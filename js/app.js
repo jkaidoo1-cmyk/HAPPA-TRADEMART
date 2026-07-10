@@ -1326,40 +1326,13 @@ async function loadHomeData() {
     const prodRes = await apiGet('products', 'limit=500');
     const storeRes = await apiGet('stores', 'limit=500');
 
-    let dbProducts = prodRes?.data || [];
-    let dbStores = storeRes?.data || [];
-
-    if (!dbProducts.length) {
-      for (const p of MOCK_PRODUCTS) {
-        await apiPost('products', p);
-      }
-      const freshP = await apiGet('products', 'limit=500');
-      dbProducts = freshP?.data || MOCK_PRODUCTS;
-    }
-    if (!dbStores.length) {
-      for (const s of MOCK_STORES) {
-        await apiPost('stores', s);
-      }
-      const freshS = await apiGet('stores', 'limit=500');
-      dbStores = freshS?.data || MOCK_STORES;
-    }
-
-    App.allProducts = dbProducts;
-    App.allStores = dbStores;
+    App.allProducts = prodRes?.data || [];
+    App.allStores = storeRes?.data || [];
 
   } catch (e) {
     console.warn('[loadHomeData] API error, falling back to mock lists:', e);
     App.allProducts = MOCK_PRODUCTS;
     App.allStores = MOCK_STORES;
-  }
-
-  // Force map store 1 to the demo vendor Kwame Mensah (u-vendor-001)
-  const demoStore = App.allStores.find(s => s.id === '1');
-  if (demoStore) {
-    demoStore.vendor_id = 'u-vendor-001';
-    if (!demoStore.storefront_status) {
-      demoStore.storefront_status = 'inactive';
-    }
   }
 
   renderFlashSale();
