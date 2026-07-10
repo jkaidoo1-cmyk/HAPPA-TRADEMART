@@ -1,0 +1,145 @@
+{
+  "users": [
+    {
+      "id": "admin",
+      "name": "Admin User",
+      "email": "admin@happatrademart.com",
+      "phone": "0000000000",
+      "password_hash": "admin123",
+      "role": "admin",
+      "status": "active",
+      "location": "Accra",
+      "wallet_balance": 0,
+      "referral_code": "ADMIN001",
+      "registered_at": "2026-01-01T08:00:00.000Z"
+    },
+    {
+      "id": "rendor",
+      "name": "Nana Ama",
+      "email": "nana@test.com",
+      "phone": "0200000000",
+      "password_hash": "rendor123",
+      "role": "rendor",
+      "status": "active",
+      "location": "Accra",
+      "wallet_balance": 0,
+      "referral_code": "NANA001",
+      "registered_at": "2026-02-10T11:00:00.000Z",
+      "is_verified": true,
+      "id_verified": true,
+      "rendor_display_name": "Nana Creative",
+      "rendor_service_cat": "Graphic Design",
+      "rendor_bio": "I create scroll-stopping visuals for brands, businesses and entrepreneurs across Ghana. From logos and social media content to full brand kits — I've got you covered. Fast delivery, clean designs, affordable rates.",
+      "rendor_starting_price": 120,
+      "rendor_tags": ["branding", "logo design", "social media", "flyers", "business cards"],
+      "rendor_whatsapp": "0249999999",
+      "rendor_email": "nana@test.com",
+      "rendor_instagram": "@nana.creative",
+      "rendor_twitter": "@nana_creative",
+      "rendor_facebook": "Nana Creative",
+      "rendor_website": "https://example.com",
+      "rendor_contact_other": "Available Mon–Sat, 8am–8pm. WhatsApp preferred.",
+      "rendor_sub_status": "active",
+      "rendor_sub_expiry": "1800000000000",
+      "rendor_sub_plan": "monthly"
+    }
+  ],
+  "stores": [],
+  "products": [],
+
+  "orders": [],
+  "packages": [],
+  "services": [
+    {
+      "id": "svc-1",
+      "rendor_id": "rendor",
+      "title": "Social Media Content Pack",
+      "category": "Graphic Design",
+      "description": "Get 10 custom-designed social media posts for Instagram, Facebook or TikTok. Includes branded templates, captions and a cover image. Perfect for launching or refreshing your online presence.",
+      "price": 200,
+      "image_url": "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=600&q=80",
+      "status": "active",
+      "created_at": "2026-03-01T10:00:00.000Z"
+    },
+    {
+      "id": "svc-2",
+      "rendor_id": "rendor",
+      "title": "Logo & Brand Identity Design",
+      "category": "Graphic Design",
+      "description": "Full brand identity package — logo (3 concepts), colour palette, typography guide, and business card design. Delivered in PNG, SVG and PDF formats. Ideal for new businesses and rebrands.",
+      "price": 350,
+      "image_url": "https://images.unsplash.com/photo-1626785774573-4b799315345d?w=600&q=80",
+      "status": "active",
+      "created_at": "2026-03-05T09:00:00.000Z"
+    },
+    {
+      "id": "svc-3",
+      "rendor_id": "rendor",
+      "title": "Event Flyer & Poster Design",
+      "category": "Graphic Design",
+      "description": "Eye-catching flyer or poster design for any event — parties, concerts, seminars, product launches. Turnaround in 24 hours. Includes 2 revision rounds. Print-ready and digital formats included.",
+      "price": 80,
+      "image_url": "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&q=80",
+      "status": "active",
+      "created_at": "2026-03-10T14:00:00.000Z"
+    },
+    {
+      "id": "svc-4",
+      "rendor_id": "rendor",
+      "title": "Business Card Design",
+      "category": "Graphic Design",
+      "description": "Professional double-sided business card design. Clean, modern layouts that reflect your brand. Delivered ready for print. Add-on: digital VCard version available on request.",
+      "price": 60,
+      "image_url": "https://images.unsplash.com/photo-1598520106830-8c45c2035460?w=600&q=80",
+      "status": "active",
+      "created_at": "2026-03-15T08:30:00.000Z"
+    },
+    {
+      "id": "svc-5",
+      "rendor_id": "rendor",
+      "title": "WhatsApp & Telegram Broadcast Design",
+      "category": "Graphic Design",
+      "description": "Branded graphics and message templates for your WhatsApp Business or Telegram channel. Includes promo banners, product highlight cards and story-size visuals. Great for daily posts.",
+      "price": 120,
+      "image_url": "https://images.unsplash.com/photo-1611746872915-64382b5c76da?w=600&q=80",
+      "status": "active",
+      "created_at": "2026-04-01T11:00:00.000Z"
+    }
+  ],
+  "wallet_transactions": [],
+  "notifications": [],
+  "ad_campaigns": [],
+  "settings": [
+    {
+      "id": "vendor_auto_approve",
+      "key": "vendor_auto_approve",
+      "value": "false",
+      "label": "Vendor Auto Approve",
+      "type": "text",
+      "updated_at": "2026-01-01T08:00:00.000Z"
+    }
+  ],
+  "referrals": [],
+  "delivery_rates": [
+    {
+      "id": "dr-1",
+      "origin": "Kumasi",
+      "destination": "KNUST",
+      "base_rate": 5,
+      "per_kg_rate": 2,
+      "est_days": 1,
+      "is_local": true
+    },
+    {
+      "id": "dr-2",
+      "origin": "Accra",
+      "destination": "Kumasi",
+      "base_rate": 25,
+      "per_kg_rate": 10,
+      "est_days": 2,
+      "is_local": false
+    }
+  ],
+  "reviews": [],
+  "service_orders": []
+}

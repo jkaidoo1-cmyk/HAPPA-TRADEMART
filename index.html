@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description"
+    content="HAPPA TRADEMART – Ghana's Premier Multi-Vendor Marketplace. Shop local stores and flash sales.">
+  <meta name="keywords" content="Ghana marketplace, online shopping, vendors, HAPPA, trademart">
+  <meta name="author" content="HAPPA TRADEMART">
+  <title>HAPPA TRADEMART</title>
+  <script>
+    // ── One-time self-heal: clear any stale service-worker caches ──
+    // Fixes the "blank unstyled page" problem when the old SW serves a
+    // cached HTML that no longer references the current assets.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.unregister());
+      });
+      if (window.caches) {
+        caches.keys().then(keys => {
+          keys.forEach(k => caches.delete(k));
+        });
+      }
+    }
+  </script>
+
+  <!-- ── PWA Manifest ── -->
+  <link rel="manifest" href="manifest.json?v=2">
+
+  <!-- ── PWA / Mobile meta ── -->
+  <meta name="theme-color" content="#e85d04">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HAPPA">
+  <meta name="application-name" content="HAPPA TRADEMART">
+  <meta name="msapplication-TileColor" content="#0d0d0d">
+  <meta name="msapplication-TileImage" content="images/icon-192.png">
+
+  <!-- ── Icons ── -->
+  <link rel="icon" type="image/png" sizes="192x192" href="images/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="images/icon-512.png">
+  <link rel="apple-touch-icon" href="images/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="images/icon-512.png">
+
+  <!-- ── iOS Splash / Safe-area ── -->
+  <meta name="format-detection" content="telephone=no">
+  <style>
+    /* Safe-area insets for notched devices */
+    :root {
+      --sat: env(safe-area-inset-top);
+      --sar: env(safe-area-inset-right);
+      --sab: env(safe-area-inset-bottom);
+      --sal: env(safe-area-inset-left);
+    }
+  </style>
+
+  <!-- Google Fonts (Optimized: Core Fonts only; Custom store fonts are loaded dynamically on-demand) -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+  <!-- ============================================================
+     TOP NAVIGATION
+     ============================================================ -->
+  <nav id="top-nav">
+    <div class="nav-logo" onclick="showPage('home')" role="button" aria-label="HAPPA TRADEMART Home">
+      <img src="images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA TRADEMART logo">
+      <div class="nav-logo-text">
+        <span class="nav-logo-name">HAPPA<span>MART</span></span>
+        <span class="nav-logo-sub">Ghana's Marketplace</span>
+      </div>
+    </div>
+    
+    <!-- Responsive Search Container (Inline on Desktop, Expandable Panel on Mobile) -->
+    <div class="nav-search-wrap" id="nav-search-container">
+      <i class="fas fa-search search-icon"></i>
+      <input type="text" id="nav-search-input" placeholder="Search stores, products…" autocomplete="off">
+      <div class="search-dropdown hidden" id="search-dropdown"></div>
+    </div>
+
+    <div class="nav-actions">
+      <!-- Search Trigger Button -->
+      <button class="nav-icon-btn" id="top-nav-search-trigger" onclick="window.toggleHeaderSearchBar(event)" title="Search">
+        <i class="fas fa-search"></i>
+      </button>
+      <button class="nav-icon-btn" onclick="showPage('notifications')" title="Notifications">
+        <i class="fas fa-bell"></i>
+        <span class="badge hidden" id="notif-badge">0</span>
+      </button>
+      <div class="profile-menu-wrap" id="top-profile-menu-wrap">
+        <button class="nav-icon-btn" id="user-avatar-btn" onclick="toggleProfileMenu(event)" title="Account">
+          <i class="fas fa-user-circle" style="font-size:1.3rem;color:var(--primary)"></i>
+        </button>
+        <div class="profile-dropdown hidden" id="profile-dropdown">
+          <button class="profile-dropdown-item" onclick="showPage('dashboard'); closeProfileMenu()">
+            <i class="fas fa-user"></i>
+            <span>Profile</span>
+          </button>
+          <button class="profile-dropdown-item" onclick="showPage('settings'); closeProfileMenu()">
+            <i class="fas fa-cog"></i>
+            <span>Settings</span>
+          </button>
+          <button class="profile-dropdown-item" onclick="logout(); closeProfileMenu()">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+     MAIN CONTENT AREA
+     ============================================================ -->
+  <div id="main-content">
+
+    <!-- ══════════ HOME PAGE ══════════ -->
+    <div class="page active" id="page-home">
+
+      <!-- Hero Banner -->
+      <div class="hero-banner" style="margin-top: -12px;">
+        <h1>Shop Ghana's Best Stores</h1>
+        <p>Discover local vendors across Accra, Kumasi, Takoradi & more</p>
+        <div class="hero-chips">
+          <span class="hero-chip" onclick="setLocationFilter('Accra')">📍 Accra</span>
+          <span class="hero-chip" onclick="setLocationFilter('Kumasi')">📍 Kumasi</span>
+          <span class="hero-chip" onclick="setLocationFilter('Takoradi')">📍 Takoradi</span>
+          <span class="hero-chip" onclick="setLocationFilter('Tamale')">📍 Tamale</span>
+          <span class="hero-chip" onclick="showPage('marketplace')"><i class="fas fa-tags"></i> All Deals</span>
+        </div>
+      </div>
+
+      <!-- Ad Banner — Home (injected by AdEngine) -->
+      <div id="ad-banner-home" style="display:none"></div>
+
+      <!-- Flash Sale Section -->
+      <div class="section">
+        <div class="flash-sale-banner">
+          <div>
+            <div style="font-size:.7rem;font-weight:700;opacity:.9;text-transform:uppercase;letter-spacing:1px">⚡ Flash
+              Sale</div>
+            <div style="font-weight:800;font-size:1rem">Limited Time Deals</div>
+          </div>
+          <div class="countdown">
+            <div class="countdown-unit">
+              <div class="num" id="cd-h">04</div>
+              <div class="lbl">hrs</div>
+            </div>
+            <div class="countdown-unit">
+              <div class="num" id="cd-m">32</div>
+              <div class="lbl">min</div>
+            </div>
+            <div class="countdown-unit">
+              <div class="num" id="cd-s">18</div>
+              <div class="lbl">sec</div>
+            </div>
+          </div>
+        </div>
+        <div class="horizontal-scroll" style="margin-top:12px">
+          <div class="scroll-inner" id="flash-sale-list"></div>
+        </div>
+      </div>
+
+      <!-- Near You Section -->
+      <div class="section" id="local-section">
+        <div class="section-header">
+          <h2 class="section-title">📍 Near You</h2>
+          <span class="section-link" onclick="showPage('marketplace')">See all</span>
+        </div>
+        <div class="horizontal-scroll">
+          <div class="scroll-inner" id="local-products-list"></div>
+        </div>
+      </div>
+
+      <!-- Featured Stores -->
+      <div class="section">
+        <div class="section-header">
+          <h2 class="section-title">🏪 Featured Stores</h2>
+          <span class="section-link" onclick="showPage('stores')">View all</span>
+        </div>
+        <div style="padding:0 12px;display:grid;grid-template-columns:repeat(2,1fr);gap:12px" id="featured-stores-list">
+        </div>
+      </div>
+
+      <!-- Top Products -->
+      <div class="section">
+        <div class="section-header">
+          <h2 class="section-title">🔥 Trending Now</h2>
+          <span class="section-link" onclick="showPage('marketplace')">See all</span>
+        </div>
+        <div class="product-grid" id="trending-list"></div>
+      </div>
+
+      <!-- Rendor Services Section -->
+      <div class="section" id="home-services-section" style="display:none">
+        <div class="section-header">
+          <h2 class="section-title">🎨 Services</h2>
+          <span class="section-link"
+            onclick="showPage('marketplace');setTimeout(()=>setMarketFilter('services',document.querySelector('[data-filter=services]')),150)">See
+            all</span>
+        </div>
+        <div id="home-services-list" style="padding:0 12px;display:grid;gap:12px"></div>
+      </div>
+
+    </div><!-- end home -->
+
+    <!-- ══════════ MARKETPLACE PAGE ══════════ -->
+    <div class="page" id="page-marketplace">
+
+      <div class="page-header">
+        <button class="back-btn" onclick="showPage('home')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Marketplace</h2>
+        <button class="btn btn-ghost btn-sm" onclick="toggleFilterModal()" style="margin-left:auto">
+          <i class="fas fa-sliders-h"></i> Filter
+        </button>
+      </div>
+
+      <!-- Ad Banner — Shop (injected by AdEngine) -->
+      <div id="ad-banner-shop" style="display:none"></div>
+
+      <!-- Filter Chips -->
+      <div class="filter-bar" id="marketplace-filters">
+        <span class="filter-chip active" data-filter="all" onclick="setMarketFilter('all',this)">All</span>
+        <span class="filter-chip" data-filter="local" onclick="setMarketFilter('local',this)">📍 Local</span>
+        <span class="filter-chip" data-filter="flash" onclick="setMarketFilter('flash',this)">⚡ Flash Sale</span>
+        <span class="filter-chip" data-filter="Fashion" onclick="setMarketFilter('Fashion',this)">Fashion</span>
+        <span class="filter-chip" data-filter="Electronics"
+          onclick="setMarketFilter('Electronics',this)">Electronics</span>
+        <span class="filter-chip" data-filter="Beauty" onclick="setMarketFilter('Beauty',this)">Beauty</span>
+        <span class="filter-chip" data-filter="Food" onclick="setMarketFilter('Food',this)">Food</span>
+        <span class="filter-chip" data-filter="services" onclick="setMarketFilter('services',this)">🎨 Services</span>
+      </div>
+
+      <!-- Sort + Count -->
+      <div style="padding:10px 16px;display:flex;align-items:center;justify-content:space-between">
+        <span id="market-count" style="font-size:.8rem;color:var(--text-muted)">Loading…</span>
+        <select class="form-control form-select" style="width:auto;padding:6px 28px 6px 10px;font-size:.8rem"
+          id="market-sort" onchange="renderMarketplace()">
+          <option value="all" selected>All</option>
+          <option value="trending">Trending</option>
+          <option value="price_low">Price: Low–High</option>
+          <option value="price_high">Price: High–Low</option>
+          <option value="rating">Top Rated</option>
+          <option value="newest">Newest</option>
+        </select>
+      </div>
+
+      <!-- Products Grid -->
+      <div class="product-grid" id="marketplace-grid" style="padding-bottom:16px"></div>
+      <div id="marketplace-empty" class="empty-state hidden">
+        <i class="fas fa-search"></i>
+        <h3>No products found</h3>
+        <p>Try a different filter or location</p>
+      </div>
+    </div>
+
+    <!-- ══════════ STORES PAGE ══════════ -->
+    <div class="page" id="page-stores">
+      <div class="page-header">
+        <button class="back-btn" onclick="showPage('home')"><i class="fas fa-arrow-left"></i></button>
+        <h2>All Stores</h2>
+      </div>
+      <!-- Ad Banner — Stores (injected by AdEngine) -->
+      <div id="ad-banner-stores" style="display:none"></div>
+      <div class="filter-bar" id="stores-filter-bar">
+        <span class="filter-chip active" data-filter="all" onclick="setStoreFilter('all',this)">All</span>
+        <span class="filter-chip" data-filter="local" onclick="setStoreFilter('local',this)">📍 Local</span>
+        <span class="filter-chip" data-filter="Fashion" onclick="setStoreFilter('Fashion',this)">Fashion</span>
+        <span class="filter-chip" data-filter="Electronics"
+          onclick="setStoreFilter('Electronics',this)">Electronics</span>
+        <span class="filter-chip" data-filter="Beauty" onclick="setStoreFilter('Beauty',this)">Beauty</span>
+      </div>
+      <div style="padding:12px" id="stores-grid"></div>
+      <div id="stores-empty" class="empty-state hidden">
+        <i class="fas fa-store-slash"></i>
+        <h3>No stores found</h3>
+      </div>
+    </div>
+
+    <!-- ══════════ PRODUCT DETAIL PAGE ══════════ -->
+    <div class="page" id="page-product">
+      <div id="product-detail-content"></div>
+    </div>
+
+    <!-- ══════════ RENDOR PUBLIC PROFILE PAGE ══════════ -->
+    <div class="page" id="page-rendor-profile">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2 id="rendor-profile-page-title" class="truncate">Rendor Profile</h2>
+      </div>
+      <div id="rendor-profile-content"></div>
+    </div>
+
+    <!-- ══════════ STORE DETAIL PAGE ══════════ -->
+    <div class="page" id="page-store-detail">
+      <div id="store-detail-content"></div>
+    </div>
+
+    <!-- ══════════ CART PAGE ══════════ -->
+    <div class="page" id="page-cart">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>My Cart</h2>
+        <button class="btn btn-ghost btn-sm" onclick="clearCart()" style="margin-left:auto;color:var(--danger)">
+          <i class="fas fa-trash"></i> Clear
+        </button>
+      </div>
+      <!-- Shipping Schedule Banner -->
+      <div style="padding:10px 16px 0">
+        <div class="ship-schedule-card">
+          <div class="ship-schedule-icon">📦</div>
+          <div>
+            <div style="font-size:.8rem;opacity:.8">Weekly Shipping Day</div>
+            <div style="font-weight:700;font-size:1rem">Orders shipped every</div>
+            <span class="ship-date-badge">Saturday</span>
+          </div>
+          <div style="margin-left:auto;text-align:center">
+            <div style="font-size:1.6rem;font-weight:900" id="days-to-saturday">-</div>
+            <div style="font-size:.7rem;opacity:.7">days left</div>
+          </div>
+        </div>
+      </div>
+      <div id="cart-content"></div>
+    </div>
+
+    <!-- ══════════ CHECKOUT PAGE ══════════ -->
+    <div class="page" id="page-checkout">
+      <div class="page-header">
+        <button class="back-btn" onclick="showPage('cart')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Checkout</h2>
+      </div>
+      <div id="checkout-content"></div>
+    </div>
+
+    <!-- ══════════ ORDER CONFIRMATION ══════════ -->
+    <div class="page" id="page-order-confirmed">
+      <div id="order-confirmed-content"></div>
+    </div>
+
+    <!-- ══════════ AUTH PAGE ══════════ -->
+    <div class="page" id="page-auth">
+      <div id="auth-content"></div>
+    </div>
+
+    <!-- ══════════ SETTINGS PAGE ══════════ -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>Settings</h2>
+        <button class="btn btn-ghost btn-sm" onclick="renderSettingsPage()" style="margin-left:auto" title="Refresh">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+      <div id="settings-page-content"></div>
+    </div>
+
+    <!-- ══════════ BUYER DASHBOARD ══════════ -->
+    <div class="page" id="page-buyer-dashboard">
+      <div class="page-header">
+        <h2>My Account</h2>
+      </div>
+      <div id="buyer-dashboard-content"></div>
+    </div>
+
+    <!-- ══════════ VENDOR DASHBOARD ══════════ -->
+    <div class="page" id="page-vendor-dashboard">
+      <div class="page-header">
+        <h2>Vendor Hub</h2>
+      </div>
+      <div id="vendor-dashboard-content"></div>
+    </div>
+
+    <!-- ══════════ VENDOR MY STORE PAGE ══════════ -->
+    <div class="page" id="page-vendor-my-store">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>My Store</h2>
+        <button class="btn btn-ghost btn-sm" onclick="renderVendorMyStorePage()" style="margin-left:auto"
+          title="Refresh">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+      <div id="vendor-my-store-content">
+        <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i>
+          Loading…</div>
+      </div>
+    </div>
+
+    <!-- ══════════ VENDOR ORDERS PAGE ══════════ -->
+    <div class="page" id="page-vendor-orders">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>My Orders</h2>
+        <button class="btn btn-ghost btn-sm" id="vendor-orders-refresh-btn" onclick="refreshVendorOrdersPage()"
+          style="margin-left:auto">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+      <div id="vendor-orders-page-content">
+        <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i>
+          Loading…</div>
+      </div>
+    </div>
+
+    <!-- ══════════ RENDOR DASHBOARD ══════════ -->
+    <div class="page" id="page-rendor-dashboard">
+      <div class="page-header">
+        <h2>Rendor Hub</h2>
+      </div>
+      <div id="rendor-dashboard-content"></div>
+    </div>
+
+    <!-- ══════════ ADMIN DASHBOARD ══════════ -->
+    <div class="page" id="page-admin-dashboard">
+      <div class="page-header">
+        <h2>Admin Panel</h2>
+      </div>
+      <div id="admin-dashboard-content"></div>
+    </div>
+
+    <!-- ══════════ ADMIN VENDOR PROFILE PAGE ══════════ -->
+    <div class="page" id="page-admin-vendor-profile">
+      <div class="page-header">
+        <button class="back-btn" onclick="showPage('admin-dashboard')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Vendor Profile</h2>
+      </div>
+      <div id="admin-vendor-profile-content">
+        <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i>
+          Loading…</div>
+      </div>
+    </div>
+
+    <!-- ══════════ ADMIN RENDOR PROFILE PAGE ══════════ -->
+    <div class="page" id="page-admin-rendor-profile">
+      <div class="page-header">
+        <button class="back-btn" onclick="showPage('admin-dashboard')"><i class="fas fa-arrow-left"></i></button>
+        <h2>Rendor Profile</h2>
+      </div>
+      <div id="admin-rendor-profile-content">
+        <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i>
+          Loading…</div>
+      </div>
+    </div>
+
+    <!-- ══════════ NOTIFICATIONS ══════════ -->
+    <div class="page" id="page-notifications">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>Notifications</h2>
+        <div style="display:flex;gap:6px;margin-left:auto">
+          <button class="btn btn-ghost btn-sm" onclick="markAllRead()">Mark all read</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="clearAllNotifications()">
+            <i class="fas fa-trash-alt"></i> Clear
+          </button>
+        </div>
+      </div>
+      <div id="notifications-content"></div>
+    </div>
+
+    <!-- ══════════ SEARCH RESULTS ══════════ -->
+    <div class="page" id="page-search">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>Search Results</h2>
+      </div>
+      <div id="search-results-content" style="padding:12px"></div>
+    </div>
+
+    <!-- ══════════ DELIVERY INFO ══════════ -->
+    <div class="page" id="page-delivery">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>Delivery Rates</h2>
+      </div>
+      <div id="delivery-content" style="padding:16px"></div>
+    </div>
+
+    <!-- ══════════ PRIVACY / COMPLIANCE ══════════ -->
+    <div class="page" id="page-privacy">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>Privacy & Data</h2>
+      </div>
+      <div style="padding:20px" id="privacy-content"></div>
+    </div>
+
+    <!-- ══════════ STOREFRONT ADMIN PORTAL ══════════ -->
+    <div class="page" id="page-store-admin"></div>
+
+  </div><!-- end main-content -->
+
+  <!-- ============================================================
+     BOTTOM NAVIGATION
+     ============================================================ -->
+  <nav id="bottom-nav">
+    <div class="bottom-nav-item active" id="bnav-home" onclick="showPage('home')">
+      <i class="fas fa-home"></i><span>Home</span>
+    </div>
+    <div class="bottom-nav-item" id="bnav-marketplace" onclick="showPage('marketplace')">
+      <i class="fas fa-th-large"></i><span>Shop</span>
+    </div>
+    <!-- Orders item — only visible for vendors -->
+    <div class="bottom-nav-item" id="bnav-orders" style="display:none" onclick="showPage('vendor-orders')">
+      <i class="fas fa-boxes"></i><span>Orders</span>
+    </div>
+    <div class="bottom-nav-item" id="bnav-stores" onclick="showPage('stores')">
+      <i class="fas fa-store"></i><span>Stores</span>
+    </div>
+    <div class="bottom-nav-item" id="bnav-cart" onclick="showPage('cart')">
+      <i class="fas fa-shopping-bag"></i><span>Cart</span>
+      <span class="badge hidden" id="cart-badge-bottom">0</span>
+    </div>
+    <div class="bottom-nav-item" id="bnav-profile" onclick="handleProfileClick()">
+      <i class="fas fa-user"></i><span>Me</span>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ============================================================
+     MODAL CONTAINER
+     ============================================================ -->
+  <div id="modal-container"></div>
+
+  <!-- ============================================================
+     ADMIN PROFILE PANEL (full-screen slide-in)
+     ============================================================ -->
+  <div id="ap-panel-root" class="ap-panel-root" style="display:none"></div>
+
+  <!-- ============================================================
+     BULK ADD PRODUCTS PANEL
+     ============================================================ -->
+  <div id="bulk-add-panel" role="dialog" aria-modal="true" aria-label="Bulk Add Products"></div>
+
+  <!-- ============================================================
+     SCRIPTS (Deferred to prevent render blocking)
+     ============================================================ -->
+  <script src="js/optimistic_ui.js" defer></script>
+  <script src="js/app.js" defer></script>
+  <script src="js/auth.js" defer></script>
+  <script src="js/orders.js" defer></script>
+  <script src="js/marketplace.js" defer></script>
+  <script src="js/cart.js" defer></script>
+  <script src="js/checkout.js" defer></script>
+  <script src="js/wallet.js" defer></script>
+  <script src="js/local_autofill.js" defer></script>
+  <script src="js/vendor.js" defer></script>
+  <script src="js/rendor.js" defer></script>
+  <script src="js/admin.js" defer></script>
+  <script src="js/admin-settings.js" defer></script>
+  <script src="js/admin-profiles.js" defer></script>
+  <script src="js/buyer.js" defer></script>
+  <script src="js/search.js" defer></script>
+  <script src="js/notifications.js" defer></script>
+  <script src="js/delivery.js" defer></script>
+  <script src="js/utils.js" defer></script>
+  <script src="js/ads.js" defer></script>
+
+  <!-- ── PWA Service Worker Registration ── -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(reg => {
+            console.log('[PWA] Service Worker registered ✅ scope:', reg.scope);
+
+            // Notify user when a new version is available
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New content available — show subtle toast if showToast exists
+                  if (typeof showToast === 'function') {
+                    showToast('🔄 New version available — refresh to update!', 'info');
+                  }
+                }
+              });
+            });
+          })
+          .catch(err => console.warn('[PWA] SW registration failed:', err));
+      });
+    }
+
+    // ── PWA Install Prompt ──────────────────────────────────────
+    let _pwaInstallPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      _pwaInstallPrompt = e;
+      // Show install banner after 3s if user is on the home page
+      setTimeout(() => {
+        if (!localStorage.getItem('pwa-dismissed')) {
+          _showPWABanner();
+        }
+      }, 3000);
+    });
+
+    window.addEventListener('appinstalled', () => {
+      _pwaInstallPrompt = null;
+      localStorage.setItem('pwa-dismissed', '1');
+      const banner = document.getElementById('pwa-install-banner');
+      if (banner) banner.remove();
+      if (typeof showToast === 'function') showToast('HAPPA installed on your device! 🎉', 'success');
+    });
+
+    function _showPWABanner() {
+      if (document.getElementById('pwa-install-banner')) return;
+      const banner = document.createElement('div');
+      banner.id = 'pwa-install-banner';
+      banner.style.cssText = [
+        'position:fixed', 'bottom:calc(64px + env(safe-area-inset-bottom, 0px))',
+        'left:12px', 'right:12px', 'z-index:9998',
+        'background:linear-gradient(135deg,#0d0d0d,#1a1a1a)',
+        'border:1.5px solid rgba(232,93,4,.5)', 'border-radius:14px',
+        'padding:14px 16px', 'display:flex', 'align-items:center', 'gap:12px',
+        'box-shadow:0 8px 32px rgba(0,0,0,.6)'
+      ].join(';');
+      banner.innerHTML = `
+      <img src="images/photo_2026-05-30_17-40-49-Photoroom.png" style="width:42px;height:42px;object-fit:cover;border-radius:8px;flex-shrink:0" alt="HAPPA">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:.88rem;color:#fff">Install HAPPA TRADEMART</div>
+        <div style="font-size:.75rem;color:rgba(255,255,255,.6);margin-top:1px">Add to home screen for a faster experience</div>
+      </div>
+      <button onclick="_installPWA()" style="background:linear-gradient(135deg,#e85d04,#f97316);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">Install</button>
+      <button onclick="_dismissPWA()" style="background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-size:1.1rem;padding:4px;flex-shrink:0">✕</button>
+    `;
+      document.body.appendChild(banner);
+    }
+
+    function _installPWA() {
+      if (!_pwaInstallPrompt) return;
+      _pwaInstallPrompt.prompt();
+      _pwaInstallPrompt.userChoice.then(result => {
+        _pwaInstallPrompt = null;
+        if (result.outcome === 'dismissed') _dismissPWA();
+      });
+    }
+
+    function _dismissPWA() {
+      localStorage.setItem('pwa-dismissed', '1');
+      const banner = document.getElementById('pwa-install-banner');
+      if (banner) banner.remove();
+    }
+  </script>
+
+</body>
+
+</html>
