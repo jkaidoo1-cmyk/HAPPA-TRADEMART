@@ -2606,6 +2606,9 @@ async function renderAdminStorefronts() {
       <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="approveStorefront('${s.id}')">
         <i class="fas fa-globe"></i> Make Live
       </button>
+      <button class="btn btn-sm btn-danger" style="background:var(--danger);border:none;color:#fff" onclick="deleteStorefront('${s.id}')">
+        <i class="fas fa-trash"></i> Delete
+      </button>
     `)).join('');
   } else {
     html += '<p style="font-size:.8rem;color:var(--text-muted);padding:10px 0">No draft storefronts.</p>';
@@ -2667,6 +2670,25 @@ async function disableStorefront(storeId) {
   showToast('Disabling storefront...', 'info');
   await apiPatch('stores', storeId, { storefront_status: 'draft' }).catch(() => {});
   showToast('Storefront disabled successfully.', 'warning');
+  renderAdminStorefronts();
+}
+
+async function deleteStorefront(storeId) {
+  if (!confirm('Are you sure you want to permanently delete this store from the database? This action cannot be undone.')) return;
+
+  showToast('Deleting store...', 'info');
+  const res = await apiDelete('stores', storeId).catch(err => {
+    console.error('Delete error:', err);
+    return null;
+  });
+  
+  // Clean local state and re-render
+  App.allStores = App.allStores.filter(s => String(s.id) !== String(storeId));
+  try {
+    localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
+  } catch(e){}
+  
+  showToast('Store deleted successfully! 🗑️', 'success');
   renderAdminStorefronts();
 }
 
