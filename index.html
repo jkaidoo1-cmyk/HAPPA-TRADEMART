@@ -66,9 +66,123 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* PWA Splash Screen Styles */
+    #pwa-splash-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999999;
+      transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.5s;
+    }
+    .splash-logo-container {
+      animation: splashPulse 2.2s infinite ease-in-out;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    @keyframes splashPulse {
+      0%, 100% {
+        transform: scale(1);
+        filter: drop-shadow(0 4px 15px rgba(232, 93, 4, 0.2));
+      }
+      50% {
+        transform: scale(1.08);
+        filter: drop-shadow(0 12px 30px rgba(232, 93, 4, 0.45));
+      }
+    }
+    .splash-brand-text {
+      font-family: 'Outfit', 'Inter', sans-serif;
+      font-size: 2.2rem;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: -1px;
+      margin-top: 15px;
+      opacity: 0;
+      transform: translateY(20px);
+      animation: splashSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation-delay: 0.2s;
+      text-align: center;
+    }
+    .splash-brand-text span {
+      color: #e85d04;
+    }
+    .splash-subtitle {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0;
+      transform: translateY(15px);
+      animation: splashSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation-delay: 0.4s;
+      margin-top: 4px;
+      text-align: center;
+    }
+    .splash-loader-bar {
+      width: 140px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      margin-top: 30px;
+      overflow: hidden;
+      opacity: 0;
+      animation: splashFadeIn 0.5s ease forwards;
+      animation-delay: 0.6s;
+    }
+    .splash-loader-progress {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #e85d04, #ff8533);
+      border-radius: 10px;
+      transform: translateX(-100%);
+      animation: splashProgress 2.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+    @keyframes splashSlideUp {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @keyframes splashFadeIn {
+      to {
+        opacity: 1;
+      }
+    }
+    @keyframes splashProgress {
+      0% {
+        transform: translateX(-100%);
+      }
+      100% {
+        transform: translateX(0);
+      }
+    }
+  </style>
 </head>
 
 <body>
+
+  <!-- Animated Splash Screen -->
+  <div id="pwa-splash-screen">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+      <div class="splash-logo-container">
+        <img src="images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA Logo" style="width:128px;height:128px;object-fit:contain;">
+      </div>
+      <div class="splash-brand-text">HAPPA<span>MART</span></div>
+      <div class="splash-subtitle">Ghana's Premier Marketplace</div>
+      <div class="splash-loader-bar">
+        <div class="splash-loader-progress"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- ============================================================
      TOP NAVIGATION

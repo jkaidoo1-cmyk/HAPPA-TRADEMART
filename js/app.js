@@ -60,7 +60,23 @@ window.addEventListener('DOMContentLoaded', () => {
   updateNavForUser(); // apply role-based nav immediately after session load
   initCountdown();
   calcDaysToSaturday();
-  loadHomeData().then(() => initAdBanners('home'));
+
+  // Custom Splash Screen Dismissal
+  const splashStart = Date.now();
+  loadHomeData().then(() => {
+    initAdBanners('home');
+    const elapsed = Date.now() - splashStart;
+    const delay = Math.max(0, 2200 - elapsed);
+    setTimeout(() => {
+      const splash = document.getElementById('pwa-splash-screen');
+      if (splash) {
+        splash.style.opacity = '0';
+        splash.style.visibility = 'hidden';
+        setTimeout(() => splash.remove(), 600);
+      }
+    }, delay);
+  });
+
   initSearch();
   renderNotifBadge();
   // Pre-warm AI config (used by vendor product auto-fill) so the first
