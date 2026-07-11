@@ -1740,7 +1740,7 @@ function adminUserRowHTML(u) {
     ? `adminOpenVendorProfile('${u.id}')`
     : u.role === 'rendor'
       ? `adminOpenRendorProfile('${u.id}')`
-      : `adminOpenUserProfile('${u.id}')`;
+      : `adminOpenBuyerProfile('${u.id}')`;
 
   return `
 <div class="card" style="margin-bottom:8px;cursor:pointer;border-left:3px solid ${borderColor}" id="user-row-${u.id}"
