@@ -1108,27 +1108,28 @@ function _localAutoFill(prefix, isManual = false) {
   
   const name = nameEl.value.trim();
   if (!name) return;
-  
-  const result = localPredictAndGenerate(name);
-  
-  if (catEl && result.category) {
-    // Automatically only update if category is Other or unset. Manually always overwrite.
-    if (isManual || catEl.value === 'Other' || !catEl.value) {
-      const option = Array.from(catEl.options).find(opt => opt.value === result.category);
-      if (option) {
-        catEl.value = result.category;
+
+  const applyResult = (result) => {
+    if (catEl && result.category) {
+      if (isManual || catEl.value === 'Other' || !catEl.value) {
+        const option = Array.from(catEl.options).find(opt => opt.value === result.category);
+        if (option) catEl.value = result.category;
       }
     }
-  }
-  if (descEl && result.description) {
-    // Automatically only update if description is empty. Manually always overwrite.
-    if (isManual || !descEl.value.trim()) {
-      descEl.value = result.description;
+    if (descEl && result.description) {
+      if (isManual || !descEl.value.trim()) {
+        descEl.value = result.description;
+      }
     }
-  }
-  
+    if (isManual) showToast('Category & description filled!', 'success');
+  };
+
   if (isManual) {
-    showToast('Category & description filled!', 'success');
+    // Manual trigger: run immediately, no debounce
+    applyResult(localPredictAndGenerate(name));
+  } else {
+    // Auto-trigger: debounce to avoid re-running on every keystroke
+    localPredictDebounced(prefix, name, applyResult);
   }
 }
 
@@ -2080,18 +2081,19 @@ function _bapSyncDraft(idx, field, val) {
 
 function _bapHandleNameInput(idx, name) {
   _bapSyncDraft(idx, 'name', name);
-  if (typeof localPredictAndGenerate === 'function') {
-    const res = localPredictAndGenerate(name);
-    const catEl = document.getElementById(`bap-cat-${idx}`);
-    const descEl = document.getElementById(`bap-desc-${idx}`);
-    if (catEl && (catEl.value === 'Other' || !catEl.value)) {
-      catEl.value = res.category;
-      _bapSyncDraft(idx, 'cat', res.category);
-    }
-    if (descEl && !descEl.value.trim()) {
-      descEl.value = res.description;
-      _bapSyncDraft(idx, 'desc', res.description);
-    }
+  if (typeof localPredictDebounced === 'function') {
+    localPredictDebounced(`bap-${idx}`, name, (res) => {
+      const catEl  = document.getElementById(`bap-cat-${idx}`);
+      const descEl = document.getElementById(`bap-desc-${idx}`);
+      if (catEl && (catEl.value === 'Other' || !catEl.value)) {
+        catEl.value = res.category;
+        _bapSyncDraft(idx, 'cat', res.category);
+      }
+      if (descEl && !descEl.value.trim()) {
+        descEl.value = res.description;
+        _bapSyncDraft(idx, 'desc', res.description);
+      }
+    });
   }
 }
 

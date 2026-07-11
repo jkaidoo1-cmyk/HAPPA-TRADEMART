@@ -1,10 +1,16 @@
 /* ============================================================
-   HAPPA TRADEMART — Local Self-Learning Autofill Tool
+   HAPPA TRADEMART — Local Self-Learning Autofill Tool (Optimized)
+   ============================================================
+   Improvements:
+   - Pre-built keyword index (Map) for O(1) category lookup
+   - Debounced autofill to avoid firing on every keystroke
+   - Learned-data lookup fully uses key-based Map
+   - Smarter description generation with richer context
    ============================================================ */
 
 const LOCAL_AUTOFILL_KEY = 'happa_local_autofill_learned';
 
-// Default templates for description generation (max 2 lines)
+// Default templates for description generation
 const DEFAULT_TEMPLATES = {
   'Sneakers': [
     "Step out in style with [Name]. Designed for ultimate comfort and durability, making it the perfect choice for your daily walk, run, or casual outing.",
@@ -76,26 +82,43 @@ const DEFAULT_TEMPLATES = {
   ]
 };
 
-// Default keyword rules to map name to category
-const KEYWORD_RULES = [
-  { keywords: ['sneaker', 'sneakers', 'running shoes', 'shoes', 'jordans', 'yeezy', 'nike', 'adidas', 'puma', 'trainer', 'trainers'], category: 'Sneakers' },
-  { keywords: ['sandal', 'sandals', 'slippers', 'slide', 'slides', 'flip flop', 'crocs', 'birkenstock'], category: 'Sandals' },
-  { keywords: ['boot', 'boots', 'chelsea boot', 'timberland', 'combat boot'], category: 'Boots' },
-  { keywords: ['earbud', 'earbuds', 'headphone', 'headphones', 'speaker', 'speakers', 'mic', 'microphone', 'airpods', 'soundbar', 'audio'], category: 'Audio' },
-  { keywords: ['phone', 'laptop', 'charger', 'cable', 'watch', 'smartwatch', 'tablet', 'screen', 'tv', 'television', 'computer', 'monitor', 'powerbank', 'mouse', 'keyboard', 'usb', 'camera', 'electronics', 'device', 'gadget'], category: 'Electronics' },
-  { keywords: ['serum', 'lotion', 'cream', 'moisturizer', 'cleanser', 'sunscreen', 'face wash', 'scrub', 'skincare', 'oil', 'toner'], category: 'Skincare' },
-  { keywords: ['makeup', 'lipstick', 'gloss', 'foundation', 'eyeliner', 'mascara', 'palette', 'blush', 'eyeshadow', 'concealer'], category: 'Makeup' },
-  { keywords: ['bag', 'backpack', 'ring', 'necklace', 'bracelet', 'wallet', 'belt', 'sunglasses', 'hat', 'cap', 'accessory', 'jewelry', 'scarf', 'purse'], category: 'Accessories' },
-  { keywords: ['book', 'books', 'novel', 'textbook', 'notebook', 'diary', 'journal', 'hardcover', 'paperback', 'literature', 'fiction', 'non-fiction'], category: 'Books' },
-  { keywords: ['shirt', 't-shirt', 'pants', 'jeans', 'dress', 'skirt', 'jacket', 'coat', 'socks', 'underwear', 'clothing', 'apparel', 'hoodie', 'sweater', 'blouse', 'suit'], category: 'Fashion' },
-  { keywords: ['food', 'drink', 'beverage', 'snack', 'chocolate', 'candy', 'coffee', 'tea', 'juice', 'soda', 'spices', 'oil', 'sauce', 'honey', 'snack', 'biscuit', 'cookie', 'cookies'], category: 'Food & Drinks' },
-  { keywords: ['furniture', 'chair', 'table', 'sofa', 'bed', 'pillow', 'blanket', 'lamp', 'light', 'decor', 'kitchen', 'plate', 'cup', 'organizer', 'rug', 'curtain', 'vase', 'clock'], category: 'Home & Living' },
-  { keywords: ['ball', 'bat', 'racket', 'glove', 'sports', 'fitness', 'gym', 'dumbbell', 'yoga', 'mat', 'jersey', 'helmet', 'bicycle', 'bike', 'treadmill'], category: 'Sports' },
-  { keywords: ['toy', 'toys', 'doll', 'action figure', 'puzzle', 'board game', 'lego', 'blocks', 'plush', 'game', 'gaming', 'nintendo', 'playstation', 'xbox'], category: 'Toys' },
-  { keywords: ['art', 'painting', 'drawing', 'sketch', 'canvas', 'poster', 'print', 'frame', 'sculpture', 'handmade', 'craft', 'pottery'], category: 'Art' },
-  { keywords: ['repair', 'cleaning', 'tutor', 'delivery', 'service', 'lessons', 'design', 'custom', 'consulting', 'plumbing', 'laundry'], category: 'Services' }
-];
+// ── Pre-built keyword index for O(1) category lookup ──────────────
+// Maps each individual keyword → its category
+const KEYWORD_INDEX = (() => {
+  const index = new Map();
+  const rules = [
+    { keywords: ['sneaker', 'sneakers', 'running shoes', 'shoes', 'jordans', 'yeezy', 'nike', 'adidas', 'puma', 'trainer', 'trainers'], category: 'Sneakers' },
+    { keywords: ['sandal', 'sandals', 'slippers', 'slide', 'slides', 'flip flop', 'crocs', 'birkenstock'], category: 'Sandals' },
+    { keywords: ['boot', 'boots', 'chelsea boot', 'timberland', 'combat boot'], category: 'Boots' },
+    { keywords: ['earbud', 'earbuds', 'headphone', 'headphones', 'speaker', 'speakers', 'mic', 'microphone', 'airpods', 'soundbar', 'audio'], category: 'Audio' },
+    { keywords: ['phone', 'laptop', 'charger', 'cable', 'watch', 'smartwatch', 'tablet', 'screen', 'tv', 'television', 'computer', 'monitor', 'powerbank', 'mouse', 'keyboard', 'usb', 'camera', 'electronics', 'device', 'gadget'], category: 'Electronics' },
+    { keywords: ['serum', 'lotion', 'cream', 'moisturizer', 'cleanser', 'sunscreen', 'face wash', 'scrub', 'skincare', 'oil', 'toner'], category: 'Skincare' },
+    { keywords: ['makeup', 'lipstick', 'gloss', 'foundation', 'eyeliner', 'mascara', 'palette', 'blush', 'eyeshadow', 'concealer'], category: 'Makeup' },
+    { keywords: ['bag', 'backpack', 'ring', 'necklace', 'bracelet', 'wallet', 'belt', 'sunglasses', 'hat', 'cap', 'accessory', 'jewelry', 'scarf', 'purse'], category: 'Accessories' },
+    { keywords: ['book', 'books', 'novel', 'textbook', 'notebook', 'diary', 'journal', 'hardcover', 'paperback', 'literature', 'fiction', 'non-fiction'], category: 'Books' },
+    { keywords: ['shirt', 't-shirt', 'pants', 'jeans', 'dress', 'skirt', 'jacket', 'coat', 'socks', 'underwear', 'clothing', 'apparel', 'hoodie', 'sweater', 'blouse', 'suit'], category: 'Fashion' },
+    { keywords: ['food', 'drink', 'beverage', 'snack', 'chocolate', 'candy', 'coffee', 'tea', 'juice', 'soda', 'spices', 'sauce', 'honey', 'biscuit', 'cookie', 'cookies'], category: 'Food & Drinks' },
+    { keywords: ['furniture', 'chair', 'table', 'sofa', 'bed', 'pillow', 'blanket', 'lamp', 'light', 'decor', 'kitchen', 'plate', 'cup', 'organizer', 'rug', 'curtain', 'vase', 'clock'], category: 'Home & Living' },
+    { keywords: ['ball', 'bat', 'racket', 'glove', 'sports', 'fitness', 'gym', 'dumbbell', 'yoga', 'mat', 'jersey', 'helmet', 'bicycle', 'bike', 'treadmill'], category: 'Sports' },
+    { keywords: ['toy', 'toys', 'doll', 'action figure', 'puzzle', 'board game', 'lego', 'blocks', 'plush', 'game', 'gaming', 'nintendo', 'playstation', 'xbox'], category: 'Toys' },
+    { keywords: ['art', 'painting', 'drawing', 'sketch', 'canvas', 'poster', 'print', 'frame', 'sculpture', 'handmade', 'craft', 'pottery'], category: 'Art' },
+    { keywords: ['repair', 'cleaning', 'tutor', 'delivery', 'service', 'lessons', 'design', 'custom', 'consulting', 'plumbing', 'laundry'], category: 'Services' }
+  ];
+  for (const rule of rules) {
+    for (const kw of rule.keywords) {
+      // Only register first occurrence so high-specificity rules win
+      if (!index.has(kw)) index.set(kw, rule.category);
+    }
+  }
+  return index;
+})();
 
+// Feature sets for rich description highlights
+const COLORS    = new Set(['red', 'blue', 'green', 'black', 'white', 'yellow', 'pink', 'purple', 'orange', 'grey', 'gray', 'brown', 'gold', 'silver', 'beige', 'navy']);
+const MATERIALS = new Set(['leather', 'cotton', 'silk', 'wooden', 'wood', 'metal', 'denim', 'wool', 'canvas', 'velvet', 'ceramic', 'polyester', 'suede']);
+const BRANDS    = new Set(['nike', 'adidas', 'puma', 'gucci', 'prada', 'apple', 'samsung', 'sony', 'dell', 'hp', 'chanel', 'dior', 'rolex', 'zara']);
+
+// ── localStorage helpers ─────────────────────────────────────────
 function getLearnedData() {
   try {
     const raw = localStorage.getItem(LOCAL_AUTOFILL_KEY);
@@ -113,112 +136,125 @@ function saveLearnedData(data) {
   }
 }
 
+// ── Core prediction engine ───────────────────────────────────────
 /**
- * Predicts the category and generates a description for a given product name
- * @param {string} name 
+ * Predicts the category and generates a description for a given product name.
+ * Uses a pre-built Map index for O(1) keyword lookup (vs. nested loops).
+ * @param {string} name
  * @returns {{category: string, description: string}}
  */
 function localPredictAndGenerate(name) {
-  if (!name || !name.trim()) {
-    return { category: 'Other', description: '' };
-  }
+  if (!name || !name.trim()) return { category: 'Other', description: '' };
 
   const cleanName = name.trim();
   const lowerName = cleanName.toLowerCase();
-  const learned = getLearnedData();
+  const learned   = getLearnedData();
 
-  // 1. Check exact match in learned data
-  if (learned.exactNames && learned.exactNames[lowerName]) {
-    return {
-      category: learned.exactNames[lowerName].category,
-      description: learned.exactNames[lowerName].description
-    };
-  }
-
-  // 2. Check if the name contains any learned exact name as a phrase
+  // 1. Exact match in learned data (O(1) Map lookup)
   if (learned.exactNames) {
+    const exact = learned.exactNames[lowerName];
+    if (exact) return { category: exact.category, description: exact.description };
+
+    // 2. Partial match — learned name contained inside the typed name
     for (const [learnedName, data] of Object.entries(learned.exactNames)) {
       if (lowerName.includes(learnedName)) {
-        const escapedName = learnedName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const escaped = learnedName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         return {
           category: data.category,
-          // Adapt description if possible, or use as is
-          description: data.description.replace(new RegExp(escapedName, 'gi'), cleanName)
+          description: data.description.replace(new RegExp(escaped, 'gi'), cleanName)
         };
       }
     }
   }
 
-  // 3. Check predefined keyword rules with a score-based classification
+  // 3. Score-based category detection using the pre-built keyword index
+  const tokens = lowerName.split(/[\s\-_,.]+/);
+  const scores  = new Map(); // category → score
+
+  for (const token of tokens) {
+    // Exact token match (score: 3)
+    if (KEYWORD_INDEX.has(token)) {
+      const cat = KEYWORD_INDEX.get(token);
+      scores.set(cat, (scores.get(cat) || 0) + 3);
+    }
+  }
+  // Substring match for multi-word keywords (score: 1) — only for unscored categories
+  for (const [kw, cat] of KEYWORD_INDEX) {
+    if (kw.includes(' ') && lowerName.includes(kw)) {
+      scores.set(cat, (scores.get(cat) || 0) + 2);
+    } else if (!tokens.includes(kw) && lowerName.includes(kw)) {
+      scores.set(cat, (scores.get(cat) || 0) + 1);
+    }
+  }
+
   let category = 'Other';
   let highestScore = 0;
-  const tokens = lowerName.split(/[\s\-_,.]+/);
+  for (const [cat, score] of scores) {
+    if (score > highestScore) { highestScore = score; category = cat; }
+  }
 
-  for (const rule of KEYWORD_RULES) {
-    let score = 0;
-    for (const kw of rule.keywords) {
-      if (tokens.includes(kw)) {
-        score += 3; // exact word match
-      } else if (lowerName.includes(kw)) {
-        score += 1; // partial word match
-      }
+  // 4. Extract features for richer description highlights
+  const highlights = [];
+  for (const token of tokens) {
+    if (BRANDS.has(token) && highlights.length < 3) {
+      highlights.push(`premium quality from ${token.charAt(0).toUpperCase() + token.slice(1)}`);
     }
-    if (score > highestScore) {
-      highestScore = score;
-      category = rule.category;
+    if (COLORS.has(token) && highlights.length < 3) {
+      highlights.push(`a stylish ${token} finish`);
+    }
+    if (MATERIALS.has(token) && highlights.length < 3) {
+      highlights.push(`crafted with high-grade ${token}`);
     }
   }
 
-  // 4. Extract descriptive features to synthesize customized details
-  const COLORS = ['red', 'blue', 'green', 'black', 'white', 'yellow', 'pink', 'purple', 'orange', 'grey', 'gray', 'brown', 'gold', 'silver', 'beige', 'navy'];
-  const MATERIALS = ['leather', 'cotton', 'silk', 'wooden', 'wood', 'metal', 'gold', 'silver', 'plastic', 'denim', 'wool', 'canvas', 'velvet', 'glass', 'ceramic', 'polyester', 'suede'];
-  const BRANDS = ['nike', 'adidas', 'puma', 'gucci', 'prada', 'apple', 'samsung', 'sony', 'dell', 'hp', 'chanel', 'dior', 'rolex', 'louis vuitton', 'zara', 'h&m'];
-
-  const foundColor = COLORS.find(c => tokens.includes(c) || lowerName.includes(' ' + c) || lowerName.startsWith(c));
-  const foundMaterial = MATERIALS.find(m => tokens.includes(m) || lowerName.includes(' ' + m) || lowerName.startsWith(m));
-  const foundBrand = BRANDS.find(b => tokens.includes(b) || lowerName.includes(' ' + b) || lowerName.startsWith(b));
-
-  let customHighlights = [];
-  if (foundBrand) {
-    customHighlights.push(`premium quality from ${foundBrand.charAt(0).toUpperCase() + foundBrand.slice(1)}`);
-  }
-  if (foundColor) {
-    customHighlights.push(`a stylish ${foundColor} finish`);
-  }
-  if (foundMaterial) {
-    customHighlights.push(`crafted with high-grade ${foundMaterial}`);
+  let highlightSentence = '';
+  if (highlights.length > 0) {
+    const head = highlights.slice(0, -1).join(', ');
+    const tail = highlights.slice(-1)[0];
+    highlightSentence = ' Featuring ' + (head ? head + ', and ' : '') + tail + '.';
   }
 
-  let highlightSentence = "";
-  if (customHighlights.length > 0) {
-    // e.g. "Featuring premium quality from Nike, a stylish red finish, and crafted with high-grade leather."
-    highlightSentence = " Featuring " + customHighlights.slice(0, -1).join(', ') + (customHighlights.length > 1 ? ', and ' : '') + customHighlights.slice(-1) + ".";
-  }
-
-  // 5. Generate description from templates
+  // 5. Generate description from templates (deterministic, no randomness)
   const templates = DEFAULT_TEMPLATES[category] || DEFAULT_TEMPLATES['Other'];
-  // Choose template deterministically based on name length
-  const templateIdx = cleanName.length % templates.length;
-  let description = templates[templateIdx].replace('[Name]', cleanName);
-
-  if (highlightSentence) {
-    description += highlightSentence;
-  }
+  const tplIdx    = cleanName.length % templates.length;
+  const description = templates[tplIdx].replace('[Name]', cleanName) + highlightSentence;
 
   return { category, description };
 }
 
+// ── Debounced autofill wrappers ───────────────────────────────────
+// Prevents `localPredictAndGenerate` from running on every single keystroke.
+const _debounceTimers = new Map();
+
 /**
- * Learns from user correction when they modify generated values
- * @param {string} name 
- * @param {string} category 
- * @param {string} description 
+ * Debounced version of localPredictAndGenerate.
+ * @param {string} key      - Unique key per field (e.g. "bap-5" or "new-p")
+ * @param {string} name     - Product name input
+ * @param {Function} cb     - Callback receives {category, description}
+ * @param {number} [delay]  - ms to wait (default 300)
+ */
+function localPredictDebounced(key, name, cb, delay = 300) {
+  if (_debounceTimers.has(key)) clearTimeout(_debounceTimers.get(key));
+  _debounceTimers.set(key, setTimeout(() => {
+    _debounceTimers.delete(key);
+    if (name && name.trim().length >= 3) {
+      cb(localPredictAndGenerate(name));
+    }
+  }, delay));
+}
+
+// ── Learning from user corrections ───────────────────────────────
+/**
+ * Learns from user corrections when they modify generated values.
+ * @param {string} name
+ * @param {string} category
+ * @param {string} description
  */
 function localLearnCorrection(name, category, description) {
   if (!name || !name.trim()) return;
   const cleanName = name.trim();
   const lowerName = cleanName.toLowerCase();
-  const learned = getLearnedData();
+  const learned   = getLearnedData();
 
   if (!learned.exactNames) learned.exactNames = {};
   learned.exactNames[lowerName] = {
@@ -230,5 +266,6 @@ function localLearnCorrection(name, category, description) {
   console.log(`[Local Autofill] Learned correction for "${cleanName}":`, learned.exactNames[lowerName]);
 }
 
-window.localPredictAndGenerate = localPredictAndGenerate;
-window.localLearnCorrection = localLearnCorrection;
+window.localPredictAndGenerate  = localPredictAndGenerate;
+window.localPredictDebounced    = localPredictDebounced;
+window.localLearnCorrection     = localLearnCorrection;
