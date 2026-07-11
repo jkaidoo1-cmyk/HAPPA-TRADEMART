@@ -2248,7 +2248,6 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   } else if (tabName === 'admin') {
     window.renderStorefrontAdminPortal(storeId);
   }
-  }
 }
 
 window.toggleFollowStore = function(storeId) {

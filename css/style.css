@@ -339,6 +339,7 @@ ul { list-style: none; }
   margin-bottom: 4px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1575,6 +1576,7 @@ ul { list-style: none; }
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -2918,7 +2920,6 @@ ul { list-style: none; }
 
 /* ----- Public Profile Layouts (vendor / store / rendor) ----- */
 .profile-layout { display:block; }
-.profile-main { }
 .profile-contact-card { margin:12px; }
 
 @media (min-width: 1024px) {
@@ -2929,7 +2930,6 @@ ul { list-style: none; }
     align-items: start;
     padding: 0 12px;
   }
-  .profile-main { }
   .profile-contact-card {
     position: sticky;
     top: calc(var(--nav-h) + 12px);
