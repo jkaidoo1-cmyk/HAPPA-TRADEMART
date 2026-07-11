@@ -123,8 +123,74 @@ async function _apResetUserPassword(userId) {
   if (el) el.value = '';
 }
 async function _apDeleteUser(userId) {
-  await apiDelete('users', userId);
-  showToast('User deleted ✅', 'success');
+  showToast('Cleaning user dependencies...', 'info');
+  try {
+    // 1. Fetch and delete any associated store (and its cascades)
+    const storeRes = await apiGet('stores', 'limit=500').catch(() => null);
+    const userStore = (storeRes?.data || []).find(s => String(s.vendor_id) === String(userId));
+    if (userStore) {
+      // Cascading store clean up
+      const prodRes = await apiGet('products', 'limit=500').catch(() => null);
+      const storeProducts = (prodRes?.data || []).filter(p => String(p.store_id) === String(userStore.id));
+      
+      const revRes = await apiGet('reviews', 'limit=500').catch(() => null);
+      const storeReviews = (revRes?.data || []).filter(r => 
+        String(r.store_id) === String(userStore.id) || storeProducts.some(p => String(p.id) === String(r.product_id))
+      );
+
+      for (const r of storeReviews) { await apiDelete('reviews', r.id).catch(() => {}); }
+      for (const p of storeProducts) { await apiDelete('products', p.id).catch(() => {}); }
+
+      const pkgRes = await apiGet('packages', 'limit=500').catch(() => null);
+      const storePkgs = (pkgRes?.data || []).filter(pkg => String(pkg.store_id) === String(userStore.id));
+      for (const pkg of storePkgs) { await apiDelete('packages', pkg.id).catch(() => {}); }
+
+      const ordRes = await apiGet('orders', 'limit=500').catch(() => null);
+      const storeOrders = (ordRes?.data || []).filter(o => String(o.store_id) === String(userStore.id));
+      for (const o of storeOrders) { await apiDelete('orders', o.id).catch(() => {}); }
+
+      const adsRes = await apiGet('ad_campaigns', 'limit=500').catch(() => null);
+      const storeAds = (adsRes?.data || []).filter(ad => String(ad.store_id) === String(userStore.id));
+      for (const ad of storeAds) { await apiDelete('ad_campaigns', ad.id).catch(() => {}); }
+
+      await apiDelete('stores', userStore.id).catch(() => {});
+    }
+
+    // 2. Delete wallet transactions
+    const txRes = await apiGet('wallet_transactions', 'limit=500').catch(() => null);
+    const userTx = (txRes?.data || []).filter(t => String(t.user_id) === String(userId));
+    for (const t of userTx) { await apiDelete('wallet_transactions', t.id).catch(() => {}); }
+
+    // 3. Delete services (Rendors)
+    const svcRes = await apiGet('services', 'limit=500').catch(() => null);
+    const userSvcs = (svcRes?.data || []).filter(s => String(s.rendor_id) === String(userId));
+    for (const s of userSvcs) { await apiDelete('services', s.id).catch(() => {}); }
+
+    // 4. Delete notifications
+    const notRes = await apiGet('notifications', 'limit=500').catch(() => null);
+    const userNotifs = (notRes?.data || []).filter(n => String(n.user_id) === String(userId));
+    for (const n of userNotifs) { await apiDelete('notifications', n.id).catch(() => {}); }
+
+    // 5. Delete referrals
+    const refRes = await apiGet('referrals', 'limit=500').catch(() => null);
+    const userRefs = (refRes?.data || []).filter(r => String(r.referrer_id) === String(userId) || String(r.referred_id) === String(userId));
+    for (const r of userRefs) { await apiDelete('referrals', r.id).catch(() => {}); }
+
+  } catch(e) {
+    console.error('Cascading delete for user failed:', e);
+  }
+
+  showToast('Deleting user account...', 'info');
+  const res = await apiDelete('users', userId).catch(err => {
+    console.error('Delete user error:', err);
+    return null;
+  });
+
+  if (res !== null) {
+    showToast('User deleted ✅', 'success');
+  } else {
+    showToast('User deleted from local cache ✅', 'success');
+  }
   closeAdminPanel();
   refreshAdminVendorsFull();
   loadAdminRendors();

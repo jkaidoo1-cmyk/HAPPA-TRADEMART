@@ -2674,11 +2674,52 @@ async function disableStorefront(storeId) {
 }
 
 async function deleteStorefront(storeId) {
-  if (!confirm('Are you sure you want to permanently delete this store from the database? This action cannot be undone.')) return;
+  if (!confirm('Are you sure you want to permanently delete this store and all its associated products/reviews from the database? This action cannot be undone.')) return;
 
-  showToast('Deleting store...', 'info');
+  showToast('Cleaning store dependencies...', 'info');
+  try {
+    // 1. Fetch and delete reviews & products
+    const prodRes = await apiGet('products', 'limit=500').catch(() => null);
+    const storeProducts = (prodRes?.data || []).filter(p => String(p.store_id) === String(storeId));
+    
+    const revRes = await apiGet('reviews', 'limit=500').catch(() => null);
+    const storeReviews = (revRes?.data || []).filter(r => 
+      String(r.store_id) === String(storeId) || storeProducts.some(p => String(p.id) === String(r.product_id))
+    );
+
+    for (const r of storeReviews) {
+      await apiDelete('reviews', r.id).catch(() => {});
+    }
+    for (const p of storeProducts) {
+      await apiDelete('products', p.id).catch(() => {});
+    }
+
+    // 2. Fetch and delete orders & packages
+    const pkgRes = await apiGet('packages', 'limit=500').catch(() => null);
+    const storePkgs = (pkgRes?.data || []).filter(pkg => String(pkg.store_id) === String(storeId));
+    for (const pkg of storePkgs) {
+      await apiDelete('packages', pkg.id).catch(() => {});
+    }
+
+    const ordRes = await apiGet('orders', 'limit=500').catch(() => null);
+    const storeOrders = (ordRes?.data || []).filter(o => String(o.store_id) === String(storeId));
+    for (const o of storeOrders) {
+      await apiDelete('orders', o.id).catch(() => {});
+    }
+
+    // 3. Fetch and delete ad campaigns
+    const adsRes = await apiGet('ad_campaigns', 'limit=500').catch(() => null);
+    const storeAds = (adsRes?.data || []).filter(ad => String(ad.store_id) === String(storeId));
+    for (const ad of storeAds) {
+      await apiDelete('ad_campaigns', ad.id).catch(() => {});
+    }
+  } catch(e) {
+    console.error('Cascading delete prep failed:', e);
+  }
+
+  showToast('Deleting store record...', 'info');
   const res = await apiDelete('stores', storeId).catch(err => {
-    console.error('Delete error:', err);
+    console.error('Delete store error:', err);
     return null;
   });
   
