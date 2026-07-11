@@ -223,7 +223,7 @@ async function renderVendorDashboard() {
 
     <!-- Analytics Chart -->
     <div class="card">
-      <div class="card-header"><h3>≡ƒôè Sales This Month</h3></div>
+      <div class="card-header"><h3><i class="fas fa-chart-bar"></i> Sales This Month</h3></div>
       <div class="card-body">
         <div class="chart-container">
           <canvas id="vendor-sales-chart"></canvas>
@@ -327,9 +327,7 @@ async function renderVendorDashboard() {
     ${myStore ? `
     <div class="card" style="margin-bottom:16px;border:2px solid var(--success)">
       <div class="card-body" style="background:linear-gradient(90deg,#d1fae5,#a7f3d0);padding:12px 14px">
-        <div style="font-weight:700;font-size:.88rem;margin-bottom:4px;color:#065f46">
-          <i class="fas fa-store" style="margin-right:6px"></i>≡ƒÅ¬ Your Store Gets Auto-Saved!
-        </div>
+          <i class="fas fa-store" style="margin-right:6px"></i> Your Store Gets Auto-Saved!
         <div style="font-size:.8rem;color:#065f46;line-height:1.6">
           When someone signs up through your referral link, <strong>"${escHtml(myStore.name)}"</strong> is automatically added to their saved stores and they see it first. More exposure for your store!
         </div>
@@ -339,7 +337,7 @@ async function renderVendorDashboard() {
     <!-- How it works -->
     <div class="card" style="margin-bottom:16px">
       <div class="card-body" style="padding:14px">
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:10px">≡ƒÆí How Referrals Work</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:10px">💡 How Referrals Work</div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">1</div>
@@ -1227,7 +1225,7 @@ async function submitAddProduct(e, storeId, vendorId) {
   if (!prod) { showToast('Failed to add product. Try again.', 'error'); return; }
   App.allProducts.push(prod);
   closeModalForce();
-  showToast(`"${name}" added successfully! ≡ƒÄë`, 'success');
+  showToast(`"${name}" added successfully! 🎉`, 'success');
   renderVendorDashboard();
 }
 
@@ -1483,7 +1481,7 @@ function resendOTP() {
   console.log('[DEMO] OTP:', otp);
   showModal(`
 <div class="modal-handle"></div>
-<div class="modal-header"><span class="modal-title">≡ƒô▒ Verify Phone</span></div>
+<div class="modal-header"><span class="modal-title">📱 Verify Phone</span></div>
 <div class="modal-body">
   <p style="font-size:.875rem;color:var(--text-light);margin-bottom:16px">
     New OTP sent to <strong>${App.currentUser?.phone}</strong><br>
@@ -1571,7 +1569,7 @@ async function showAvailableStores() {
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
-  <span class="modal-title">≡ƒÅ¬ Available Stores</span>
+  <span class="modal-title">🏪 Available Stores</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
 <div class="modal-body">
@@ -1671,8 +1669,8 @@ async function acquireStoreViaReferrals(storeId) {
   }
 
   closeModalForce();
-  showToast('≡ƒÄë Store unlocked successfully via referrals!', 'success');
-  addNotification(u.id, 'system', '≡ƒÅ¬ Store Acquired!',
+  showToast('🎉 Store unlocked successfully via referrals!', 'success');
+  addNotification(u.id, 'system', '🏪 Store Acquired!',
     `Your store "${storeCheck.name || 'new store'}" is ready! Go to My Store tab and start adding products.`);
   renderVendorDashboard();
 }
@@ -1750,8 +1748,8 @@ async function purchaseStore(storeId, price) {
   }
   
   closeModalForce();
-  showToast('≡ƒÄë Store purchased successfully!', 'success');
-  addNotification(u.id, 'system', '≡ƒÅ¬ Store Acquired!',
+  showToast('🎉 Store purchased successfully!', 'success');
+  addNotification(u.id, 'system', '🏪 Store Acquired!',
     `Your store "${storeCheck.name || 'new store'}" is ready! Go to My Store tab and start adding products.`);
   renderVendorDashboard();
 }

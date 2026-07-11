@@ -561,9 +561,9 @@ async function doLogin(e) {
 
   saveSessions();
 
-  addNotification(user.id, 'system', '≡ƒÄë Welcome back!', `Hello ${user.name}, welcome back to HAPPA TRADEMART`);
+  addNotification(user.id, 'system', '🎉 Welcome back!', `Hello ${user.name}, welcome back to HAPPA TRADEMART`);
 
-  showToast(`Welcome back, ${user.name}! ≡ƒÄë`, 'success');
+  showToast(`Welcome back, ${user.name}! 🎉`, 'success');
 
   showPage('dashboard');
 
@@ -827,7 +827,7 @@ async function doRegister(e) {
 
       // Notify the referrer
 
-      addNotification(referrer.id, 'referral', '≡ƒÄü New Referral Signup!',
+      addNotification(referrer.id, 'referral', '🎁 New Referral Signup!',
 
         `${name} joined using your referral link! Your store gets saved for them automatically.`);
 
@@ -879,7 +879,7 @@ async function doRegister(e) {
 
 
 
-          addNotification(created.id, 'referral', '≡ƒÅ¬ Store Saved For You!',
+          addNotification(created.id, 'referral', '🏪 Store Saved For You!',
 
             `"${referrerStore.name}" has been saved to your stores. Check it out in the marketplace!`);
 
@@ -911,7 +911,7 @@ async function doRegister(e) {
 
   // Add welcome notification
 
-  addNotification(created.id, 'system', '≡ƒÄë Welcome to HAPPA TRADEMART!',
+  addNotification(created.id, 'system', '🎉 Welcome to HAPPA TRADEMART!',
 
     authRole === 'vendor'
 
@@ -947,7 +947,7 @@ function showOTPModal(user) {
 
 <div class="modal-header">
 
-  <span class="modal-title">≡ƒô▒ Verify Phone</span>
+  <span class="modal-title">📱 Verify Phone</span>
 
 </div>
 
@@ -1093,7 +1093,7 @@ function showPendingScreen() {
 
   <div class="auth-body" style="text-align:center;padding:32px 20px">
 
-    <div style="font-size:3rem;margin-bottom:16px">${isRen ? '≡ƒÄ¿' : '⏳'}</div>
+    <div style="font-size:3rem;margin-bottom:16px">${isRen ? '🎨' : '⏳'}</div>
 
     <h2 style="font-weight:800;font-size:1.2rem;margin-bottom:8px">
 
@@ -1337,7 +1337,7 @@ async function quickLogin(role) {
 
   saveSessions();
 
-  showToast(`Welcome, ${user.name}! ≡ƒÄë`, 'success');
+  showToast(`Welcome, ${user.name}! 🎉`, 'success');
 
   addNotification(user.id, 'system', 'Welcome back!', `Hello ${user.name}, good to see you again on HAPPA TRADEMART!`);
 

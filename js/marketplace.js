@@ -714,7 +714,7 @@ ${store.id ? `
 
 <div class="card" style="margin:0 12px 12px">
 
-  <div class="card-header"><h3>≡ƒÜÜ Delivery Info</h3></div>
+  <div class="card-header"><h3><i class="fas fa-truck"></i> Delivery Info</h3></div>
 
   <div class="card-body" id="product-delivery-info">
 
@@ -876,7 +876,7 @@ function notifyRestock(productId) {
 
   if (!App.currentUser) { showPage('auth'); return; }
 
-  showToast('We\'ll notify you when this item is back in stock ≡ƒöö', 'info');
+  showToast('We\'ll notify you when this item is back in stock 🔔', 'info');
 
 }
 
@@ -894,7 +894,7 @@ function shareProduct(productId) {
 
     navigator.clipboard?.writeText(url);
 
-    showToast('Product link copied! ≡ƒôï', 'success');
+    showToast('Product link copied! 📋', 'success');
 
   }
 
@@ -1684,7 +1684,7 @@ async function submitReview(targetId, targetType) {
 
   closeModalForce();
 
-  showToast('Review submitted! Thank you ≡ƒîƒ', 'success');
+  showToast('Review submitted! Thank you ⭐', 'success');
 
   // Reload product/store detail
 
