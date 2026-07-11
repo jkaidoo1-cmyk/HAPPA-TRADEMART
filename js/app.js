@@ -1371,8 +1371,10 @@ async function loadHomeData() {
   ];
 
   try {
-    const prodRes = await apiGet('products', 'limit=500');
-    const storeRes = await apiGet('stores', 'limit=500');
+    const [prodRes, storeRes] = await Promise.all([
+      apiGet('products', 'limit=500'),
+      apiGet('stores', 'limit=500')
+    ]);
 
     App.allProducts = prodRes?.data || [];
     App.allStores = storeRes?.data || [];

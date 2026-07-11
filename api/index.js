@@ -146,12 +146,44 @@ app.get('/api/:table', async (req, res) => {
   try {
     const supabase = getSupabase();
     const table = req.params.table;
-    const { data, error } = await supabase.from(table).select('*');
+    const { search, limit, page, sort, ...filters } = req.query;
+
+    let queryBuilder = supabase.from(table).select('*');
+
+    // 1. Apply exact match filters directly in database
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== '') {
+        queryBuilder = queryBuilder.eq(key, value);
+      }
+    }
+
+    // 2. Apply sorting directly in database
+    if (sort) {
+      // Check if sort column exists or default to id/created_at
+      queryBuilder = queryBuilder.order(sort, { ascending: false });
+    }
+
+    // 3. Apply limit/pagination in database if no client-side search is present
+    if (limit && !search) {
+      const max = parseInt(limit, 10);
+      if (!isNaN(max) && max > 0) {
+        const pageNum = parseInt(page, 10) || 1;
+        const start = (pageNum - 1) * max;
+        queryBuilder = queryBuilder.range(start, start + max - 1);
+      }
+    }
+
+    const { data, error } = await queryBuilder;
     if (error) return res.status(500).json({ error: error.message });
 
-    const rows = (data || []).map(serializeRecord);
-    const filtered = applyClientFilters(rows, req.query);
-    res.json({ data: filtered });
+    let rows = (data || []).map(serializeRecord);
+
+    // 4. Fallback search / client filter if needed
+    if (search) {
+      rows = applyClientFilters(rows, { search, limit, page });
+    }
+
+    res.json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
