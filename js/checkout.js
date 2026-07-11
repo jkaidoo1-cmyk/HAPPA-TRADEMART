@@ -307,7 +307,7 @@ async function placeOrder() {
       const prod = App.allProducts.find(p => p.id === item.id);
       if (prod) {
         const newQty = Math.max(0, (prod.stock_qty||0) - item.qty);
-        await apiPatch('products', item.id, { stock_qty: newQty, sold_count: (prod.sold_count||0) + item.qty });
+        await apiPatch('products', item.id, { stock_qty: newQty, total_sold: (prod.total_sold || prod.sold_count || 0) + item.qty });
         prod.stock_qty = newQty;
       }
     }

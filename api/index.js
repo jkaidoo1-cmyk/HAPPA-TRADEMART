@@ -46,11 +46,40 @@ const JSONB_COLS = new Set([
 
 function serializeRecord(record) {
   const out = { ...record };
+
+  // Parse JSONB columns stored as strings
   for (const col of JSONB_COLS) {
     if (col in out && typeof out[col] === 'string') {
       try { out[col] = JSON.parse(out[col]); } catch {}
     }
   }
+
+  // ── Field aliasing: DB name → frontend expected name ──────────
+  // Products: total_sold → sold_count (frontend uses sold_count everywhere)
+  if ('total_sold' in out && !('sold_count' in out)) {
+    out.sold_count = out.total_sold;
+  }
+  // Users: avatar_url → avatar
+  if ('avatar_url' in out && !('avatar' in out)) {
+    out.avatar = out.avatar_url;
+  }
+  // Stores: description → about_us (used by storefront views)
+  if ('description' in out && !('about_us' in out)) {
+    out.about_us = out.description;
+  }
+  // Stores: return_policy → shipping_policy fallback
+  if ('return_policy' in out && !('shipping_policy' in out)) {
+    out.shipping_policy = out.return_policy;
+  }
+  // Stores: review_count → followers fallback for display
+  if ('review_count' in out && !('followers' in out)) {
+    out.followers = out.review_count || 0;
+  }
+  // Products: review_count → views fallback
+  if ('review_count' in out && !('views' in out)) {
+    out.views = (out.review_count || 0) * 10;
+  }
+
   return out;
 }
 
