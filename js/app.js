@@ -1026,7 +1026,7 @@ function updateCountdown() {
 
 // ── Load Home Data ────────────────────────────────────────
 async function loadHomeData() {
-  const MOCK_PRODUCTS = [
+  const MOCK_PRODUCTS = []; const MOCK_PRODUCTS_OLD = [
     {
       id: '1',
       name: 'Designer Sneakers',
@@ -1267,7 +1267,7 @@ async function loadHomeData() {
     }
   ];
 
-  const MOCK_STORES = [
+  const MOCK_STORES = []; const MOCK_STORES_OLD = [
     {
       id: '1',
       vendor_id: 'u-vendor-001',
