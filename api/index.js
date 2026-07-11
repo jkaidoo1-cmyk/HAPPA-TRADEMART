@@ -101,6 +101,46 @@ app.get('/api', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', backend: 'supabase' });
 });
 
+app.post('/api/clean-temp-database-records', async (req, res) => {
+  try {
+    const supabase = getSupabase();
+    
+    // 1. Delete Kumasi Fashion Hub & Northern Trends
+    const storeRes = await supabase.from('stores').select('*');
+    const stores = storeRes.data || [];
+    const targets = stores.filter(s => s.name === 'Kumasi Fashion Hub' || s.name === 'Northern Trends');
+    
+    for (const store of targets) {
+      await supabase.from('reviews').delete().eq('store_id', store.id);
+      // Delete products and reviews of those products
+      const prodRes = await supabase.from('products').select('id').eq('store_id', store.id);
+      const productIds = (prodRes.data || []).map(p => p.id);
+      for (const pid of productIds) {
+        await supabase.from('reviews').delete().eq('product_id', pid);
+      }
+      await supabase.from('products').delete().eq('store_id', store.id);
+      await supabase.from('packages').delete().eq('store_id', store.id);
+      await supabase.from('orders').delete().eq('store_id', store.id);
+      await supabase.from('ad_campaigns').delete().eq('store_id', store.id);
+      await supabase.from('stores').delete().eq('id', store.id);
+    }
+    
+    // 2. Delete Nana Ama (rendor)
+    await supabase.from('services').delete().eq('rendor_id', 'rendor');
+    await supabase.from('service_orders').delete().eq('rendor_id', 'rendor');
+    await supabase.from('service_orders').delete().eq('buyer_id', 'rendor');
+    await supabase.from('notifications').delete().eq('user_id', 'rendor');
+    await supabase.from('wallet_transactions').delete().eq('user_id', 'rendor');
+    await supabase.from('referrals').delete().eq('referrer_id', 'rendor');
+    await supabase.from('referrals').delete().eq('referred_id', 'rendor');
+    await supabase.from('users').delete().eq('id', 'rendor');
+    
+    res.json({ success: true, message: 'Purged target records successfully!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/:table  — list with optional filters
 app.get('/api/:table', async (req, res) => {
   try {

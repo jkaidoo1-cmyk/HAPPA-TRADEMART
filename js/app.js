@@ -50,6 +50,43 @@ window.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('happa_seed_v', SEED_VERSION);
   }
 
+  // Clear local cache for target draft stores and Nana Ama
+  try {
+    const keys = ['happa_all_stores', 'happa_saved', 'happa_users', 'happa_currentUser'];
+    for (const key of keys) {
+      const dataRaw = localStorage.getItem(key);
+      if (dataRaw) {
+        let data = JSON.parse(dataRaw);
+        if (Array.isArray(data)) {
+          const filtered = data.filter(item => {
+            if (item && item.name && (item.name === 'Kumasi Fashion Hub' || item.name === 'Northern Trends' || item.name === 'Nana Ama')) return false;
+            if (item && item.id && (item.id === '2' || item.id === '3' || item.id === 'rendor')) return false;
+            return true;
+          });
+          localStorage.setItem(key, JSON.stringify(filtered));
+        } else if (data && typeof data === 'object') {
+          if (data.name === 'Nana Ama' || data.id === 'rendor') {
+            localStorage.removeItem(key);
+          }
+        }
+      }
+    }
+  } catch(e){}
+
+  // Trigger serverless database cleanup for target demo records
+  if (!localStorage.getItem('happa_db_cleaned_v2')) {
+    fetch('/api/clean-temp-database-records', { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          localStorage.setItem('happa_db_cleaned_v2', '1');
+          console.log('[DB Clean] Purged target records successfully.');
+          loadHomeData().then(() => initAdBanners('home'));
+        }
+      })
+      .catch(err => console.warn('[DB Clean] Error:', err));
+  }
+
   // First, hide ALL pages completely
   document.querySelectorAll('.page').forEach(p => {
     p.classList.remove('active');
