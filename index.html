@@ -769,6 +769,24 @@
       const banner = document.getElementById('pwa-install-banner');
       if (banner) banner.remove();
     }
+
+    // Expose a global function to trigger PWA installation manually
+    window.triggerPWAInstall = function() {
+      if (_pwaInstallPrompt) {
+        _pwaInstallPrompt.prompt();
+        _pwaInstallPrompt.userChoice.then(result => {
+          if (result.outcome === 'accepted') {
+            _pwaInstallPrompt = null;
+          }
+        });
+      } else {
+        if (typeof showToast === 'function') {
+          showToast('App is already installed, running in browser standalone mode, or PWA isn\'t supported.', 'info');
+        } else {
+          alert('App is already installed or PWA isn\'t supported.');
+        }
+      }
+    };
   </script>
 
 </body>

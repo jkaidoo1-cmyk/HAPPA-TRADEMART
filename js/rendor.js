@@ -84,10 +84,16 @@ async function renderRendorDashboard() {
     <div class="rendor-profile-cat"><i class="fas fa-briefcase"></i> ${escHtml(serviceCat)}</div>
     ${u.rendor_tags ? `<div style="font-size:.72rem;opacity:.8;margin-top:2px">${escHtml(u.rendor_tags)}</div>` : ''}
   </div>
-  <button class="btn btn-outline btn-sm" style="margin-left:auto;border-color:#a78bfa;color:#7c3aed;flex-shrink:0"
-          onclick="showEditRendorProfileModal()">
-    <i class="fas fa-edit"></i> Edit
-  </button>
+  <div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
+    <button class="btn btn-outline btn-sm" style="border-color:#a78bfa;color:#7c3aed"
+            onclick="showEditRendorProfileModal()">
+      <i class="fas fa-edit"></i> Edit
+    </button>
+    <button class="btn btn-outline btn-sm" style="border-color:var(--primary);color:var(--primary);padding:3px 8px;font-size:0.7rem;display:inline-flex;align-items:center;gap:4px"
+            onclick="window.triggerPWAInstall()">
+      <i class="fas fa-download"></i> Install App
+    </button>
+  </div>
 </div>
 
 <!-- ── Subscription status strip ── -->

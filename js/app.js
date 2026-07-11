@@ -422,6 +422,16 @@ function renderSettingsPage() {
         </div>
       </div>
 
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><h3>📱 App Installation</h3></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+          <p style="font-size:.8rem;color:var(--text-muted);margin:0">Add HAPPA TRADEMART to your device home screen for a faster, offline-enabled app experience.</p>
+          <button class="btn btn-primary btn-sm btn-block" onclick="window.triggerPWAInstall()">
+            <i class="fas fa-download"></i> Install HAPPA PWA App
+          </button>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header"><h3>🔒 Account</h3></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:10px">

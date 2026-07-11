@@ -139,6 +139,9 @@ async function renderAdminDashboard() {
         <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="previewAsRole('vendor')">
           <i class="fas fa-store"></i> Preview as Vendor
         </button>
+        <button class="btn btn-sm btn-outline" style="border-color:var(--primary);color:var(--primary)" onclick="window.triggerPWAInstall()">
+          <i class="fas fa-download"></i> Install App
+        </button>
       </div>
     </div>
 

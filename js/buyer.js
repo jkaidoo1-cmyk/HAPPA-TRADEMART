@@ -49,6 +49,9 @@ async function renderBuyerDashboard() {
         <div style="font-size:.78rem;color:var(--text-muted)">${u.email}</div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap">
           <span class="store-location-tag"><i class="fas fa-map-marker-alt"></i> ${u.location||'No location'}</span>
+          <button class="btn btn-outline" onclick="window.triggerPWAInstall()" style="padding:2px 8px;font-size:.72rem;display:inline-flex;align-items:center;gap:4px;height:auto;line-height:1">
+            <i class="fas fa-download"></i> Install App
+          </button>
         </div>
       </div>
     </div>
