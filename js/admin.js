@@ -671,7 +671,7 @@ async function renderAdminDashboard() {
 </div>`;
 
   setTimeout(() => {
-    renderAdminRevenueChart();
+    renderAdminRevenueChart(allOrders);
     renderAdminLocationChart(allOrders);
   }, 200);
 }
@@ -2085,15 +2085,33 @@ function exitPreviewMode() {
 }
 
 // ── Charts ────────────────────────────────────────────────
-function renderAdminRevenueChart() {
+function renderAdminRevenueChart(orders = []) {
   const canvas = document.getElementById('admin-revenue-chart');
   if (!canvas) return;
-  const weeks = ['W1','W2','W3','W4','W5'];
-  const data  = weeks.map(() => Math.floor(Math.random() * 5000 + 1000));
+
+  const now = new Date();
+  const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+  const weeks = ['W1', 'W2', 'W3', 'W4', 'W5'];
+  const data = [0, 0, 0, 0, 0];
+
+  orders.forEach(o => {
+    if (!o.created_at) return;
+    const orderDate = new Date(o.created_at);
+    const diffMs = now - orderDate;
+    if (diffMs < 0 || diffMs > 5 * oneWeekMs) return;
+
+    const bucketIndex = 4 - Math.floor(diffMs / oneWeekMs);
+    if (bucketIndex >= 0 && bucketIndex < 5) {
+      data[bucketIndex] += parseFloat(o.platform_fee || 0);
+    }
+  });
+
+  const roundedData = data.map(v => parseFloat(v.toFixed(2)));
+
   if (window._adminRevChart) window._adminRevChart.destroy();
   window._adminRevChart = new Chart(canvas, {
     type: 'line',
-    data: { labels: weeks, datasets: [{ label: 'Platform Fee (GHS)', data, fill: true,
+    data: { labels: weeks, datasets: [{ label: 'Platform Fee (GHS)', data: roundedData, fill: true,
       backgroundColor: 'rgba(232,93,4,0.1)', borderColor: 'var(--primary)', tension: 0.4, pointRadius: 4 }] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },

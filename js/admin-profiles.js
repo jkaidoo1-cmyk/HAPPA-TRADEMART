@@ -1250,7 +1250,7 @@ async function adminOpenVendorProfile(userId) {
           </div>
           <div class="form-group">
             <label class="form-label">Keywords / Tags <span style="font-size:.72rem;color:var(--text-muted)">(comma-separated)</span></label>
-            <input class="form-control" name="keywords" value="${escHtml((store.keywords||[]).join?store.keywords.join(', '):store.keywords||'')}" placeholder="e.g., shoes, fashion, accessories">
+            <input class="form-control" name="keywords" value="${escHtml((store.keywords||[]).join(', '))}" placeholder="e.g., shoes, fashion, accessories">
           </div>
           <div class="form-group">
             <label class="form-label">Logo Image URL</label>

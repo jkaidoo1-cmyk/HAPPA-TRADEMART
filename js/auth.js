@@ -1360,16 +1360,25 @@ function generateRefCode(name) {
 
 
 function addNotification(userId, type, title, message, actionUrl = '') {
-
-  const notif = { id: 'n' + Date.now(), user_id: userId, type, title, message, is_read: false, action_url: actionUrl };
+  const notif = {
+    id: 'n' + Date.now() + Math.random().toString(36).substr(2, 5),
+    user_id: userId,
+    type,
+    title,
+    message,
+    is_read: false,
+    action_url: actionUrl,
+    created_at: new Date().toISOString()
+  };
 
   App.notifications.unshift(notif);
-
   if (App.notifications.length > 50) App.notifications.pop();
-
   saveNotifs();
-
   renderNotifBadge();
 
+  // Asynchronously upload to database
+  apiPost('notifications', notif).catch(err => {
+    console.warn('Failed to upload notification to server:', err);
+  });
 }
 

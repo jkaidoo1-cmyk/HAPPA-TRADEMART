@@ -185,7 +185,7 @@ function selectPayment(method) {
   renderCheckout();
 }
 
-function applyReferral() {
+async function applyReferral() {
   const code = document.getElementById('checkout-refcode')?.value.trim().toUpperCase();
   if (!code) return;
   const msg = document.getElementById('referral-msg');
@@ -193,9 +193,22 @@ function applyReferral() {
     if (msg) msg.innerHTML = '<span style="color:var(--danger)">You cannot use your own code</span>';
     return;
   }
-  // Simulate referral validation
-  if (msg) msg.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check"></i> Referral code applied!</span>';
-  App.appliedReferral = code;
+  if (msg) msg.innerHTML = '<span><i class="fas fa-spinner fa-spin"></i> Validating…</span>';
+  try {
+    const res = await apiGet('users', 'limit=200');
+    const users = res?.data || [];
+    const referrer = users.find(u => u.referral_code && u.referral_code.toUpperCase() === code);
+    if (!referrer) {
+      if (msg) msg.innerHTML = '<span style="color:var(--danger)">Invalid referral code</span>';
+      App.appliedReferral = null;
+    } else {
+      if (msg) msg.innerHTML = `<span style="color:var(--success)"><i class="fas fa-check"></i> Referral code applied (Referrer: ${escHtml(referrer.name)})!</span>`;
+      App.appliedReferral = code;
+    }
+  } catch(e) {
+    if (msg) msg.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check"></i> Referral code applied!</span>';
+    App.appliedReferral = code;
+  }
 }
 
 function updateDeliveryFee() {

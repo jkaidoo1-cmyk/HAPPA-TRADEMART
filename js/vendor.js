@@ -819,15 +819,38 @@ async function renderVendorDashboard() {
   }, 200);
 }
 
-function renderVendorChart(packages) {
+function renderVendorChart(packages = []) {
   const canvas = document.getElementById('vendor-sales-chart');
   if (!canvas) return;
   const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const data  = days.map(() => Math.floor(Math.random() * 800 + 100));
+  const data = [0, 0, 0, 0, 0, 0, 0];
+
+  const now = new Date();
+  const currentDay = now.getDay();
+  const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - distanceToMonday);
+  startOfWeek.setHours(0,0,0,0);
+
+  packages.forEach(p => {
+    if (!['delivered', 'confirmed'].includes(p.status)) return;
+    if (!p.created_at) return;
+    const pDate = new Date(p.created_at);
+    if (pDate >= startOfWeek) {
+      const dayIdx = pDate.getDay();
+      const mappedIdx = dayIdx === 0 ? 6 : dayIdx - 1;
+      if (mappedIdx >= 0 && mappedIdx < 7) {
+        data[mappedIdx] += parseFloat(p.gross_amount || p.vendor_amount || 0);
+      }
+    }
+  });
+
+  const roundedData = data.map(v => parseFloat(v.toFixed(2)));
+
   if (window._vendorChart) window._vendorChart.destroy();
   window._vendorChart = new Chart(canvas, {
     type: 'bar',
-    data: { labels: days, datasets: [{ label: 'GHS', data, backgroundColor: 'rgba(232,93,4,0.8)', borderRadius: 6 }] },
+    data: { labels: days, datasets: [{ label: 'GHS', data: roundedData, backgroundColor: 'rgba(232,93,4,0.8)', borderRadius: 6 }] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: true, ticks: { callback: v => 'GHS '+v } } } }
@@ -997,10 +1020,15 @@ function showAddProductModal(storeId, vendorId) {
       </div>
     </div>
     <button class="btn btn-primary btn-block" type="submit">
+    <button class="btn btn-primary btn-block" type="submit">
       <i class="fas fa-plus-circle"></i> Add Product
     </button>
   </form>
 </div>`);
+  // Automatically initialize first image slot (Cover Image) for convenience
+  setTimeout(() => {
+    _addProductImgSlot('new-p');
+  }, 50);
 }
 
 // ── Note prompt visibility toggle ───────────────────────────
@@ -1222,7 +1250,7 @@ async function submitAddProduct(e, storeId, vendorId) {
   const store    = App.allStores.find(s => s.id === storeId) || {};
   const tags     = tagsStr ? tagsStr.split(',').map(t=>t.trim()).filter(Boolean) : [];
 
-  if (!name || !price || stock === undefined) { showToast('Fill in required fields', 'warning'); return; }
+  if (!name || isNaN(price) || isNaN(stock)) { showToast('Fill in all required fields with valid numbers', 'warning'); return; }
 
   // Learn from user's input
   if (name && cat && desc) {
@@ -1358,7 +1386,6 @@ async function saveProductEdit(productId) {
   const buyerNotePrompt = (document.getElementById('edit-p-note-prompt')?.value || '').trim() || 'Add a note (e.g. color, size)';
   const status = stock === 0 ? 'sold_out' : 'active';
   
-  // Learn from user's changes
   if (name && category && description) {
     localLearnCorrection(name, category, description);
   }
@@ -1369,7 +1396,8 @@ async function saveProductEdit(productId) {
     allow_buyer_note: allowBuyerNote,
     buyer_note_prompt: allowBuyerNote ? buyerNotePrompt : ''
   });
-  const p = App.allProducts.find(p => p.id === productId);
+
+  const p = App.allProducts.find(p => String(p.id) === String(productId));
   if (p) {
     p.name = name; p.description = description; p.category = category;
     p.stock_qty = stock; p.price = price; p.is_flash_sale = flash; p.status = status; p.images = images;
@@ -1387,7 +1415,7 @@ async function saveProductEdit(productId) {
 async function archiveProduct(productId) {
   if (!confirm('Archive this product? It will be hidden from buyers.')) return;
   await apiPatch('products', productId, { status: 'archived' });
-  const p = App.allProducts.find(p => p.id === productId);
+  const p = App.allProducts.find(p => String(p.id) === String(productId));
   if (p) p.status = 'archived';
   showToast('Product archived', 'info');
   if (App.currentPage === 'vendor-my-store') {
@@ -1400,9 +1428,9 @@ async function archiveProduct(productId) {
 async function deleteVendorProduct(productId) {
   if (!confirm('Permanently delete this product? This cannot be undone.')) return;
   await apiDelete('products', productId);
-  // Remove from global cache immediately so it doesn\'t reappear
+  // Remove from global cache immediately so it doesn't reappear
   if (Array.isArray(App.allProducts)) {
-    const idx = App.allProducts.findIndex(p => p.id === productId);
+    const idx = App.allProducts.findIndex(p => String(p.id) === String(productId));
     if (idx > -1) App.allProducts.splice(idx, 1);
   }
   showToast('Product deleted', 'warning');
