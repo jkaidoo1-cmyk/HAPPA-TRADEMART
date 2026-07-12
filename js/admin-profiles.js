@@ -192,8 +192,10 @@ async function _apDeleteUser(userId) {
     showToast('User deleted from local cache ✅', 'success');
   }
   closeAdminPanel();
-  refreshAdminVendorsFull();
-  loadAdminRendors();
+  if (typeof refreshAdminVendorsFull === 'function') refreshAdminVendorsFull().catch(() => {});
+  if (typeof loadAdminRendors === 'function') loadAdminRendors().catch(() => {});
+  if (typeof refreshAdminUsersList === 'function') refreshAdminUsersList().catch(() => {});
+  if (typeof renderAdminDashboard === 'function') renderAdminDashboard().catch(() => {});
 }
 
 // ── Store helpers ─────────────────────────────────────────
