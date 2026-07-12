@@ -1685,6 +1685,11 @@ function showAdminPanel(html) {
   root.innerHTML = html;
   root.style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  root.onclick = function(e) {
+    if (e.target === root) {
+      closeAdminPanel();
+    }
+  };
 }
 function closeAdminPanel() {
   const root = document.getElementById('ap-panel-root');
