@@ -952,8 +952,28 @@ async function adminOpenBuyerProfile(userId) {
               ${LOCATIONS.map(l=>`<option value="${l}" ${l===u.location?'selected':''}>${l}</option>`).join('')}
             </select>
           </div>
-          <button class="btn btn-primary btn-block" type="submit"><i class="fas fa-save"></i> Save Changes</button>
+          <button class="btn btn-primary btn-block" type="submit" style="margin-bottom:20px"><i class="fas fa-save"></i> Save Changes</button>
         </form>
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+        <div class="ap-section-title">⚙️ Account Controls</div>
+        <div class="ap-action-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">
+          ${_apBtn('ap-action-blue','fas fa-bell','Send Notification',
+            'closeAdminPanel();setTimeout(()=>showSendNotificationModal(\''+userId+'\',\''+nameSafe+'\'),300)')}
+          ${_apBtn('ap-action-purple','fas fa-wallet','Adjust Wallet',
+            'closeAdminPanel();setTimeout(()=>adjustUserWallet(\''+userId+'\',\''+nameSafe+'\','+(u.wallet_balance||0)+'),300)')}
+          ${u.is_verified
+            ? _apBtn('ap-action-gray','fas fa-phone-slash','Revoke Phone','_apRevokePhoneVerify(\''+userId+'\')')
+            : _apBtn('ap-action-green','fas fa-phone','Verify Phone','_apGrantPhoneVerify(\''+userId+'\')')}
+          ${u.id_verified
+            ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\''+userId+'\')')
+            : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\''+userId+'\')')}
+          ${u.status==='active'
+            ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\''+userId+'\')')
+            : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\''+userId+'\')')}
+        </div>
+        ${_apRoleSection(userId,u.role||'buyer')}
+        ${_apPasswordSection(userId)}
+        ${_apDangerZone(userId,u.name)}
       </div>
     </div>
     <!-- WALLET -->
@@ -1144,8 +1164,33 @@ async function adminOpenVendorProfile(userId) {
             ${LOCATIONS.map(l=>`<option value="${l}" ${l===u.location?'selected':''}>${l}</option>`).join('')}
           </select>
         </div>
-        <button class="btn btn-primary btn-block" type="submit"><i class="fas fa-save"></i> Save Changes</button>
+        <button class="btn btn-primary btn-block" type="submit" style="margin-bottom:20px"><i class="fas fa-save"></i> Save Changes</button>
       </form>
+      <div style="height:1px;background:var(--border);margin:16px 0"></div>
+      <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">⚙️ Account Controls</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">
+        ${_apBtn('ap-action-blue','fas fa-bell','Send Notification','showSendNotificationModal(\'' + userId + '\',\'' + nameSafe + '\')')}
+        ${_apBtn('ap-action-purple','fas fa-wallet','Adjust Wallet','setTimeout(()=>adjustUserWallet(\'' + userId + '\',\'' + nameSafe + '\',' + (u.wallet_balance||0) + '),100)')}
+        ${u.is_verified
+          ? _apBtn('ap-action-gray','fas fa-phone-slash','Revoke Phone','_apRevokePhoneVerify(\'' + userId + '\')')
+          : _apBtn('ap-action-green','fas fa-phone','Verify Phone','_apGrantPhoneVerify(\'' + userId + '\')')}
+        ${u.id_verified
+          ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\'' + userId + '\')')
+          : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\'' + userId + '\')')}
+        ${u.status === 'active'
+          ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\'' + userId + '\')')
+          : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\'' + userId + '\')')}
+        ${_apBtn('ap-action-teal','fas fa-eye','Preview as Vendor','setTimeout(()=>previewAsRole(\'vendor\'),100)')}
+      </div>
+      ${_apRoleSection(userId, u.role||'vendor')}
+      ${_apPasswordSection(userId)}
+      <div style="height:1px;background:var(--border);margin:16px 0"></div>
+      <div style="font-weight:900;margin-bottom:12px;color:var(--danger);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">⚠️ Danger Zone</div>
+      <div style="background:#fee2e2;padding:12px;border-radius:var(--radius-md);border:1px solid #fca5a5">
+        <button class="btn btn-danger btn-block" onclick="if(confirm('Are you ABSOLUTELY sure you want to delete ${nameSafe||'this user'}? This CANNOT be undone!'))_apDeleteUser('${userId}')">
+          <i class="fas fa-user-slash"></i> Delete User Account
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1436,8 +1481,36 @@ async function adminOpenRendorProfile(userId) {
             ${LOCATIONS.map(l=>`<option value="${l}" ${l===u.location?'selected':''}>${l}</option>`).join('')}
           </select>
         </div>
-        <button class="btn btn-primary btn-block" type="submit"><i class="fas fa-save"></i> Save Changes</button>
+        <button class="btn btn-primary btn-block" type="submit" style="margin-bottom:20px"><i class="fas fa-save"></i> Save Changes</button>
       </form>
+      <div style="height:1px;background:var(--border);margin:16px 0"></div>
+      <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">⚙️ Account Controls</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">
+        ${_apBtn('ap-action-blue','fas fa-bell','Send Notification','showSendNotificationModal(\'' + userId + '\',\'' + nameSafe + '\')')}
+        ${_apBtn('ap-action-purple','fas fa-wallet','Adjust Wallet','setTimeout(()=>adjustUserWallet(\'' + userId + '\',\'' + nameSafe + '\',' + (u.wallet_balance||0) + '),100)')}
+        ${u.is_verified
+          ? _apBtn('ap-action-gray','fas fa-phone-slash','Revoke Phone','_apRevokePhoneVerify(\'' + userId + '\')')
+          : _apBtn('ap-action-green','fas fa-phone','Verify Phone','_apGrantPhoneVerify(\'' + userId + '\')')}
+        ${u.id_verified
+          ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\'' + userId + '\')')
+          : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\'' + userId + '\')')}
+        ${u.status === 'active'
+          ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\'' + userId + '\')')
+          : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\'' + userId + '\')')}
+        ${subActive
+          ? _apBtn('ap-action-gray','fas fa-star-slash','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
+          : _apBtn('ap-action-purple','fas fa-star','Activate Sub','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')')}
+        ${_apBtn('ap-action-teal','fas fa-eye','View Public Profile','setTimeout(()=>{App.currentRendorId=\'' + userId + '\';showPage(\'rendor-profile\');renderRendorProfilePublic();},100)')}
+      </div>
+      ${_apRoleSection(userId, u.role||'rendor')}
+      ${_apPasswordSection(userId)}
+      <div style="height:1px;background:var(--border);margin:16px 0"></div>
+      <div style="font-weight:900;margin-bottom:12px;color:var(--danger);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">⚠️ Danger Zone</div>
+      <div style="background:#fee2e2;padding:12px;border-radius:var(--radius-md);border:1px solid #fca5a5">
+        <button class="btn btn-danger btn-block" onclick="if(confirm('Are you ABSOLUTELY sure you want to delete ${nameSafe||'this user'}? This CANNOT be undone!'))_apDeleteUser('${userId}')">
+          <i class="fas fa-user-slash"></i> Delete User Account
+        </button>
+      </div>
     </div>
   </div>
 

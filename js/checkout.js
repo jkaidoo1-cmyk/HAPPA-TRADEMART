@@ -51,7 +51,7 @@ function renderCheckout() {
       <div class="form-group">
         <label class="form-label">Delivery Location</label>
         <select class="form-control form-select" id="checkout-dest" onchange="updateDeliveryFee()">
-          ${LOCATIONS.map(l => `<option value="${l}"\${l===u.location?' selected':''}>${l}</option>`).join('')}
+          ${LOCATIONS.map(l => `<option value="${l}"${l===u.location?' selected':''}>${l}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -80,8 +80,8 @@ function renderCheckout() {
       ${Object.entries(groupByVendor(App.cart)).map(([sid, items]) => {
         const pCode = generatePackageCode(items[0].location);
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:.875rem">
-          <div><strong>\${escHtml(items[0].store_name)}</strong><br><span style="font-size:.75rem;color:var(--text-muted)">\${items.length} item\${items.length!==1?'s':''} · \${items[0].location}</span></div>
-          <code style="background:var(--secondary);color:var(--accent);padding:3px 8px;border-radius:4px;font-size:.75rem;font-weight:700">\${pCode}</code>
+          <div><strong>${escHtml(items[0].store_name)}</strong><br><span style="font-size:.75rem;color:var(--text-muted)">${items.length} item${items.length!==1?'s':''} · ${items[0].location}</span></div>
+          <code style="background:var(--secondary);color:var(--accent);padding:3px 8px;border-radius:4px;font-size:.75rem;font-weight:700">${pCode}</code>
         </div>`;
       }).join('')}
     </div>
@@ -103,25 +103,25 @@ function renderCheckout() {
   <div class="card" style="margin-bottom:14px">
     <div class="card-header"><h3>💳 Payment Method</h3></div>
     <div class="card-body">
-      <div class="payment-option \${selectedPayment==='mobile_money'?'selected':''}" onclick="selectPayment('mobile_money')">
+      <div class="payment-option ${selectedPayment==='mobile_money'?'selected':''}" onclick="selectPayment('mobile_money')">
         <span class="payment-icon">📱</span>
         <div><div class="payment-name">Mobile Money</div><div class="payment-desc">MTN, Vodafone, Paystack, Stripe</div></div>
-        <i class="fas fa-\${selectedPayment==='mobile_money'?'check-circle':'circle'}" style="margin-left:auto;color:\${selectedPayment==='mobile_money'?'var(--primary)':'var(--border)'}"></i>
+        <i class="fas fa-${selectedPayment==='mobile_money'?'check-circle':'circle'}" style="margin-left:auto;color:${selectedPayment==='mobile_money'?'var(--primary)':'var(--border)'}"></i>
       </div>
-      <div class="payment-option \${selectedPayment==='card'?'selected':''}" onclick="selectPayment('card')">
+      <div class="payment-option ${selectedPayment==='card'?'selected':''}" onclick="selectPayment('card')">
         <span class="payment-icon">💳</span>
         <div><div class="payment-name">Bank Card</div><div class="payment-desc">Visa, Mastercard</div></div>
-        <i class="fas fa-\${selectedPayment==='card'?'check-circle':'circle'}" style="margin-left:auto;color:\${selectedPayment==='card'?'var(--primary)':'var(--border)'}"></i>
+        <i class="fas fa-${selectedPayment==='card'?'check-circle':'circle'}" style="margin-left:auto;color:${selectedPayment==='card'?'var(--primary)':'var(--border)'}"></i>
       </div>
-      <div class="payment-option \${selectedPayment==='wallet'?'selected':''}" onclick="selectPayment('wallet')">
+      <div class="payment-option ${selectedPayment==='wallet'?'selected':''}" onclick="selectPayment('wallet')">
         <span class="payment-icon">👛</span>
-        <div><div class="payment-name">HAPPA Wallet</div><div class="payment-desc">Balance: GHS \${(App.currentUser?.wallet_balance||0).toFixed(2)}</div></div>
-        <i class="fas fa-\${selectedPayment==='wallet'?'check-circle':'circle'}" style="margin-left:auto;color:\${selectedPayment==='wallet'?'var(--primary)':'var(--border)'}"></i>
+        <div><div class="payment-name">HAPPA Wallet</div><div class="payment-desc">Balance: GHS ${(App.currentUser?.wallet_balance||0).toFixed(2)}</div></div>
+        <i class="fas fa-${selectedPayment==='wallet'?'check-circle':'circle'}" style="margin-left:auto;color:${selectedPayment==='wallet'?'var(--primary)':'var(--border)'}"></i>
       </div>
     </div>
   </div>
 
-  \${selectedPayment === 'mobile_money' ? `
+  ${selectedPayment === 'mobile_money' ? `
   <div class="card" style="margin-bottom:14px">
     <div class="card-header"><h3>📱 Mobile Money Details</h3></div>
     <div class="card-body">
@@ -135,7 +135,7 @@ function renderCheckout() {
       </div>
       <div class="form-group">
         <label class="form-label">Mobile Number</label>
-        <input class="form-control" id="momo-number" type="tel" placeholder="024 000 0000" value="\${u.phone||''}">
+        <input class="form-control" id="momo-number" type="tel" placeholder="024 000 0000" value="${u.phone||''}">
       </div>
     </div>
   </div>` : selectedPayment === 'card' ? `
@@ -155,16 +155,16 @@ function renderCheckout() {
 
   <!-- Order Summary -->
   <div class="checkout-summary" style="margin-bottom:14px">
-    <div class="summary-row"><span>Subtotal (\${App.cart.reduce((s,i)=>s+i.qty,0)} items)</span><span>GHS \${totals.subtotal.toFixed(2)}</span></div>
-    <div class="summary-row"><span>Platform Fee (\${PLATFORM_FEE_PCT}%)</span><span>GHS \${totals.platformFee.toFixed(2)}</span></div>
-    <div class="summary-row"><span>Delivery Fee</span><span id="checkout-delivery">GHS \${totals.deliveryFee.toFixed(2)}</span></div>
+    <div class="summary-row"><span>Subtotal (${App.cart.reduce((s,i)=>s+i.qty,0)} items)</span><span>GHS ${totals.subtotal.toFixed(2)}</span></div>
+    <div class="summary-row"><span>Platform Fee (${PLATFORM_FEE_PCT}%)</span><span>GHS ${totals.platformFee.toFixed(2)}</span></div>
+    <div class="summary-row"><span>Delivery Fee</span><span id="checkout-delivery">GHS ${totals.deliveryFee.toFixed(2)}</span></div>
     <div class="summary-row" id="discount-row" style="display:none"><span style="color:var(--success)">Discount</span><span id="discount-amt" style="color:var(--success)">- GHS 0.00</span></div>
-    <div class="summary-row total"><span>Total</span><span class="amount" id="checkout-total">GHS \${totals.total.toFixed(2)}</span></div>
+    <div class="summary-row total"><span>Total</span><span class="amount" id="checkout-total">GHS ${totals.total.toFixed(2)}</span></div>
   </div>
 
   <!-- Place Order -->
   <button class="btn btn-primary btn-block btn-lg" onclick="placeOrder()" id="place-order-btn">
-    <i class="fas fa-lock"></i> Place Order · GHS \${totals.total.toFixed(2)}
+    <i class="fas fa-lock"></i> Place Order · GHS ${totals.total.toFixed(2)}
   </button>
   <p style="text-align:center;font-size:.75rem;color:var(--text-muted);margin-top:8px">
     🔒 Secured by HAPPA TRADEMART Payment Gateway
@@ -331,17 +331,17 @@ function renderOrderConfirmation(order, packages) {
     <div style="padding:24px;text-align:center">
       <div style="font-size:4rem;color:#10b981;margin-bottom:12px"><i class="fas fa-check-circle"></i></div>
       <h2 style="font-size:1.5rem;font-weight:900">Order Confirmed!</h2>
-      <p style="color:var(--text-muted);font-size:.85rem;margin-top:6px">Your order has been successfully placed. Order ID: <strong>\${order.id}</strong></p>
+      <p style="color:var(--text-muted);font-size:.85rem;margin-top:6px">Your order has been successfully placed. Order ID: <strong>${order.id}</strong></p>
       
       <div class="card" style="margin-top:20px;text-align:left">
         <div class="card-header"><h3>📦 Delivery Details</h3></div>
         <div class="card-body" style="font-size:.85rem;display:grid;gap:6px">
-          <div><strong>Recipient:</strong> \${escHtml(order.buyer_name)}</div>
-          <div><strong>Phone:</strong> \${escHtml(order.buyer_phone)}</div>
-          <div><strong>Email:</strong> \${escHtml(order.buyer_email)}</div>
-          <div><strong>Address:</strong> \${escHtml(order.delivery_address || 'Home delivery')}</div>
-          <div><strong>Payment Method:</strong> \${escHtml(order.payment_method)}</div>
-          <div><strong>Grand Total:</strong> GHS \${order.total.toFixed(2)}</div>
+          <div><strong>Recipient:</strong> ${escHtml(order.buyer_name)}</div>
+          <div><strong>Phone:</strong> ${escHtml(order.buyer_phone)}</div>
+          <div><strong>Email:</strong> ${escHtml(order.buyer_email)}</div>
+          <div><strong>Address:</strong> ${escHtml(order.delivery_address || 'Home delivery')}</div>
+          <div><strong>Payment Method:</strong> ${escHtml(order.payment_method)}</div>
+          <div><strong>Grand Total:</strong> GHS ${order.total.toFixed(2)}</div>
         </div>
       </div>
 
