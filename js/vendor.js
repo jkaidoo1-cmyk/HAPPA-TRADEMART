@@ -11,6 +11,18 @@ async function renderVendorDashboard() {
     c.innerHTML = '<div class="empty-state"><i class="fas fa-lock"></i><h3>Access Denied</h3><p>Vendor accounts only</p></div>';
     return;
   }
+
+  // Re-fetch the vendor's latest data from the server so admin approval
+  // is reflected without requiring a logout/login cycle.
+  try {
+    const freshUser = await apiFetch('users/' + App.currentUser.id);
+    if (freshUser && freshUser.id) {
+      // Merge server data into the local session (preserving any client-only keys)
+      Object.assign(App.currentUser, freshUser);
+      saveSessions();
+    }
+  } catch(e) { /* offline / error — proceed with cached data */ }
+
   // Pending approval — show waiting screen
   if (App.currentUser.status === 'pending_approval') {
     c.innerHTML = `
@@ -900,6 +912,11 @@ function packageRowHTML(pkg) {
 
 // ── Add Product Modal ──────────────────────────────────────
 function showAddProductModal(storeId, vendorId) {
+  // Block product uploads for unapproved vendors
+  if (App.currentUser && App.currentUser.status === 'pending_approval') {
+    showToast('Your vendor account is still pending approval. You cannot add products yet.', 'warning');
+    return;
+  }
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
@@ -1185,6 +1202,11 @@ function _collectProductImages(prefix) {
 
 async function submitAddProduct(e, storeId, vendorId) {
   e.preventDefault();
+  // Double-check approval status (in case the modal was already open)
+  if (App.currentUser && App.currentUser.status === 'pending_approval') {
+    showToast('Your vendor account is still pending approval. You cannot add products yet.', 'warning');
+    return;
+  }
   const name     = document.getElementById('new-p-name')?.value.trim();
   const desc     = document.getElementById('new-p-desc')?.value.trim();
   const price    = parseFloat(document.getElementById('new-p-price')?.value);
@@ -1796,6 +1818,11 @@ const PRODUCT_CATS = [
 
 // ── Open the panel ──────────────────────────────────────────
 function showBulkAddPanel(storeId, vendorId) {
+  // Block bulk product uploads for unapproved vendors
+  if (App.currentUser && App.currentUser.status === 'pending_approval') {
+    showToast('Your vendor account is still pending approval. You cannot add products yet.', 'warning');
+    return;
+  }
   _bap = { storeId, vendorId, drafts: [], step: 1 };
   const panel = document.getElementById('bulk-add-panel');
   if (!panel) return;

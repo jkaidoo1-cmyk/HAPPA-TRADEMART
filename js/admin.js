@@ -50,7 +50,7 @@ async function renderAdminDashboard() {
   <div class="tab-btn" onclick="switchTab(this,'admin-storefronts');renderAdminStorefronts()">
     Storefronts ${pendingStorefronts.length ? `<span style="background:#ea580c;color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:3px">${pendingStorefronts.length}</span>` : ''}
   </div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-users')">Users</div>
+  <div class="tab-btn" onclick="switchTab(this,'admin-users');refreshAdminUsersList()">Users</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-orders');refreshAdminOrdersList()">Orders</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-create-store')">Add Vendor</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-analytics')">Analytics</div>
@@ -1618,6 +1618,15 @@ async function clearAnnouncement() {
   showToast('Announcement cleared', 'info');
 }
 
+async function refreshAdminUsersList() {
+  const list = document.getElementById('admin-users-list');
+  if (!list) return;
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+  const res = await apiGet('users', 'limit=200');
+  const users = res?.data || [];
+  list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
+}
+
 // ── Refresh vendors+stores list in-place ────────────────────
 async function refreshAdminVendorsList() {
   await refreshAdminVendorsFull();
@@ -1643,14 +1652,26 @@ async function refreshAdminVendorsFull() {
 // ── Vendor card with embedded store info ─────────────────────
 function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
   let store = (allStores || []).find(s => s.vendor_id === u.id);
-  if (!store) {
+  if (!store && u.status === 'active') {
+    // Only auto-create a fallback store for already active vendors if one is missing,
+    // using their preferences if available to keep the information in place.
+    const storeName = (u.preferred_store_name || '').trim() || u.name + "'s Shop";
+    const loc = u.location || 'Accra';
+    const prefix = (typeof LOCATION_PREFIXES !== 'undefined' ? LOCATION_PREFIXES[loc] : null) || 'XX';
+    const slug = storeName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const kws = (u.preferred_store_kws || '').split(',').map(k => k.trim()).filter(Boolean);
+
     store = {
       id: 'store-' + u.id,
-      name: u.name + "'s Shop",
+      name: storeName,
+      slug: slug,
+      description: u.preferred_store_desc || '',
       vendor_id: u.id,
       status: 'active',
-      location: u.location || 'Accra',
-      category: 'General',
+      location: loc,
+      category: u.preferred_store_cat || 'General',
+      keywords: kws,
+      location_prefix: prefix,
       total_sales: 0,
       total_orders: 0
     };
@@ -1692,6 +1713,7 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
         ${u.status === 'active'
           ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="event.stopPropagation();suspendUser('${u.id}')"><i class="fas fa-ban"></i> Suspend</button>`
           : (u.status !== 'deleted' ? `<button class="btn btn-ghost btn-sm" style="color:var(--success)" onclick="event.stopPropagation();activateUser('${u.id}')"><i class="fas fa-check"></i> Activate</button>` : '')}
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);margin-top:2px" onclick="event.stopPropagation();if(confirm('Are you ABSOLUTELY sure you want to delete ${escHtml(u.name).replace(/'/g,"\\'") || 'this user'}? This CANNOT be undone!'))_apDeleteUser('${u.id}')"><i class="fas fa-trash-alt"></i> Delete</button>
       </div>
     </div>
 

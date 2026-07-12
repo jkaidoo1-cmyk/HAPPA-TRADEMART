@@ -50,42 +50,21 @@ window.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('happa_seed_v', SEED_VERSION);
   }
 
-  // Clear local cache for target draft stores and Nana Ama
+  // Clear local cache for any stale/orphaned store or user entries
   try {
-    const keys = ['happa_all_stores', 'happa_saved', 'happa_users', 'happa_currentUser'];
-    for (const key of keys) {
-      const dataRaw = localStorage.getItem(key);
-      if (dataRaw) {
-        let data = JSON.parse(dataRaw);
-        if (Array.isArray(data)) {
-          const filtered = data.filter(item => {
-            if (item && item.name && (item.name === 'Kumasi Fashion Hub' || item.name === 'Northern Trends' || item.name === 'Nana Ama')) return false;
-            if (item && item.id && (item.id === '2' || item.id === '3' || item.id === 'rendor')) return false;
-            return true;
-          });
-          localStorage.setItem(key, JSON.stringify(filtered));
-        } else if (data && typeof data === 'object') {
-          if (data.name === 'Nana Ama' || data.id === 'rendor') {
-            localStorage.removeItem(key);
-          }
+    const storeCache = localStorage.getItem('happa_all_stores');
+    if (storeCache) {
+      let stores = JSON.parse(storeCache);
+      if (Array.isArray(stores)) {
+        const filtered = stores.filter(s =>
+          s && s.name !== 'Kumasi Fashion Hub' && s.name !== 'Northern Trends' && s.name !== 'Nana Ama'
+        );
+        if (filtered.length !== stores.length) {
+          localStorage.setItem('happa_all_stores', JSON.stringify(filtered));
         }
       }
     }
   } catch(e){}
-
-  // Trigger serverless database cleanup for target demo records
-  if (!localStorage.getItem('happa_db_cleaned_v2')) {
-    fetch('/api/clean-temp-database-records', { method: 'POST' })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          localStorage.setItem('happa_db_cleaned_v2', '1');
-          console.log('[DB Clean] Purged target records successfully.');
-          loadHomeData().then(() => initAdBanners('home'));
-        }
-      })
-      .catch(err => console.warn('[DB Clean] Error:', err));
-  }
 
   // First, hide ALL pages completely
   document.querySelectorAll('.page').forEach(p => {
@@ -180,6 +159,19 @@ window.addEventListener('DOMContentLoaded', () => {
       if (typeof switchRole === 'function') {
         switchRole('vendor');
       }
+    }
+  });
+
+  // ── Browser back-button support ──
+  // Replace the initial entry so it has state, then listen for popstate
+  history.replaceState({ page: App.currentPage }, '');
+  window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.page) {
+      // Navigate to the page stored in the history entry without pushing
+      // a new entry (the browser already moved the pointer).
+      App._skipPush = true;
+      showPage(e.state.page);
+      App._skipPush = false;
     }
   });
 
@@ -313,6 +305,12 @@ function showPage(pageId) {
   App.prevPage = App.currentPage;
   App.currentPage = pageId;
 
+  // Push a browser-history entry so the mobile back button works.
+  // Skip when we're already handling a popstate (browser-back) event.
+  if (!App._skipPush) {
+    history.pushState({ page: pageId }, '');
+  }
+
   // Hide ALL pages completely
   document.querySelectorAll('.page').forEach(p => {
     p.classList.remove('active');
@@ -375,7 +373,15 @@ function showPage(pageId) {
     case 'privacy':          renderPrivacyPage(); break;
   }
 }
-function goBack() { showPage(App.prevPage || 'home'); }
+function goBack() {
+  // If there is real browser history to go back to, use it so the
+  // history stack stays consistent. Otherwise fall back to prevPage.
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    showPage(App.prevPage || 'home');
+  }
+}
 
 function handleProfileClick() {
   if (!App.currentUser) { showPage('auth'); return; }
@@ -1315,7 +1321,8 @@ async function loadHomeData() {
     }
   ];
 
-  const MOCK_STORES = []; const MOCK_STORES_OLD = [
+  const MOCK_STORES = [];
+  const MOCK_STORES_OLD = [
     {
       id: '1',
       vendor_id: 'u-vendor-001',
@@ -1341,34 +1348,9 @@ async function loadHomeData() {
       business_hours: 'Mon - Sat: 9:00 AM - 7:00 PM',
       shipping_policy: 'Instant Accra delivery in 2-3 hours. Out of station orders ship via VIP coach.',
       return_policy: '7-day replacement for size and fitting issues. Products must be unworn.'
-    },
-    {
-      id: '2',
-      name: 'Kumasi Fashion Hub',
-      category: 'Fashion',
-      location: 'Kumasi',
-      status: 'active',
-      logo_url: 'product/photo_2026-05-31_06-36-03.jpg',
-      banner_url: 'product/photo_2026-05-30_17-19-10 - Copy.jpg',
-      avg_rating: 4.6,
-      total_sales: 3800,
-      total_orders: 145,
-      keywords: ['casual', 'wears', 'fashion']
-    },
-    {
-      id: '3',
-      name: 'Northern Trends',
-      category: 'Fashion',
-      location: 'Tamale',
-      status: 'active',
-      logo_url: 'product/photo_2026-05-31_06-35-46.jpg',
-      banner_url: 'product/photo_2026-05-30_17-19-27.jpg',
-      avg_rating: 4.8,
-      total_sales: 2900,
-      total_orders: 98,
-      keywords: ['african', 'print', 'traditional']
     }
   ];
+
 
   try {
     const [prodRes, storeRes] = await Promise.all([

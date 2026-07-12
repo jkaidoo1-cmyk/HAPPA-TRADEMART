@@ -51,22 +51,18 @@ async function renderMarketplace() {
   grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
 
 
+  // Always re-fetch products & stores so newly uploaded items appear
+  try {
+    const res = await apiGet('products', 'limit=500');
+    App.allProducts = res ? res.data || [] : App.allProducts;
+  } catch(e) { /* offline — use cached data */ }
 
-  if (!App.allProducts.length) {
-
-    const res = await apiGet('products', 'limit=100');
-
-    App.allProducts = res ? res.data || [] : [];
-
-  }
-
-  if (!App.allStores.length) {
-
-    const sRes = await apiGet('stores', 'limit=50');
-
-    App.allStores = sRes ? sRes.data || [] : [];
-
-  }
+  try {
+    if (!App.allStores.length) {
+      const sRes = await apiGet('stores', 'limit=200');
+      App.allStores = sRes ? sRes.data || [] : App.allStores;
+    }
+  } catch(e) { /* offline — use cached data */ }
 
 
 
@@ -390,13 +386,11 @@ async function renderStores() {
 
 
 
-  if (!App.allStores.length) {
-
-    const res = await apiGet('stores', 'limit=50');
-
-    App.allStores = res ? res.data || [] : [];
-
-  }
+  // Always re-fetch stores so newly created stores appear
+  try {
+    const res = await apiGet('stores', 'limit=200');
+    App.allStores = res ? res.data || [] : App.allStores;
+  } catch(e) { /* offline — use cached data */ }
 
 
 
