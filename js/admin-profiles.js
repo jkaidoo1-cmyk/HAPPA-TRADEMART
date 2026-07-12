@@ -1018,49 +1018,58 @@ async function adminOpenVendorProfile(userId) {
     </div>`;
   showPage('admin-vendor-profile');
 
-  // Step 1: fetch user + store + orders + txns first so we have store.id for the products query
-  const [userRes, storeRes, pkgsRes, txnRes] = await Promise.all([
-    apiFetch('users/' + userId),
-    apiGet('stores',              'search=' + userId + '&limit=10'),
-    apiGet('packages',            'search=' + userId + '&limit=100'),
-    apiGet('wallet_transactions', 'search=' + userId + '&limit=50')
-  ]);
+  try {
+    // Step 1: fetch user + store + orders + txns first so we have store.id for the products query
+    const [userRes, storeRes, pkgsRes, txnRes] = await Promise.all([
+      apiFetch('users/' + userId),
+      apiGet('stores',              'search=' + userId + '&limit=10'),
+      apiGet('packages',            'search=' + userId + '&limit=100'),
+      apiGet('wallet_transactions', 'search=' + userId + '&limit=50')
+    ]);
 
-  const u     = userRes || {};
-  const store = (storeRes?.data || []).find(s => s.vendor_id === userId) || null;
-  const pkgs  = (pkgsRes?.data  || []).filter(p => p.vendor_id === userId);
-  const txns  = (txnRes?.data   || []).filter(t => t.user_id   === userId);
+    const u     = userRes || {};
+    const store = (storeRes?.data || []).find(s => String(s.vendor_id) === String(userId)) || null;
+    const pkgs  = (pkgsRes?.data  || []).filter(p => String(p.vendor_id) === String(userId));
+    const txns  = (txnRes?.data   || []).filter(t => String(t.user_id)   === String(userId));
 
-  // Step 2: fetch products by vendor_id AND by store_id in parallel, then merge + deduplicate.
-  const [prodByVendor, prodByStore] = await Promise.all([
-    apiGet('products', 'search=' + userId + '&limit=200'),
-    store ? apiGet('products', 'search=' + store.id + '&limit=200') : Promise.resolve(null)
-  ]);
-  const _seenProductIds = new Set();
-  const products = [
-    ...(prodByVendor?.data || []),
-    ...(prodByStore?.data  || [])
-  ].filter(p => {
-    const belongs = p.vendor_id === userId || (store && p.store_id === store.id);
-    if (!belongs || _seenProductIds.has(p.id)) return false;
-    _seenProductIds.add(p.id);
-    return true;
-  });
+    // Step 2: fetch products by vendor_id AND by store_id in parallel, then merge + deduplicate.
+    const [prodByVendor, prodByStore] = await Promise.all([
+      apiGet('products', 'search=' + userId + '&limit=200'),
+      store ? apiGet('products', 'search=' + store.id + '&limit=200') : Promise.resolve(null)
+    ]);
+    const _seenProductIds = new Set();
+    const products = [
+      ...(prodByVendor?.data || []),
+      ...(prodByStore?.data  || [])
+    ].filter(p => {
+      const belongs = String(p.vendor_id) === String(userId) || (store && String(p.store_id) === String(store.id));
+      if (!belongs || _seenProductIds.has(p.id)) return false;
+      _seenProductIds.add(p.id);
+      return true;
+    });
 
-  // ── cache closures so tab clicks never re-fetch ───────────
-  window._apCache = window._apCache || {};
-  window._apCache[userId] = { pkgs, txns, products, store };
+    // ── cache closures so tab clicks never re-fetch ───────────
+    window._apCache = window._apCache || {};
+    window._apCache[userId] = { pkgs, txns, products, store };
 
-  const totalSales  = pkgs.filter(p=>['delivered','confirmed'].includes(p.status)).reduce((s,p)=>s+(p.gross_amount||0),0);
-  const pendingPkgs = pkgs.filter(p=>p.status==='pending').length;
-  const joinedDate  = u.registered_at
-    ? new Date(u.registered_at).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})
-    : '—';
-  const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#b45309'}[u.status] || 'var(--text-muted)';
-  const nameSafe    = escHtml(u.name||'').replace(/'/g,"\\'");
+    const totalSales  = pkgs.filter(p=>['delivered','confirmed'].includes(p.status)).reduce((s,p)=>s+(parseFloat(p.gross_amount)||0),0);
+    const pendingPkgs = pkgs.filter(p=>p.status==='pending').length;
+    
+    let joinedDate = '—';
+    if (u.registered_at) {
+      try {
+        const d = new Date(u.registered_at);
+        if (!isNaN(d.getTime())) {
+          joinedDate = d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+        }
+      } catch(e) {}
+    }
 
-  // Render into the page content div
-  document.getElementById('admin-vendor-profile-content').innerHTML = `
+    const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#b45309'}[u.status] || 'var(--text-muted)';
+    const nameSafe    = escHtml(u.name||'').replace(/'/g,"\\'");
+
+    // Render into the page content div
+    document.getElementById('admin-vendor-profile-content').innerHTML = `
 <div style="padding:10px 14px 24px">
   <!-- Hero -->
   <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:18px;border-radius:var(--radius-md);margin-bottom:16px;overflow:hidden">
@@ -1298,11 +1307,23 @@ async function adminOpenVendorProfile(userId) {
   ` : ''}
 </div>`;
 
-  // Pre-render cached content immediately
-  _apRenderVendorProductsForPage(userId, products);
-  _apRenderVendorPackagesForPage(userId, pkgs);
-  _apRenderUserTxnsForPage(userId, txns, 'ap-v-wallet-txns');
-  if (store) _apRenderEmbeddedStoreForPage(store.id, userId, products);
+    // Pre-render cached content immediately
+    _apRenderVendorProductsForPage(userId, products);
+    _apRenderVendorPackagesForPage(userId, pkgs);
+    _apRenderUserTxnsForPage(userId, txns, 'ap-v-wallet-txns');
+    if (store) _apRenderEmbeddedStoreForPage(store.id, userId, products);
+  } catch (err) {
+    console.error('[Admin Vendor Profile Error]', err);
+    document.getElementById('admin-vendor-profile-content').innerHTML = `
+      <div style="text-align:center;padding:40px 20px;color:var(--danger)">
+        <i class="fas fa-exclamation-triangle" style="font-size:2rem;margin-bottom:12px"></i>
+        <h3>Failed to load Vendor Profile</h3>
+        <p style="font-size:.85rem;color:var(--text-muted);margin:8px 0 20px">${escHtml(err.message || 'Unknown error')}</p>
+        <button class="btn btn-outline btn-sm" onclick="showPage('admin-dashboard')">
+          <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </button>
+      </div>`;
+  }
 }
 
 /* ============================================================
