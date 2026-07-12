@@ -473,6 +473,61 @@ async function updateAdminStatus(packageId, newStatus) {
       addNotification(pkg.vendor_id, 'earning', '💰 Payment Released',
         `GHS ${earnAmt.toFixed(2)} from order ${pkg.package_code} has been released to your wallet.`);
     }
+
+    // Process referral reward if any
+    try {
+      const refRes = await apiGet('referrals', `referred_id=${pkg.buyer_id}&status=active&limit=10`);
+      const refs = refRes?.data || [];
+      if (refs.length > 0) {
+        for (const refItem of refs) {
+          const referrer = await apiFetch('users/' + refItem.referrer_id);
+          if (referrer) {
+            const vendorAmt = parseFloat(pkg.vendor_amount) || 0;
+            const pct = typeof getEffectiveReferralCommissionPct === 'function'
+              ? getEffectiveReferralCommissionPct(vendorAmt)
+              : 3;
+            const reward = parseFloat((vendorAmt * (pct / 100)).toFixed(2));
+
+            if (reward > 0) {
+              // Update referral status and record reward
+              await apiPatch('referrals', refItem.id, {
+                reward_amount: reward,
+                reward_pct: pct,
+                order_id: pkg.order_id || pkg.id,
+                status: 'completed'
+              });
+
+              // Update referrer wallet balance
+              const oldBal = parseFloat(referrer.wallet_balance) || 0;
+              const newBal = parseFloat((oldBal + reward).toFixed(2));
+              await apiPatch('users', referrer.id, { wallet_balance: newBal });
+
+              // Record transaction
+              await apiPost('wallet_transactions', {
+                user_id: refItem.referrer_id,
+                type: 'referral_reward',
+                amount: reward,
+                balance_before: oldBal,
+                balance_after: newBal,
+                payment_method: 'system',
+                status: 'completed',
+                note: `Referral Reward: Earned ${pct}% on referred purchase by ${pkg.buyer_name || 'referred buyer'} (${pkg.package_code})`
+              });
+
+              // Notify referrer
+              addNotification(
+                refItem.referrer_id,
+                'referral',
+                '🎁 Referral Reward Received!',
+                `You earned GHS ${reward.toFixed(2)} (${pct}%) referral reward from ${pkg.buyer_name || 'a friend'}'s purchase ${pkg.package_code}.`
+              );
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Referral Reward Error]', err);
+    }
   }
 
   // Notify buyer

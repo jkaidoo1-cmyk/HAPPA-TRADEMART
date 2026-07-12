@@ -83,8 +83,8 @@ async function renderVendorDashboard() {
   let myProducts = [];
   if (myStore) {
     const prodRes = await apiGet('products', `search=${myStore.id}&limit=100`);
-    myProducts = (prodRes?.data || []).filter(p => p.store_id === myStore.id);
-    App.allProducts = [...App.allProducts.filter(p => p.store_id !== myStore.id), ...myProducts];
+    myProducts = (prodRes?.data || []).filter(p => String(p.store_id) === String(myStore.id));
+    App.allProducts = [...App.allProducts.filter(p => String(p.store_id) !== String(myStore.id)), ...myProducts];
   }
 
   // Fetch orders/packages for vendor
@@ -1249,7 +1249,11 @@ async function submitAddProduct(e, storeId, vendorId) {
   App.allProducts.push(prod);
   closeModalForce();
   showToast(`"${name}" added successfully! 🎉`, 'success');
-  renderVendorDashboard();
+  if (App.currentPage === 'vendor-my-store') {
+    renderVendorMyStorePage();
+  } else {
+    renderVendorDashboard();
+  }
 }
 
 function showEditProductModal(productId) {
@@ -1373,7 +1377,11 @@ async function saveProductEdit(productId) {
   }
   closeModalForce();
   showToast('Product updated! ✅', 'success');
-  renderVendorDashboard();
+  if (App.currentPage === 'vendor-my-store') {
+    renderVendorMyStorePage();
+  } else {
+    renderVendorDashboard();
+  }
 }
 
 async function archiveProduct(productId) {
@@ -1382,7 +1390,11 @@ async function archiveProduct(productId) {
   const p = App.allProducts.find(p => p.id === productId);
   if (p) p.status = 'archived';
   showToast('Product archived', 'info');
-  renderVendorDashboard();
+  if (App.currentPage === 'vendor-my-store') {
+    renderVendorMyStorePage();
+  } else {
+    renderVendorDashboard();
+  }
 }
 
 async function deleteVendorProduct(productId) {
@@ -1394,7 +1406,11 @@ async function deleteVendorProduct(productId) {
     if (idx > -1) App.allProducts.splice(idx, 1);
   }
   showToast('Product deleted', 'warning');
-  renderVendorDashboard();
+  if (App.currentPage === 'vendor-my-store') {
+    renderVendorMyStorePage();
+  } else {
+    renderVendorDashboard();
+  }
 }
 
 function editKeywords(storeId) {
@@ -2586,7 +2602,7 @@ window.updateStorefrontPreview = function() {
   if (window.App && Array.isArray(App.allProducts)) {
     const storeNameVal = document.getElementById('store-name')?.value || '';
     const myStore = App.allStores.find(s => s.name === storeNameVal || s.id === 1 || s.id === '1') || {};
-    displayProducts = App.allProducts.filter(p => p.store_id === myStore.id && p.status === 'active');
+    displayProducts = App.allProducts.filter(p => String(p.store_id) === String(myStore.id) && p.status === 'active');
     if (displayProducts.length === 0) {
       displayProducts = App.allProducts.filter(p => p.status === 'active');
     }

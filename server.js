@@ -31,9 +31,21 @@ if (hasSupabaseUrl && hasSupabaseKey) {
   try {
     const { createClient } = require('@supabase/supabase-js');
     supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-    console.log('[Supabase] Connected to database successfully! ⚡');
+    console.log('[Supabase] Initializing client... ⚡');
+    supabase.from('users').select('id').limit(1).then(({ error }) => {
+      if (error) {
+        console.warn('[Supabase] Connection query failed. Falling back to local db.json:', error.message);
+        supabase = null;
+      } else {
+        console.log('[Supabase] Connected to database successfully! ⚡');
+      }
+    }).catch(err => {
+      console.warn('[Supabase] Connection error. Falling back to local db.json:', err.message);
+      supabase = null;
+    });
   } catch (e) {
     console.warn('[Supabase] Failed to initialize client, falling back to db.json:', e.message);
+    supabase = null;
   }
 }
 

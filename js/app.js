@@ -978,6 +978,26 @@ function localTablesApi(table, opts = {}) {
 }
 
 // ── API Helpers ───────────────────────────────────────────
+const apiCache = {
+  data: {},
+  get(key) {
+    const entry = this.data[key];
+    if (entry && (Date.now() - entry.timestamp < 30000)) { // 30 seconds cache TTL
+      return entry.promise;
+    }
+    return null;
+  },
+  set(key, promise) {
+    this.data[key] = {
+      promise,
+      timestamp: Date.now()
+    };
+  },
+  clear() {
+    this.data = {};
+  }
+};
+
 async function apiFetch(table, opts = {}) {
   if (API === 'tables/') {
     return localTablesApi(table, opts);
@@ -995,18 +1015,28 @@ async function apiFetch(table, opts = {}) {
   }
 }
 async function apiGet(table, params = '') {
-  return apiFetch(table + (params ? '?' + params : ''));
+  const cacheKey = table + (params ? '?' + params : '');
+  let cachedPromise = apiCache.get(cacheKey);
+  if (!cachedPromise) {
+    cachedPromise = apiFetch(table + (params ? '?' + params : ''));
+    apiCache.set(cacheKey, cachedPromise);
+  }
+  return cachedPromise;
 }
 async function apiPost(table, data) {
+  apiCache.clear();
   return apiFetch(table, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
 }
 async function apiPut(table, id, data) {
+  apiCache.clear();
   return apiFetch(table + '/' + id, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
 }
 async function apiPatch(table, id, data) {
+  apiCache.clear();
   return apiFetch(table + '/' + id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
 }
 async function apiDelete(table, id) {
+  apiCache.clear();
   return apiFetch(table + '/' + id, { method: 'DELETE' });
 }
 
