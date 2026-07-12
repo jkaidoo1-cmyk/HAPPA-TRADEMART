@@ -269,3 +269,26 @@ function localLearnCorrection(name, category, description) {
 window.localPredictAndGenerate  = localPredictAndGenerate;
 window.localPredictDebounced    = localPredictDebounced;
 window.localLearnCorrection     = localLearnCorrection;
+
+// ── AI Product Info Auto-Generation Model (Simulated) ─────────────
+const SAMPLE_AI_PRODUCTS = [
+  { name: "Nike Air Max Pulse", category: "Sneakers", description: "Step into the next generation of Air style. The Air Max Pulse brings a clean, street-ready silhouette with premium textile wrap and point-loaded cushioning for unmatched responsiveness." },
+  { name: "adidas Ultraboost Light", category: "Sneakers", description: "Experience epic energy with the new adidas Ultraboost Light. Our lightest Ultraboost ever, built with premium Primeknit upper and next-gen Boost cushioning for ultimate comfort." },
+  { name: "Sony WH-1000XM5 Wireless Headphones", category: "Audio", description: "Immerse yourself in pure sound. Industry-leading noise cancellation, dual processors, 8 microphones, and exceptional call quality make these the ultimate wireless headphones." },
+  { name: "Apple MacBook Air 13\" M3", category: "Electronics", description: "Supercharged by the next-generation M3 chip, the incredibly thin MacBook Air lets you work, play, or create anything, anywhere, with up to 18 hours of battery life." },
+  { name: "Cerave Hydrating Facial Cleanser", category: "Skincare", description: "A gentle, non-foaming facial wash formulated with three essential ceramides and hyaluronic acid to cleanse, hydrate, and restore the skin's natural protective barrier." },
+  { name: "Fenty Beauty Gloss Bomb", category: "Makeup", description: "The ultimate gotta-have-it lip gloss with explosive shine that feels as good as it looks. One luscious swipe of Gloss Bomb’s XXL wand gives lips more to love." },
+  { name: "Leather Minimalist Wallet", category: "Accessories", description: "Crafted from full-grain premium leather, this ultra-slim cardholder holds up to 8 cards and cash safely with built-in RFID blocking technology." },
+  { name: "Minimalist Ceramic Coffee Mug", category: "Other", description: "A beautifully hand-glazed matte ceramic mug designed with an ergonomic handle to keep your morning coffee or tea perfectly hot in style." }
+];
+
+async function autoGenerateProductInfo(base64Image) {
+  // Simulate network latency for the AI model analysis
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  
+  // Pick a random product from our sample catalog to return
+  const idx = Math.floor(Math.random() * SAMPLE_AI_PRODUCTS.length);
+  return { ...SAMPLE_AI_PRODUCTS[idx] };
+}
+
+window.autoGenerateProductInfo = autoGenerateProductInfo;
