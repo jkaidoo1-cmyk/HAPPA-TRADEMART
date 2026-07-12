@@ -906,6 +906,22 @@ async function renderStoreDetail(id) {
   const s = App.allStores.find(s => String(s.id) === String(id)) || await apiGet(`stores/${id}`);
   if (!s) { c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Store not found</h3></div>'; return; }
 
+  // Enforce storefront visibility: only allow approved storefronts to load.
+  // Exception: Let admins or the store owner vendor view/review the storefront.
+  const isOwner = App.currentUser && String(App.currentUser.id) === String(s.vendor_id);
+  const isAdmin = App.currentUser && App.currentUser.role === 'admin';
+  if (s.storefront_status !== 'approved' && !isOwner && !isAdmin) {
+    c.innerHTML = `
+      <div class="empty-state" style="padding: 40px 20px; text-align: center;">
+        <div style="font-size: 3rem; margin-bottom: 16px;">🏪</div>
+        <h3>Storefront under construction</h3>
+        <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 4px;">
+          This storefront has not been approved or requested yet.
+        </p>
+      </div>`;
+    return;
+  }
+
   // Dynamically load Google Font on demand if not already loaded (saves massive bandwidth and load time)
   if (s.font_family && s.font_family !== 'Outfit' && s.font_family !== 'Inter') {
     const fontId = `storefront-font-${s.font_family.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;

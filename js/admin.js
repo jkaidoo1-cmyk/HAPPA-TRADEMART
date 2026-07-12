@@ -2509,7 +2509,7 @@ async function renderAdminStorefronts() {
   
   const pending = stores.filter(s => s.storefront_status === 'pending_approval');
   const approved = stores.filter(s => s.storefront_status === 'approved');
-  const draft = stores.filter(s => s.storefront_status === 'draft' || s.storefront_status === 'inactive' || !s.storefront_status);
+  const draft = stores.filter(s => s.storefront_status === 'draft' || s.storefront_status === 'inactive');
   
   // Helper: get a small subscription badge for admin view
   const getSubBadge = (s) => {
