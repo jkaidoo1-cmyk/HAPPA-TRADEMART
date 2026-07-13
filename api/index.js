@@ -9,6 +9,31 @@
 
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
+const path = require('path');
+
+// Local JSON DB fallback (used when SUPABASE_* env vars are missing)
+const DB_PATH = path.resolve(__dirname, '..', 'db.json');
+function loadLocalDB() {
+  try {
+    const raw = fs.readFileSync(DB_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    return {};
+  }
+}
+function saveLocalDB(db) {
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Failed to write local DB', err);
+    return false;
+  }
+}
+function ensureTable(db, table) {
+  if (!db[table]) db[table] = [];
+}
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
@@ -28,7 +53,7 @@ function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_KEY;
   if (!url || !key) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_KEY environment variables');
+    return null; // caller will fall back to local DB
   }
   return createClient(url, key);
 }
@@ -177,22 +202,30 @@ app.get('/api/:table', async (req, res) => {
     const table = req.params.table;
     const { search, limit, page, sort, ...filters } = req.query;
 
-    let queryBuilder = supabase.from(table).select('*');
+    if (!supabase) {
+      // Local DB path
+      const db = loadLocalDB();
+      ensureTable(db, table);
+      let rows = db[table].map(serializeRecord);
+      if (search) rows = applyClientFilters(rows, { search, limit, page });
+      // Apply simple filters
+      for (const [k, v] of Object.entries(filters)) {
+        if (!v) continue;
+        rows = rows.filter(r => String(r[k] ?? '').toLowerCase() === String(v).toLowerCase());
+      }
+      if (sort) rows.sort((a,b) => (b[sort]||0) - (a[sort]||0));
+      res.json({ data: rows });
+      return;
+    }
 
-    // 1. Apply exact match filters directly in database
+    // Supabase path
+    let queryBuilder = supabase.from(table).select('*');
     for (const [key, value] of Object.entries(filters)) {
       if (value !== undefined && value !== '') {
         queryBuilder = queryBuilder.eq(key, value);
       }
     }
-
-    // 2. Apply sorting directly in database
-    if (sort) {
-      // Check if sort column exists or default to id/created_at
-      queryBuilder = queryBuilder.order(sort, { ascending: false });
-    }
-
-    // 3. Apply limit/pagination in database if no client-side search is present
+    if (sort) queryBuilder = queryBuilder.order(sort, { ascending: false });
     if (limit && !search) {
       const max = parseInt(limit, 10);
       if (!isNaN(max) && max > 0) {
@@ -201,17 +234,10 @@ app.get('/api/:table', async (req, res) => {
         queryBuilder = queryBuilder.range(start, start + max - 1);
       }
     }
-
     const { data, error } = await queryBuilder;
     if (error) return res.status(500).json({ error: error.message });
-
     let rows = (data || []).map(serializeRecord);
-
-    // 4. Fallback search / client filter if needed
-    if (search) {
-      rows = applyClientFilters(rows, { search, limit, page });
-    }
-
+    if (search) rows = applyClientFilters(rows, { search, limit, page });
     res.json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -222,11 +248,16 @@ app.get('/api/:table', async (req, res) => {
 app.get('/api/:table/:id', async (req, res) => {
   try {
     const supabase = getSupabase();
-    const { data, error } = await supabase
-      .from(req.params.table)
-      .select('*')
-      .eq('id', req.params.id)
-      .single();
+    const table = req.params.table;
+    const id = req.params.id;
+    if (!supabase) {
+      const db = loadLocalDB();
+      ensureTable(db, table);
+      const found = db[table].find(r => String(r.id) === String(id));
+      if (!found) return res.status(404).json({ error: 'Record not found' });
+      return res.json(serializeRecord(found));
+    }
+    const { data, error } = await supabase.from(table).select('*').eq('id', id).single();
     if (error || !data) return res.status(404).json({ error: 'Record not found' });
     res.json(serializeRecord(data));
   } catch (err) {
@@ -244,8 +275,16 @@ app.post('/api/:table', async (req, res) => {
     body.id = String(body.id);
     if (!body.created_at) body.created_at = new Date().toISOString();
     body.updated_at = new Date().toISOString();
-
     const record = serializeRecord(body);
+
+    if (!supabase) {
+      const db = loadLocalDB();
+      ensureTable(db, table);
+      db[table].push(record);
+      saveLocalDB(db);
+      return res.status(201).json(serializeRecord(record));
+    }
+
     const { data, error } = await supabase.from(table).insert(record).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.status(201).json(serializeRecord(data));
@@ -259,10 +298,18 @@ app.put('/api/:table/:id', async (req, res) => {
   try {
     const supabase = getSupabase();
     const table = req.params.table;
-    const body = { ...req.body, id: req.params.id, updated_at: new Date().toISOString() };
+    const id = req.params.id;
+    const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
     const record = serializeRecord(body);
-    const { data, error } = await supabase
-      .from(table).upsert(record).select().single();
+    if (!supabase) {
+      const db = loadLocalDB();
+      ensureTable(db, table);
+      const idx = db[table].findIndex(r => String(r.id) === String(id));
+      if (idx === -1) db[table].push(record); else db[table][idx] = { ...db[table][idx], ...record };
+      saveLocalDB(db);
+      return res.json(serializeRecord(record));
+    }
+    const { data, error } = await supabase.from(table).upsert(record).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
   } catch (err) {
@@ -275,10 +322,19 @@ app.patch('/api/:table/:id', async (req, res) => {
   try {
     const supabase = getSupabase();
     const table = req.params.table;
-    const body = { ...req.body, id: req.params.id, updated_at: new Date().toISOString() };
+    const id = req.params.id;
+    const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
     const record = serializeRecord(body);
-    const { data, error } = await supabase
-      .from(table).update(record).eq('id', req.params.id).select().single();
+    if (!supabase) {
+      const db = loadLocalDB();
+      ensureTable(db, table);
+      const idx = db[table].findIndex(r => String(r.id) === String(id));
+      if (idx === -1) return res.status(404).json({ error: 'Record not found' });
+      db[table][idx] = { ...db[table][idx], ...record };
+      saveLocalDB(db);
+      return res.json(serializeRecord(db[table][idx]));
+    }
+    const { data, error } = await supabase.from(table).update(record).eq('id', id).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
   } catch (err) {
@@ -290,8 +346,18 @@ app.patch('/api/:table/:id', async (req, res) => {
 app.delete('/api/:table/:id', async (req, res) => {
   try {
     const supabase = getSupabase();
-    const { error } = await supabase
-      .from(req.params.table).delete().eq('id', req.params.id);
+    const table = req.params.table;
+    const id = req.params.id;
+    if (!supabase) {
+      const db = loadLocalDB();
+      ensureTable(db, table);
+      const before = db[table].length;
+      db[table] = db[table].filter(r => String(r.id) !== String(id));
+      saveLocalDB(db);
+      if (db[table].length === before) return res.status(404).json({ error: 'Record not found' });
+      return res.status(204).send();
+    }
+    const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) return res.status(500).json({ error: error.message });
     res.status(204).send();
   } catch (err) {

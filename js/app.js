@@ -1027,8 +1027,15 @@ async function apiFetch(table, opts = {}) {
     if (resp.status === 204) return null;
     return await resp.json();
   } catch(e) {
-    console.warn('API Error, falling back to local tables:', table, e);
-    return localTablesApi(table, opts);
+    console.warn('API Error:', table, e);
+    // Only fall back to the local tables shim when the app is explicitly
+    // configured to use the `tables/` local API. For a real server API
+    // (e.g. `/api/`) surface the error so callers can handle it and avoid
+    // treating a failed server write as a successful local-only write.
+    if (API === 'tables/') {
+      return localTablesApi(table, opts);
+    }
+    return null;
   }
 }
 async function apiGet(table, params = '') {
