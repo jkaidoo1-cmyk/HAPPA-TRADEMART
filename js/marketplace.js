@@ -903,8 +903,161 @@ async function renderStoreDetail(id) {
   if (!c) return;
   c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
 
-  const s = App.allStores.find(s => String(s.id) === String(id)) || await apiGet(`stores/${id}`);
+  const s = App.allStores.find(st => String(st.id) === String(id)) || await apiGet(`stores/${id}`);
   if (!s) { c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Store not found</h3></div>'; return; }
+
+  const isOwner = App.currentUser && String(App.currentUser.id) === String(s.vendor_id);
+  const isAdmin = App.currentUser && App.currentUser.role === 'admin';
+  if (s.storefront_status !== 'approved' && !isOwner && !isAdmin) {
+    c.innerHTML = `
+      <div class="empty-state" style="padding: 40px 20px; text-align: center;">
+        <div style="font-size: 3rem; margin-bottom: 16px;">🏪</div>
+        <h3>Store under construction</h3>
+        <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 4px;">
+          This store is not approved yet.
+        </p>
+      </div>`;
+    return;
+  }
+
+  const storeProds = App.allProducts.filter(p => String(p.store_id) === String(id) && p.status !== 'archived');
+  const slogan = s.slogan || 'Welcome to our store!';
+  const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
+  let followed = App.savedStores.includes(id);
+  const bannerSrc = s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const logoSrc = s.logo_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const storeName = s.name;
+
+  const headerHTML = `
+    <div style="position:relative;background:#f8f9fa">
+      <img src="${bannerSrc}" alt="${escHtml(storeName)}" 
+           style="width:100%;height:140px;object-fit:cover;" onerror="this.src='https://via.placeholder.com/800x300?text=Store+Banner'">
+      <div style="padding:12px 16px;background:#fff;border-bottom:1px solid var(--border);position:relative">
+        <div style="display:flex;align-items:flex-start;gap:12px;margin-top:-35px">
+          <img src="${logoSrc}" alt="${escHtml(storeName)}"
+               style="width:64px;height:64px;border-radius:12px;border:3px solid #fff;object-fit:cover;box-shadow:var(--shadow-sm)"
+               onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+          <div style="flex:1;padding-top:25px">
+            <h1 style="font-size:1.1rem;font-weight:800;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text)">
+              ${escHtml(storeName)} ${verifiedBadge}
+            </h1>
+            <p style="font-size:.78rem;margin:2px 0 0 0;font-style:italic;color:var(--text-light)">${escHtml(slogan)}</p>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+              ${renderStars(s.avg_rating || 0)}
+              <span style="font-size:.75rem;color:var(--text-muted)">${(s.avg_rating || 0).toFixed(1)} (${s.review_count || 0})</span>
+              <span style="font-size:.75rem;color:var(--text-muted)"><i class="fas fa-map-marker-alt"></i> ${s.location}</span>
+            </div>
+          </div>
+          <div style="padding-top:25px;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            <button class="btn btn-sm ${followed ? 'btn-outline' : 'store-theme-btn'}" onclick="toggleFollowStore('${s.id}')" id="follow-store-btn">
+              <i class="fas ${followed ? 'fa-check' : 'fa-plus'}"></i> ${followed ? 'Following' : 'Follow'}
+            </button>
+            <span style="font-size:.65rem;color:var(--text-muted);font-weight:600" id="followers-count">${s.followers || 0} followers</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const adminToolbarHTML = isAdmin ? `
+    <div id="admin-store-toolbar" style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:10px 16px;box-shadow:0 2px 8px rgba(0,0,0,.4)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <i class="fas fa-shield-alt" style="color:#f59e0b;font-size:.8rem"></i>
+        <span style="color:#f59e0b;font-weight:800;font-size:.75rem;text-transform:uppercase">Admin View — ${escHtml(s.name)}</span>
+      </div>
+    </div>` : '';
+
+  c.innerHTML = `
+    <div id="marketplace-store-container">
+      <style>
+        #marketplace-store-container .store-tab-btn {
+          flex: 1;
+          padding: 12px 0;
+          cursor: pointer;
+          background: none;
+          border: none;
+          color: var(--text-light);
+          border-bottom: 2px solid transparent;
+          font-size: 0.75rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          text-align: center;
+          transition: all 0.2s;
+        }
+        #marketplace-store-container .store-tab-btn.active {
+          border-bottom-color: var(--primary);
+          color: var(--primary);
+        }
+        #marketplace-store-container .store-theme-btn {
+          background: var(--primary);
+          color: #fff;
+          border: none;
+          border-radius: 20px;
+          padding: 6px 14px;
+          font-weight: 700;
+          font-size: 0.75rem;
+          box-shadow: 0 4px 10px rgba(232, 93, 4, 0.2);
+          cursor: pointer;
+          transition: transform 0.1s;
+        }
+        #marketplace-store-container .store-theme-btn:hover {
+          transform: translateY(-1px);
+        }
+      </style>
+      <div class="page-header" style="background:#fff;border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:12px">
+        <button class="back-btn" onclick="goBack()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:var(--text)"><i class="fas fa-arrow-left"></i></button>
+        <h2 style="font-size:1.15rem;font-weight:800;margin:0;color:var(--text)">${escHtml(storeName)}</h2>
+      </div>
+      ${adminToolbarHTML}
+      ${headerHTML}
+
+      <!-- Search product within store -->
+      <div style="padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--border)">
+        <div style="position:relative">
+          <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted)"></i>
+          <input type="text" placeholder="Search products in this store..." id="store-search-input" 
+                 oninput="handleStoreProductSearch('${s.id}', this.value)"
+                 style="width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border);border-radius:25px;font-size:.82rem">
+        </div>
+      </div>
+      
+      <!-- Store Tabs Navigation -->
+      <div class="store-tab-list" style="display:flex;overflow-x:auto;sticky:top;background:#fff;border-bottom:1px solid var(--border)">
+        <button class="store-tab-btn active" data-tab="home" onclick="switchStorefrontTab('home','${s.id}')">Home</button>
+        <button class="store-tab-btn" data-tab="products" onclick="switchStorefrontTab('products','${s.id}')">Products</button>
+        <button class="store-tab-btn" data-tab="cart" onclick="switchStorefrontTab('cart','${s.id}')">Cart <span id="store-cart-count-${s.id}" style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 6px;font-size:0.6rem;font-weight:700;display:none">0</span></button>
+        <button class="store-tab-btn" data-tab="about" onclick="switchStorefrontTab('about','${s.id}')">About</button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div class="store-tab-content" id="store-tab-content"></div>
+    </div>
+  `;
+
+  switchStorefrontTab('home', s.id);
+
+  setTimeout(() => {
+    const storeCart = JSON.parse(localStorage.getItem('happa_store_cart_' + s.id) || '[]');
+    const totalQty = storeCart.reduce((acc, curr) => acc + curr.qty, 0);
+    const countBadge = document.getElementById('store-cart-count-' + s.id);
+    if (countBadge) {
+      if (totalQty > 0) {
+        countBadge.textContent = totalQty;
+        countBadge.style.display = 'inline-block';
+      } else {
+        countBadge.style.display = 'none';
+      }
+    }
+  }, 100);
+}
+
+async function renderStorefront(id) {
+  const c = document.getElementById('storefront-content');
+  if (!c) return;
+  c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+
+  const s = App.allStores.find(st => String(st.id) === String(id)) || await apiGet(`stores/${id}`);
+  if (!s) { c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Storefront not found</h3></div>'; return; }
 
   // Enforce storefront visibility: only allow approved storefronts to load.
   // Exception: Let admins or the store owner vendor view/review the storefront.
@@ -964,7 +1117,7 @@ async function renderStoreDetail(id) {
       #storefront-page-container .store-theme-btn { background: ${primaryColor} !important; color: #fff !important; border: none !important; border-radius: 8px; font-weight:800; text-transform: uppercase; box-shadow: 0 4px 10px color-mix(in srgb, ${primaryColor} 30%, transparent); }
       #storefront-page-container .store-tab-btn { flex:1; padding:10px 0; cursor:pointer; color:var(--text-light); transition: all 0.2s; border-bottom: 2px solid transparent; font-weight:800; text-transform:uppercase; font-size:0.7rem; text-align:center; }
       #storefront-page-container .store-tab-btn.active { border-bottom-color: ${primaryColor}; color: ${primaryColor}; }
-      #storefront-page-container #store-tab-content { background: #f8f9fa !important; color: var(--text) !important; padding-bottom:12px; }
+      #storefront-page-container .store-tab-content { background: #f8f9fa !important; color: var(--text) !important; padding-bottom:12px; }
       #storefront-page-container .product-card { background: #ffffff !important; border: 1px solid var(--border) !important; border-radius: 12px !important; color: var(--text) !important; box-shadow: 0 4px 15px rgba(0,0,0,0.07) !important; transition: all 0.25s ease-in-out !important; }
       #storefront-page-container .product-card:hover { transform: translateY(-3px) !important; box-shadow: 0 12px 24px rgba(0,0,0,0.12) !important; }
       #storefront-page-container .product-card .product-name { color: var(--text) !important; font-weight: 700 !important; font-size: 0.85rem !important; }
@@ -999,7 +1152,7 @@ async function renderStoreDetail(id) {
       #storefront-page-container .store-tab-btn { flex:1; padding:10px 0; cursor:pointer; color:var(--text-light) !important; transition: all 0.2s; border-bottom: 2px solid transparent; font-size: 0.72rem; text-align:center; }
       #storefront-page-container .store-tab-btn.active { color: ${primaryColor} !important; font-weight: 800; border-bottom-color: ${primaryColor}; }
       #storefront-page-container .store-tab-list { background: color-mix(in srgb, ${secondaryColor} 20%, rgba(255, 255, 255, 0.6)); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
-      #storefront-page-container #store-tab-content { background: color-mix(in srgb, ${secondaryColor} 20%, #faf9f6) !important; color: var(--text) !important; padding-bottom:12px; }
+      #storefront-page-container .store-tab-content { background: color-mix(in srgb, ${secondaryColor} 20%, #faf9f6) !important; color: var(--text) !important; padding-bottom:12px; }
       #storefront-page-container .product-card { background: rgba(255,255,255,0.75) !important; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.4) !important; color: var(--text) !important; box-shadow: 0 4px 15px rgba(0,0,0,0.03) !important; border-radius: 12px !important; }
       #storefront-page-container .product-card .product-name { color: var(--text) !important; font-weight: 700 !important; font-size: 0.85rem !important; }
       #storefront-page-container .product-card .product-price { color: ${primaryColor} !important; font-weight: 800 !important; }
@@ -1035,7 +1188,7 @@ async function renderStoreDetail(id) {
       #storefront-page-container .store-tab-btn { flex:1; padding:8px 0; cursor:pointer; color:var(--text-light) !important; transition: all 0.2s; border-radius: 10px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; text-align: center; box-shadow: 2px 2px 5px rgba(165,175,190,0.25), -2px -2px 5px #ffffff; }
       #storefront-page-container .store-tab-btn.active { color: ${primaryColor} !important; box-shadow: inset 1px 1px 3px rgba(165,175,190,0.25), inset -1px -1px 3px #ffffff; }
       #storefront-page-container .store-tab-list { background: var(--neu-bg); padding: 4px; display: flex; gap: 8px; border-bottom: none; }
-      #storefront-page-container #store-tab-content { background: var(--neu-bg) !important; color: var(--text) !important; padding-bottom: 12px; }
+      #storefront-page-container .store-tab-content { background: var(--neu-bg) !important; color: var(--text) !important; padding-bottom: 12px; }
       #storefront-page-container .product-card { background: var(--neu-bg) !important; border: none !important; border-radius: 16px !important; color: var(--text) !important; box-shadow: 3px 3px 8px rgba(165,175,190,0.25), -3px -3px 8px #ffffff !important; transition: all 0.25s ease-in-out !important; }
       #storefront-page-container .product-card:hover { transform: translateY(-2px) !important; box-shadow: 5px 5px 12px rgba(165,175,190,0.35), -5px -5px 12px #ffffff !important; }
       #storefront-page-container .product-card .product-name { color: var(--text) !important; font-size: 0.65rem !important; font-weight: 700 !important; }
@@ -1159,7 +1312,7 @@ async function renderStoreDetail(id) {
       </div>
 
       <!-- Tab Content Area -->
-      <div id="store-tab-content"></div>
+      <div class="store-tab-content" id="store-tab-content"></div>
     </div>
   `;
 
@@ -2147,16 +2300,26 @@ function toggleSaveStore(storeId) {
 }
 
 
+function getStoreTabContentEl() {
+  const activePageId = App.currentPage === 'storefront' ? 'page-storefront' : 'page-store-detail';
+  const activePage = document.getElementById(activePageId);
+  return activePage ? activePage.querySelector('.store-tab-content') : document.getElementById('store-tab-content');
+}
+
 // ── Storefront Helper Functions ──────────────────────────────────────────
 window.switchStorefrontTab = async function(tabName, storeId) {
   const s = App.allStores.find(st => String(st.id) === String(storeId));
   if (!s) return;
 
-  document.querySelectorAll('.store-tab-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
-  });
+  const activePageId = App.currentPage === 'storefront' ? 'page-storefront' : 'page-store-detail';
+  const activePage = document.getElementById(activePageId);
+  if (activePage) {
+    activePage.querySelectorAll('.store-tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+    });
+  }
 
-  const contentEl = document.getElementById('store-tab-content');
+  const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
   const storeProds = App.allProducts.filter(p => String(p.store_id) === String(storeId) && p.status === 'active');
@@ -2290,7 +2453,7 @@ window.toggleFollowStore = function(storeId) {
 };
 
 window.handleStoreProductSearch = function(storeId, query) {
-  const contentEl = document.getElementById('store-tab-content');
+  const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
   const needle = query.trim().toLowerCase();
@@ -2439,7 +2602,7 @@ window.addStorefrontCartItem = function(storeId, productId) {
 };
 
 window.renderStorefrontCart = function(storeId) {
-  const contentEl = document.getElementById('store-tab-content');
+  const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
   const s = App.allStores.find(st => String(st.id) === String(storeId)) || {};
@@ -2543,7 +2706,7 @@ window.removeStorefrontCartItem = function(storeId, productId) {
 };
 
 window.renderStorefrontCheckout = function(storeId) {
-  const contentEl = document.getElementById('store-tab-content');
+  const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
   const s = App.allStores.find(st => String(st.id) === String(storeId)) || {};
@@ -2697,7 +2860,7 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     if (countBadge) countBadge.style.display = 'none';
 
     // Show confirmation tab content
-    const contentEl = document.getElementById('store-tab-content');
+    const contentEl = getStoreTabContentEl();
     if (contentEl) {
       contentEl.innerHTML = `
         <div class="empty-state" style="padding:60px 20px">
@@ -2712,7 +2875,7 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
 };
 
 window.renderStorefrontAdminPortal = function(storeId) {
-  const contentEl = document.getElementById('store-tab-content');
+  const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
   const s = App.allStores.find(st => String(st.id) === String(storeId)) || {};

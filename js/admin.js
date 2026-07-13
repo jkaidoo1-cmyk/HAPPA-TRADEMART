@@ -2598,7 +2598,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:16px 0 8px"><i class="fas fa-clock" style="color:#d97706"></i> Storefront Requests (${pending.length})</h3>`;
   if (pending.length) {
     html += pending.map(s => renderItemHTML(s, 'Pending Review', '#fef3c7', '#d97706', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('store-detail'); renderStoreDetail('${s.id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="approveStorefront('${s.id}')">
@@ -2616,7 +2616,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Approved & Live Storefronts (${approved.length})</h3>`;
   if (approved.length) {
     html += approved.map(s => renderItemHTML(s, 'Live', '#d1fae5', '#065f46', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('store-detail'); renderStoreDetail('${s.id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="adminGrantSubscription('${s.id}')">
@@ -2637,7 +2637,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-folder-open" style="color:var(--text-muted)"></i> Draft/Inactive Storefronts (${draft.length})</h3>`;
   if (draft.length) {
     html += draft.map(s => renderItemHTML(s, 'Draft / Inactive', '#f3f4f6', 'var(--text-muted)', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('store-detail'); renderStoreDetail('${s.id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="adminGrantSubscription('${s.id}')">

@@ -97,9 +97,12 @@ window.addEventListener('DOMContentLoaded', () => {
   const startupHash = window.location.hash;
   const searchParams = new URLSearchParams(window.location.search);
   const isStoreAdmin = startupHash.startsWith('#store-admin/');
+  const isStorefrontPage = startupHash.startsWith('#storefront/');
   const storeSlug = searchParams.get('store') || 
                     (startupHash.startsWith('#store/') ? startupHash.substring(7) : null) ||
-                    (isStoreAdmin ? startupHash.substring(13) : null);
+                    (isStoreAdmin ? startupHash.substring(13) : null) ||
+                    searchParams.get('storefront') ||
+                    (isStorefrontPage ? startupHash.substring(12) : null);
   
   if (startupHash === '#register-vendor' || startupHash === '#auth-vendor') {
     showPage('auth');
@@ -118,6 +121,11 @@ window.addEventListener('DOMContentLoaded', () => {
           showPage('store-admin');
           if (typeof renderStorefrontAdminPortalPage === 'function') {
             renderStorefrontAdminPortalPage(found.id);
+          }
+        } else if (isStorefrontPage || searchParams.has('storefront')) {
+          showPage('storefront');
+          if (typeof renderStorefront === 'function') {
+            renderStorefront(found.id);
           }
         } else {
           showPage('store-detail');
@@ -143,6 +151,15 @@ window.addEventListener('DOMContentLoaded', () => {
         showPage('store-detail');
         if (typeof renderStoreDetail === 'function') {
           renderStoreDetail(found.id);
+        }
+      }
+    } else if (newHash.startsWith('#storefront/')) {
+      const slug = newHash.substring(12);
+      const found = App.allStores.find(s => s.slug === slug || s.id === slug);
+      if (found) {
+        showPage('storefront');
+        if (typeof renderStorefront === 'function') {
+          renderStorefront(found.id);
         }
       }
     } else if (newHash.startsWith('#store-admin/')) {
@@ -288,8 +305,8 @@ function updatePWAManifest(name, logoUrl, themeColor) {
 
 // ── Page Navigation ───────────────────────────────────────
 function showPage(pageId) {
-  // Reset PWA manifest when leaving store detail page
-  if (pageId !== 'store-detail') {
+  // Reset PWA manifest when leaving store detail or storefront page
+  if (pageId !== 'store-detail' && pageId !== 'storefront') {
     updatePWAManifest('HAPPA TRADEMART', 'images/icon-192.png', '#e85d04');
   }
 
@@ -328,7 +345,7 @@ function showPage(pageId) {
   const mainContent = document.getElementById('main-content');
   if (mainContent) {
     mainContent.scrollTop = 0;
-    if (pageId === 'store-detail' || pageId === 'store-admin') {
+    if (pageId === 'storefront' || pageId === 'store-admin') {
       mainContent.style.height = '100vh';
       mainContent.style.paddingBottom = '0';
     } else {
@@ -487,7 +504,7 @@ function updateNavForUser() {
   const isVendor  = (role === 'vendor' || role === 'seller') && !isPreview;
   const isRendor  = role === 'rendor' && !isPreview;
 
-  const isStorefront = App.currentPage === 'store-detail' || App.currentPage === 'store-admin';
+  const isStorefront = App.currentPage === 'storefront' || App.currentPage === 'store-admin';
 
   // Top Nav visibility
   const topNav = document.getElementById('top-nav');

@@ -516,11 +516,8 @@ async function doLogin(e) {
 
 
   if (!user) {
-
-    showToast('Invalid credentials. Try a demo account below.', 'error');
-
+    showToast('Invalid email or password. Please try again.', 'error');
     return;
-
   }
 
   if (user.status === 'suspended') {

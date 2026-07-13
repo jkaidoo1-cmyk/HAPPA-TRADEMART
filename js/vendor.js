@@ -543,12 +543,12 @@ async function renderVendorDashboard() {
             <div style="font-size:.8rem;line-height:1.5">
               Your independent storefront is active. Use the links below to share with customers or manage settings:
               <div style="margin-top:6px;display:grid;gap:4px">
-                <div><strong>Storefront Website (Buyer Link):</strong> <a href="#store/${myStore.slug || myStore.id}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/store/${myStore.slug || myStore.id}</a></div>
+                <div><strong>Storefront Website (Buyer Link):</strong> <a href="#storefront/${myStore.slug || myStore.id}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/storefront/${myStore.slug || myStore.id}</a></div>
                 <div><strong>Storefront Admin Control (Vendor Link):</strong> <a href="#store-admin/${myStore.slug || myStore.id}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/store-admin/${myStore.slug || myStore.id}</a></div>
               </div>
             </div>
             <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-sm" style="background:#065f46;color:#fff;border:none" onclick="showPage('store-detail'); renderStoreDetail('${myStore.id}')">
+              <button class="btn btn-sm" style="background:#065f46;color:#fff;border:none" onclick="showPage('storefront'); renderStorefront('${myStore.id}')">
                 <i class="fas fa-external-link-alt"></i> View Storefront
               </button>
               <button class="btn btn-sm" style="background:#0284c7;color:#fff;border:none" onclick="window.location.hash = '#store-admin/${myStore.slug || myStore.id}'">
@@ -2620,7 +2620,7 @@ window.updateStorefrontPreview = function() {
 
   // Update preview URL bar
   const urlBar = document.getElementById('preview-url-bar');
-  if (urlBar) urlBar.textContent = `happamart.com/store/${slug}`;
+  if (urlBar) urlBar.textContent = `happamart.com/storefront/${slug}`;
 
   const previewBox = document.getElementById('storefront-live-preview-box');
   if (!previewBox) return;
