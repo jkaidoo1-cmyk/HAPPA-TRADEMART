@@ -1028,10 +1028,9 @@ async function apiFetch(table, opts = {}) {
     return await resp.json();
   } catch(e) {
     console.warn('API Error:', table, e);
-    // Only fall back to the local tables shim when the app is explicitly
-    // configured to use the `tables/` local API. For a real server API
-    // (e.g. `/api/`) surface the error so callers can handle it and avoid
-    // treating a failed server write as a successful local-only write.
+    // If configured to use local API shim, fall back to local tables.
+    // Otherwise, return null to surface the error to the caller (backend now
+    // handles its own local DB fallback for Supabase failures).
     if (API === 'tables/') {
       return localTablesApi(table, opts);
     }

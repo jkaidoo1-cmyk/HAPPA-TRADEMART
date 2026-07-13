@@ -92,6 +92,15 @@ async function renderVendorDashboard() {
   const pkgRes = await apiGet('packages', `search=${encodeURIComponent(u.id)}&limit=100`);
   const myPackages = (pkgRes?.data || []).filter(p => p.vendor_id === u.id);
 
+  // Fetch storefront (separate entity) for this vendor's store, if any
+  let myStorefront = null;
+  if (myStore) {
+    const sfRes = await apiGet('storefronts', `limit=200`);
+    const allSF = sfRes?.data || [];
+    myStorefront = allSF.find(s => String(s.store_id) === String(myStore.id) || String(s.vendor_id) === String(u.id)) || null;
+    App.myStorefront = myStorefront;
+  }
+
   c.innerHTML = `
 <div class="tab-nav" id="vendor-tabs">
   <div class="tab-btn active" onclick="switchTab(this,'vendor-overview')">Overview</div>
@@ -426,7 +435,7 @@ async function renderVendorDashboard() {
 <div class="tab-content" id="vendor-storefront">
   <div class="dashboard-wrap">
     ${myStore ? `
-      ${(!myStore.storefront_status || myStore.storefront_status === 'inactive') ? `
+      ${(!myStorefront || myStorefront.status === 'inactive') ? `
         <!-- State 1: Inactive / Initial state — choose subscription plan -->
         <div style="text-align:center;padding:30px 20px 20px;">
           <div style="font-size:3rem;margin-bottom:12px">🏪</div>
@@ -492,7 +501,7 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      ${(myStore.storefront_status === 'pending_approval') ? `
+      ${(myStorefront && myStorefront.status === 'pending_approval') ? `
         <!-- State 2: Pending Approval -->
         <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
           <div style="font-size:3rem;margin-bottom:16px;">⏳</div>
@@ -510,23 +519,23 @@ async function renderVendorDashboard() {
         <div class="card">
           <div class="card-header"><h3>Customization Preview</h3></div>
           <div class="card-body" style="font-size:.85rem;color:var(--text-light);display:grid;gap:8px">
-            <div><strong>Slogan:</strong> ${escHtml(myStore.slogan || 'None')}</div>
-            <div><strong>Friendly URL Slug:</strong> happamart.com/store/${myStore.slug || myStore.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}</div>
-            <div><strong>Primary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStore.primary_color || '#faf9f6'}"></span> ${myStore.primary_color || '#faf9f6'}</div>
-            <div><strong>Secondary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStore.secondary_color || '#ffffff'}"></span> ${myStore.secondary_color || '#ffffff'}</div>
-            <div><strong>Tertiary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStore.tertiary_color || '#e85d04'}"></span> ${myStore.tertiary_color || '#e85d04'}</div>
-            <div><strong>About Us:</strong> ${escHtml(myStore.description || 'None')}</div>
+            <div><strong>Slogan:</strong> ${escHtml(myStorefront?.slogan || myStore.slogan || 'None')}</div>
+            <div><strong>Friendly URL Slug:</strong> happamart.com/store/${myStorefront?.slug || myStore.slug || myStore.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}</div>
+            <div><strong>Primary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStorefront?.primary_color || myStore.primary_color || '#faf9f6'}"></span> ${myStorefront?.primary_color || myStore.primary_color || '#faf9f6'}</div>
+            <div><strong>Secondary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStorefront?.secondary_color || myStore.secondary_color || '#ffffff'}"></span> ${myStorefront?.secondary_color || myStore.secondary_color || '#ffffff'}</div>
+            <div><strong>Tertiary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStorefront?.tertiary_color || myStore.tertiary_color || '#e85d04'}"></span> ${myStorefront?.tertiary_color || myStore.tertiary_color || '#e85d04'}</div>
+            <div><strong>About Us:</strong> ${escHtml(myStorefront?.about_us || myStore.description || 'None')}</div>
           </div>
         </div>
       ` : ''}
 
-      ${(myStore.storefront_status === 'draft' || myStore.storefront_status === 'approved') ? `
+      ${(myStorefront && (myStorefront.status === 'draft' || myStorefront.status === 'approved')) ? `
         <!-- State 3: Editing / Approved Customization Form -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
           <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-              <i class="fas fa-save"></i> ${myStore.storefront_status === 'draft' ? 'Save Draft' : 'Save Settings'}
+              <i class="fas fa-save"></i> ${(myStorefront?.status === 'draft') ? 'Save Draft' : 'Save Settings'}
             </button>
             ${myStore.storefront_status === 'draft' ? `
               <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">

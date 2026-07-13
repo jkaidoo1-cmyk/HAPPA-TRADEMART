@@ -9,31 +9,7 @@
 
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
-const path = require('path');
-
-// Local JSON DB fallback (used when SUPABASE_* env vars are missing)
-const DB_PATH = path.resolve(__dirname, '..', 'db.json');
-function loadLocalDB() {
-  try {
-    const raw = fs.readFileSync(DB_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    return {};
-  }
-}
-function saveLocalDB(db) {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Failed to write local DB', err);
-    return false;
-  }
-}
-function ensureTable(db, table) {
-  if (!db[table]) db[table] = [];
-}
+const dataStore = require('./data-store');
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
@@ -88,7 +64,7 @@ function serializeRecord(record) {
   if ('avatar_url' in out && !('avatar' in out)) {
     out.avatar = out.avatar_url;
   }
-  // Stores: description → about_us (used by storefront views)
+  // Stores: description → about_us (used by store views)
   if ('description' in out && !('about_us' in out)) {
     out.about_us = out.description;
   }
@@ -152,7 +128,17 @@ function applyClientFilters(rows, query) {
 // ── Routes ────────────────────────────────────────────────────
 
 app.get('/api', (req, res) => {
-  res.json({ status: 'ok', version: '2.0.0', backend: 'supabase' });
+  const hasSupa = !!(process.env.SUPABASE_URL && process.env.SUPABASE_KEY);
+  res.json({ 
+    status: 'ok', 
+    version: '2.0.0', 
+    backend: hasSupa ? 'supabase' : 'memory-cache + db.json',
+    debug: {
+      supabase_configured: hasSupa,
+      data_store_path: dataStore.dbPath,
+      node_env: process.env.NODE_ENV || 'development'
+    }
+  });
 });
 
 app.post('/api/clean-temp-database-records', async (req, res) => {
@@ -203,17 +189,20 @@ app.get('/api/:table', async (req, res) => {
     const { search, limit, page, sort, ...filters } = req.query;
 
     if (!supabase) {
-      // Local DB path
-      const db = loadLocalDB();
-      ensureTable(db, table);
-      let rows = db[table].map(serializeRecord);
+      // In-memory/file-backed path
+      dataStore.ensureTable(table);
+      const store = dataStore.getStore();
+      let rows = store[table].map(serializeRecord);
+      
+      // Apply filters
       if (search) rows = applyClientFilters(rows, { search, limit, page });
-      // Apply simple filters
       for (const [k, v] of Object.entries(filters)) {
         if (!v) continue;
         rows = rows.filter(r => String(r[k] ?? '').toLowerCase() === String(v).toLowerCase());
       }
+      // Apply sorting
       if (sort) rows.sort((a,b) => (b[sort]||0) - (a[sort]||0));
+      
       res.json({ data: rows });
       return;
     }
@@ -250,13 +239,15 @@ app.get('/api/:table/:id', async (req, res) => {
     const supabase = getSupabase();
     const table = req.params.table;
     const id = req.params.id;
+    
     if (!supabase) {
-      const db = loadLocalDB();
-      ensureTable(db, table);
-      const found = db[table].find(r => String(r.id) === String(id));
+      dataStore.ensureTable(table);
+      const store = dataStore.getStore();
+      const found = store[table].find(r => String(r.id) === String(id));
       if (!found) return res.status(404).json({ error: 'Record not found' });
       return res.json(serializeRecord(found));
     }
+    
     const { data, error } = await supabase.from(table).select('*').eq('id', id).single();
     if (error || !data) return res.status(404).json({ error: 'Record not found' });
     res.json(serializeRecord(data));
@@ -278,18 +269,32 @@ app.post('/api/:table', async (req, res) => {
     const record = serializeRecord(body);
 
     if (!supabase) {
-      const db = loadLocalDB();
-      ensureTable(db, table);
-      db[table].push(record);
-      saveLocalDB(db);
-      return res.status(201).json(serializeRecord(record));
+      // In-memory/file-backed path
+      try {
+        dataStore.ensureTable(table);
+        const store = dataStore.getStore();
+        store[table].push(record);
+        const fileSaved = dataStore.saveToFile();
+        
+        console.log(`[POST] Saved ${table}/${record.id} to memory${fileSaved ? ' + db.json' : ' (file save failed, continuing with memory)'}`);
+        return res.status(201).json(serializeRecord(record));
+      } catch (localErr) {
+        console.error('[POST] Local store error:', table, localErr);
+        return res.status(500).json({ error: localErr.message, backend: 'memory-cache' });
+      }
     }
 
+    // Supabase path
     const { data, error } = await supabase.from(table).insert(record).select().single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error('[POST] Supabase error:', table, error);
+      return res.status(500).json({ error: error.message, backend: 'supabase' });
+    }
+    console.log(`[POST] Saved ${table}/${data.id} to Supabase`);
     res.status(201).json(serializeRecord(data));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[POST] Unexpected error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 
@@ -301,14 +306,16 @@ app.put('/api/:table/:id', async (req, res) => {
     const id = req.params.id;
     const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
     const record = serializeRecord(body);
+    
     if (!supabase) {
-      const db = loadLocalDB();
-      ensureTable(db, table);
-      const idx = db[table].findIndex(r => String(r.id) === String(id));
-      if (idx === -1) db[table].push(record); else db[table][idx] = { ...db[table][idx], ...record };
-      saveLocalDB(db);
+      dataStore.ensureTable(table);
+      const store = dataStore.getStore();
+      const idx = store[table].findIndex(r => String(r.id) === String(id));
+      if (idx === -1) store[table].push(record); else store[table][idx] = { ...store[table][idx], ...record };
+      dataStore.saveToFile();
       return res.json(serializeRecord(record));
     }
+    
     const { data, error } = await supabase.from(table).upsert(record).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
@@ -325,15 +332,17 @@ app.patch('/api/:table/:id', async (req, res) => {
     const id = req.params.id;
     const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
     const record = serializeRecord(body);
+    
     if (!supabase) {
-      const db = loadLocalDB();
-      ensureTable(db, table);
-      const idx = db[table].findIndex(r => String(r.id) === String(id));
+      dataStore.ensureTable(table);
+      const store = dataStore.getStore();
+      const idx = store[table].findIndex(r => String(r.id) === String(id));
       if (idx === -1) return res.status(404).json({ error: 'Record not found' });
-      db[table][idx] = { ...db[table][idx], ...record };
-      saveLocalDB(db);
-      return res.json(serializeRecord(db[table][idx]));
+      store[table][idx] = { ...store[table][idx], ...record };
+      dataStore.saveToFile();
+      return res.json(serializeRecord(store[table][idx]));
     }
+    
     const { data, error } = await supabase.from(table).update(record).eq('id', id).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
@@ -348,15 +357,17 @@ app.delete('/api/:table/:id', async (req, res) => {
     const supabase = getSupabase();
     const table = req.params.table;
     const id = req.params.id;
+    
     if (!supabase) {
-      const db = loadLocalDB();
-      ensureTable(db, table);
-      const before = db[table].length;
-      db[table] = db[table].filter(r => String(r.id) !== String(id));
-      saveLocalDB(db);
-      if (db[table].length === before) return res.status(404).json({ error: 'Record not found' });
+      dataStore.ensureTable(table);
+      const store = dataStore.getStore();
+      const before = store[table].length;
+      store[table] = store[table].filter(r => String(r.id) !== String(id));
+      dataStore.saveToFile();
+      if (store[table].length === before) return res.status(404).json({ error: 'Record not found' });
       return res.status(204).send();
     }
+    
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) return res.status(500).json({ error: error.message });
     res.status(204).send();
