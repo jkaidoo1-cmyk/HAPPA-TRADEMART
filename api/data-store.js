@@ -24,6 +24,7 @@ function loadMemoryStore() {
     memoryStore = {
       users: [],
       stores: [],
+      storefronts: [],
       products: [],
       orders: [],
       packages: [],

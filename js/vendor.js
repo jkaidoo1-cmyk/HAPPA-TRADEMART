@@ -101,6 +101,25 @@ async function renderVendorDashboard() {
     App.myStorefront = myStorefront;
   }
 
+  // Helper variables for storefront configuration form to decouple from stores
+  const sfTheme = myStorefront?.theme || myStore?.theme || 'classic';
+  const sfPrimaryColor = myStorefront?.primary_color || myStore?.primary_color || '#e85d04';
+  const sfSecondaryColor = myStorefront?.secondary_color || myStore?.secondary_color || '#faf9f6';
+  const sfFontFamily = myStorefront?.font_family || myStore?.font_family || 'Outfit';
+  const sfLogoUrl = myStorefront?.logo_url || myStore?.logo_url || '';
+  const sfBannerUrl = myStorefront?.banner_url || myStore?.banner_url || '';
+  const sfName = myStorefront?.name || myStore?.name || '';
+  const sfSlogan = myStorefront?.slogan || myStore?.slogan || '';
+  const sfDescription = myStorefront?.about_us || myStore?.description || '';
+  const sfHours = myStorefront?.business_hours || myStore?.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM';
+  const sfShipping = myStorefront?.shipping_policy || myStore?.shipping_policy || '';
+  const sfReturn = myStorefront?.return_policy || myStore?.return_policy || '';
+  const sfFacebook = myStorefront?.facebook_url || myStore?.facebook_url || '';
+  const sfInstagram = myStorefront?.instagram_url || myStore?.instagram_url || '';
+  const sfYoutube = myStorefront?.youtube_url || myStore?.youtube_url || '';
+  const sfSlug = myStorefront?.url_slug || myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || '';
+  const sfMetaDesc = myStorefront?.meta_description || myStore?.meta_description || '';
+
   c.innerHTML = `
 <div class="tab-nav" id="vendor-tabs">
   <div class="tab-btn active" onclick="switchTab(this,'vendor-overview')">Overview</div>
@@ -519,12 +538,11 @@ async function renderVendorDashboard() {
         <div class="card">
           <div class="card-header"><h3>Customization Preview</h3></div>
           <div class="card-body" style="font-size:.85rem;color:var(--text-light);display:grid;gap:8px">
-            <div><strong>Slogan:</strong> ${escHtml(myStorefront?.slogan || myStore.slogan || 'None')}</div>
-            <div><strong>Friendly URL Slug:</strong> happamart.com/store/${myStorefront?.slug || myStore.slug || myStore.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}</div>
-            <div><strong>Primary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStorefront?.primary_color || myStore.primary_color || '#faf9f6'}"></span> ${myStorefront?.primary_color || myStore.primary_color || '#faf9f6'}</div>
-            <div><strong>Secondary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStorefront?.secondary_color || myStore.secondary_color || '#ffffff'}"></span> ${myStorefront?.secondary_color || myStore.secondary_color || '#ffffff'}</div>
-            <div><strong>Tertiary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${myStorefront?.tertiary_color || myStore.tertiary_color || '#e85d04'}"></span> ${myStorefront?.tertiary_color || myStore.tertiary_color || '#e85d04'}</div>
-            <div><strong>About Us:</strong> ${escHtml(myStorefront?.about_us || myStore.description || 'None')}</div>
+            <div><strong>Slogan:</strong> ${escHtml(sfSlogan || 'None')}</div>
+            <div><strong>Friendly URL Slug:</strong> happamart.com/storefront/${sfSlug}</div>
+            <div><strong>Primary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${sfPrimaryColor}"></span> ${sfPrimaryColor}</div>
+            <div><strong>Secondary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${sfSecondaryColor}"></span> ${sfSecondaryColor}</div>
+            <div><strong>About Us:</strong> ${escHtml(sfDescription || 'None')}</div>
           </div>
         </div>
       ` : ''}
@@ -537,7 +555,7 @@ async function renderVendorDashboard() {
             <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
               <i class="fas fa-save"></i> ${(myStorefront?.status === 'draft') ? 'Save Draft' : 'Save Settings'}
             </button>
-            ${myStore.storefront_status === 'draft' ? `
+            ${myStorefront.status === 'draft' ? `
               <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
                 <i class="fas fa-paper-plane"></i> Request Storefront
               </button>
@@ -545,22 +563,22 @@ async function renderVendorDashboard() {
           </div>
         </div>
 
-        ${myStore.storefront_status === 'approved' ? `
+        ${myStorefront.status === 'approved' ? `
           ${window.getSubscriptionBannerHTML ? window.getSubscriptionBannerHTML(myStore) : ''}
           <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;gap:8px">
             <div style="font-weight:800;font-size:.9rem"><i class="fas fa-check-circle"></i> Storefront Live!</div>
             <div style="font-size:.8rem;line-height:1.5">
               Your independent storefront is active. Use the links below to share with customers or manage settings:
               <div style="margin-top:6px;display:grid;gap:4px">
-                <div><strong>Storefront Website (Buyer Link):</strong> <a href="#storefront/${myStore.slug || myStore.id}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/storefront/${myStore.slug || myStore.id}</a></div>
-                <div><strong>Storefront Admin Control (Vendor Link):</strong> <a href="#store-admin/${myStore.slug || myStore.id}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/store-admin/${myStore.slug || myStore.id}</a></div>
+                <div><strong>Storefront Website (Buyer Link):</strong> <a href="#storefront/${sfSlug}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/storefront/${sfSlug}</a></div>
+                <div><strong>Storefront Admin Control (Vendor Link):</strong> <a href="#store-admin/${sfSlug}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/store-admin/${sfSlug}</a></div>
               </div>
             </div>
             <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-sm" style="background:#065f46;color:#fff;border:none" onclick="showPage('storefront'); renderStorefront('${myStore.id}')">
                 <i class="fas fa-external-link-alt"></i> View Storefront
               </button>
-              <button class="btn btn-sm" style="background:#0284c7;color:#fff;border:none" onclick="window.location.hash = '#store-admin/${myStore.slug || myStore.id}'">
+              <button class="btn btn-sm" style="background:#0284c7;color:#fff;border:none" onclick="window.location.hash = '#store-admin/${sfSlug}'">
                 <i class="fas fa-cog"></i> Open Admin Panel
               </button>
               <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="window.showSubscriptionDetails('${myStore.id}')">
@@ -617,26 +635,26 @@ async function renderVendorDashboard() {
                     }
                   </style>
                   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-                    <label class="theme-option" style="border:2px solid ${myStore.theme === 'classic' || !myStore.theme ? 'var(--primary)' : 'var(--border)'};background:${myStore.theme === 'classic' || !myStore.theme ? 'var(--primary-light)' : 'transparent'};min-width:130px;" id="theme-label-classic">
-                      <input type="radio" name="store-theme" value="classic" ${myStore.theme === 'classic' || !myStore.theme ? 'checked' : ''} style="display:none" onchange="window.updateStoreTheme('classic')">
+                    <label class="theme-option" style="border:2px solid ${sfTheme === 'classic' ? 'var(--primary)' : 'var(--border)'};background:${sfTheme === 'classic' ? 'var(--primary-light)' : 'transparent'};min-width:130px;" id="theme-label-classic">
+                      <input type="radio" name="store-theme" value="classic" ${sfTheme === 'classic' ? 'checked' : ''} style="display:none" onchange="window.updateStoreTheme('classic')">
                       <div class="theme-icon">🖼️</div>
                       <div class="theme-title">Classic</div>
                       <div class="theme-desc">Top menu banner</div>
                     </label>
-                    <label class="theme-option" style="border:2px solid ${myStore.theme === 'bold' ? 'var(--primary)' : 'var(--border)'};background:${myStore.theme === 'bold' ? 'var(--primary-light)' : 'transparent'};min-width:130px;" id="theme-label-bold">
-                      <input type="radio" name="store-theme" value="bold" ${myStore.theme === 'bold' ? 'checked' : ''} style="display:none" onchange="window.updateStoreTheme('bold')">
+                    <label class="theme-option" style="border:2px solid ${sfTheme === 'bold' ? 'var(--primary)' : 'var(--border)'};background:${sfTheme === 'bold' ? 'var(--primary-light)' : 'transparent'};min-width:130px;" id="theme-label-bold">
+                      <input type="radio" name="store-theme" value="bold" ${sfTheme === 'bold' ? 'checked' : ''} style="display:none" onchange="window.updateStoreTheme('bold')">
                       <div class="theme-icon">🎯</div>
                       <div class="theme-title">Modern Bold</div>
                       <div class="theme-desc">Centered logo</div>
                     </label>
-                    <label class="theme-option" style="border:2px solid ${myStore.theme === 'modern' ? 'var(--primary)' : 'var(--border)'};background:${myStore.theme === 'modern' ? 'var(--primary-light)' : 'transparent'};min-width:130px;" id="theme-label-modern">
-                      <input type="radio" name="store-theme" value="modern" ${myStore.theme === 'modern' ? 'checked' : ''} style="display:none" onchange="window.updateStoreTheme('modern')">
+                    <label class="theme-option" style="border:2px solid ${sfTheme === 'modern' ? 'var(--primary)' : 'var(--border)'};background:${sfTheme === 'modern' ? 'var(--primary-light)' : 'transparent'};min-width:130px;" id="theme-label-modern">
+                      <input type="radio" name="store-theme" value="modern" ${sfTheme === 'modern' ? 'checked' : ''} style="display:none" onchange="window.updateStoreTheme('modern')">
                       <div class="theme-icon">✨</div>
                       <div class="theme-title">Modern Glass</div>
                       <div class="theme-desc">Neon glassmorphism</div>
                     </label>
-                    <label class="theme-option" style="border:2px solid ${myStore.theme === 'neumorphic' ? 'var(--primary)' : 'var(--border)'};background:${myStore.theme === 'neumorphic' ? 'var(--primary-light)' : 'transparent'};min-width:130px;" id="theme-label-neumorphic">
-                       <input type="radio" name="store-theme" value="neumorphic" ${myStore.theme === 'neumorphic' ? 'checked' : ''} style="display:none" onchange="window.updateStoreTheme('neumorphic')">
+                    <label class="theme-option" style="border:2px solid ${sfTheme === 'neumorphic' ? 'var(--primary)' : 'var(--border)'};background:${sfTheme === 'neumorphic' ? 'var(--primary-light)' : 'transparent'};min-width:130px;" id="theme-label-neumorphic">
+                       <input type="radio" name="store-theme" value="neumorphic" ${sfTheme === 'neumorphic' ? 'checked' : ''} style="display:none" onchange="window.updateStoreTheme('neumorphic')">
                        <div class="theme-icon">☁️</div>
                        <div class="theme-title">Neumorphic Soft</div>
                        <div class="theme-desc">3D soft shadow relief</div>
@@ -648,86 +666,57 @@ async function renderVendorDashboard() {
                  <div style="display:flex;gap:12px;flex-wrap:wrap">
                    <div style="flex:1;min-width:140px">
                      <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Primary Color (Accents/Buttons)</label>
-                     <div style="display:flex;gap:6px">
-                       <input type="color" id="store-primary-color" value="${myStore.primary_color || '#e85d04'}" style="width:36px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;cursor:pointer" oninput="document.getElementById('store-primary-text').value = this.value; window.updateStorefrontPreview()">
-                       <input type="text" id="store-primary-text" value="${myStore.primary_color || '#e85d04'}" class="form-control" style="font-size:.8rem" oninput="document.getElementById('store-primary-color').value = this.value; window.updateStorefrontPreview()">
+                     <div style="display:flex;align-items:center;gap:6px">
+                       <input type="color" id="store-primary-color" value="${sfPrimaryColor}" style="width:36px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;cursor:pointer" oninput="document.getElementById('store-primary-text').value = this.value; window.updateStorefrontPreview()">
+                       <input type="text" id="store-primary-text" value="${sfPrimaryColor}" class="form-control" style="font-size:.8rem" oninput="document.getElementById('store-primary-color').value = this.value; window.updateStorefrontPreview()">
                      </div>
                    </div>
                    <div style="flex:1;min-width:140px">
-                     <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Secondary Color (Backgrounds)</label>
-                     <div style="display:flex;gap:6px">
-                       <input type="color" id="store-secondary-color" value="${myStore.secondary_color || '#faf9f6'}" style="width:36px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;cursor:pointer" oninput="document.getElementById('store-secondary-text').value = this.value; window.updateStorefrontPreview()">
-                       <input type="text" id="store-secondary-text" value="${myStore.secondary_color || '#faf9f6'}" class="form-control" style="font-size:.8rem" oninput="document.getElementById('store-secondary-color').value = this.value; window.updateStorefrontPreview()">
+                     <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Secondary Color (Page Background)</label>
+                     <div style="display:flex;align-items:center;gap:6px">
+                       <input type="color" id="store-secondary-color" value="${sfSecondaryColor}" style="width:36px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;cursor:pointer" oninput="document.getElementById('store-secondary-text').value = this.value; window.updateStorefrontPreview()">
+                       <input type="text" id="store-secondary-text" value="${sfSecondaryColor}" class="form-control" style="font-size:.8rem" oninput="document.getElementById('store-secondary-color').value = this.value; window.updateStorefrontPreview()">
                      </div>
                    </div>
                  </div>
 
-                 <!-- Custom Color Combos -->
-                 <div>
-                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:6px">Quick Color Combos</label>
-                   <div style="display:flex;gap:8px;flex-wrap:wrap">
-                     <button type="button" class="btn btn-sm" style="font-size:.7rem;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer" onclick="window.applyColorCombo('#8a7a5f', '#faf9f6')">
-                       ⚜️ Elegant Gold (Gold/Ivory)
-                     </button>
-                     <button type="button" class="btn btn-sm" style="font-size:.7rem;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer" onclick="window.applyColorCombo('#06b6d4', '#0b0f19')">
-                       🔮 Neon Glass (Cyan/Slate)
-                     </button>
-                     <button type="button" class="btn btn-sm" style="font-size:.7rem;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer" onclick="window.applyColorCombo('#e85d04', '#ffffff')">
-                       🎯 Bold Contrast (Orange/White)
-                     </button>
-                     <button type="button" class="btn btn-sm" style="font-size:.7rem;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer" onclick="window.applyColorCombo('#18181b', '#f4f4f5')">
-                       🌑 Dark Charcoal (Charcoal/Zinc)
-                     </button>
-                   </div>
-                 </div>
-
-                 <!-- Font Style Option -->
-                  <div>
+                 <div style="margin-top:4px">
                     <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Storefront Font Style</label>
                     <select id="store-font-family" class="form-control" style="font-size:.8rem; background:#fff; border:1.5px solid var(--border); border-radius:8px; padding:6px 12px; width:100%; height:36px; color:var(--text); cursor:pointer" onchange="window.updateStorefrontPreview()">
-                      <option value="Outfit" ${myStore.font_family === 'Outfit' ? 'selected' : ''}>Outfit (Modern Rounded)</option>
-                      <option value="Inter" ${myStore.font_family === 'Inter' ? 'selected' : ''}>Inter (Sleek Clean)</option>
-                      <option value="Roboto" ${myStore.font_family === 'Roboto' ? 'selected' : ''}>Roboto (Clean Neo-Grotesque)</option>
-                      <option value="Open Sans" ${myStore.font_family === 'Open Sans' ? 'selected' : ''}>Open Sans (Warm Readable)</option>
-                      <option value="Poppins" ${myStore.font_family === 'Poppins' ? 'selected' : ''}>Poppins (Geometric Bold)</option>
-                      <option value="Montserrat" ${myStore.font_family === 'Montserrat' ? 'selected' : ''}>Montserrat (Classic Geometric)</option>
-                      <option value="Lato" ${myStore.font_family === 'Lato' ? 'selected' : ''}>Lato (Warm Humanist)</option>
-                      <option value="Playfair Display" ${myStore.font_family === 'Playfair Display' ? 'selected' : ''}>Playfair Display (Luxury Serif)</option>
-                      <option value="Lora" ${myStore.font_family === 'Lora' ? 'selected' : ''}>Lora (Contemporary Serif)</option>
-                      <option value="Merriweather" ${myStore.font_family === 'Merriweather' ? 'selected' : ''}>Merriweather (High-Contrast Editorial)</option>
-                      <option value="Cinzel" ${myStore.font_family === 'Cinzel' ? 'selected' : ''}>Cinzel (Classical Roman Serif)</option>
-                      <option value="Cormorant Garamond" ${myStore.font_family === 'Cormorant Garamond' ? 'selected' : ''}>Cormorant Garamond (Graceful Serif)</option>
-                      <option value="Oswald" ${myStore.font_family === 'Oswald' ? 'selected' : ''}>Oswald (Condensed Display)</option>
-                      <option value="Barlow" ${myStore.font_family === 'Barlow' ? 'selected' : ''}>Barlow (Sleek Architectural)</option>
-                      <option value="Josefin Sans" ${myStore.font_family === 'Josefin Sans' ? 'selected' : ''}>Josefin Sans (Vintage Geometric)</option>
-                      <option value="Courier New" ${myStore.font_family === 'Courier New' ? 'selected' : ''}>Courier New (Retro Monospace)</option>
-                      <option value="DM Sans" ${myStore.font_family === 'DM Sans' ? 'selected' : ''}>DM Sans (Modern Minimalist)</option>
-                      <option value="Space Grotesk" ${myStore.font_family === 'Space Grotesk' ? 'selected' : ''}>Space Grotesk (Tech Geometric)</option>
-                      <option value="Syne" ${myStore.font_family === 'Syne' ? 'selected' : ''}>Syne (Artistic Display)</option>
-                      <option value="Manrope" ${myStore.font_family === 'Manrope' ? 'selected' : ''}>Manrope (Sleek Architectural)</option>
+                      <option value="Outfit" ${sfFontFamily === 'Outfit' ? 'selected' : ''}>Outfit (Default Clean)</option>
+                      <option value="Inter" ${sfFontFamily === 'Inter' ? 'selected' : ''}>Inter (Professional Neo-Grotesque)</option>
+                      <option value="Playfair Display" ${sfFontFamily === 'Playfair Display' ? 'selected' : ''}>Playfair Display (Elegant Serif)</option>
+                      <option value="Oswald" ${sfFontFamily === 'Oswald' ? 'selected' : ''}>Oswald (Condensed Display)</option>
+                      <option value="Barlow" ${sfFontFamily === 'Barlow' ? 'selected' : ''}>Barlow (Sleek Architectural)</option>
+                      <option value="Josefin Sans" ${sfFontFamily === 'Josefin Sans' ? 'selected' : ''}>Josefin Sans (Vintage Geometric)</option>
+                      <option value="Courier New" ${sfFontFamily === 'Courier New' ? 'selected' : ''}>Courier New (Retro Monospace)</option>
+                      <option value="DM Sans" ${sfFontFamily === 'DM Sans' ? 'selected' : ''}>DM Sans (Modern Minimalist)</option>
+                      <option value="Space Grotesk" ${sfFontFamily === 'Space Grotesk' ? 'selected' : ''}>Space Grotesk (Tech Geometric)</option>
+                      <option value="Syne" ${sfFontFamily === 'Syne' ? 'selected' : ''}>Syne (Artistic Display)</option>
+                      <option value="Manrope" ${sfFontFamily === 'Manrope' ? 'selected' : ''}>Manrope (Sleek Architectural)</option>
                     </select>
                   </div>
 
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Store Logo Image</label>
                   <input type="file" id="store-logo-file" accept="image/*" class="form-control" style="font-size:.8rem" onchange="window.handleImageUpload('logo')">
-                  <input type="hidden" id="store-logo-url" value="${myStore.logo_url || ''}">
+                  <input type="hidden" id="store-logo-url" value="${sfLogoUrl}">
                 </div>
 
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Store Banner Image</label>
                   <input type="file" id="store-banner-file" accept="image/*" class="form-control" style="font-size:.8rem" onchange="window.handleImageUpload('banner')">
-                  <input type="hidden" id="store-banner-url" value="${myStore.banner_url || ''}">
+                  <input type="hidden" id="store-banner-url" value="${sfBannerUrl}">
                 </div>
                 
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Storefront Name</label>
-                  <input type="text" id="store-name" value="${myStore.name || ''}" class="form-control" placeholder="e.g. Accra Streetwear Co." oninput="window.handleStoreNameChange(this.value)">
+                  <input type="text" id="store-name" value="${sfName}" class="form-control" placeholder="e.g. Accra Streetwear Co." oninput="window.handleStoreNameChange(this.value)">
                 </div>
                 
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Store Slogan</label>
-                  <input type="text" id="store-slogan" value="${myStore.slogan || ''}" class="form-control" placeholder="Best Gadgets in Ghana" oninput="window.updateStorefrontPreview()">
+                  <input type="text" id="store-slogan" value="${sfSlogan}" class="form-control" placeholder="Best Gadgets in Ghana" oninput="window.updateStorefrontPreview()">
                 </div>
               </div>
             </div>
@@ -737,19 +726,19 @@ async function renderVendorDashboard() {
               <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">About Us / Description</label>
-                  <textarea id="store-description" class="form-control" rows="3" placeholder="Describe your store..." oninput="window.updateStorefrontPreview()">${myStore.description || ''}</textarea>
+                  <textarea id="store-description" class="form-control" rows="3" placeholder="Describe your store..." oninput="window.updateStorefrontPreview()">${sfDescription}</textarea>
                 </div>
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Business Hours</label>
-                  <input type="text" id="store-hours" value="${myStore.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM'}" class="form-control" placeholder="e.g. Mon - Fri: 8 AM - 6 PM">
+                  <input type="text" id="store-hours" value="${sfHours}" class="form-control" placeholder="e.g. Mon - Fri: 8 AM - 6 PM">
                 </div>
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Shipping Policy</label>
-                  <textarea id="store-shipping-policy" class="form-control" rows="2" placeholder="Describe shipping estimates, rates...">${myStore.shipping_policy || ''}</textarea>
+                  <textarea id="store-shipping-policy" class="form-control" rows="2" placeholder="Describe shipping estimates, rates...">${sfShipping}</textarea>
                 </div>
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Return Policy</label>
-                  <textarea id="store-return-policy" class="form-control" rows="2" placeholder="Describe return periods, terms...">${myStore.return_policy || ''}</textarea>
+                  <textarea id="store-return-policy" class="form-control" rows="2" placeholder="Describe return periods, terms...">${sfReturn}</textarea>
                 </div>
               </div>
             </div>
@@ -759,15 +748,15 @@ async function renderVendorDashboard() {
               <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
                 <div style="display:flex;align-items:center;gap:8px">
                   <i class="fab fa-facebook" style="color:#1877f2;width:20px;text-align:center"></i>
-                  <input type="text" id="store-facebook" value="${myStore.facebook_url || ''}" class="form-control" placeholder="Facebook URL">
+                  <input type="text" id="store-facebook" value="${sfFacebook}" class="form-control" placeholder="Facebook URL">
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
                   <i class="fab fa-instagram" style="color:#e1306c;width:20px;text-align:center"></i>
-                  <input type="text" id="store-instagram" value="${myStore.instagram_url || ''}" class="form-control" placeholder="Instagram URL">
+                  <input type="text" id="store-instagram" value="${sfInstagram}" class="form-control" placeholder="Instagram URL">
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
                   <i class="fab fa-youtube" style="color:#ff0000;width:20px;text-align:center"></i>
-                  <input type="text" id="store-youtube" value="${myStore.youtube_url || ''}" class="form-control" placeholder="YouTube Channel URL">
+                  <input type="text" id="store-youtube" value="${sfYoutube}" class="form-control" placeholder="YouTube Channel URL">
                 </div>
               </div>
             </div>
@@ -778,19 +767,19 @@ async function renderVendorDashboard() {
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Store Slug / Friendly URL</label>
                   <div style="display:flex;align-items:center;gap:6px">
-                    <span style="font-size:.8rem;color:var(--text-muted)">happamart.com/store/</span>
-                    <input type="text" id="store-slug" value="${myStore.slug || myStore.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}" class="form-control" style="font-size:.8rem;font-weight:700" placeholder="my-store-link" oninput="window.updateStorefrontPreview()">
+                    <span style="font-size:.8rem;color:var(--text-muted)">happamart.com/storefront/</span>
+                    <input type="text" id="store-slug" value="${sfSlug}" class="form-control" style="font-size:.8rem;font-weight:700" placeholder="my-store-link" oninput="window.updateStorefrontPreview()">
                   </div>
                 </div>
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Meta Description</label>
-                  <input type="text" id="store-meta-desc" value="${myStore.meta_description || ''}" class="form-control" placeholder="Brief SEO snippet for Google search">
+                  <input type="text" id="store-meta-desc" value="${sfMetaDesc}" class="form-control" placeholder="Brief SEO snippet for Google search">
                 </div>
               </div>
             </div>
 
             <button class="btn btn-primary btn-block" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-              <i class="fas fa-save"></i> ${myStore.storefront_status === 'draft' ? 'Save Draft' : 'Save Settings'}
+              <i class="fas fa-save"></i> ${myStorefront.status === 'draft' ? 'Save Draft' : 'Save Settings'}
             </button>
           </div>
           
@@ -2505,55 +2494,78 @@ window.saveVendorStoreSettings = async function(storeId) {
   // Show loading toast or lock btn
   showToast('Saving storefront settings...', 'info');
 
-  const fields = {
+  const sfFields = {
     name,
     primary_color,
     secondary_color,
     logo_url,
     banner_url,
     slogan,
-    description,
+    about_us: description,
     business_hours,
     shipping_policy,
     return_policy,
     facebook_url,
     instagram_url,
     youtube_url,
-    slug,
+    url_slug: slug,
     meta_description,
     theme,
     font_family
   };
 
-  // Sync locally
-  const idx = App.allStores.findIndex(s => String(s.id) === String(storeId));
-  let storeObj = idx !== -1 ? App.allStores[idx] : {};
-  Object.assign(storeObj, fields);
-  if (idx !== -1) App.allStores[idx] = storeObj;
-  
-  try {
-    localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
-  } catch(e){}
+  if (App.myStorefront) {
+    Object.assign(App.myStorefront, sfFields);
+    const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
+    if (sfIdx !== -1) App.allStorefronts[sfIdx] = App.myStorefront;
+    try {
+      localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
+    } catch(e){}
+    await apiPatch('storefronts', App.myStorefront.id, sfFields).catch(() => {});
+  } else {
+    const payload = {
+      ...sfFields,
+      store_id: storeId,
+      vendor_id: App.currentUser?.id || '',
+      status: 'draft'
+    };
+    const res = await apiPost('storefronts', payload).catch(() => null);
+    if (res?.data) {
+      App.myStorefront = res.data;
+      if (!App.allStorefronts) App.allStorefronts = [];
+      App.allStorefronts.push(App.myStorefront);
+      try {
+        localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
+      } catch(e){}
+    }
+  }
 
-  apiPatch('stores', storeId, fields).catch(() => {});
   showToast('Storefront settings saved! 🎉', 'success');
   renderVendorDashboard();
 };
 
 window.setStorefrontStatus = async function(storeId, status) {
-  const idx = App.allStores.findIndex(s => String(s.id) === String(storeId));
-  if (idx !== -1) {
-    App.allStores[idx].storefront_status = status;
-    try {
-      localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
-    } catch(e){}
-    apiPatch('stores', storeId, { storefront_status: status }).catch(() => {});
-    
-    // Notify admin
-    if (status === 'pending_approval' && typeof addNotification === 'function') {
-      addNotification('u-admin-001', 'system', '🎨 New Storefront Request', `${App.allStores[idx].name || 'A vendor'} has requested storefront layout approval.`);
-    }
+  if (!App.myStorefront) {
+    showToast('Storefront record not found. Save settings first.', 'error');
+    return;
   }
+  
+  App.myStorefront.status = status;
+  const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
+  if (sfIdx !== -1) App.allStorefronts[sfIdx].status = status;
+  
+  try {
+    localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
+  } catch(e){}
+  
+  await apiPatch('storefronts', App.myStorefront.id, { status }).catch(() => {});
+  
+  // Notify admin
+  if (status === 'pending_approval' && typeof addNotification === 'function') {
+    const storeObj = App.allStores?.find(s => String(s.id) === String(storeId));
+    addNotification('u-admin-001', 'system', '🎨 New Storefront Request', `${storeObj?.name || 'A vendor'} has requested storefront layout approval.`);
+  }
+
   showToast(status === 'pending_approval' ? 'Storefront request submitted! 🚀' : 'Storefront status updated', 'success');
   renderVendorDashboard();
 };
@@ -3196,20 +3208,43 @@ window.confirmStorefrontSubscription = async function(storeId) {
   App.allStores[idx].subscription_months = months;
   App.allStores[idx].subscription_method = method;
 
-  // If storefront wasn't active yet, set to draft so vendor can customize and submit
-  if (!App.allStores[idx].storefront_status || App.allStores[idx].storefront_status === 'inactive') {
-    App.allStores[idx].storefront_status = 'draft';
-  }
-
   try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
 
   await apiPatch('stores', storeId, {
     subscription_plan: planKey,
     subscription_status: 'active',
     subscription_start: now.toISOString(),
-    subscription_end: newEnd.toISOString(),
-    storefront_status: App.allStores[idx].storefront_status
+    subscription_end: newEnd.toISOString()
   }).catch(() => {});
+
+  // If storefront wasn't active yet, set to draft so vendor can customize and submit
+  if (App.myStorefront) {
+    if (App.myStorefront.status === 'inactive') {
+      App.myStorefront.status = 'draft';
+      const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
+      if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'draft';
+      try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+      await apiPatch('storefronts', App.myStorefront.id, { status: 'draft' }).catch(() => {});
+    }
+  } else {
+    // Create new storefront record with draft status
+    const newSFPayload = {
+      store_id: storeId,
+      vendor_id: App.currentUser?.id || '',
+      status: 'draft',
+      theme: 'classic',
+      primary_color: '#e85d04',
+      secondary_color: '#faf9f6',
+      font_family: 'Outfit'
+    };
+    const res = await apiPost('storefronts', newSFPayload).catch(() => null);
+    if (res?.data) {
+      App.myStorefront = res.data;
+      if (!App.allStorefronts) App.allStorefronts = [];
+      App.allStorefronts.push(res.data);
+      try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+    }
+  }
 
   showToast(`🎉 ${plan.name} plan activated! Storefront subscription runs until ${newEnd.toLocaleDateString()}.`, 'success');
 

@@ -1059,11 +1059,19 @@ async function renderStorefront(id) {
   const s = App.allStores.find(st => String(st.id) === String(id)) || await apiGet(`stores/${id}`);
   if (!s) { c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Storefront not found</h3></div>'; return; }
 
+  // Look up storefront record for this store ID
+  let sf = null;
+  const sfRes = await apiGet('storefronts', 'limit=200');
+  const allSF = sfRes?.data || [];
+  sf = allSF.find(sfRecord => String(sfRecord.store_id) === String(id)) || null;
+
   // Enforce storefront visibility: only allow approved storefronts to load.
   // Exception: Let admins or the store owner vendor view/review the storefront.
   const isOwner = App.currentUser && String(App.currentUser.id) === String(s.vendor_id);
   const isAdmin = App.currentUser && App.currentUser.role === 'admin';
-  if (s.storefront_status !== 'approved' && !isOwner && !isAdmin) {
+  const storefrontStatus = sf?.status || 'inactive';
+
+  if (storefrontStatus !== 'approved' && !isOwner && !isAdmin) {
     c.innerHTML = `
       <div class="empty-state" style="padding: 40px 20px; text-align: center;">
         <div style="font-size: 3rem; margin-bottom: 16px;">🏪</div>
@@ -1075,38 +1083,38 @@ async function renderStorefront(id) {
     return;
   }
 
+  const theme = sf?.theme || s.theme || 'classic';
+  const font_family = sf?.font_family || s.font_family || 'Outfit';
+
   // Dynamically load Google Font on demand if not already loaded (saves massive bandwidth and load time)
-  if (s.font_family && s.font_family !== 'Outfit' && s.font_family !== 'Inter') {
-    const fontId = `storefront-font-${s.font_family.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  if (font_family && font_family !== 'Outfit' && font_family !== 'Inter') {
+    const fontId = `storefront-font-${font_family.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
     if (!document.getElementById(fontId)) {
       const link = document.createElement('link');
       link.id = fontId;
       link.rel = 'stylesheet';
-      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(s.font_family)}:wght@400;700;800&display=swap`;
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font_family)}:wght@400;700;800&display=swap`;
       document.head.appendChild(link);
     }
   }
 
   // Update dynamic PWA manifest for storefront branding
   if (typeof updatePWAManifest === 'function') {
-    updatePWAManifest(s.name, s.logo_url || 'images/icon-192.png', s.primary_color || '#e85d04');
+    updatePWAManifest(sf?.name || s.name, sf?.logo_url || s.logo_url || 'images/icon-192.png', sf?.primary_color || s.primary_color || '#e85d04');
   }
 
-  const isAdmin   = App.currentUser?.role === 'admin';
   const storeProds = App.allProducts.filter(p => String(p.store_id) === String(id) && p.status !== 'archived');
 
-  const primaryColor = s.primary_color || '#e85d04';
-  const secondaryColor = s.secondary_color || '#0d0d0d';
-  const slogan = s.slogan || 'Welcome to our store!';
+  const primaryColor = sf?.primary_color || s.primary_color || '#e85d04';
+  const secondaryColor = sf?.secondary_color || s.secondary_color || '#0d0d0d';
+  const slogan = sf?.slogan || s.slogan || 'Welcome to our store!';
   const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
 
   let followed = App.savedStores.includes(id);
 
-  const theme = s.theme || 'classic';
-  const font_family = s.font_family || 'Outfit';
-  const bannerSrc = s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const logoSrc = s.logo_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const storeName = s.name;
+  const bannerSrc = sf?.banner_url || s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const logoSrc = sf?.logo_url || s.logo_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const storeName = sf?.name || s.name;
 
   let themeStyles = '';
   let headerHTML = '';
@@ -2311,6 +2319,12 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   const s = App.allStores.find(st => String(st.id) === String(storeId));
   if (!s) return;
 
+  // Look up storefront record
+  let sf = null;
+  const sfRes = await apiGet('storefronts', 'limit=200');
+  const allSF = sfRes?.data || [];
+  sf = allSF.find(sfRecord => String(sfRecord.store_id) === String(storeId)) || null;
+
   const activePageId = App.currentPage === 'storefront' ? 'page-storefront' : 'page-store-detail';
   const activePage = document.getElementById(activePageId);
   if (activePage) {
@@ -2323,7 +2337,16 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   if (!contentEl) return;
 
   const storeProds = App.allProducts.filter(p => String(p.store_id) === String(storeId) && p.status === 'active');
-  const slogan = s.slogan || 'Welcome to ElsBee Technologies';
+
+  const isStorefrontPage = App.currentPage === 'storefront';
+  const slogan = isStorefrontPage ? (sf?.slogan || s.slogan || 'Welcome to our store!') : (s.slogan || 'Welcome to our store!');
+  const description = isStorefrontPage ? (sf?.about_us || s.description || 'No store bio available yet.') : (s.description || 'No store bio available yet.');
+  const business_hours = isStorefrontPage ? (sf?.business_hours || s.business_hours || 'Open Mon - Sat 8:00 AM - 6:00 PM') : (s.business_hours || 'Open Mon - Sat 8:00 AM - 6:00 PM');
+  const shipping_policy = isStorefrontPage ? (sf?.shipping_policy || s.shipping_policy || 'Standard Ghana shipping rates apply.') : (s.shipping_policy || 'Standard Ghana shipping rates apply.');
+  const return_policy = isStorefrontPage ? (sf?.return_policy || s.return_policy || 'Items can be returned within 3 days if seal is not broken.') : (s.return_policy || 'Items can be returned within 3 days if seal is not broken.');
+  const facebook_url = isStorefrontPage ? (sf?.facebook_url || s.facebook_url) : s.facebook_url;
+  const instagram_url = isStorefrontPage ? (sf?.instagram_url || s.instagram_url) : s.instagram_url;
+  const youtube_url = isStorefrontPage ? (sf?.youtube_url || s.youtube_url) : s.youtube_url;
 
   if (tabName === 'home') {
     const featured = storeProds.filter(p => p.is_flash_sale).slice(0, 4);
@@ -2373,14 +2396,14 @@ window.switchStorefrontTab = async function(tabName, storeId) {
 
   } else if (tabName === 'about') {
     let socialLinksHTML = '';
-    if (s.facebook_url || s.instagram_url || s.youtube_url) {
+    if (facebook_url || instagram_url || youtube_url) {
       socialLinksHTML = `
         <div class="card" style="margin-top:12px">
           <div class="card-header"><h3>🔗 Connect With Us</h3></div>
           <div class="card-body" style="display:flex;gap:16px;font-size:1.3rem;padding:12px 16px">
-            ${s.facebook_url ? `<a href="${s.facebook_url}" target="_blank" style="color:#1877f2" title="Facebook"><i class="fab fa-facebook"></i></a>` : ''}
-            ${s.instagram_url ? `<a href="${s.instagram_url}" target="_blank" style="color:#e1306c" title="Instagram"><i class="fab fa-instagram"></i></a>` : ''}
-            ${s.youtube_url ? `<a href="${s.youtube_url}" target="_blank" style="color:#ff0000" title="YouTube"><i class="fab fa-youtube"></i></a>` : ''}
+            ${facebook_url ? `<a href="${facebook_url}" target="_blank" style="color:#1877f2" title="Facebook"><i class="fab fa-facebook"></i></a>` : ''}
+            ${instagram_url ? `<a href="${instagram_url}" target="_blank" style="color:#e1306c" title="Instagram"><i class="fab fa-instagram"></i></a>` : ''}
+            ${youtube_url ? `<a href="${youtube_url}" target="_blank" style="color:#ff0000" title="YouTube"><i class="fab fa-youtube"></i></a>` : ''}
           </div>
         </div>
       `;
@@ -2390,13 +2413,13 @@ window.switchStorefrontTab = async function(tabName, storeId) {
         <div class="card">
           <div class="card-header"><h3>🏪 About Us</h3></div>
           <div class="card-body">
-            <p class="store-description-text" style="font-size:.85rem;color:var(--text-light)">${escHtml(s.description || s.about_us || 'No store bio available yet.')}</p>
+            <p class="store-description-text" style="font-size:.85rem;color:var(--text-light)">${escHtml(description)}</p>
           </div>
         </div>
         <div class="card">
           <div class="card-header"><h3>⏰ Business Hours</h3></div>
           <div class="card-body" style="font-size:.85rem;color:var(--text-light)">
-            <p>${escHtml(s.business_hours || 'Open Mon - Sat 8:00 AM - 6:00 PM')}</p>
+            <p>${escHtml(business_hours)}</p>
           </div>
         </div>
         <div class="card">
@@ -2410,8 +2433,8 @@ window.switchStorefrontTab = async function(tabName, storeId) {
         <div class="card">
           <div class="card-header"><h3>📦 Policies</h3></div>
           <div class="card-body" style="font-size:.82rem;color:var(--text-light);display:grid;gap:8px">
-            <div><strong>Shipping:</strong> ${escHtml(s.shipping_policy || 'Standard Ghana shipping rates apply.')}</div>
-            <div><strong>Returns:</strong> ${escHtml(s.return_policy || 'Items can be returned within 3 days if seal is not broken.')}</div>
+            <div><strong>Shipping:</strong> ${escHtml(shipping_policy)}</div>
+            <div><strong>Returns:</strong> ${escHtml(return_policy)}</div>
           </div>
         </div>
         ${socialLinksHTML}

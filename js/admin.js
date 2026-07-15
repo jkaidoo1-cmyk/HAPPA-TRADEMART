@@ -2531,7 +2531,7 @@ async function renderAdminStorefronts() {
   
   // Helper: get a small subscription badge for admin view
   const getSubBadge = (s) => {
-    if (!s.subscription_plan || !s.subscription_status) {
+    if (!s || !s.subscription_plan || !s.subscription_status) {
       return `<span style="font-size:.65rem;background:#f3f4f6;color:#6b7280;padding:1px 6px;border-radius:4px;margin-left:4px">No Sub</span>`;
     }
     const end = s.subscription_end ? new Date(s.subscription_end) : null;
@@ -2546,27 +2546,34 @@ async function renderAdminStorefronts() {
     return `<span style="font-size:.65rem;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:4px;margin-left:4px">${planLabel} — until ${end ? end.toLocaleDateString() : '?'}</span>`;
   };
 
-  const renderItemHTML = (s, badgeText, badgeBg, badgeColor, actionsHTML) => `
-    <div class="card" style="margin-bottom:12px;border:1px solid var(--border)">
-      <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:14px 16px">
-        <div style="flex:1;min-width:200px">
-          <h4 style="font-weight:700;font-size:.88rem;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            ${escHtml(s.name)}
-            <span style="font-size:.72rem;background:${badgeBg};color:${badgeColor};padding:2px 6px;border-radius:4px;font-weight:600">${badgeText}</span>
-            ${getSubBadge(s)}
-          </h4>
-          <div style="font-size:.78rem;color:var(--text-muted);margin-top:4px">
-            <div><strong>Slogan:</strong> ${escHtml(s.slogan || 'None')}</div>
-            <div><strong>Link Slug:</strong> <code style="background:var(--bg);padding:2px 4px;border-radius:3px">happamart.com/store/${s.slug || s.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}</code></div>
+  const renderItemHTML = (sf, badgeText, badgeBg, badgeColor, actionsHTML) => {
+    const store = allStores.find(st => String(st.id) === String(sf.store_id)) || {};
+    const storeName = store.name || 'Unknown Store';
+    const sloganText = sf.slogan || store.slogan || 'None';
+    const slugText = sf.url_slug || store.slug || storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    
+    return `
+      <div class="card" style="margin-bottom:12px;border:1px solid var(--border)">
+        <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:14px 16px">
+          <div style="flex:1;min-width:200px">
+            <h4 style="font-weight:700;font-size:.88rem;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              ${escHtml(storeName)}
+              <span style="font-size:.72rem;background:${badgeBg};color:${badgeColor};padding:2px 6px;border-radius:4px;font-weight:600">${badgeText}</span>
+              ${getSubBadge(store)}
+            </h4>
+            <div style="font-size:.78rem;color:var(--text-muted);margin-top:4px">
+              <div><strong>Slogan:</strong> ${escHtml(sloganText)}</div>
+              <div><strong>Link Slug:</strong> <code style="background:var(--bg);padding:2px 4px;border-radius:3px">happamart.com/storefront/${slugText}</code></div>
+              ${sf.admin_feedback ? `<div style="color:var(--danger);margin-top:4px"><strong>Feedback:</strong> ${escHtml(sf.admin_feedback)}</div>` : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${actionsHTML}
           </div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${actionsHTML}
-        </div>
       </div>
-    </div>
-  `;
-
+    `;
+  };
 
   let html = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:20px">
@@ -2593,12 +2600,11 @@ async function renderAdminStorefronts() {
     </div>
   `;
 
-
   // 1. Pending Section
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:16px 0 8px"><i class="fas fa-clock" style="color:#d97706"></i> Storefront Requests (${pending.length})</h3>`;
   if (pending.length) {
     html += pending.map(s => renderItemHTML(s, 'Pending Review', '#fef3c7', '#d97706', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="approveStorefront('${s.id}')">
@@ -2616,7 +2622,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Approved & Live Storefronts (${approved.length})</h3>`;
   if (approved.length) {
     html += approved.map(s => renderItemHTML(s, 'Live', '#d1fae5', '#065f46', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="adminGrantSubscription('${s.id}')">
@@ -2637,7 +2643,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-folder-open" style="color:var(--text-muted)"></i> Draft/Inactive Storefronts (${draft.length})</h3>`;
   if (draft.length) {
     html += draft.map(s => renderItemHTML(s, 'Draft / Inactive', '#f3f4f6', 'var(--text-muted)', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="adminGrantSubscription('${s.id}')">
@@ -2657,12 +2663,12 @@ async function renderAdminStorefronts() {
   listEl.innerHTML = html;
 }
 
-async function approveStorefront(storeId) {
+async function approveStorefront(sfId) {
   if (!confirm('Approve this storefront layout? It will go live immediately.')) return;
   showToast('Approving storefront...', 'info');
-  await apiPatch('storefronts', storeId, { status: 'approved' }).catch(() => {});
+  await apiPatch('storefronts', sfId, { status: 'approved' }).catch(() => {});
 
-  const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(storeId)) : -1;
+  const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(sfId)) : -1;
   if (idx !== -1) {
     App.allStorefronts[idx].status = 'approved';
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
@@ -2672,13 +2678,13 @@ async function approveStorefront(storeId) {
   renderAdminStorefronts();
 }
 
-async function rejectStorefront(storeId) {
+async function rejectStorefront(sfId) {
   const reason = prompt('Enter a reason for rejecting this storefront request (will be saved in draft):');
   if (reason === null) return;
   showToast('Rejecting storefront request...', 'info');
-  await apiPatch('storefronts', storeId, { status: 'draft', admin_feedback: reason }).catch(() => {});
+  await apiPatch('storefronts', sfId, { status: 'draft', admin_feedback: reason }).catch(() => {});
 
-  const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(storeId)) : -1;
+  const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(sfId)) : -1;
   if (idx !== -1) {
     App.allStorefronts[idx].status = 'draft';
     App.allStorefronts[idx].admin_feedback = reason;
@@ -2689,15 +2695,15 @@ async function rejectStorefront(storeId) {
   renderAdminStorefronts();
 }
 
-async function disableStorefront(storeId) {
+async function disableStorefront(sfId) {
   if (!confirm('Are you sure you want to disable/revoke this storefront? It will no longer be publicly accessible.')) return;
 
   // Patch the storefront record to mark it inactive
   showToast('Disabling storefront...', 'info');
-  await apiPatch('storefronts', storeId, { status: 'inactive' }).catch(() => {});
+  await apiPatch('storefronts', sfId, { status: 'inactive' }).catch(() => {});
 
   // Update local cache
-  const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(storeId)) : -1;
+  const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(sfId)) : -1;
   if (idx !== -1) {
     App.allStorefronts[idx].status = 'inactive';
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
@@ -2707,70 +2713,31 @@ async function disableStorefront(storeId) {
   renderAdminStorefronts();
 }
 
-async function deleteStorefront(storeId) {
-  if (!confirm('Are you sure you want to permanently delete this store and all its associated products/reviews from the database? This action cannot be undone.')) return;
+async function deleteStorefront(sfId) {
+  if (!confirm('Are you sure you want to permanently delete this storefront? This will not affect the vendor account, products, or reviews.')) return;
 
-  showToast('Cleaning store dependencies...', 'info');
-  try {
-    // 1. Fetch and delete reviews & products
-    const prodRes = await apiGet('products', 'limit=500').catch(() => null);
-    const storeProducts = (prodRes?.data || []).filter(p => String(p.store_id) === String(storeId));
-    
-    const revRes = await apiGet('reviews', 'limit=500').catch(() => null);
-    const storeReviews = (revRes?.data || []).filter(r => 
-      String(r.store_id) === String(storeId) || storeProducts.some(p => String(p.id) === String(r.product_id))
-    );
-
-    for (const r of storeReviews) {
-      await apiDelete('reviews', r.id).catch(() => {});
-    }
-    for (const p of storeProducts) {
-      await apiDelete('products', p.id).catch(() => {});
-    }
-
-    // 2. Fetch and delete orders & packages
-    const pkgRes = await apiGet('packages', 'limit=500').catch(() => null);
-    const storePkgs = (pkgRes?.data || []).filter(pkg => String(pkg.store_id) === String(storeId));
-    for (const pkg of storePkgs) {
-      await apiDelete('packages', pkg.id).catch(() => {});
-    }
-
-    const ordRes = await apiGet('orders', 'limit=500').catch(() => null);
-    const storeOrders = (ordRes?.data || []).filter(o => String(o.store_id) === String(storeId));
-    for (const o of storeOrders) {
-      await apiDelete('orders', o.id).catch(() => {});
-    }
-
-    // 3. Fetch and delete ad campaigns
-    const adsRes = await apiGet('ad_campaigns', 'limit=500').catch(() => null);
-    const storeAds = (adsRes?.data || []).filter(ad => String(ad.store_id) === String(storeId));
-    for (const ad of storeAds) {
-      await apiDelete('ad_campaigns', ad.id).catch(() => {});
-    }
-  } catch(e) {
-    console.error('Cascading delete prep failed:', e);
-  }
-
-  showToast('Deleting store record...', 'info');
-  const res = await apiDelete('stores', storeId).catch(err => {
-    console.error('Delete store error:', err);
+  showToast('Deleting storefront record...', 'info');
+  await apiDelete('storefronts', sfId).catch(err => {
+    console.error('Delete storefront error:', err);
     return null;
   });
   
   // Clean local state and re-render
-  App.allStores = App.allStores.filter(s => String(s.id) !== String(storeId));
+  App.allStorefronts = (App.allStorefronts || []).filter(s => String(s.id) !== String(sfId));
   try {
-    localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
+    localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
   } catch(e){}
   
-  showToast('Store deleted successfully! 🗑️', 'success');
+  showToast('Storefront deleted successfully! 🗑️', 'success');
   renderAdminStorefronts();
 }
 
 // ── Admin Subscription Management ─────────────────────────────────────────────
 
-async function adminGrantSubscription(storeId) {
-  const store = App.allStores.find(s => String(s.id) === String(storeId));
+async function adminGrantSubscription(sfId) {
+  const sf = App.allStorefronts.find(s => String(s.id) === String(sfId));
+  if (!sf) return;
+  const store = App.allStores.find(s => String(s.id) === String(sf.store_id));
   if (!store) return;
 
   const planKey = prompt(`Grant free subscription plan for "${store.name}".\nEnter plan: starter, growth, or pro`, store.subscription_plan || 'growth');
@@ -2781,9 +2748,9 @@ async function adminGrantSubscription(storeId) {
   const months = parseInt(prompt('How many free months?', '1') || '1', 10);
   if (!months || months < 1) return;
 
-  const idx = App.allStores.findIndex(s => String(s.id) === String(storeId));
+  const idx = App.allStores.findIndex(s => String(s.id) === String(store.id));
   const now = new Date();
-  const currentEnd = App.allStores[idx]?.subscription_end ? new Date(App.allStores[idx].subscription_end) : null;
+  const currentEnd = store.subscription_end ? new Date(store.subscription_end) : null;
   const startFrom = (currentEnd && currentEnd > now) ? currentEnd : now;
   const newEnd = new Date(startFrom);
   newEnd.setMonth(newEnd.getMonth() + months);
@@ -2795,23 +2762,34 @@ async function adminGrantSubscription(storeId) {
   App.allStores[idx].subscription_method = 'admin_grant';
 
   try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
-  await apiPatch('stores', storeId, {
+  await apiPatch('stores', store.id, {
     subscription_plan: planKey.toLowerCase(),
     subscription_status: 'active',
     subscription_start: now.toISOString(),
     subscription_end: newEnd.toISOString()
   }).catch(() => {});
 
+  // Update storefront status to draft if it was inactive
+  if (sf.status === 'inactive') {
+    sf.status = 'draft';
+    const sfIdx = App.allStorefronts.findIndex(s => String(s.id) === String(sf.id));
+    if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'draft';
+    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+    await apiPatch('storefronts', sf.id, { status: 'draft' }).catch(() => {});
+  }
+
   showToast(`✅ ${months} month(s) of ${planKey} plan granted to ${store.name} until ${newEnd.toLocaleDateString()}.`, 'success');
   renderAdminStorefronts();
 }
 
-async function adminRevokeSubscription(storeId) {
-  const store = App.allStores.find(s => String(s.id) === String(storeId));
+async function adminRevokeSubscription(sfId) {
+  const sf = App.allStorefronts.find(s => String(s.id) === String(sfId));
+  if (!sf) return;
+  const store = App.allStores.find(s => String(s.id) === String(sf.store_id));
   if (!store) return;
   if (!confirm(`Revoke subscription for "${store.name}"? This will expire their plan immediately.`)) return;
 
-  const idx = App.allStores.findIndex(s => String(s.id) === String(storeId));
+  const idx = App.allStores.findIndex(s => String(s.id) === String(store.id));
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
 
@@ -2819,7 +2797,7 @@ async function adminRevokeSubscription(storeId) {
   App.allStores[idx].subscription_end = yesterday.toISOString();
 
   try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
-  await apiPatch('stores', storeId, {
+  await apiPatch('stores', store.id, {
     subscription_status: 'revoked',
     subscription_end: yesterday.toISOString()
   }).catch(() => {});

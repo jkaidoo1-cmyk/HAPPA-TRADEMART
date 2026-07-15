@@ -268,3 +268,23 @@ js/
 8. **Push notifications** — Web Push API so admins and vendors get notified of new orders without polling
 9. **Search improvements** — index rendor posts alongside products; display rendors in search results
 10. **PWA / offline support** — service worker, manifest, install-to-homescreen prompt
+
+---
+
+## 🏪 Store vs. Standalone Storefront Architecture
+
+To avoid confusion, HAPPA separates the built-in marketplace **Store** from the customizable standalone **Storefront**:
+
+| Feature | Store (Marketplace Profile) | Storefront (Standalone Landing Page) |
+| :--- | :--- | :--- |
+| **Concept** | The main vendor profile integrated directly into HAPPA marketplace. | A customized, standalone e-commerce page designed specifically for the vendor's direct sales. |
+| **Creation** | Automatically created when a vendor account is created. | Manually configured, saved, and submitted by the vendor from the dashboard. |
+| **Visibility** | Publicly browsable directly on the HAPPA website (under `/#stores` and product details). | Isolated from the main marketplace; accessible *only* via its unique URL. |
+| **URL Route** | `/#store-detail/<store_id>` (marketplace route). | `/#storefront/<url_slug>` (standalone direct landing route). |
+| **Customization** | Standard marketplace theme, styling, and navigation. | Personalized themes (Classic, Bold, Modern, Neumorphic), custom colors, logo, and fonts. |
+| **Lifecycle** | Lifetime tied directly to the vendor's account status. | Draft, pending layout review by admin, approved and active, or deactivated. |
+| **Subscription** | Always free as part of the vendor account. | Paid monthly plans (Starter / Growth / Pro) required for publication. |
+
+### Database Schema Decoupling
+- **`stores`**: Contains core vendor account records (name, rating, phone, email, location, subscription status, etc.) integrated into the marketplace.
+- **`storefronts`**: A dedicated table storing custom layouts (custom name, slogan, theme, primary_color, secondary_color, font_family, logo_url, banner_url, business_hours, shipping/return policies, social links, url_slug, status, admin_feedback).

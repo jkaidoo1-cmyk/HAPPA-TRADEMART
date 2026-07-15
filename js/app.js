@@ -112,10 +112,29 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }, 150);
   } else if (storeSlug) {
-    apiGet('stores', 'limit=200').then(res => {
-      const all = res ? res.data || [] : [];
-      App.allStores = all;
-      const found = all.find(s => s.slug === storeSlug || s.id === storeSlug);
+    Promise.all([
+      apiGet('stores', 'limit=200'),
+      apiGet('storefronts', 'limit=200')
+    ]).then(([storesRes, sfRes]) => {
+      const allStores = storesRes ? storesRes.data || [] : [];
+      const allStorefronts = sfRes ? sfRes.data || [] : [];
+      App.allStores = allStores;
+      App.allStorefronts = allStorefronts;
+      
+      let found = null;
+      if (isStorefrontPage || isStoreAdmin || searchParams.has('storefront')) {
+        // Resolve storefront first
+        const sf = allStorefronts.find(item => item.url_slug === storeSlug || item.id === storeSlug || item.store_id === storeSlug);
+        if (sf) {
+          found = allStores.find(s => String(s.id) === String(sf.store_id));
+        }
+      }
+      
+      // Fallback/Direct Store Lookup
+      if (!found) {
+        found = allStores.find(s => s.slug === storeSlug || s.id === storeSlug);
+      }
+      
       if (found) {
         if (isStoreAdmin) {
           showPage('store-admin');
@@ -155,7 +174,14 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     } else if (newHash.startsWith('#storefront/')) {
       const slug = newHash.substring(12);
-      const found = App.allStores.find(s => s.slug === slug || s.id === slug);
+      let found = null;
+      const sf = (App.allStorefronts || []).find(item => item.url_slug === slug || item.id === slug || item.store_id === slug);
+      if (sf) {
+        found = App.allStores.find(s => String(s.id) === String(sf.store_id));
+      }
+      if (!found) {
+        found = App.allStores.find(s => s.slug === slug || s.id === slug);
+      }
       if (found) {
         showPage('storefront');
         if (typeof renderStorefront === 'function') {
@@ -164,7 +190,14 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     } else if (newHash.startsWith('#store-admin/')) {
       const slug = newHash.substring(13);
-      const found = App.allStores.find(s => s.slug === slug || s.id === slug);
+      let found = null;
+      const sf = (App.allStorefronts || []).find(item => item.url_slug === slug || item.id === slug || item.store_id === slug);
+      if (sf) {
+        found = App.allStores.find(s => String(s.id) === String(sf.store_id));
+      }
+      if (!found) {
+        found = App.allStores.find(s => s.slug === slug || s.id === slug);
+      }
       if (found) {
         showPage('store-admin');
         if (typeof renderStorefrontAdminPortalPage === 'function') {
