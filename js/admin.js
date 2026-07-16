@@ -1188,7 +1188,7 @@ function adminPendingVendorRowHTML(v) {
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
         <button class="btn btn-success btn-sm" onclick="approveAndCreateStore('${v.id}','${v.email}')">
-          <i class="fas fa-store"></i> Approve &amp; Create Store
+          <i class="fas fa-check"></i> Approve
         </button>
         <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="rejectVendorApplication('${v.id}','${v.email}')">
           <i class="fas fa-times"></i> Reject
