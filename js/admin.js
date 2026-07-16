@@ -1204,16 +1204,20 @@ async function approveVendor(userId, email) {
   const btn = event?.target?.closest('button');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
-  const vendor = await apiFetch('users/' + userId).catch(() => null);
+  const vendorData = await apiFetch('users/' + userId).catch(() => null);
+  let vendor = vendorData || {};
+  if (!vendor.id) {
+    vendor = (App.allUsers || []).find(u => String(u.id) === String(userId)) || {};
+  }
+  if (!vendor.id) vendor.id = userId;
+  if (!vendor.email) vendor.email = email;
 
   await apiPatch('users', userId, { status: 'active' });
   addNotification(userId, 'system', '✅ Vendor Account Approved!',
     'Your vendor account has been approved! Log in with your registered email and password — your vendor dashboard is now active.');
   showToast(`Vendor approved ✅`, 'success');
 
-  if (vendor) {
-    await window.autoCreateStoreForVendor(vendor);
-  }
+  await window.autoCreateStoreForVendor(vendor);
 
   // Remove the card from the DOM immediately
   const card = document.getElementById('pending-vendor-' + userId);
@@ -1229,8 +1233,13 @@ async function approveAndCreateStore(userId, email) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
   // Fetch fresh vendor data to get their store preferences
-  const vendorData = await apiFetch('users/' + userId);
-  const vendor = vendorData || {};
+  const vendorData = await apiFetch('users/' + userId).catch(() => null);
+  let vendor = vendorData || {};
+  if (!vendor.id) {
+    vendor = (App.allUsers || []).find(u => String(u.id) === String(userId)) || {};
+  }
+  if (!vendor.id) vendor.id = userId;
+  if (!vendor.email) vendor.email = email;
 
   // First approve the vendor
   await apiPatch('users', userId, { status: 'active' });
@@ -1990,8 +1999,15 @@ async function activateUser(userId) {
   const res = await apiGet('users', 'limit=200');
   const users = res?.data || [];
   App.allUsers = users;
-  const user = users.find(u => String(u.id) === String(userId));
-  if (user && user.role === 'vendor') {
+  
+  let user = users.find(u => String(u.id) === String(userId));
+  if (!user || !user.id) {
+    const vendorData = await apiFetch('users/' + userId).catch(() => null);
+    user = vendorData || {};
+  }
+  if (!user.id) user.id = userId;
+
+  if (user && (user.role === 'vendor' || !user.role)) {
     await window.autoCreateStoreForVendor(user);
   }
   const list = document.getElementById('admin-users-list');

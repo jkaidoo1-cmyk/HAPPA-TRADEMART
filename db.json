@@ -31,7 +31,13 @@
       "rendor_service_cat": "Graphic Design",
       "rendor_bio": "I create scroll-stopping visuals for brands, businesses and entrepreneurs across Ghana. From logos and social media content to full brand kits — I've got you covered. Fast delivery, clean designs, affordable rates.",
       "rendor_starting_price": 120,
-      "rendor_tags": ["branding", "logo design", "social media", "flyers", "business cards"],
+      "rendor_tags": [
+        "branding",
+        "logo design",
+        "social media",
+        "flyers",
+        "business cards"
+      ],
       "rendor_whatsapp": "0249999999",
       "rendor_email": "nana@test.com",
       "rendor_instagram": "@nana.creative",
@@ -44,10 +50,16 @@
       "rendor_sub_plan": "monthly"
     }
   ],
-  "stores": [],
+  "stores": [
+    {
+      "name": "Test Store",
+      "slug": "test-store",
+      "location": "Accra",
+      "id": "sto-1093-0e97"
+    }
+  ],
   "storefronts": [],
   "products": [],
-
   "orders": [],
   "packages": [],
   "services": [

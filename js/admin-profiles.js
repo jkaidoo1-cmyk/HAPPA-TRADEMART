@@ -316,8 +316,14 @@ async function _apActivateUser(userId) {
       const res = await apiGet('users', 'limit=200').catch(() => null);
       App.allUsers = res?.data || [];
     }
-    const user = (App.allUsers || []).find(u => u.id === userId);
-    if (user && user.role === 'vendor') {
+    let user = (App.allUsers || []).find(u => u.id === userId);
+    if (!user || !user.id) {
+      const vendorData = await apiFetch('users/' + userId).catch(() => null);
+      user = vendorData || {};
+    }
+    if (!user.id) user.id = userId;
+
+    if (user && (user.role === 'vendor' || !user.role)) {
       await window.autoCreateStoreForVendor(user);
     }
     // Refresh the vendor profile UI to immediately display the new store
