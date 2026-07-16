@@ -1203,10 +1203,16 @@ async function approveVendor(userId, email) {
   const btn = event?.target?.closest('button');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
+  const vendor = await apiFetch('users/' + userId).catch(() => null);
+
   await apiPatch('users', userId, { status: 'active' });
   addNotification(userId, 'system', '✅ Vendor Account Approved!',
     'Your vendor account has been approved! Log in with your registered email and password — your vendor dashboard is now active.');
   showToast(`Vendor approved ✅`, 'success');
+
+  if (vendor) {
+    await window.autoCreateStoreForVendor(vendor);
+  }
 
   // Remove the card from the DOM immediately
   const card = document.getElementById('pending-vendor-' + userId);
@@ -1236,41 +1242,10 @@ async function approveAndCreateStore(userId, email) {
 
   showToast(`Vendor approved — creating store…`, 'success');
 
-  // Every vendor gets a store — use preferences if provided, or default to vendor's name
-  const storeName = (vendor.preferred_store_name || '').trim() || `${vendor.name || 'New'}'s Store`;
-  const loc    = vendor.location || 'Accra';
-  const prefix = (typeof LOCATION_PREFIXES !== 'undefined' ? LOCATION_PREFIXES[loc] : null) || 'XX';
-  const slug   = storeName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  const kws    = (vendor.preferred_store_kws || '').split(',').map(k => k.trim()).filter(Boolean);
-
-  const store = await apiPost('stores', {
-    name:                  storeName,
-    slug,
-    description:           vendor.preferred_store_desc || '',
-    logo_url:              '',
-    banner_url:            '',
-    location:              loc,
-    category:              vendor.preferred_store_cat || '',
-    keywords:              kws,
-    vendor_id:             userId,
-    intended_vendor_email: email,
-    status:                'active',
-    avg_rating:            0,
-    review_count:          0,
-    total_sales:           0,
-    total_orders:          0,
-    location_prefix:       prefix,
-    store_price:           0,
-    is_paid:               false,
-    acquired_by_referral:  false,
-    handover_date:         new Date().toISOString()
-  });
+  const store = await window.autoCreateStoreForVendor(vendor);
 
   if (store && store.id) {
-    App.allStores = [...(App.allStores || []), store];
-    addNotification(userId, 'system', '🏪 Your Store is Live!',
-      `"${storeName}" has been created and is now active. Log in to your vendor dashboard with your registered email and password to start adding products and selling!`);
-    showToast(`Store "${storeName}" created and assigned ✅`, 'success');
+    showToast(`Store "${store.name}" created and assigned ✅`, 'success');
   } else {
     showToast('Store creation failed — please create the store manually from the Add Vendor tab', 'warning');
   }

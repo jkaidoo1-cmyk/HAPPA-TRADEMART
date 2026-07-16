@@ -2195,3 +2195,52 @@ function requestAccountDeletion() {
     // In a real implementation, call apiPost('account-deletion-requests', {...})
   }
 }
+
+window.autoCreateStoreForVendor = async function(vendor) {
+  if (!vendor || vendor.role !== 'vendor') return null;
+  
+  // 1. Double check if store already exists to prevent duplicate stores
+  const storeRes = await apiGet('stores', 'limit=200').catch(() => null);
+  const existing = (storeRes?.data || []).find(s => String(s.vendor_id) === String(vendor.id));
+  if (existing) return existing;
+
+  // 2. Build store properties
+  const storeName = (vendor.preferred_store_name || '').trim() || `${vendor.name || 'New'}'s Store`;
+  const loc = vendor.location || 'Accra';
+  const prefix = (typeof LOCATION_PREFIXES !== 'undefined' ? LOCATION_PREFIXES[loc] : null) || 'XX';
+  const slug = storeName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  const kws = (vendor.preferred_store_kws || '').split(',').map(k => k.trim()).filter(Boolean);
+
+  const newStore = {
+    name:                  storeName,
+    slug,
+    description:           vendor.preferred_store_desc || '',
+    logo_url:              '',
+    banner_url:            '',
+    location:              loc,
+    category:              vendor.preferred_store_cat || 'General',
+    keywords:              kws,
+    vendor_id:             vendor.id,
+    intended_vendor_email: vendor.email,
+    status:                'active',
+    avg_rating:            0,
+    review_count:          0,
+    total_sales:           0,
+    total_orders:          0,
+    location_prefix:       prefix,
+    store_price:           0,
+    is_paid:               false,
+    acquired_by_referral:  false,
+    handover_date:         new Date().toISOString()
+  };
+
+  const store = await apiPost('stores', newStore).catch(() => null);
+  if (store && store.id) {
+    if (!App.allStores) App.allStores = [];
+    App.allStores.push(store);
+    try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
+    addNotification(vendor.id, 'system', '🏪 Store Automatically Set Up!',
+      `Your store "${storeName}" has been successfully set up. You can customize details and upload product listings now.`);
+  }
+  return store;
+};

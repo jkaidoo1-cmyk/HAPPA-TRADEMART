@@ -901,8 +901,11 @@ async function doRegister(e) {
 
 
   App.currentUser = created;
-
   saveSessions();
+
+  if (authRole === 'vendor' && initialStatus === 'active') {
+    await window.autoCreateStoreForVendor(created);
+  }
 
 
 

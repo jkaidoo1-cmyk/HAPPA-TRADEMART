@@ -309,7 +309,17 @@ async function _apSuspendUser(userId) {
   catch (e) {}
 }
 async function _apActivateUser(userId) {
-  try { await _apPatchUserOptimistic(userId, { status: 'active' }, 'Account activated ✅'); }
+  try {
+    await _apPatchUserOptimistic(userId, { status: 'active' }, 'Account activated ✅');
+    const user = App.allUsers.find(u => u.id === userId);
+    if (user && user.role === 'vendor') {
+      await window.autoCreateStoreForVendor(user);
+    }
+    // Refresh the vendor profile UI to immediately display the new store
+    if (typeof adminOpenVendorProfile === 'function') {
+      await adminOpenVendorProfile(userId);
+    }
+  }
   catch (e) {}
 }
 
