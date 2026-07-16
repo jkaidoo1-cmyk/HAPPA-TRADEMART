@@ -466,7 +466,7 @@ async function renderVendorDashboard() {
 <div class="tab-content" id="vendor-storefront">
   <div class="dashboard-wrap">
     ${myStore ? `
-      ${(!myStorefront || myStorefront.status === 'inactive') ? `
+      ${(myStore.subscription_status !== 'active') ? `
         <!-- State 1: Inactive / Initial state — choose subscription plan -->
         <div style="text-align:center;padding:30px 20px 20px;">
           <div style="font-size:3rem;margin-bottom:12px">🏪</div>
@@ -559,15 +559,15 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      ${(myStorefront && (myStorefront.status === 'draft' || myStorefront.status === 'approved')) ? `
+      ${(myStore.subscription_status === 'active' && (!myStorefront || myStorefront.status === 'draft' || myStorefront.status === 'approved')) ? `
         <!-- State 3: Editing / Approved Customization Form -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
           <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-              <i class="fas fa-save"></i> ${(myStorefront?.status === 'draft') ? 'Save Draft' : 'Save Settings'}
+              <i class="fas fa-save"></i> ${(!myStorefront || myStorefront.status === 'draft') ? 'Save Draft' : 'Save Settings'}
             </button>
-            ${myStorefront.status === 'draft' ? `
+            ${(!myStorefront || myStorefront.status === 'draft') ? `
               <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
                 <i class="fas fa-paper-plane"></i> Request Storefront
               </button>
@@ -575,7 +575,7 @@ async function renderVendorDashboard() {
           </div>
         </div>
 
-        ${myStorefront.status === 'approved' ? `
+        ${(myStorefront && myStorefront.status === 'approved') ? `
           ${window.getSubscriptionBannerHTML ? window.getSubscriptionBannerHTML(myStore) : ''}
           <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;gap:8px">
             <div style="font-weight:800;font-size:.9rem"><i class="fas fa-check-circle"></i> Storefront Live!</div>
@@ -791,7 +791,7 @@ async function renderVendorDashboard() {
             </div>
 
             <button class="btn btn-primary btn-block" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-              <i class="fas fa-save"></i> ${myStorefront.status === 'draft' ? 'Save Draft' : 'Save Settings'}
+              <i class="fas fa-save"></i> ${(!myStorefront || myStorefront.status === 'draft') ? 'Save Draft' : 'Save Settings'}
             </button>
           </div>
           
@@ -3237,24 +3237,6 @@ window.confirmStorefrontSubscription = async function(storeId) {
       if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'draft';
       try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
       await apiPatch('storefronts', App.myStorefront.id, { status: 'draft' }).catch(() => {});
-    }
-  } else {
-    // Create new storefront record with draft status
-    const newSFPayload = {
-      store_id: storeId,
-      vendor_id: App.currentUser?.id || '',
-      status: 'draft',
-      theme: 'classic',
-      primary_color: '#e85d04',
-      secondary_color: '#faf9f6',
-      font_family: 'Outfit'
-    };
-    const res = await apiPost('storefronts', newSFPayload).catch(() => null);
-    if (res?.data) {
-      App.myStorefront = res.data;
-      if (!App.allStorefronts) App.allStorefronts = [];
-      App.allStorefronts.push(res.data);
-      try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
     }
   }
 

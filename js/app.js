@@ -38,6 +38,8 @@ const App = {
   currentStoreId: null,
   currentRendorId: null,
   flashSaleEnd: null,
+  loadedPages: {},
+  isBackgroundRefresh: false,
 };
 
 // ── Initialize ────────────────────────────────────────────
@@ -138,20 +140,11 @@ window.addEventListener('DOMContentLoaded', () => {
       
       if (found) {
         if (isStoreAdmin) {
-          showPage('store-admin');
-          if (typeof renderStorefrontAdminPortalPage === 'function') {
-            renderStorefrontAdminPortalPage(found.id);
-          }
+          showPage('store-admin', found.id);
         } else if (isStorefrontPage || searchParams.has('storefront')) {
-          showPage('storefront');
-          if (typeof renderStorefront === 'function') {
-            renderStorefront(found.id);
-          }
+          showPage('storefront', found.id);
         } else {
-          showPage('store-detail');
-          if (typeof renderStoreDetail === 'function') {
-            renderStoreDetail(found.id);
-          }
+          showPage('store-detail', found.id);
         }
       } else {
         showPage('home');
@@ -168,10 +161,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const slug = newHash.substring(7);
       const found = App.allStores.find(s => s.slug === slug || s.id === slug);
       if (found) {
-        showPage('store-detail');
-        if (typeof renderStoreDetail === 'function') {
-          renderStoreDetail(found.id);
-        }
+        showPage('store-detail', found.id);
       }
     } else if (newHash.startsWith('#storefront/')) {
       const slug = newHash.substring(12);
@@ -184,10 +174,7 @@ window.addEventListener('DOMContentLoaded', () => {
         found = App.allStores.find(s => s.slug === slug || s.id === slug);
       }
       if (found) {
-        showPage('storefront');
-        if (typeof renderStorefront === 'function') {
-          renderStorefront(found.id);
-        }
+        showPage('storefront', found.id);
       }
     } else if (newHash.startsWith('#store-admin/')) {
       const slug = newHash.substring(13);
@@ -200,10 +187,7 @@ window.addEventListener('DOMContentLoaded', () => {
         found = App.allStores.find(s => s.slug === slug || s.id === slug);
       }
       if (found) {
-        showPage('store-admin');
-        if (typeof renderStorefrontAdminPortalPage === 'function') {
-          renderStorefrontAdminPortalPage(found.id);
-        }
+        showPage('store-admin', found.id);
       }
     } else if (newHash === '#register-vendor' || newHash === '#auth-vendor') {
       showPage('auth');
@@ -215,13 +199,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // ── Browser back-button support ──
   // Replace the initial entry so it has state, then listen for popstate
-  history.replaceState({ page: App.currentPage }, '');
+  history.replaceState({ page: App.currentPage, entityId: getPageEntityId(App.currentPage) }, '');
   window.addEventListener('popstate', (e) => {
     if (e.state && e.state.page) {
       // Navigate to the page stored in the history entry without pushing
       // a new entry (the browser already moved the pointer).
       App._skipPush = true;
-      showPage(e.state.page);
+      showPage(e.state.page, e.state.entityId);
       App._skipPush = false;
     }
   });
@@ -290,10 +274,10 @@ function injectSkeletonLoaders(pageId) {
     if (trending) trending.innerHTML = Array(6).fill(cardHtml).join('');
     if (stores) stores.innerHTML = Array(4).fill(rowHtml).join('');
   } else if (pageId === 'marketplace') {
-    const list = document.getElementById('marketplace-list');
+    const list = document.getElementById('marketplace-grid');
     if (list) list.innerHTML = Array(8).fill(cardHtml).join('');
   } else if (pageId === 'stores') {
-    const list = document.getElementById('stores-list');
+    const list = document.getElementById('stores-grid');
     if (list) list.innerHTML = Array(8).fill(rowHtml).join('');
   } else if (pageId === 'notifications') {
     const list = document.getElementById('notifications-content');
@@ -338,7 +322,72 @@ function updatePWAManifest(name, logoUrl, themeColor) {
 }
 
 // ── Page Navigation ───────────────────────────────────────
-function showPage(pageId) {
+// ── Page Navigation ───────────────────────────────────────
+function getPageCacheKey(pageId) {
+  if (pageId === 'store-detail') return `store-detail-${App.currentStoreId}`;
+  if (pageId === 'product') return `product-${App.currentProductId}`;
+  if (pageId === 'rendor-profile') return `rendor-profile-${App.currentRendorId}`;
+  if (pageId === 'storefront') return `storefront-${App.currentStoreId}`;
+  return pageId;
+}
+
+function getPageEntityId(pageId) {
+  if (pageId === 'store-detail' || pageId === 'storefront' || pageId === 'store-admin') {
+    return App.currentStoreId;
+  }
+  if (pageId === 'product') {
+    return App.currentProductId;
+  }
+  if (pageId === 'rendor-profile') {
+    return App.currentRendorId;
+  }
+  return null;
+}
+
+async function runPageInit(pageId) {
+  const cacheKey = getPageCacheKey(pageId);
+  try {
+    switch(pageId) {
+      case 'home':           await loadHomeData().then(() => initAdBanners('home')); break;
+      case 'marketplace':    await renderMarketplace().then(() => initAdBanners('shop')); calcDaysToSaturday(); break;
+      case 'stores':         await renderStores().then(() => initAdBanners('stores')); break;
+      case 'cart':           renderCart(); calcDaysToSaturday(); break;
+      case 'checkout':       renderCheckout(); break;
+      case 'auth':           renderAuth(); break;
+      case 'settings':       await renderSettingsPage(); break;
+      case 'buyer-dashboard': await renderBuyerDashboard(); break;
+      case 'vendor-dashboard':  await renderVendorDashboard(); break;
+      case 'vendor-my-store':   await renderVendorMyStorePage(); break;
+      case 'vendor-orders':     await renderVendorOrdersPage(); break;
+      case 'rendor-dashboard':  await renderRendorDashboard(); break;
+      case 'rendor-profile':    await renderRendorProfilePublic(); break;
+      case 'admin-dashboard':   await renderAdminDashboard(); if (typeof window.refreshAIBadge==='function') window.refreshAIBadge(); break;
+      case 'notifications':     await renderNotifications(); break;
+      case 'delivery':         renderDeliveryPage(); break;
+      case 'privacy':          renderPrivacyPage(); break;
+      case 'product':          await renderProductDetail(App.currentProductId); break;
+      case 'store-detail':     await renderStoreDetail(App.currentStoreId); break;
+      case 'storefront':       await renderStorefront(App.currentStoreId); break;
+      case 'store-admin':      if (typeof window.renderStorefrontAdminPortalPage === 'function') await window.renderStorefrontAdminPortalPage(App.currentStoreId); break;
+    }
+    // Mark as loaded successfully
+    App.loadedPages[cacheKey] = true;
+  } catch (err) {
+    console.error(`[runPageInit] Error loading page ${pageId}:`, err);
+  }
+}
+
+function showPage(pageId, entityId = null) {
+  if (entityId) {
+    if (pageId === 'store-detail' || pageId === 'storefront' || pageId === 'store-admin') {
+      App.currentStoreId = entityId;
+    } else if (pageId === 'product') {
+      App.currentProductId = entityId;
+    } else if (pageId === 'rendor-profile') {
+      App.currentRendorId = entityId;
+    }
+  }
+
   // Reset PWA manifest when leaving store detail or storefront page
   if (pageId !== 'store-detail' && pageId !== 'storefront') {
     updatePWAManifest('HAPPA TRADEMART', 'images/icon-192.png', '#e85d04');
@@ -359,7 +408,7 @@ function showPage(pageId) {
   // Push a browser-history entry so the mobile back button works.
   // Skip when we're already handling a popstate (browser-back) event.
   if (!App._skipPush) {
-    history.pushState({ page: pageId }, '');
+    history.pushState({ page: pageId, entityId: entityId || getPageEntityId(pageId) }, '');
   }
 
   // Hide ALL pages completely
@@ -373,8 +422,16 @@ function showPage(pageId) {
   target.classList.add('active');
   target.style.display = 'block';
   
-  // Inject skeletons while content loads asynchronously
-  injectSkeletonLoaders(pageId);
+  const cacheKey = getPageCacheKey(pageId);
+  const isLoaded = !!App.loadedPages[cacheKey];
+
+  if (isLoaded) {
+    App.isBackgroundRefresh = true;
+  } else {
+    App.isBackgroundRefresh = false;
+    // Inject skeletons while content loads asynchronously
+    injectSkeletonLoaders(pageId);
+  }
   
   const mainContent = document.getElementById('main-content');
   if (mainContent) {
@@ -403,26 +460,10 @@ function showPage(pageId) {
   // ── Adjust top nav & bottom nav visibility based on role ──
   updateNavForUser();
 
-  // page-specific init
-  switch(pageId) {
-    case 'home':           loadHomeData().then(() => initAdBanners('home')); break;
-    case 'marketplace':    renderMarketplace().then(() => initAdBanners('shop')); calcDaysToSaturday(); break;
-    case 'stores':         renderStores().then(() => initAdBanners('stores')); break;
-    case 'cart':           renderCart(); calcDaysToSaturday(); break;
-    case 'checkout':       renderCheckout(); break;
-    case 'auth':           renderAuth(); break;
-    case 'settings':       renderSettingsPage(); break;
-    case 'buyer-dashboard': renderBuyerDashboard(); break;
-    case 'vendor-dashboard':  renderVendorDashboard(); break;
-    case 'vendor-my-store':   renderVendorMyStorePage(); break;
-    case 'vendor-orders':     renderVendorOrdersPage(); break;
-    case 'rendor-dashboard':  renderRendorDashboard(); break;
-    case 'rendor-profile':    renderRendorProfilePublic(); break;
-    case 'admin-dashboard':   renderAdminDashboard(); if (typeof window.refreshAIBadge==='function') window.refreshAIBadge(); break;
-    case 'notifications':     renderNotifications(); break;
-    case 'delivery':         renderDeliveryPage(); break;
-    case 'privacy':          renderPrivacyPage(); break;
-  }
+  // Run the page init asynchronously, and clear background refresh status afterwards
+  runPageInit(pageId).finally(() => {
+    App.isBackgroundRefresh = false;
+  });
 }
 function goBack() {
   // If there is real browser history to go back to, use it so the
@@ -1654,19 +1695,16 @@ function renderStars(rating) {
 // ── Product & Store Open ──────────────────────────────────
 async function openProduct(id) {
   App.currentProductId = id;
-  if (App.currentPage === 'store-detail') {
+  if (App.currentPage === 'store-detail' || App.currentPage === 'storefront') {
     if (typeof openStorefrontProductModal === 'function') {
       openStorefrontProductModal(id);
     }
   } else {
-    showPage('product');
-    await renderProductDetail(id);
+    showPage('product', id);
   }
 }
 async function openStore(id) {
-  App.currentStoreId = id;
-  showPage('store-detail');
-  await renderStoreDetail(id);
+  showPage('store-detail', id);
 }
 
 // ── Cart Badge ────────────────────────────────────────────

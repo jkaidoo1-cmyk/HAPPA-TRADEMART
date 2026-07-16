@@ -48,7 +48,9 @@ async function renderMarketplace() {
 
 
 
-  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+  if (!App.isBackgroundRefresh) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+  }
 
 
   // Always re-fetch products & stores so newly uploaded items appear
@@ -440,7 +442,9 @@ async function renderProductDetail(id) {
 
   if (!c) return;
 
-  c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  if (!App.isBackgroundRefresh) {
+    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  }
 
 
 
@@ -570,7 +574,7 @@ async function renderProductDetail(id) {
 
     <span class="tag"><i class="fas fa-map-marker-alt"></i> ${p.location}${p.campus?` · ${p.campus}`:''}</span>
 
-    ${p.tags?.slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('') || ''}
+    ${Array.isArray(p.tags) ? p.tags.slice(0,3).map(t=>`<span class="tag">${escHtml(t)}</span>`).join('') : ''}
 
   </div>
 
@@ -766,6 +770,8 @@ ${store.id ? `
 
   if (relDiv) relDiv.innerHTML = related.map(rp => productCardHTML(rp)).join('');
 
+  App.loadedPages['product-' + id] = true;
+  App.isBackgroundRefresh = false;
 }
 
 
@@ -901,20 +907,22 @@ function shareProduct(productId) {
 async function renderStoreDetail(id) {
   const c = document.getElementById('store-detail-content');
   if (!c) return;
-  c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  if (!App.isBackgroundRefresh) {
+    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  }
 
   const s = App.allStores.find(st => String(st.id) === String(id)) || await apiGet(`stores/${id}`);
   if (!s) { c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Store not found</h3></div>'; return; }
 
   const isOwner = App.currentUser && String(App.currentUser.id) === String(s.vendor_id);
   const isAdmin = App.currentUser && App.currentUser.role === 'admin';
-  if (s.storefront_status !== 'approved' && !isOwner && !isAdmin) {
+  if (s.status !== 'active' && !isOwner && !isAdmin) {
     c.innerHTML = `
       <div class="empty-state" style="padding: 40px 20px; text-align: center;">
         <div style="font-size: 3rem; margin-bottom: 16px;">🏪</div>
         <h3>Store under construction</h3>
         <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 4px;">
-          This store is not approved yet.
+          This store is not active yet.
         </p>
       </div>`;
     return;
@@ -1049,12 +1057,17 @@ async function renderStoreDetail(id) {
       }
     }
   }, 100);
+
+  App.loadedPages['store-detail-' + id] = true;
+  App.isBackgroundRefresh = false;
 }
 
 async function renderStorefront(id) {
   const c = document.getElementById('storefront-content');
   if (!c) return;
-  c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  if (!App.isBackgroundRefresh) {
+    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  }
 
   const s = App.allStores.find(st => String(st.id) === String(id)) || await apiGet(`stores/${id}`);
   if (!s) { c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Storefront not found</h3></div>'; return; }
@@ -1507,6 +1520,8 @@ function adminProductCardHTML(p) {
 
 </div>`;
 
+  App.loadedPages['storefront-' + id] = true;
+  App.isBackgroundRefresh = false;
 }
 
 
@@ -1921,7 +1936,9 @@ async function renderRendorProfilePublic() {
 
 
 
-  c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  if (!App.isBackgroundRefresh) {
+    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  }
 
 
 
@@ -2165,6 +2182,8 @@ ${contacts.length ? `
 
 `;
 
+  App.loadedPages['rendor-profile-' + rendorId] = true;
+  App.isBackgroundRefresh = false;
 }
 
 
@@ -3012,6 +3031,9 @@ window.renderStorefrontAdminPortalPage = async function(storeId) {
   if (typeof renderVendorDashboard === 'function') {
     renderVendorDashboard();
   }
+
+  App.loadedPages['store-admin-' + storeId] = true;
+  App.isBackgroundRefresh = false;
 };
 
 window.submitStorefrontAdminLogin = async function(form, storeId) {
