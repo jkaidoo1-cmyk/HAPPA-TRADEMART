@@ -1,8 +1,8 @@
 # Simple HTTP Server
 $listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add("http://localhost:8081/")
+$listener.Prefixes.Add("http://localhost:9000/")
 $listener.Start()
-Write-Host "Server running at http://localhost:8081/"
+Write-Host "Server running at http://localhost:9000/"
 Write-Host "Press Ctrl+C to stop..."
 
 try {

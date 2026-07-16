@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Constants ──────────────────────────────────────────────
-const API = '/api/';
+const API = 'tables/';
 const LOCATIONS = ['Accra','Kumasi','Takoradi','Tamale','Cape Coast','Tema','Sunyani','Koforidua'];
 const CATEGORIES = ['Fashion & Footwear','Electronics','Beauty & Skincare','Food & Groceries',
                     'Books & Stationery','Health & Fitness','Home & Living','Sports & Outdoor'];
@@ -2238,14 +2238,22 @@ window.autoCreateStoreForVendor = async function(vendor) {
 
   // Optimistically push to frontend state
   if (!App.allStores) App.allStores = [];
-  const alreadyInState = App.allStores.find(s => String(s.vendor_id) === String(vendor.id));
+  let alreadyInState = App.allStores.find(s => String(s.vendor_id) === String(vendor.id));
   if (!alreadyInState) {
     App.allStores.push(newStore);
   }
   try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
 
   const store = await apiPost('stores', newStore).catch(() => null);
-  const finalStore = store || newStore;
+  let finalStore = store || newStore;
+  
+  // Update App.allStores with the real store from API if we got one
+  if (store) {
+    // Remove any existing store for this vendor
+    App.allStores = App.allStores.filter(s => String(s.vendor_id) !== String(vendor.id));
+    App.allStores.push(store);
+    try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
+  }
 
   addNotification(vendor.id, 'system', '🏪 Store Automatically Set Up!',
     `Your store "${storeName}" has been successfully set up. You can customize details and upload product listings now.`);

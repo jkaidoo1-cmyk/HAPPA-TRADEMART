@@ -76,8 +76,20 @@ async function renderVendorDashboard() {
       apiPatch('stores', '1', { vendor_id: 'u-vendor-001' }).catch(() => {});
     }
   }
-  const stores   = allStores.filter(s => s.vendor_id === u.id);
-  const myStore  = stores[0] || null;
+  let stores   = allStores.filter(s => s.vendor_id === u.id);
+  let myStore  = stores[0] || null;
+  
+  // If no store exists for this vendor, auto-create one
+  if (!myStore) {
+    myStore = await window.autoCreateStoreForVendor(u);
+    // Refresh stores from API to get the newly created store
+    const newStoreRes = await apiGet('stores', `limit=200`);
+    const newAllStores = newStoreRes?.data || [];
+    stores = newAllStores.filter(s => s.vendor_id === u.id);
+    myStore = stores[0] || myStore;
+    // Update App.allStores with fresh data
+    App.allStores = newAllStores;
+  }
 
   // Fetch vendor's products
   let myProducts = [];

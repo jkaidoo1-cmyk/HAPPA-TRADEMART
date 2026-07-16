@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-PORT = 9000
+PORT = 9001
 ROOT_DIR = Path(__file__).resolve().parent
 DB_FILE = ROOT_DIR / 'db.json'
 
