@@ -2197,7 +2197,7 @@ function requestAccountDeletion() {
 }
 
 window.autoCreateStoreForVendor = async function(vendor) {
-  if (!vendor || vendor.role !== 'vendor') return null;
+  if (!vendor) return null;
   
   // 1. Double check if store already exists to prevent duplicate stores
   const storeRes = await apiGet('stores', 'limit=200').catch(() => null);
@@ -2212,6 +2212,7 @@ window.autoCreateStoreForVendor = async function(vendor) {
   const kws = (vendor.preferred_store_kws || '').split(',').map(k => k.trim()).filter(Boolean);
 
   const newStore = {
+    id:                    'store-' + vendor.id,
     name:                  storeName,
     slug,
     description:           vendor.preferred_store_desc || '',
@@ -2234,13 +2235,19 @@ window.autoCreateStoreForVendor = async function(vendor) {
     handover_date:         new Date().toISOString()
   };
 
-  const store = await apiPost('stores', newStore).catch(() => null);
-  if (store && store.id) {
-    if (!App.allStores) App.allStores = [];
-    App.allStores.push(store);
-    try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
-    addNotification(vendor.id, 'system', '🏪 Store Automatically Set Up!',
-      `Your store "${storeName}" has been successfully set up. You can customize details and upload product listings now.`);
+  // Optimistically push to frontend state
+  if (!App.allStores) App.allStores = [];
+  const alreadyInState = App.allStores.find(s => String(s.vendor_id) === String(vendor.id));
+  if (!alreadyInState) {
+    App.allStores.push(newStore);
   }
-  return store;
+  try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
+
+  const store = await apiPost('stores', newStore).catch(() => null);
+  const finalStore = store || newStore;
+
+  addNotification(vendor.id, 'system', '🏪 Store Automatically Set Up!',
+    `Your store "${storeName}" has been successfully set up. You can customize details and upload product listings now.`);
+
+  return finalStore;
 };
