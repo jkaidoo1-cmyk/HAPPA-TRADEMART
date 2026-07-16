@@ -84,6 +84,56 @@ function serializeRecord(record) {
   return out;
 }
 
+const TABLE_COLUMNS = {
+  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'extra', 'campus', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws'],
+  notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
+  stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'created_at', 'updated_at', 'extra'],
+  orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
+  ad_campaigns: ['id', 'vendor_id', 'store_id', 'title', 'image_url', 'link', 'placement', 'budget', 'spent', 'impressions', 'clicks', 'status', 'start_date', 'end_date', 'created_at', 'updated_at', 'extra'],
+  services: ['id', 'rendor_id', 'title', 'category', 'description', 'price', 'image_url', 'status', 'created_at', 'updated_at', 'extra'],
+  service_orders: ['id', 'service_id', 'rendor_id', 'buyer_id', 'title', 'amount', 'status', 'notes', 'created_at', 'updated_at', 'extra'],
+  settings: ['id', 'key', 'value', 'label', 'type', 'updated_at'],
+  reviews: ['id', 'product_id', 'store_id', 'buyer_id', 'rating', 'comment', 'created_at'],
+  products: ['id', 'store_id', 'vendor_id', 'name', 'category', 'price', 'original_price', 'stock_qty', 'images', 'is_flash_sale', 'flash_pct', 'status', 'is_available', 'description', 'location', 'avg_rating', 'review_count', 'total_sold', 'created_at', 'updated_at', 'extra'],
+  packages: ['id', 'code', 'buyer_id', 'vendor_id', 'store_id', 'items', 'status', 'total', 'delivery_fee', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'notes', 'created_at', 'updated_at', 'extra'],
+  delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
+  referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'status', 'created_at'],
+  wallet_transactions: ['id', 'user_id', 'type', 'amount', 'description', 'reference', 'created_at', 'extra'],
+  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'created_at', 'updated_at']
+};
+
+function prepareRecordForDb(table, record) {
+  const out = { ...record };
+
+  // Inverse aliasing: map frontend names back to DB column names if DB column is missing
+  if ('about_us' in out && !('description' in out)) {
+    out.description = out.about_us;
+  }
+  if ('sold_count' in out && !('total_sold' in out)) {
+    out.total_sold = out.sold_count;
+  }
+  if ('avatar' in out && !('avatar_url' in out)) {
+    out.avatar_url = out.avatar;
+  }
+  if ('shipping_policy' in out && !('return_policy' in out)) {
+    out.return_policy = out.shipping_policy;
+  }
+
+  // Filter columns to only include valid DB columns for Supabase
+  if (TABLE_COLUMNS[table]) {
+    const clean = {};
+    for (const col of TABLE_COLUMNS[table]) {
+      if (col in out) {
+        clean[col] = out[col];
+      }
+    }
+    return clean;
+  }
+
+  return out;
+}
+
+
 function applyClientFilters(rows, query) {
   let result = [...rows];
   const { search, limit, page, sort, ...filters } = query;
@@ -285,7 +335,8 @@ app.post('/api/:table', async (req, res) => {
     }
 
     // Supabase path
-    const { data, error } = await supabase.from(table).insert(record).select().single();
+    const dbRecord = prepareRecordForDb(table, record);
+    const { data, error } = await supabase.from(table).insert(dbRecord).select().single();
     if (error) {
       console.error('[POST] Supabase error:', table, error);
       return res.status(500).json({ error: error.message, backend: 'supabase' });
@@ -316,7 +367,8 @@ app.put('/api/:table/:id', async (req, res) => {
       return res.json(serializeRecord(record));
     }
     
-    const { data, error } = await supabase.from(table).upsert(record).select().single();
+    const dbRecord = prepareRecordForDb(table, record);
+    const { data, error } = await supabase.from(table).upsert(dbRecord).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
   } catch (err) {
@@ -343,7 +395,8 @@ app.patch('/api/:table/:id', async (req, res) => {
       return res.json(serializeRecord(store[table][idx]));
     }
     
-    const { data, error } = await supabase.from(table).update(record).eq('id', id).select().single();
+    const dbRecord = prepareRecordForDb(table, record);
+    const { data, error } = await supabase.from(table).update(dbRecord).eq('id', id).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
   } catch (err) {
