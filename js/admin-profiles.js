@@ -277,6 +277,7 @@ async function _apSaveProductEdit(prodId, userId, form) {
 
 // ── Verification helpers ───────────────────────────────────
 function _apPatchUserOptimistic(userId, patch, successMsg) {
+  if (!App.allUsers) App.allUsers = [];
   const idx = App.allUsers.findIndex(u => u.id === userId);
   const snap = idx > -1 ? { ...App.allUsers[idx] } : null;
   if (snap) Object.assign(App.allUsers[idx], patch);
@@ -311,7 +312,11 @@ async function _apSuspendUser(userId) {
 async function _apActivateUser(userId) {
   try {
     await _apPatchUserOptimistic(userId, { status: 'active' }, 'Account activated ✅');
-    const user = App.allUsers.find(u => u.id === userId);
+    if (!App.allUsers || !App.allUsers.length) {
+      const res = await apiGet('users', 'limit=200').catch(() => null);
+      App.allUsers = res?.data || [];
+    }
+    const user = (App.allUsers || []).find(u => u.id === userId);
     if (user && user.role === 'vendor') {
       await window.autoCreateStoreForVendor(user);
     }

@@ -3018,8 +3018,14 @@ window.submitStorefrontAdminLogin = async function(form, storeId) {
   const email = form.email.value.trim().toLowerCase();
   const password = form.password.value.trim();
 
+  // Dynamically populate App.allUsers if missing or empty
+  if (!App.allUsers || !App.allUsers.length) {
+    const res = await apiGet('users', 'limit=200').catch(() => null);
+    App.allUsers = res?.data || [];
+  }
+
   // Find user and check credentials
-  const foundUser = App.allUsers.find(u => u.email.toLowerCase() === email && u.password === password);
+  const foundUser = (App.allUsers || []).find(u => u.email.toLowerCase() === email && u.password === password);
   if (!foundUser) {
     showToast('Invalid email or password', 'danger');
     return;

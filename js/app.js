@@ -33,6 +33,7 @@ const App = {
   notifications: [],
   allProducts: [],
   allStores: [],
+  allUsers: [],
   currentProductId: null,
   currentStoreId: null,
   currentRendorId: null,

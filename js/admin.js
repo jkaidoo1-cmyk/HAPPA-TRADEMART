@@ -27,6 +27,7 @@ async function renderAdminDashboard() {
 
   App.allStores   = allStores;
   App.allProducts = allProducts;
+  App.allUsers    = allUsers;
 
   const buyers         = allUsers.filter(u => u.role === 'buyer');
   const vendors        = allUsers.filter(u => u.role === 'vendor');
@@ -1604,6 +1605,7 @@ async function refreshAdminUsersList() {
   list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
   const res = await apiGet('users', 'limit=200');
   const users = res?.data || [];
+  App.allUsers = users;
   list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
 }
 
@@ -1623,6 +1625,7 @@ async function refreshAdminVendorsFull() {
   const allUsers  = usersRes?.data  || [];
   const allStores = storesRes?.data || [];
   App.allStores = allStores;
+  App.allUsers = allUsers;
   const vendors = allUsers.filter(u => u.role === 'vendor');
   list.innerHTML = vendors.length
     ? vendors.map(v => adminVendorWithStoreRowHTML(v, allStores, allUsers)).join('')
@@ -1986,6 +1989,11 @@ async function activateUser(userId) {
   // Refresh users list in-place without full re-render
   const res = await apiGet('users', 'limit=200');
   const users = res?.data || [];
+  App.allUsers = users;
+  const user = users.find(u => String(u.id) === String(userId));
+  if (user && user.role === 'vendor') {
+    await window.autoCreateStoreForVendor(user);
+  }
   const list = document.getElementById('admin-users-list');
   if (list) list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
 }
