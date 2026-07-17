@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Constants ──────────────────────────────────────────────
-const API = 'tables/';
+const API = '/api/';
 const LOCATIONS = ['Accra','Kumasi','Takoradi','Tamale','Cape Coast','Tema','Sunyani','Koforidua'];
 const CATEGORIES = ['Fashion & Footwear','Electronics','Beauty & Skincare','Food & Groceries',
                     'Books & Stationery','Health & Fitness','Home & Living','Sports & Outdoor'];
