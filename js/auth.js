@@ -5,9 +5,6 @@
    ============================================================ */
 
 
-
-const CAMPUSES = ['Legon', 'KNUST', 'UCC', 'UDS', 'UPSA', 'Ashesi', 'UMaT', 'UENR'];
-
 let authMode = 'login'; // login | register
 let authRole = 'buyer'; // buyer | vendor | rendor
 
@@ -230,20 +227,6 @@ ${authRole === 'rendor' ? `
       <option value="">Select your city…</option>
 
       ${LOCATIONS.map(l => `<option value="${l}">${l}</option>`).join('')}
-
-    </select>
-
-  </div>
-
-  <div class="form-group" id="campus-field-wrap"${authRole==='buyer'?'':''}>
-
-    <label class="form-label">Campus (Optional)</label>
-
-    <select class="form-control form-select" id="reg-campus">
-
-      <option value="">Not on campus</option>
-
-      ${CAMPUSES.map(c => `<option value="${c}">${c}</option>`).join('')}
 
     </select>
 
@@ -579,9 +562,6 @@ async function doRegister(e) {
   const phone  = document.getElementById('reg-phone')?.value.trim();
 
   const loc    = document.getElementById('reg-location')?.value;
-
-  const campus = document.getElementById('reg-campus')?.value || '';
-
   const pass   = document.getElementById('reg-pass')?.value;
 
   // Read referral code from hidden field OR from sessionStorage (set when user clicked a referral link)
@@ -711,10 +691,7 @@ async function doRegister(e) {
   const initialStatus = needsApproval ? 'pending_approval' : 'active';
 
   const newUser = {
-
-    name, email, phone, role: authRole, location: loc, campus,
-
-    is_verified: false, id_verified: false,
+    name, email, phone, role: authRole, location: loc,    is_verified: false, id_verified: false,
 
     referral_code: refCode, referred_by: ref || '',
 
@@ -1251,8 +1228,6 @@ async function quickLogin(role) {
 
       location: 'Accra',
 
-      campus: 'UG Legon',
-
       status: 'active',
 
       password_hash: 'buyer123',
@@ -1281,8 +1256,6 @@ async function quickLogin(role) {
 
       location: 'Accra',
 
-      campus: '',
-
       status: 'active',
 
       password_hash: 'vendor123',
@@ -1310,8 +1283,6 @@ async function quickLogin(role) {
       role: 'admin',
 
       location: 'Accra',
-
-      campus: '',
 
       status: 'active',
 

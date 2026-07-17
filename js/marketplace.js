@@ -72,8 +72,6 @@ async function renderMarketplace() {
 
   const ul  = App.currentUser?.location || '';
 
-  const uc  = App.currentUser?.campus || '';
-
   const af  = App.advancedFilter || {};
 
 
@@ -85,8 +83,6 @@ async function renderMarketplace() {
   if (f === 'local')    items = items.filter(p => ul && p.location === ul);
 
   if (f === 'flash')    items = items.filter(p => p.is_flash_sale);
-
-  if (f === 'campus')   items = items.filter(p => uc && p.campus === uc);
 
   if (f === 'Fashion')  items = items.filter(p => p.category?.includes('Fashion') || p.category?.includes('Footwear'));
 
@@ -101,8 +97,6 @@ async function renderMarketplace() {
   // Advanced filter
 
   if (af.loc)    items = items.filter(p => p.location === af.loc);
-
-  if (af.campus) items = items.filter(p => p.campus === af.campus);
 
   if (af.cat)    items = items.filter(p => p.category?.includes(af.cat.split(' ')[0]));
 
@@ -400,13 +394,9 @@ async function renderStores() {
 
   const ul = App.currentUser?.location || '';
 
-  const uc = App.currentUser?.campus || '';
-
   const f  = currentStoreFilter;
 
   if (f === 'local')  stores = stores.filter(s => ul && s.location === ul);
-
-  if (f === 'campus') stores = stores.filter(s => uc && s.campus === uc);
 
   if (['Fashion','Electronics','Beauty'].includes(f)) {
 
@@ -572,7 +562,7 @@ async function renderProductDetail(id) {
 
     </span>
 
-    <span class="tag"><i class="fas fa-map-marker-alt"></i> ${p.location}${p.campus?` · ${p.campus}`:''}</span>
+    <span class="tag"><i class="fas fa-map-marker-alt"></i> ${p.location}</span>
 
     ${Array.isArray(p.tags) ? p.tags.slice(0,3).map(t=>`<span class="tag">${escHtml(t)}</span>`).join('') : ''}
 
@@ -730,7 +720,7 @@ ${store.id ? `
 
   <div class="card-header">
 
-    <h3>Γ¡É Reviews (${reviews.length})</h3>
+    <h3>Reviews (${reviews.length})</h3>
 
     ${App.currentUser ? `<button class="btn btn-outline btn-sm" onclick="showReviewModal('${p.id}','product')">Write Review</button>` : ''}
 

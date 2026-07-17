@@ -1318,7 +1318,6 @@ async function submitAddProduct(e, storeId, vendorId) {
     stock_qty: stock, sold_count: 0, views: 0,
     avg_rating: 0, review_count: 0,
     location: store.location || App.currentUser?.location,
-    campus: store.campus || '',
     is_flash_sale: isFlash, flash_sale_end: '',
     status: stock > 0 ? 'active' : 'sold_out',
     tags, commission_pct: commission, weight_kg: weight,
@@ -1825,7 +1824,7 @@ async function showAvailableStores() {
              onerror="this.src='https://via.placeholder.com/50x50?text=S'">
         <div style="flex:1">
           <div style="font-weight:700;font-size:.9rem">${escHtml(s.name)}</div>
-          <div style="font-size:.75rem;color:var(--text-muted)">${s.location}${s.campus?' ┬╖ '+s.campus:''}</div>
+          <div style="font-size:.75rem;color:var(--text-muted)">${s.location}</div>
           <div style="font-size:.75rem;color:var(--text-muted)">Price: <strong>GHS ${(s.store_price||500).toFixed(0)}</strong></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
@@ -2595,7 +2594,6 @@ async function _bapSubmitAll() {
       stock_qty: stock, sold_count: 0, views: 0,
       avg_rating: 0, review_count: 0,
       location: store.location || App.currentUser?.location || '',
-      campus:   store.campus   || '',
       is_flash_sale: flash, flash_sale_end: '',
       status: stock > 0 ? 'active' : 'sold_out',
       tags, commission_pct: commission, weight_kg: weight,

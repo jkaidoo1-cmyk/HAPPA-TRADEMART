@@ -210,6 +210,24 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // ── Background Prefetching ──
+  // Start preloading all static pages in the background to speed up navigation
+  setTimeout(() => {
+    const prefetchPages = ['marketplace', 'stores', 'cart', 'checkout', 'settings', 'notifications', 'delivery', 'privacy'];
+    if (App.currentUser) {
+      if (App.currentUser.role === 'buyer') prefetchPages.push('buyer-dashboard');
+      else if (App.currentUser.role === 'vendor' || App.currentUser.role === 'seller') prefetchPages.push('vendor-dashboard', 'vendor-my-store', 'vendor-orders');
+      else if (App.currentUser.role === 'rendor') prefetchPages.push('rendor-dashboard');
+      else if (App.currentUser.role === 'admin') prefetchPages.push('admin-dashboard');
+    }
+    prefetchPages.forEach(page => {
+      const cacheKey = getPageCacheKey(page);
+      if (!App.loadedPages[cacheKey] && App.currentPage !== page) {
+        runPageInit(page).catch(e => console.warn('Prefetch failed for', page, e));
+      }
+    });
+  }, 4000); // 4 seconds after DOM load to prioritize initial render
+
   document.addEventListener('click', closeProfileMenu);
 });
 
