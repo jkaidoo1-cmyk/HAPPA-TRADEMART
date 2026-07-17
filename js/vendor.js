@@ -468,71 +468,6 @@ async function renderVendorDashboard() {
 <div class="tab-content" id="vendor-storefront">
   <div class="dashboard-wrap">
     ${myStore ? `
-      ${(myStore.subscription_status !== 'active') ? `
-        <!-- State 1: Inactive / Initial state — choose subscription plan -->
-        <div style="text-align:center;padding:30px 20px 20px;">
-          <div style="font-size:3rem;margin-bottom:12px">🏪</div>
-          <h2 style="font-weight:800;font-size:1.25rem;margin-bottom:6px">Launch Your Custom Storefront</h2>
-          <p style="font-size:.85rem;color:var(--text-light);margin-bottom:28px;line-height:1.7;max-width:480px;margin-left:auto;margin-right:auto">
-            Get a branded mini-website under HAPPA with your own URL, theme, colors and logo.
-            Choose a monthly subscription plan to get started.
-          </p>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:720px;margin:0 auto 24px">
-
-            <!-- Starter Plan -->
-            <div style="border:2px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;position:relative;background:#fff;transition:border .2s,box-shadow .2s" onmouseenter="this.style.borderColor='var(--primary)';this.style.boxShadow='0 6px 24px rgba(0,0,0,.1)'" onmouseleave="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-              <div style="font-size:1.6rem;margin-bottom:6px">🌱</div>
-              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Starter</div>
-              <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:2px">GH₵ 29<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-              <ul style="font-size:.75rem;color:var(--text-muted);text-align:left;margin:12px 0 16px;padding-left:16px;line-height:1.8">
-                <li>Custom storefront URL</li>
-                <li>Basic theme & colors</li>
-                <li>Up to 20 products listed</li>
-                <li>Email support</li>
-              </ul>
-              <button class="btn btn-outline btn-sm" style="width:100%;font-size:.8rem" onclick="window.openStorefrontSubscribeModal('${myStore.id}','starter',29)">
-                Choose Starter
-              </button>
-            </div>
-
-            <!-- Growth Plan -->
-            <div style="border:2px solid var(--primary);border-radius:14px;padding:22px 18px;text-align:center;position:relative;background:linear-gradient(135deg,#fff7ed,#fff);box-shadow:0 6px 24px rgba(0,0,0,.08)">
-              <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px">MOST POPULAR</div>
-              <div style="font-size:1.6rem;margin-bottom:6px">🚀</div>
-              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Growth</div>
-              <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:2px">GH₵ 59<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-              <ul style="font-size:.75rem;color:var(--text-muted);text-align:left;margin:12px 0 16px;padding-left:16px;line-height:1.8">
-                <li>Everything in Starter</li>
-                <li>All 4 premium themes</li>
-                <li>Up to 100 products</li>
-                <li>Hero banner & gallery</li>
-                <li>Priority support</li>
-              </ul>
-              <button class="btn btn-primary btn-sm" style="width:100%;font-size:.8rem" onclick="window.openStorefrontSubscribeModal('${myStore.id}','growth',59)">
-                Choose Growth
-              </button>
-            </div>
-
-            <!-- Pro Plan -->
-            <div style="border:2px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;position:relative;background:#fff;transition:border .2s,box-shadow .2s" onmouseenter="this.style.borderColor='#7c3aed';this.style.boxShadow='0 6px 24px rgba(124,58,237,.12)'" onmouseleave="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-              <div style="font-size:1.6rem;margin-bottom:6px">💎</div>
-              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Pro</div>
-              <div style="font-size:1.5rem;font-weight:900;color:#7c3aed;margin-bottom:2px">GH₵ 99<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-              <ul style="font-size:.75rem;color:var(--text-muted);text-align:left;margin:12px 0 16px;padding-left:16px;line-height:1.8">
-                <li>Everything in Growth</li>
-                <li>Unlimited products</li>
-                <li>Custom domain support</li>
-                <li>Analytics dashboard</li>
-                <li>Dedicated support</li>
-              </ul>
-              <button class="btn btn-outline btn-sm" style="width:100%;font-size:.8rem;border-color:#7c3aed;color:#7c3aed" onclick="window.openStorefrontSubscribeModal('${myStore.id}','pro',99)">
-                Choose Pro
-              </button>
-            </div>
-          </div>
-          <p style="font-size:.72rem;color:var(--text-muted)">Subscriptions are billed monthly. Cancel or change plan anytime.</p>
-        </div>
-      ` : ''}
 
       ${(myStorefront && myStorefront.status === 'pending_approval') ? `
         <!-- State 2: Pending Approval -->
@@ -602,7 +537,7 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      ${(myStore.subscription_status === 'active' && (!myStorefront || myStorefront.status === 'draft' || myStorefront.status === 'approved')) ? `
+      ${(!myStorefront || myStorefront.status === 'draft' || myStorefront.status === 'approved') ? `
         <!-- State 3: Editing / Approved Customization Form -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
           <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>

@@ -30,7 +30,7 @@ async function renderBuyerDashboard() {
   <div class="tab-btn" onclick="switchTab(this,'buyer-addresses');renderBuyerAddresses()">Addresses</div>
   <div class="tab-btn" onclick="switchTab(this,'buyer-coupons')">Coupons</div>
   <div class="tab-btn" onclick="switchTab(this,'buyer-reviews');renderBuyerReviews()">My Reviews</div>
-  <div class="tab-btn" onclick="switchTab(this,'buyer-wallet');renderWalletHistory('buyer-txn-list')">Wallet</div>
+
   <div class="tab-btn" onclick="switchTab(this,'buyer-referral')">Referrals</div>
   <div class="tab-btn" onclick="switchTab(this,'buyer-saved')">Saved Stores</div>
   <div class="tab-btn" onclick="showPage('settings')">Settings</div>
@@ -62,11 +62,7 @@ async function renderBuyerDashboard() {
         <div class="stat-value">${myOrders.length}</div>
         <div class="stat-label">Total Orders</div>
       </div>
-      <div class="stat-card" style="cursor:pointer" onclick="switchTab(document.querySelector('[onclick*=buyer-wallet]'),'buyer-wallet');renderWalletHistory('buyer-txn-list')">
-        <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-wallet" style="color:var(--success)"></i></div>
-        <div class="stat-value">GHS ${(u.wallet_balance||0).toFixed(0)}</div>
-        <div class="stat-label">Wallet <span style="font-size:.65rem;color:var(--primary)">+ Top Up</span></div>
-      </div>
+
       <div class="stat-card">
         <div class="stat-icon" style="background:#ede9fe"><i class="fas fa-users" style="color:#7c3aed"></i></div>
         <div class="stat-value">${u.referral_count||0}</div>
@@ -218,56 +214,7 @@ async function renderBuyerDashboard() {
   </div>
 </div>
 
-<!-- ── Wallet Tab ── -->
-<div class="tab-content" id="buyer-wallet">
-  <div class="dashboard-wrap">
 
-    <!-- Balance Card -->
-    <div style="background:linear-gradient(135deg,var(--secondary),#16213e);border-radius:var(--radius-md);padding:18px;color:#fff;margin-bottom:16px">
-      <div style="font-size:.78rem;opacity:.75;margin-bottom:4px">HAPPA Wallet Balance</div>
-      <div style="font-size:2rem;font-weight:800;line-height:1">GHS ${(u.wallet_balance||0).toFixed(2)}</div>
-      <div style="font-size:.75rem;opacity:.65;margin:4px 0 14px">Use wallet balance at checkout for faster payments</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-accent btn-sm" onclick="showDepositModal()">
-          <i class="fas fa-arrow-down"></i> Deposit
-        </button>
-      </div>
-    </div>
-
-    <!-- How it works -->
-    <div class="card" style="margin-bottom:14px">
-      <div class="card-header"><h3>💡 How Wallet Works</h3></div>
-      <div class="card-body" style="padding:12px 14px">
-        ${[
-          ['fas fa-arrow-down','Deposit via MoMo or card','Top up any amount instantly'],
-          ['fas fa-shopping-bag','Pay at checkout','Select \'HAPPA Wallet\' at checkout'],
-          ['fas fa-gift','Earn referral rewards','Referral rewards land here automatically']
-        ].map(([ic,title,desc]) => `
-        <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-          <div style="width:32px;height:32px;border-radius:50%;background:var(--primary-light);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <i class="${ic}" style="color:var(--primary);font-size:.8rem"></i>
-          </div>
-          <div><div style="font-size:.875rem;font-weight:600">${title}</div><div style="font-size:.75rem;color:var(--text-muted)">${desc}</div></div>
-        </div>`).join('')}
-      </div>
-    </div>
-
-    <!-- Transaction History -->
-    <div class="card">
-      <div class="card-header">
-        <h3>Transaction History</h3>
-        <button class="btn btn-ghost btn-sm" onclick="renderWalletHistory('buyer-txn-list')">
-          <i class="fas fa-sync-alt"></i>
-        </button>
-      </div>
-      <div id="buyer-txn-list" style="padding:0 14px">
-        <div style="text-align:center;padding:20px;color:var(--text-muted)">
-          <i class="fas fa-spinner fa-spin"></i> Loading…
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ── Wishlist Tab ── -->
 <div class="tab-content" id="buyer-wishlist">

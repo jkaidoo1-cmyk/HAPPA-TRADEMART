@@ -113,11 +113,7 @@ function renderCheckout() {
         <div><div class="payment-name">Bank Card</div><div class="payment-desc">Visa, Mastercard</div></div>
         <i class="fas fa-${selectedPayment==='card'?'check-circle':'circle'}" style="margin-left:auto;color:${selectedPayment==='card'?'var(--primary)':'var(--border)'}"></i>
       </div>
-      <div class="payment-option ${selectedPayment==='wallet'?'selected':''}" onclick="selectPayment('wallet')">
-        <span class="payment-icon">👛</span>
-        <div><div class="payment-name">HAPPA Wallet</div><div class="payment-desc">Balance: GHS ${(App.currentUser?.wallet_balance||0).toFixed(2)}</div></div>
-        <i class="fas fa-${selectedPayment==='wallet'?'check-circle':'circle'}" style="margin-left:auto;color:${selectedPayment==='wallet'?'var(--primary)':'var(--border)'}"></i>
-      </div>
+
     </div>
   </div>
 

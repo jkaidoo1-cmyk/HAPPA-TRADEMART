@@ -861,38 +861,65 @@ async function buyNow(productId) {
 
 function toggleWishlist(productId) {
 
-  showToast('Saved to wishlist Γ¥ñ∩╕Å', 'success');
+  showToast('Saved to wishlist ❤️', 'success');
 
 }
 
 
 
 function notifyRestock(productId) {
-
   if (!App.currentUser) { showPage('auth'); return; }
-
   showToast('We\'ll notify you when this item is back in stock 🔔', 'info');
-
 }
 
-
-
-function shareProduct(productId) {
-
-  const url = window.location.href + '?product=' + productId;
-
-  if (navigator.share) {
-
-    navigator.share({ title: 'Check this out on HAPPA TRADEMART', url });
-
-  } else {
-
-    navigator.clipboard?.writeText(url);
-
-    showToast('Product link copied! 📋', 'success');
-
+async function shareProduct(productId) {
+  const p = App.allProducts.find(prod => String(prod.id) === String(productId));
+  if (!p) {
+    showToast('Product not found', 'error');
+    return;
   }
 
+  const baseUrl = window.location.origin + window.location.pathname;
+  const url = baseUrl + '?product=' + productId;
+  const title = p.name;
+  const desc = p.description ? ${p.description}
+
+ : '';
+  const text = ${title}
+
+Check this out on HAPPA TRADEMART!;
+
+  const shareData = {
+    title: title,
+    text: text,
+    url: url
+  };
+
+  try {
+    if (navigator.share) {
+      const imgUrl = p.images && p.images.length > 0 ? p.images[0] : null;
+      if (imgUrl && navigator.canShare) {
+        try {
+          const response = await fetch(imgUrl);
+          const blob = await response.blob();
+          const file = new File([blob], 'product.jpg', { type: blob.type });
+          if (navigator.canShare({ files: [file] })) {
+            shareData.files = [file];
+          }
+        } catch (e) {
+          console.log('Could not fetch image for sharing:', e);
+        }
+      }
+      await navigator.share(shareData);
+    } else {
+      navigator.clipboard?.writeText(${title}
+
+);
+      showToast('Product details copied! 📋', 'success');
+    }
+  } catch (err) {
+    console.log('Share failed or was cancelled:', err);
+  }
 }
 
 
@@ -1024,35 +1051,15 @@ async function renderStoreDetail(id) {
                  style="width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border);border-radius:25px;font-size:.82rem">
         </div>
       </div>
-      
-      <!-- Store Tabs Navigation -->
-      <div class="store-tab-list" style="display:flex;overflow-x:auto;sticky:top;background:#fff;border-bottom:1px solid var(--border)">
-        <button class="store-tab-btn active" data-tab="home" onclick="switchStorefrontTab('home','${s.id}')">Home</button>
-        <button class="store-tab-btn" data-tab="products" onclick="switchStorefrontTab('products','${s.id}')">Products</button>
-        <button class="store-tab-btn" data-tab="cart" onclick="switchStorefrontTab('cart','${s.id}')">Cart <span id="store-cart-count-${s.id}" style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 6px;font-size:0.6rem;font-weight:700;display:none">0</span></button>
-        <button class="store-tab-btn" data-tab="about" onclick="switchStorefrontTab('about','${s.id}')">About</button>
+      <!-- Tab Content Area (Used for handleStoreProductSearch) -->
+      <div class="store-tab-content" id="store-tab-content" style="padding:16px;background:#f8f9fa;">
+        <div class="product-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+           ${storeProds.map(p => productCardHTML(p)).join('')}
+        </div>
+        ${storeProds.length === 0 ? '<div class="empty-state" style="grid-column: 1 / -1; padding: 40px;"><i class="fas fa-box-open"></i><h3>No products found</h3></div>' : ''}
       </div>
-
-      <!-- Tab Content Area -->
-      <div class="store-tab-content" id="store-tab-content"></div>
     </div>
   `;
-
-  switchStorefrontTab('home', s.id);
-
-  setTimeout(() => {
-    const storeCart = JSON.parse(localStorage.getItem('happa_store_cart_' + s.id) || '[]');
-    const totalQty = storeCart.reduce((acc, curr) => acc + curr.qty, 0);
-    const countBadge = document.getElementById('store-cart-count-' + s.id);
-    if (countBadge) {
-      if (totalQty > 0) {
-        countBadge.textContent = totalQty;
-        countBadge.style.display = 'inline-block';
-      } else {
-        countBadge.style.display = 'none';
-      }
-    }
-  }, 100);
 
   App.loadedPages['store-detail-' + id] = true;
   App.isBackgroundRefresh = false;

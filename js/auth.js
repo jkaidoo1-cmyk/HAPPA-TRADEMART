@@ -541,8 +541,6 @@ async function doLogin(e) {
 
   saveSessions();
 
-  addNotification(user.id, 'system', '🎉 Welcome back!', `Hello ${user.name}, welcome back to HAPPA TRADEMART`);
-
   showToast(`Welcome back, ${user.name}! 🎉`, 'success');
 
   showPage('dashboard');
@@ -887,18 +885,7 @@ async function doRegister(e) {
 
 
   // Add welcome notification
-
-  addNotification(created.id, 'system', '🎉 Welcome to HAPPA TRADEMART!',
-
-    authRole === 'vendor'
-
-      ? 'Your vendor account is under review. We\'ll notify you once approved!'
-
-      : authRole === 'rendor'
-
-      ? 'Your rendor profile is under review. You\'ll be notified once your profile goes live!'
-
-      : `Welcome, ${name}! Start shopping Ghana's best stores.`);
+  showToast('🎉 Welcome to HAPPA TRADEMART!', 'success');
 
 
 
@@ -1310,7 +1297,7 @@ async function quickLogin(role) {
 
   showToast(`Welcome, ${user.name}! 🎉`, 'success');
 
-  addNotification(user.id, 'system', 'Welcome back!', `Hello ${user.name}, good to see you again on HAPPA TRADEMART!`);
+  showToast(`Welcome back, ${user.name}! 🎉`, 'success');
 
   showPage('dashboard');
 
