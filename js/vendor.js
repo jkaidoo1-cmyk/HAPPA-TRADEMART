@@ -561,6 +561,47 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
+      ${(myStorefront && myStorefront.status === 'approved_pending_payment') ? `
+        <!-- State 2.5: Approved, Pending Payment -->
+        <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
+          <div style="font-size:3rem;margin-bottom:16px;">🎉</div>
+          <h2 style="font-weight:800;font-size:1.25rem;margin-bottom:8px;color:#16a34a">Storefront Approved!</h2>
+          <p style="font-size:.875rem;color:var(--text-light);margin-bottom:24px;line-height:1.7;max-width:500px;margin-left:auto;margin-right:auto">
+            Your custom storefront layout has been approved. Please select a subscription plan below to activate your storefront.
+          </p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:800px;margin:0 auto">
+            <!-- Starter Plan -->
+            <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
+              <div style="font-size:1.6rem;margin-bottom:6px">🌱</div>
+              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Starter</div>
+              <div style="font-size:1.5rem;font-weight:900;color:var(--text);margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.starter || 50}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+              <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'starter', ${myStorefront.plan_prices?.starter || 50})">
+                Pay & Activate
+              </button>
+            </div>
+            <!-- Growth Plan -->
+            <div style="border:2px solid var(--primary);border-radius:14px;padding:22px 18px;text-align:center;background:#fff;position:relative">
+              <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px">RECOMMENDED</div>
+              <div style="font-size:1.6rem;margin-bottom:6px">🚀</div>
+              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Growth</div>
+              <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.growth || 100}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+              <button class="btn btn-primary btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'growth', ${myStorefront.plan_prices?.growth || 100})">
+                Pay & Activate
+              </button>
+            </div>
+            <!-- Pro Plan -->
+            <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
+              <div style="font-size:1.6rem;margin-bottom:6px">💎</div>
+              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Pro</div>
+              <div style="font-size:1.5rem;font-weight:900;color:#7c3aed;margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.pro || 200}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+              <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem;border-color:#7c3aed;color:#7c3aed" onclick="window.activateStorefrontPlan('${myStore.id}', 'pro', ${myStorefront.plan_prices?.pro || 200})">
+                Pay & Activate
+              </button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
       ${(myStore.subscription_status === 'active' && (!myStorefront || myStorefront.status === 'draft' || myStorefront.status === 'approved')) ? `
         <!-- State 3: Editing / Approved Customization Form -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
@@ -2698,6 +2739,67 @@ window.setStorefrontStatus = async function(storeId, status) {
   }
 
   showToast(status === 'pending_approval' ? 'Storefront request submitted! 🚀' : 'Storefront status updated', 'success');
+  renderVendorDashboard();
+};
+
+window.activateStorefrontPlan = async function(storeId, planKey, price) {
+  if (!App.myStorefront || App.myStorefront.status !== 'approved_pending_payment') return;
+  
+  // Check wallet balance
+  if (App.walletBalance < price) {
+    showToast(`Insufficient balance. You need GH₵ ${price} to activate this plan.`, 'error');
+    return;
+  }
+  
+  if (!confirm(`Pay GH₵ ${price} to activate the ${planKey.toUpperCase()} plan?`)) return;
+  
+  showToast('Processing payment & activating storefront...', 'info');
+  
+  // 1. Deduct balance (mock via API)
+  await apiPost('wallet_transactions', {
+    user_id: App.currentUser.id,
+    type: 'payment',
+    amount: price,
+    description: `Storefront Subscription: ${planKey.toUpperCase()} Plan`,
+    status: 'completed'
+  }).catch(() => {});
+  
+  App.walletBalance -= price;
+  if (typeof updateWalletUI === 'function') updateWalletUI();
+  
+  // 2. Update storefront status
+  App.myStorefront.status = 'approved';
+  await apiPatch('storefronts', App.myStorefront.id, { status: 'approved' }).catch(() => {});
+  const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
+  if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'approved';
+  
+  // 3. Update store subscription details
+  const storeIdx = App.allStores ? App.allStores.findIndex(s => String(s.id) === String(storeId)) : -1;
+  const now = new Date();
+  const newEnd = new Date(now);
+  newEnd.setMonth(newEnd.getMonth() + 1);
+  
+  if (storeIdx !== -1) {
+    App.allStores[storeIdx].subscription_plan = planKey;
+    App.allStores[storeIdx].subscription_status = 'active';
+    App.allStores[storeIdx].subscription_start = now.toISOString();
+    App.allStores[storeIdx].subscription_end = newEnd.toISOString();
+    App.allStores[storeIdx].subscription_method = 'vendor_paid';
+    
+    await apiPatch('stores', storeId, {
+      subscription_plan: planKey,
+      subscription_status: 'active',
+      subscription_start: now.toISOString(),
+      subscription_end: newEnd.toISOString()
+    }).catch(() => {});
+  }
+  
+  try {
+    localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
+    localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
+  } catch(e){}
+  
+  showToast('Storefront activated successfully! 🎉', 'success');
   renderVendorDashboard();
 };
 

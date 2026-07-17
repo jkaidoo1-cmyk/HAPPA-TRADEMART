@@ -154,7 +154,7 @@
     </div>
   </div>
   <script>
-    // Bulletproof Splash Screen Auto-Dismiss (exactly 2 seconds)
+    // Bulletproof Splash Screen Auto-Dismiss (exactly 4 seconds)
     setTimeout(() => {
       const splash = document.getElementById('pwa-splash-screen');
       if (splash) {
@@ -162,7 +162,7 @@
         splash.style.visibility = 'hidden';
         setTimeout(() => splash.remove(), 500);
       }
-    }, 2000);
+    }, 4000);
   </script>
 
   <!-- ============================================================

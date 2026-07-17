@@ -2600,6 +2600,7 @@ async function renderAdminStorefronts() {
   App.allStores = allStores;
   
   const pending = allStorefronts.filter(s => s.status === 'pending_approval');
+  const pendingPayment = allStorefronts.filter(s => s.status === 'approved_pending_payment');
   const approved = allStorefronts.filter(s => s.status === 'approved');
   const draft = allStorefronts.filter(s => s.status === 'draft' || s.status === 'inactive');
   
@@ -2692,6 +2693,21 @@ async function renderAdminStorefronts() {
     html += '<p style="font-size:.8rem;color:var(--text-muted);padding:10px 0">No pending storefront launch requests.</p>';
   }
 
+  // 1.5 Pending Payment Section
+  html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-wallet" style="color:#0ea5e9"></i> Pending Payment (${pendingPayment.length})</h3>`;
+  if (pendingPayment.length) {
+    html += pendingPayment.map(s => renderItemHTML(s, 'Awaiting Payment', '#e0f2fe', '#0284c7', `
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
+        <i class="fas fa-eye"></i> Preview
+      </button>
+      <button class="btn btn-sm btn-danger" style="background:var(--danger);border:none;color:#fff" onclick="disableStorefront('${s.id}')">
+        <i class="fas fa-ban"></i> Disable
+      </button>
+    `)).join('');
+  } else {
+    html += '<p style="font-size:.8rem;color:var(--text-muted);padding:10px 0">No storefronts awaiting payment.</p>';
+  }
+
   // 2. Approved Section
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Approved & Live Storefronts (${approved.length})</h3>`;
   if (approved.length) {
@@ -2738,17 +2754,30 @@ async function renderAdminStorefronts() {
 }
 
 async function approveStorefront(sfId) {
-  if (!confirm('Approve this storefront layout? It will go live immediately.')) return;
+  const starterPrice = prompt('Enter price for STARTER plan (e.g. 50):', '50');
+  if (starterPrice === null) return;
+  const growthPrice = prompt('Enter price for GROWTH plan (e.g. 100):', '100');
+  if (growthPrice === null) return;
+  const proPrice = prompt('Enter price for PRO plan (e.g. 200):', '200');
+  if (proPrice === null) return;
+
   showToast('Approving storefront...', 'info');
-  await apiPatch('storefronts', sfId, { status: 'approved' }).catch(() => {});
+  const plan_prices = {
+    starter: parseFloat(starterPrice) || 50,
+    growth: parseFloat(growthPrice) || 100,
+    pro: parseFloat(proPrice) || 200
+  };
+
+  await apiPatch('storefronts', sfId, { status: 'approved_pending_payment', plan_prices }).catch(() => {});
 
   const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(sfId)) : -1;
   if (idx !== -1) {
-    App.allStorefronts[idx].status = 'approved';
+    App.allStorefronts[idx].status = 'approved_pending_payment';
+    App.allStorefronts[idx].plan_prices = plan_prices;
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
   }
 
-  showToast('Storefront approved successfully! 🎉', 'success');
+  showToast('Storefront approved! Waiting for vendor payment. 🎉', 'success');
   renderAdminStorefronts();
 }
 
