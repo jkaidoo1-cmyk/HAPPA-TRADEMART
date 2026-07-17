@@ -1343,11 +1343,15 @@ function adminActiveRendorCardHTML(r) {
   const subStatus = r.rendor_sub_status || null;
   const subExpiry = r.rendor_sub_expiry ? new Date(Number(r.rendor_sub_expiry)) : null;
   const subActive = subStatus === 'active' && subExpiry && subExpiry > new Date();
+
+  const subBg     = subActive ? '#d1fae5' : r.sub_request_status === 'pending_quote' ? '#fef3c7' : '#fee2e2';
+  const subColor  = subActive ? '#059669' : r.sub_request_status === 'pending_quote' ? '#b45309' : '#dc2626';
+  const subIcon   = subActive ? 'check-circle' : r.sub_request_status === 'pending_quote' ? 'clock' : 'times-circle';
   const subLabel  = subActive
     ? `Sub active → ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`
+    : r.sub_request_status === 'pending_quote' ? '⏳ Quote requested'
+    : r.sub_request_status === 'quoted' ? '📋 Quote sent'
     : 'No subscription';
-  const subColor  = subActive ? '#059669' : '#dc2626';
-  const subBg     = subActive ? '#d1fae5' : '#fee2e2';
 
   return `
 <div class="card" style="margin-bottom:10px;border-left:4px solid #7c3aed;cursor:pointer" id="rendor-row-${r.id}"
@@ -1369,14 +1373,19 @@ function adminActiveRendorCardHTML(r) {
         </div>
         <!-- Subscription pill -->
         <div style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;background:${subBg};color:${subColor};border-radius:20px;padding:2px 8px;font-size:.7rem;font-weight:700">
-          <i class="fas fa-${subActive?'check-circle':'times-circle'}"></i> ${subLabel}
+          <i class="fas fa-${subIcon}"></i> ${subLabel}
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+        ${r.sub_request_status === 'pending_quote' ? `
+        <button class="btn btn-sm" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:#f59e0b;font-size:.72rem;padding:4px 8px"
+                onclick="event.stopPropagation();adminSendSubQuote('${r.id}','${escHtml(r.rendor_display_name||r.name)}')">
+          <i class="fas fa-tag"></i> Send Quote
+        </button>` : `
         <button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.72rem;padding:4px 8px"
                 onclick="event.stopPropagation();adminActivateRendorSub('${r.id}','${escHtml(r.rendor_display_name||r.name)}')">
           <i class="fas fa-star"></i> Sub
-        </button>
+        </button>`}
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();adminNotifyUser('${r.id}')">
           <i class="fas fa-bell"></i>
         </button>
@@ -1411,6 +1420,71 @@ async function rejectRendorApplication(userId, email) {
   showToast('Application rejected', 'warning');
   const card = document.getElementById('pending-rendor-' + userId);
   if (card) card.remove();
+}
+
+// ── Send a subscription price quote to a rendor (admin-side) ─
+function adminSendSubQuote(userId, displayName) {
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">💰 Send Subscription Quote</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body">
+  <p style="font-size:.85rem;color:var(--text-light);margin-bottom:16px;line-height:1.6">
+    Set personalised subscription prices for <strong>${escHtml(displayName)}</strong>.
+    Only plans you fill in will be shown to the rendor.
+  </p>
+  <div class="form-group">
+    <label class="form-label">Monthly Price (GHS) *</label>
+    <input class="form-control" type="number" min="0" step="0.01" id="quote-monthly" placeholder="e.g. 30">
+  </div>
+  <div class="form-group">
+    <label class="form-label">3-Month Price (GHS)</label>
+    <input class="form-control" type="number" min="0" step="0.01" id="quote-quarterly" placeholder="e.g. 80">
+  </div>
+  <div class="form-group">
+    <label class="form-label">6-Month Price (GHS)</label>
+    <input class="form-control" type="number" min="0" step="0.01" id="quote-biannual" placeholder="e.g. 150">
+  </div>
+  <button class="btn btn-block" id="send-quote-btn"
+          style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:#f59e0b;margin-top:8px"
+          onclick="_doSendSubQuote('${userId}','${escHtml(displayName)}')"
+  >
+    <i class="fas fa-paper-plane"></i> Send Quote to Rendor
+  </button>
+</div>`);
+}
+
+async function _doSendSubQuote(userId, displayName) {
+  const monthly   = parseFloat(document.getElementById('quote-monthly')?.value  || 0);
+  const quarterly = parseFloat(document.getElementById('quote-quarterly')?.value || 0);
+  const biannual  = parseFloat(document.getElementById('quote-biannual')?.value  || 0);
+
+  if (!monthly || monthly <= 0) {
+    showToast('Monthly price is required', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('send-quote-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…'; }
+
+  await apiPatch('users', userId, {
+    sub_request_status: 'quoted',
+    sub_quote_monthly:   String(monthly),
+    sub_quote_quarterly: quarterly > 0 ? String(quarterly) : '',
+    sub_quote_biannual:  biannual  > 0 ? String(biannual)  : '',
+  });
+
+  // Notify the rendor
+  addNotification(userId, 'system',
+    '📋 Your Subscription Quote is Ready!',
+    `Admin has set your subscription prices. Monthly: GHS ${monthly.toFixed(2)}${quarterly > 0 ? ', 3-Month: GHS ' + quarterly.toFixed(2) : ''}${biannual > 0 ? ', 6-Month: GHS ' + biannual.toFixed(2) : ''}. Go to Subscription tab to choose a plan and pay.`
+  );
+
+  showToast('Quote sent to rendor! ✅', 'success');
+  closeModalForce();
+  await loadAdminRendors();
 }
 
 // ── Rendor subscription activation (admin-side) ───────────
@@ -1476,6 +1550,7 @@ async function _doActivateRendorSub(userId) {
     rendor_sub_status: 'active',
     rendor_sub_expiry: String(expiryMs),
     rendor_sub_plan:   planId,
+    sub_request_status: null,
   });
 
   addNotification(userId, 'system', '🎉 Subscription Activated!',

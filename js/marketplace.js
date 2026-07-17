@@ -437,7 +437,7 @@ async function renderStores() {
 // ── Product Detail ────────────────────────────────────────
 
 async function renderProductDetail(id) {
-
+  try {
   const c = document.getElementById('product-detail-content');
 
   if (!c) return;
@@ -772,6 +772,11 @@ ${store.id ? `
 
   App.loadedPages['product-' + id] = true;
   App.isBackgroundRefresh = false;
+  } catch(e) {
+    const c = document.getElementById('product-detail-content');
+    if (c) c.innerHTML = `<div style="padding:40px;color:red;white-space:pre-wrap">Error rendering product detail:\n\n${e.stack}</div>`;
+    console.error(e);
+  }
 }
 
 
@@ -905,6 +910,7 @@ function shareProduct(productId) {
 // ── Store Detail ──────────────────────────────────────────
 
 async function renderStoreDetail(id) {
+  try {
   const c = document.getElementById('store-detail-content');
   if (!c) return;
   if (!App.isBackgroundRefresh) {
@@ -1060,6 +1066,11 @@ async function renderStoreDetail(id) {
 
   App.loadedPages['store-detail-' + id] = true;
   App.isBackgroundRefresh = false;
+  } catch (e) {
+    const c = document.getElementById('store-detail-content');
+    if (c) c.innerHTML = `<div style="padding:40px;color:red;white-space:pre-wrap">Error rendering store detail:\n\n${e.stack}</div>`;
+    console.error(e);
+  }
 }
 
 async function renderStorefront(id) {
