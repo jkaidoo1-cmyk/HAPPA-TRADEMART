@@ -408,7 +408,9 @@ function showPage(pageId, entityId = null) {
   // Push a browser-history entry so the mobile back button works.
   // Skip when we're already handling a popstate (browser-back) event.
   if (!App._skipPush) {
-    history.pushState({ page: pageId, entityId: entityId || getPageEntityId(pageId) }, '');
+    try {
+      history.pushState({ page: pageId, entityId: entityId || getPageEntityId(pageId) }, '');
+    } catch(e) { console.warn('history.pushState failed:', e); }
   }
 
   // Hide ALL pages completely

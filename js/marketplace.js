@@ -3083,3 +3083,15 @@ window.logoutStorefrontAdmin = function(storeId) {
   logout();
   window.renderStorefrontAdminPortalPage(storeId);
 };
+
+
+window.switchImg = function(thumbnailEl, imgUrl) {
+  const container = thumbnailEl.closest('.page, .modal-content, .card');
+  if (!container) return;
+  const mainImg = container.querySelector('img[style*="max-height:340px"], .product-img');
+  if (mainImg) mainImg.src = imgUrl;
+  const thumbs = container.querySelectorAll('img[onclick*="switchImg"]');
+  thumbs.forEach(t => t.style.opacity = '0.6');
+  thumbnailEl.style.opacity = '1';
+};
+
