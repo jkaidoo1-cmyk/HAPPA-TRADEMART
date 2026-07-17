@@ -298,11 +298,21 @@ async function _apRevokePhoneVerify(userId) {
   catch (e) {}
 }
 async function _apGrantIdVerify(userId) {
-  try { await _apPatchUserOptimistic(userId, { id_verified: true }, 'ID verified ✅'); }
+  try {
+    await _apPatchUserOptimistic(userId, { id_verified: true }, 'ID verified ✅');
+    if (typeof adminOpenVendorProfile === 'function') {
+      adminOpenVendorProfile(userId);
+    }
+  }
   catch (e) {}
 }
 async function _apRevokeIdVerify(userId) {
-  try { await _apPatchUserOptimistic(userId, { id_verified: false }, 'ID verification revoked'); }
+  try {
+    await _apPatchUserOptimistic(userId, { id_verified: false }, 'ID verification revoked');
+    if (typeof adminOpenVendorProfile === 'function') {
+      adminOpenVendorProfile(userId);
+    }
+  }
   catch (e) {}
 }
 async function _apSuspendUser(userId) {
@@ -1168,6 +1178,42 @@ async function adminOpenVendorProfile(userId) {
       ${_apRow('Phone Verified', u.is_verified ? '✅ Yes' : '❌ No')}
       ${_apRow('ID Verified', u.id_verified ? '✅ Yes' : '❌ No')}
       ${_apRow('Account Status', '<span style="color:' + statusColor + ';font-weight:800">' + (u.status||'active') + '</span>')}
+
+      <!-- Verification Documents Section -->
+      <div style="margin-top:14px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md)">
+        <div style="font-weight:700;font-size:.78rem;margin-bottom:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:.5px">Submitted Verification Files</div>
+        
+        <div style="margin-bottom:8px;font-size:.8rem;font-weight:700">Ghana Card / Passport:</div>
+        ${u.id_image ? `
+          <div style="margin-bottom:12px">
+            <img src="${u.id_image}" style="max-height:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:contain" onclick="window.showZoomedImage('${u.id_image}', 'Ghana Card / ID Document')">
+          </div>
+        ` : '<div style="color:var(--text-light);font-size:.78rem;margin-bottom:12px"><i class="fas fa-times-circle" style="color:var(--danger)"></i> ID card missing</div>'}
+        
+        <div style="margin-bottom:8px;font-size:.8rem;font-weight:700">Proof of Previous Sales (3 images):</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          ${u.proof_sales_1 ? `<img src="${u.proof_sales_1}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage('${u.proof_sales_1}', 'Sales Proof 1')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 1 missing</div>'}
+          ${u.proof_sales_2 ? `<img src="${u.proof_sales_2}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage('${u.proof_sales_2}', 'Sales Proof 2')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 2 missing</div>'}
+          ${u.proof_sales_3 ? `<img src="${u.proof_sales_3}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage('${u.proof_sales_3}', 'Sales Proof 3')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 3 missing</div>'}
+        </div>
+        
+        <div style="margin-bottom:8px;font-size:.8rem;font-weight:700">Proof of Link Sharing (Status screenshot):</div>
+        ${u.proof_share ? `
+          <div style="margin-bottom:12px">
+            <img src="${u.proof_share}" style="max-height:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:contain" onclick="window.showZoomedImage('${u.proof_share}', 'Link Sharing Proof')">
+          </div>
+        ` : '<div style="color:var(--text-light);font-size:.78rem;margin-bottom:12px"><i class="fas fa-times-circle" style="color:var(--danger)"></i> Sharing proof missing</div>'}
+        
+        ${(u.id_image && u.proof_sales_1 && u.proof_sales_2 && u.proof_sales_3 && u.proof_share) ? `
+          <div style="display:flex;gap:8px;margin-top:12px">
+            ${!u.id_verified ? `
+              <button class="btn btn-success btn-sm" style="flex:1" onclick="_apGrantIdVerify('${u.id}')"><i class="fas fa-check-circle"></i> Approve & Verify ID</button>
+            ` : `
+              <button class="btn btn-ghost btn-sm" style="color:var(--danger);flex:1" onclick="_apRevokeIdVerify('${u.id}')"><i class="fas fa-times-circle"></i> Revoke Verification</button>
+            `}
+          </div>
+        ` : ''}
+      </div>
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Edit Account Info</div>
       <form onsubmit="event.preventDefault();_apSaveBuyerInfo('${userId}',this)">
@@ -1585,3 +1631,15 @@ async function adminOpenRendorProfile(userId) {
 
   _apRenderUserTxnsForPage(userId, txns, 'ap-r-wallet-txns');
 }
+
+window.showZoomedImage = function(src, title = 'Image Preview') {
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">${title}</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body" style="text-align:center;padding:10px">
+  <img src="${src}" style="max-width:100%;max-height:75vh;object-fit:contain;border-radius:8px">
+</div>`);
+};

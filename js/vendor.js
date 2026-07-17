@@ -439,16 +439,18 @@ async function renderVendorDashboard() {
           ${!u.is_verified ? `<button class="btn btn-warning btn-sm" style="margin-top:6px" onclick="resendOTP()">Resend OTP</button>` : ''}
         </div>
       </div>
-      <div class="verify-step ${u.id_verified?'done':'pending-step'}">
-        <div class="verify-step-icon"><i class="fas fa-${u.id_verified?'check':'id-card'}"></i></div>
+      <div class="verify-step ${u.id_verified?'done':(u.id_image?'done':'pending-step')}">
+        <div class="verify-step-icon"><i class="fas fa-${u.id_verified?'check':(u.id_image?'clock':'id-card')}"></i></div>
         <div style="flex:1">
-          <div style="font-weight:700;font-size:.875rem">ID Document Upload</div>
-          <div style="font-size:.78rem;color:var(--text-muted)">${u.id_verified?'✅ Verified':'Upload your Ghana Card, passport, or driver\'s licence'}</div>
+          <div style="font-weight:700;font-size:.875rem">ID & Vendor Verification Uploads</div>
+          <div style="font-size:.78rem;color:var(--text-muted)">
+            ${u.id_verified ? '✅ Verified' : (u.id_image ? '⏳ Awaiting Admin Approval' : 'Upload ID, sales proofs, and status sharing screenshots')}
+          </div>
           ${!u.id_verified ? `
-          <div class="upload-area" style="margin-top:8px" onclick="simulateIdUpload('${u.id}')">
-            <i class="fas fa-cloud-upload-alt"></i>
-            <p>Click to upload ID document (JPG/PDF, max 5MB)</p>
-          </div>` : ''}
+            <button class="btn btn-warning btn-sm" style="margin-top:8px" onclick="simulateIdUpload('${u.id}')">
+              <i class="fas fa-cloud-upload-alt"></i> ${u.id_image ? 'Update / Re-upload Documents' : 'Upload Documents'}
+            </button>
+          ` : ''}
         </div>
       </div>
       <div class="verify-step ${u.id_verified&&u.is_verified?'done':'pending-step'}">
@@ -1572,61 +1574,178 @@ function resendOTP() {
 }
 
 function simulateIdUpload(userId) {
+  const u = App.currentUser || {};
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
-  <span class="modal-title">Upload ID Document</span>
+  <span class="modal-title">Vendor Verification Uploads</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
-<div class="modal-body">
-  <div class="upload-area" id="id-upload-area" onclick="document.getElementById('id-doc-file').click()" style="cursor:pointer;margin-bottom:14px">
-    <i class="fas fa-id-card" style="color:var(--primary)"></i>
-    <p>Ghana Card / Passport / Driver's Licence</p>
-    <p style="font-size:.75rem;margin-top:4px">JPG or PNG · Max 5MB · Tap to choose from gallery</p>
+<div class="modal-body" style="max-height:75vh;overflow-y:auto;padding-bottom:20px">
+  <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:14px;line-height:1.4">
+    Please upload the required verification items. All fields are mandatory to apply for vendor verification.
+  </p>
+
+  <!-- 1. ID document -->
+  <div class="form-group" style="margin-bottom:14px">
+    <label class="form-label" style="font-weight:700">1. ID Document (Ghana Card / Passport / License)</label>
+    <div class="upload-area" id="id-upload-area" style="cursor:pointer;padding:12px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
+      <i class="fas fa-id-card" style="color:var(--primary);font-size:1.4rem;margin-bottom:4px"></i>
+      <p style="font-size:.78rem;margin:0">Tap to upload ID photo</p>
+    </div>
+    <input type="file" id="id-doc-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'id-doc-preview', 'id-doc-thumb')">
+    <div id="id-doc-preview" style="${u.id_image ? '' : 'display:none;'}margin-top:8px;text-align:center">
+      <img id="id-doc-thumb" src="${u.id_image || ''}" style="max-height:100px;border-radius:4px;border:1px solid var(--border)">
+    </div>
   </div>
-  <input type="file" id="id-doc-file" accept="image/*" style="display:none" onchange="previewIdDoc(this)">
-  <div id="id-doc-preview" style="display:none;margin-bottom:14px;text-align:center">
-    <img id="id-doc-thumb" style="max-width:100%;max-height:180px;border-radius:8px;border:2px solid var(--border);object-fit:contain">
-    <p style="font-size:.75rem;color:var(--success);margin-top:6px"><i class="fas fa-check-circle"></i> Image selected — ready to submit</p>
+
+  <!-- 2. Proof of Previous Sales (3 images) -->
+  <div class="form-group" style="margin-bottom:14px">
+    <label class="form-label" style="font-weight:700">2. Proof of Previous Sales (Upload exactly 3 images)</label>
+    <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">Invoices, screenshots of customer chats, or package deliveries.</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <!-- Slot 1 -->
+      <div>
+        <div class="upload-area" id="sales-1-area" style="cursor:pointer;padding:10px 4px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
+          <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
+          <p style="font-size:.7rem;margin:0">Image 1</p>
+        </div>
+        <input type="file" id="sales-1-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-1-preview', 'sales-1-thumb')">
+        <div id="sales-1-preview" style="${u.proof_sales_1 ? '' : 'display:none;'}margin-top:6px;text-align:center">
+          <img id="sales-1-thumb" src="${u.proof_sales_1 || ''}" style="max-height:60px;max-width:100%;border-radius:4px;border:1px solid var(--border)">
+        </div>
+      </div>
+      <!-- Slot 2 -->
+      <div>
+        <div class="upload-area" id="sales-2-area" style="cursor:pointer;padding:10px 4px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
+          <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
+          <p style="font-size:.7rem;margin:0">Image 2</p>
+        </div>
+        <input type="file" id="sales-2-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-2-preview', 'sales-2-thumb')">
+        <div id="sales-2-preview" style="${u.proof_sales_2 ? '' : 'display:none;'}margin-top:6px;text-align:center">
+          <img id="sales-2-thumb" src="${u.proof_sales_2 || ''}" style="max-height:60px;max-width:100%;border-radius:4px;border:1px solid var(--border)">
+        </div>
+      </div>
+      <!-- Slot 3 -->
+      <div>
+        <div class="upload-area" id="sales-3-area" style="cursor:pointer;padding:10px 4px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
+          <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
+          <p style="font-size:.7rem;margin:0">Image 3</p>
+        </div>
+        <input type="file" id="sales-3-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-3-preview', 'sales-3-thumb')">
+        <div id="sales-3-preview" style="${u.proof_sales_3 ? '' : 'display:none;'}margin-top:6px;text-align:center">
+          <img id="sales-3-thumb" src="${u.proof_sales_3 || ''}" style="max-height:60px;max-width:100%;border-radius:4px;border:1px solid var(--border)">
+        </div>
+      </div>
+    </div>
   </div>
-  <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:14px">Your ID will be reviewed by admin within 24 hours.</p>
-  <button class="btn btn-primary btn-block" id="id-confirm-btn" onclick="confirmIdUpload('${userId}')" disabled>
-    <i class="fas fa-upload"></i> Submit ID for Review
+
+  <!-- 3. Proof of link sharing -->
+  <div class="form-group" style="margin-bottom:18px">
+    <label class="form-label" style="font-weight:700">3. Proof of Link Sharing</label>
+    <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">Screenshot showing HAPPA website link shared to your status or group chat.</p>
+    <div class="upload-area" id="share-upload-area" style="cursor:pointer;padding:12px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
+      <i class="fas fa-share-alt" style="color:var(--primary);font-size:1.4rem;margin-bottom:4px"></i>
+      <p style="font-size:.78rem;margin:0">Tap to upload screenshot</p>
+    </div>
+    <input type="file" id="share-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'share-preview', 'share-thumb')">
+    <div id="share-preview" style="${u.proof_share ? '' : 'display:none;'}margin-top:8px;text-align:center">
+      <img id="share-thumb" src="${u.proof_share || ''}" style="max-height:100px;border-radius:4px;border:1px solid var(--border)">
+    </div>
+  </div>
+
+  <button class="btn btn-primary btn-block" id="id-confirm-btn" onclick="submitVerificationDocuments('${userId}')" disabled>
+    <i class="fas fa-upload"></i> Submit Verification Documents
   </button>
 </div>`);
-  // Wire up the upload area click after modal renders
+
+  // Wire up upload triggers
   setTimeout(() => {
-    const area = document.querySelector('.upload-area[id="id-upload-area"]');
-    if (area) area.onclick = () => document.getElementById('id-doc-file')?.click();
-    const idArea = document.getElementById('id-upload-area');
-    if (idArea) idArea.onclick = () => document.getElementById('id-doc-file')?.click();
+    document.getElementById('id-upload-area').onclick = () => document.getElementById('id-doc-file').click();
+    document.getElementById('sales-1-area').onclick = () => document.getElementById('sales-1-file').click();
+    document.getElementById('sales-2-area').onclick = () => document.getElementById('sales-2-file').click();
+    document.getElementById('sales-3-area').onclick = () => document.getElementById('sales-3-file').click();
+    document.getElementById('share-upload-area').onclick = () => document.getElementById('share-file').click();
+    checkVerificationFormReady();
   }, 100);
 }
 
-function previewIdDoc(input) {
+function previewDocField(input, previewId, thumbId) {
   const file = input.files?.[0];
   if (!file) return;
   if (file.size > 5 * 1024 * 1024) { showToast('File too large. Max 5MB.', 'warning'); input.value = ''; return; }
   const reader = new FileReader();
   reader.onload = e => {
-    const thumb    = document.getElementById('id-doc-thumb');
-    const preview  = document.getElementById('id-doc-preview');
-    const btn      = document.getElementById('id-confirm-btn');
-    if (thumb)   { thumb.src = e.target.result; }
+    const thumb = document.getElementById(thumbId);
+    const preview = document.getElementById(previewId);
+    if (thumb) { thumb.src = e.target.result; }
     if (preview) { preview.style.display = 'block'; }
-    if (btn)     { btn.disabled = false; }
+    checkVerificationFormReady();
   };
   reader.readAsDataURL(file);
 }
 
-async function confirmIdUpload(userId) {
-  // Mark as verified (in real app, we'd upload the image to storage first)
-  await apiPatch('users', userId, { id_verified: true });
-  if (App.currentUser) App.currentUser.id_verified = true;
-  saveSessions();
-  closeModalForce();
-  showToast('ID document submitted for review ✅', 'success');
-  renderVendorDashboard();
+function checkVerificationFormReady() {
+  const btn = document.getElementById('id-confirm-btn');
+  const idThumb = document.getElementById('id-doc-thumb');
+  const s1Thumb = document.getElementById('sales-1-thumb');
+  const s2Thumb = document.getElementById('sales-2-thumb');
+  const s3Thumb = document.getElementById('sales-3-thumb');
+  const shareThumb = document.getElementById('share-thumb');
+
+  const ready = idThumb?.src && !idThumb.src.endsWith('/') &&
+                s1Thumb?.src && !s1Thumb.src.endsWith('/') &&
+                s2Thumb?.src && !s2Thumb.src.endsWith('/') &&
+                s3Thumb?.src && !s3Thumb.src.endsWith('/') &&
+                shareThumb?.src && !shareThumb.src.endsWith('/');
+  if (btn) {
+    btn.disabled = !ready;
+  }
+}
+
+async function submitVerificationDocuments(userId) {
+  const btn = document.getElementById('id-confirm-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+  }
+
+  const idImage = document.getElementById('id-doc-thumb').src;
+  const s1 = document.getElementById('sales-1-thumb').src;
+  const s2 = document.getElementById('sales-2-thumb').src;
+  const s3 = document.getElementById('sales-3-thumb').src;
+  const share = document.getElementById('share-thumb').src;
+
+  try {
+    await apiPatch('users', userId, {
+      id_image: idImage,
+      proof_sales_1: s1,
+      proof_sales_2: s2,
+      proof_sales_3: s3,
+      proof_share: share,
+      id_verified: false
+    });
+
+    if (App.currentUser) {
+      App.currentUser.id_image = idImage;
+      App.currentUser.proof_sales_1 = s1;
+      App.currentUser.proof_sales_2 = s2;
+      App.currentUser.proof_sales_3 = s3;
+      App.currentUser.proof_share = share;
+      App.currentUser.id_verified = false;
+    }
+    saveSessions();
+    closeModalForce();
+    showToast('Verification documents submitted for review ✅', 'success');
+    renderVendorDashboard();
+  } catch (err) {
+    console.error(err);
+    showToast('Failed to submit documents: ' + (err?.message || 'Network error'), 'danger');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-upload"></i> Submit Verification Documents';
+    }
+  }
 }
 
 // ══════════ STORE ACQUISITION (admin-assigned only) ══════════
