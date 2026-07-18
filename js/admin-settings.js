@@ -5,10 +5,8 @@
 
 // All settings keys with their defaults and input type
 const SETTINGS_CONFIG = [
-  // Commission & Fees (delivery only — commission handled by tiers below)
   { key: 'delivery_fee_local',         id: 'setting-delivery-local',             type: 'number',   default: '5'    },
   { key: 'delivery_fee_intercity',     id: 'setting-delivery-intercity',         type: 'number',   default: '15'   },
-  { key: 'free_delivery_threshold',    id: 'setting-free-delivery-threshold',    type: 'number',   default: '200'  },
   // Wallet & Withdrawals
   { key: 'min_withdrawal',             id: 'setting-min-withdrawal',             type: 'number',   default: '50'   },
   { key: 'max_pending_withdrawals',    id: 'setting-max-pending-withdrawals',    type: 'number',   default: '3'    },
@@ -356,27 +354,42 @@ function renderCouponsEditor() {
     return;
   }
   container.innerHTML = _coupons.map((c, i) => `
-    <div style="display:grid;grid-template-columns:1fr 80px 80px auto;gap:6px;margin-bottom:6px;align-items:center">
-      <input class="form-control" placeholder="Code (e.g. SAVE10)" value="${escHtml(c.code)}" oninput="updateCoupon(${i},'code',this.value)">
-      <select class="form-control form-select" onchange="updateCoupon(${i},'type',this.value)">
-        <option value="%" ${c.type === '%' ? 'selected' : ''}>%</option>
-        <option value="GHS" ${c.type === 'GHS' ? 'selected' : ''}>GHS</option>
-      </select>
-      <input class="form-control" type="number" min="0" step="0.01" value="${c.value}" oninput="updateCoupon(${i},'value',this.value)">
-      <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:var(--danger);padding:0;width:34px;height:34px;display:flex;align-items:center;justify-content:center" onclick="removeCoupon(${i})">
-        <i class="fas fa-trash"></i>
-      </button>
+    <div style="background:#f8f9fa; border:1px solid var(--border); padding:8px; border-radius:8px; margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:1fr 80px 80px auto;gap:6px;margin-bottom:6px;align-items:center">
+        <input class="form-control" placeholder="Code (e.g. SAVE10)" value="${escHtml(c.code)}" oninput="updateCoupon(${i},'code',this.value)">
+        <select class="form-control form-select" onchange="updateCoupon(${i},'type',this.value)">
+          <option value="%" ${c.type === '%' ? 'selected' : ''}>%</option>
+          <option value="GHS" ${c.type === 'GHS' ? 'selected' : ''}>GHS</option>
+        </select>
+        <input class="form-control" type="number" min="0" step="0.01" value="${c.value}" oninput="updateCoupon(${i},'value',this.value)">
+        <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:var(--danger);padding:0;width:34px;height:34px;display:flex;align-items:center;justify-content:center" onclick="removeCoupon(${i})">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap; margin-bottom:0">Max Uses (0=unlimited):</label>
+        <input class="form-control" type="number" min="0" step="1" value="${c.max_uses || 0}" oninput="updateCoupon(${i},'max_uses',this.value)" style="width:80px; padding:4px; height:auto; font-size:0.8rem">
+        <span style="font-size:0.75rem; color:var(--text-light); margin-left:auto">
+          Used: ${c.used_by ? c.used_by.length : 0} times
+        </span>
+      </div>
     </div>
   `).join('');
 }
 
 window.addCoupon = function() {
-  _coupons.push({ code: '', type: '%', value: 0 });
+  _coupons.push({ code: '', type: '%', value: 0, max_uses: 0, used_by: [] });
   renderCouponsEditor();
 };
 
 window.updateCoupon = function(i, field, val) {
-  _coupons[i][field] = field === 'value' ? parseFloat(val) || 0 : val;
+  if (field === 'value') {
+    _coupons[i][field] = parseFloat(val) || 0;
+  } else if (field === 'max_uses') {
+    _coupons[i][field] = parseInt(val, 10) || 0;
+  } else {
+    _coupons[i][field] = val;
+  }
 };
 
 window.removeCoupon = function(i) {

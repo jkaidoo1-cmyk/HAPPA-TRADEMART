@@ -79,7 +79,7 @@ window.addEventListener('DOMContentLoaded', () => {
   updateNavForUser(); // apply role-based nav immediately after session load
   initCountdown();
   calcDaysToSaturday();
-  loadHomeData().then(() => initAdBanners('home'));
+  loadHomeData().then(() => { initAdBanners('home'); initHeroBanners(); });
 
   initSearch();
   renderNotifBadge();
@@ -147,7 +147,11 @@ window.addEventListener('DOMContentLoaded', () => {
           showPage('store-detail', found.id);
         }
       } else {
-        showPage('home');
+        if (isStorefrontPage || searchParams.has('storefront')) {
+          showPage('storefront', null);
+        } else {
+          showPage('home');
+        }
       }
     }).catch(() => showPage('home'));
   } else {
@@ -181,6 +185,8 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       if (found) {
         showPage('storefront', found.id);
+      } else {
+        showPage('storefront', null);
       }
     } else if (newHash.startsWith('#store-admin/')) {
       const slug = newHash.substring(13);
@@ -2386,3 +2392,48 @@ async function calculateUserReferralBalance(userId) {
     return 0;
   }
 }
+
+// ── Hero Banners Setup ─────────────────────────────────────
+let _heroBannerTimer = null;
+async function initHeroBanners() {
+  try {
+    const res = await apiGet('settings', 'key=hero_banners');
+    const heroRow = res?.data?.find(r => r.key === 'hero_banners');
+    let heroBanners = [];
+    if (heroRow && heroRow.value) {
+      heroBanners = JSON.parse(heroRow.value);
+    }
+    
+    const container = document.getElementById('hero-default');
+    if (!container || heroBanners.length === 0) return;
+    
+    // Clear interval if already set
+    if (_heroBannerTimer) clearInterval(_heroBannerTimer);
+    
+    let currentIndex = 0;
+    
+    const renderBanner = () => {
+      const imgUrl = heroBanners[currentIndex];
+      // Keep its size, just resize the image to fit
+      container.style.backgroundImage = `url("${imgUrl}")`;
+      container.style.backgroundSize = 'contain';
+      container.style.backgroundPosition = 'center';
+      container.style.backgroundRepeat = 'no-repeat';
+      container.style.backgroundColor = 'transparent'; 
+      container.innerHTML = ''; // Clear default text/chips
+    };
+    
+    renderBanner();
+    
+    if (heroBanners.length > 1) {
+      _heroBannerTimer = setInterval(() => {
+        currentIndex = (currentIndex + 1) % heroBanners.length;
+        renderBanner();
+      }, 3000); // 3 seconds
+    }
+    
+  } catch(e) {
+    console.error('Failed to load hero banners', e);
+  }
+}
+

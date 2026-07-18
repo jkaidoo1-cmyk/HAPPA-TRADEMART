@@ -1278,7 +1278,7 @@ async function adminOpenVendorProfile(userId) {
         ${_apRow('Rating', store.avg_rating ? store.avg_rating.toFixed(1) + ' ★ (' + store.review_count + ')' : '—')}
         <div style="margin-top:14px">
           <button class="btn btn-block" style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border:none" onclick="closeAdminPanel();setTimeout(()=>openStore('${store.id}'),300)">
-            <i class="fas fa-store"></i> View Live Storefront
+            <i class="fas fa-store"></i> View Live Store
           </button>
         </div>
         <div style="height:1px;background:var(--border);margin:14px 0"></div>
@@ -1413,7 +1413,7 @@ async function adminOpenVendorProfile(userId) {
 
   ${store ? `
   <div style="margin-top:16px;background:white;border-radius:var(--radius-md);padding:14px;border:1px solid var(--border)">
-    <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem"><i class="fas fa-store"></i> Live Storefront - ${escHtml(store.name)}</div>
+    <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem"><i class="fas fa-store"></i> Live Store - ${escHtml(store.name)}</div>
     <div id="ap-v-store-preview"></div>
   </div>
   ` : ''}

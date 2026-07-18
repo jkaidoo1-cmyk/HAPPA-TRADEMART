@@ -45,7 +45,7 @@ const AdEngine = {
   slots:            {},   // slotId → SlotState (see _buildSlotState)
   lastFetch:        0,
   CACHE_MS:         5 * 60000,
-  DEFAULT_SLIDE_MS: 5000,  // fallback slide duration: 5 s
+  DEFAULT_SLIDE_MS: 3000,  // fallback slide duration: 3 s
 };
 
 /* ──────────────────────────────────────────────────────────── */
@@ -221,19 +221,6 @@ function _buildSlotState(campaign, pageKey) {
   // Build one entry per store that actually has eligible products
   const allStoreEntries = [];
 
-  if (pageKey === 'home' && AdEngine.heroBanners && AdEngine.heroBanners.length > 0) {
-    // Inject admin hero banners as a pseudo-store
-    const heroProducts = AdEngine.heroBanners.map((url, i) => ({
-      id: `hero-${i}`,
-      name: '',
-      images: [url],
-      is_hero: true,
-      price: 0,
-      original_price: 0
-    }));
-    allStoreEntries.push({ sid: 'admin_hero', products: heroProducts, cursor: 0 });
-  }
-
   for (const sid of storeIds) {
     const products = AdEngine.products.filter(p =>
       p.status !== 'archived' && p.store_id === sid
@@ -245,7 +232,6 @@ function _buildSlotState(campaign, pageKey) {
 
   // Active ring = stores that still have budget today
   const activeRing = allStoreEntries.filter(e => {
-    if (e.sid === 'admin_hero') return true;
     const budget = Number(budgets[e.sid]) || 30;
     return (spent[e.sid] || 0) < budget;
   });
@@ -320,7 +306,6 @@ function _tick(slotId, slot, firstRender) {
  */
 function _chargeEntry(state, entry) {
   const sid          = entry.sid;
-  if (sid === 'admin_hero') return; // Do not charge admin hero banners
   const slideMinutes = state.slideMs / 60000;
 
   state.spent[sid] = (state.spent[sid] || 0) + slideMinutes;

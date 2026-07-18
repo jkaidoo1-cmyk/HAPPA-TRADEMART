@@ -228,8 +228,20 @@ async function applyCoupon() {
       if (msg) msg.innerHTML = '<span style="color:var(--danger)">Invalid or expired coupon code</span>';
       App.appliedCoupon = null;
     } else {
-      if (msg) msg.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check"></i> Coupon applied!</span>';
-      App.appliedCoupon = validCoupon;
+      const currentUserId = App.currentUser ? App.currentUser.id : null;
+      const usedBy = validCoupon.used_by || [];
+      const maxUses = parseInt(validCoupon.max_uses) || 0;
+
+      if (currentUserId && usedBy.includes(currentUserId)) {
+        if (msg) msg.innerHTML = '<span style="color:var(--danger)">You have already used this coupon</span>';
+        App.appliedCoupon = null;
+      } else if (maxUses > 0 && usedBy.length >= maxUses) {
+        if (msg) msg.innerHTML = '<span style="color:var(--danger)">This coupon has reached its usage limit</span>';
+        App.appliedCoupon = null;
+      } else {
+        if (msg) msg.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check"></i> Coupon applied!</span>';
+        App.appliedCoupon = validCoupon;
+      }
     }
   } catch(e) {
     if (msg) msg.innerHTML = '<span style="color:var(--danger)">Error validating coupon</span>';
@@ -304,6 +316,7 @@ async function placeOrder() {
   const savedCart = JSON.parse(JSON.stringify(App.cart));
   const savedReferral = App.appliedReferral;
   const usedReferralDiscount = App.appliedCoupon?.is_referral ? totals.discount : 0;
+  const savedCoupon = App.appliedCoupon;
 
   App.cart = [];
   App.appliedReferral = null;
@@ -333,6 +346,33 @@ async function placeOrder() {
     const newUsed = (parseFloat(App.currentUser.referral_commission_used) || 0) + usedReferralDiscount;
     App.currentUser.referral_commission_used = newUsed;
     apiPatch('users', App.currentUser.id, { referral_commission_used: newUsed });
+  }
+
+  // Update coupon usage if a standard coupon was applied
+  if (savedCoupon && !savedCoupon.is_referral && App.currentUser) {
+    try {
+      const res = await apiGet('settings', 'key=coupons');
+      const couponRow = res?.data?.find(r => r.key === 'coupons');
+      if (couponRow && couponRow.value) {
+        let coupons = JSON.parse(couponRow.value);
+        let updated = false;
+        coupons = coupons.map(c => {
+          if (c.code === savedCoupon.code) {
+            c.used_by = c.used_by || [];
+            if (!c.used_by.includes(App.currentUser.id)) {
+              c.used_by.push(App.currentUser.id);
+              updated = true;
+            }
+          }
+          return c;
+        });
+        if (updated) {
+          await apiPatch('settings', couponRow.id, { value: JSON.stringify(coupons), updated_at: new Date().toISOString() });
+        }
+      }
+    } catch(e) {
+      console.error('Failed to update coupon usage:', e);
+    }
   }
 
   // Create packages

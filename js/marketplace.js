@@ -540,7 +540,7 @@ async function renderProductDetail(id) {
 
     ${p.original_price > p.price ? `<span style="font-size:.9rem;color:var(--text-muted);text-decoration:line-through">GHS ${p.original_price}</span>` : ''}
 
-    <span style="font-size:.75rem;background:var(--bg);color:var(--text-muted);padding:2px 8px;border-radius:var(--radius-full)">+${commission}% commission</span>
+
 
   </div>
 
@@ -1139,11 +1139,7 @@ async function renderStorefront(id) {
     `;
     headerHTML = `
       <div style="position:relative; text-align:center; padding-bottom:12px; background:#fff; border-bottom:1px solid var(--border)">
-        <div style="position:absolute;top:12px;left:12px;z-index:10">
-          <button class="btn btn-sm" onclick="goBack()" style="border-radius:20px;background:rgba(0,0,0,0.65);border:none;color:#fff;display:flex;align-items:center;gap:6px;padding:6px 14px;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;font-weight:700;font-size:0.75rem">
-            <i class="fas fa-arrow-left"></i> Exit Store
-          </button>
-        </div>
+
         <div style="width:100%; height:130px; background:${secondaryColor}; display:flex; align-items:center; justify-content:center; overflow:hidden">
           <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
         </div>
@@ -1174,11 +1170,7 @@ async function renderStorefront(id) {
     `;
     headerHTML = `
       <div style="position:relative; overflow:hidden; min-height:190px; display:flex; align-items:center; justify-content:center; padding:25px 10px;">
-        <div style="position:absolute;top:12px;left:12px;z-index:10">
-          <button class="btn btn-sm" onclick="goBack()" style="border-radius:20px;background:rgba(0,0,0,0.65);border:none;color:#fff;display:flex;align-items:center;gap:6px;padding:6px 14px;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;font-weight:700;font-size:0.75rem">
-            <i class="fas fa-arrow-left"></i> Exit Store
-          </button>
-        </div>
+
         <!-- Full-screen hero banner in background -->
         <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" loading="lazy" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
         <div style="position:absolute; inset:0; background:rgba(15, 23, 42, 0.45); z-index:1;"></div>
@@ -1211,11 +1203,7 @@ async function renderStorefront(id) {
     `;
     headerHTML = `
       <div style="background:color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); padding:12px; display:flex; flex-direction:column; align-items:center; position:relative; border-bottom: none">
-        <div style="position:absolute;top:12px;left:12px;z-index:10">
-          <button class="btn btn-sm" onclick="goBack()" style="border-radius:20px;background:rgba(0,0,0,0.65);border:none;color:#fff;display:flex;align-items:center;gap:6px;padding:6px 14px;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;font-weight:700;font-size:0.75rem">
-            <i class="fas fa-arrow-left"></i> Exit Store
-          </button>
-        </div>
+
         <!-- Neumorphic Banner Inset Frame -->
         <div style="width:100%; height:110px; background:color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); padding:4px; box-shadow: inset 1px 1px 3px rgba(165,175,190,0.25), inset -1px -1px 3px #ffffff; border-radius:12px; overflow:hidden">
           <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" loading="lazy" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
@@ -1245,11 +1233,7 @@ async function renderStorefront(id) {
     `;
     headerHTML = `
       <div style="position:relative;background:#f8f9fa">
-        <div style="position:absolute;top:12px;left:12px;z-index:10">
-          <button class="btn btn-sm" onclick="goBack()" style="border-radius:20px;background:rgba(0,0,0,0.65);border:none;color:#fff;display:flex;align-items:center;gap:6px;padding:6px 14px;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;font-weight:700;font-size:0.75rem">
-            <i class="fas fa-arrow-left"></i> Exit Store
-          </button>
-        </div>
+
         <img src="${bannerSrc}" alt="${escHtml(storeName)}" 
              style="width:100%;height:180px;object-fit:cover;" onerror="this.src='https://via.placeholder.com/800x300?text=Store+Banner'">
         <div style="padding:16px;background:#fff;border-bottom:1px solid var(--border);position:relative">

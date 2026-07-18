@@ -47,20 +47,16 @@ async function renderAdminDashboard() {
   c.innerHTML = `
 <div class="tab-nav" id="admin-tabs">
   <div class="tab-btn active" onclick="switchTab(this,'admin-overview')">Overview</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-vendors');refreshAdminVendorsFull()">
-    Vendors ${pendingAll ? `<span style="background:var(--danger);color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:3px">${pendingAll}</span>` : ''}
-  </div>
+
   <div class="tab-btn" onclick="switchTab(this,'admin-rendors');loadAdminRendors()">
     Rendors ${pendingRendors.length ? `<span style="background:#7c3aed;color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:3px">${pendingRendors.length}</span>` : ''}
   </div>
   <div class="tab-btn" onclick="switchTab(this,'admin-storefronts');renderAdminStorefronts()">
     Custom Storefronts ${pendingStorefronts.length ? `<span style="background:#ea580c;color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:3px">${pendingStorefronts.length}</span>` : ''}
   </div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-users');refreshAdminUsersList()">Users</div>
+
   <div class="tab-btn" onclick="switchTab(this,'admin-orders');refreshAdminOrdersList()">Orders</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-create-store')">Add Vendor</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-analytics')">Analytics</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-wallet');renderAdminTransactions('admin-txn-wrap')">Wallet</div>
+
   <div class="tab-btn" onclick="switchTab(this,'admin-ads');loadAdminAds()">🎯 Ads</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-referrals');loadAdminReferrals()">🔗 Referrals</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-settings');loadAdminSettings()">Settings</div>
@@ -105,7 +101,7 @@ async function renderAdminDashboard() {
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-users" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">${allUsers.length}</div>
+        <div class="stat-value">${allUsers.filter(u => u.role !== 'admin').length}</div>
         <div class="stat-label">Total Users</div>
       </div>
       <div class="stat-card">
@@ -509,11 +505,6 @@ async function renderAdminDashboard() {
             <label class="form-label">Delivery Fee — Intercity (GHS)</label>
             <input class="form-control" id="setting-delivery-intercity" type="number" min="0" step="0.5" value="15">
             <div class="form-hint">Base fee for deliveries between cities</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Free Delivery Threshold (GHS)</label>
-            <input class="form-control" id="setting-free-delivery-threshold" type="number" min="0" value="200">
-            <div class="form-hint">Order total above which delivery is free (0 to disable)</div>
           </div>
         </div>
       </div>
