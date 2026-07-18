@@ -2959,6 +2959,18 @@ ul { list-style: none; }
   display: inline-block;
   vertical-align: middle;
 }
+.scroll-inner .skeleton-card {
+  flex-shrink: 0;
+  width: 155px;
+}
+.scroll-inner .skeleton-row {
+  flex-shrink: 0;
+  width: 280px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  border-bottom: 1.5px solid var(--border);
+}
+
 .skeleton-card {
   background: #fff;
   border-radius: var(--radius-md);

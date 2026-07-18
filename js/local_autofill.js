@@ -259,7 +259,38 @@ function localPredictAndGenerate(name) {
   const catRes = classifyProduct(name);
   const desc = buildHumanDesc(catRes.category, name, attrs);
 
-  return { category: catRes.category, description: desc };
+  const CAT_MAP = {
+    'electronics': 'Electronics',
+    'clothing': 'Fashion',
+    'home-kitchen': 'Home & Living',
+    'beauty': 'Skincare',
+    'sports': 'Sports',
+    'toys': 'Toys',
+    'books': 'Books',
+    'food': 'Food & Drinks',
+    'jewelry': 'Accessories',
+    'automotive': 'Other',
+    'pet-supplies': 'Other',
+    'health': 'Other',
+    'office': 'Other',
+    'garden': 'Other'
+  };
+
+  let uiCat = CAT_MAP[catRes.category] || 'Other';
+  const lower = name.toLowerCase();
+
+  // Refine
+  if (uiCat === 'Skincare' && lower.includes('makeup')) uiCat = 'Makeup';
+  if (uiCat === 'Fashion') {
+    if (lower.includes('sneaker') || lower.includes('shoe')) uiCat = 'Sneakers';
+    if (lower.includes('sandal')) uiCat = 'Sandals';
+    if (lower.includes('boot')) uiCat = 'Boots';
+  }
+  if (uiCat === 'Electronics' && (lower.includes('headphone') || lower.includes('audio') || lower.includes('speaker') || lower.includes('earbud'))) {
+    uiCat = 'Audio';
+  }
+
+  return { category: uiCat, description: desc };
 }
 
 const _debounceTimers = new Map();

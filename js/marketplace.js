@@ -496,7 +496,7 @@ async function renderProductDetail(id) {
 
 <div style="position:relative;background:#f3f4f6">
 
-  ${p.is_flash_sale ? '<span class="flash-badge" style="top:12px;left:12px">ΓÜí FLASH</span>' : ''}
+  ${p.is_flash_sale ? '<span class="flash-badge" style="top:12px;left:12px">FLASH</span>' : ''}
 
   ${discount > 0 ? `<span style="position:absolute;top:12px;right:12px;background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:var(--radius-full)">${discount}% OFF</span>` : ''}
 
@@ -882,12 +882,8 @@ async function shareProduct(productId) {
   const baseUrl = window.location.origin + window.location.pathname;
   const url = baseUrl + '?product=' + productId;
   const title = p.name;
-  const desc = p.description ? ${p.description}
-
- : '';
-  const text = ${title}
-
-Check this out on HAPPA TRADEMART!;
+  const desc = p.description ? `${p.description}` : '';
+  const text = `${title} Check this out on HAPPA TRADEMART!`;
 
   const shareData = {
     title: title,
@@ -912,9 +908,7 @@ Check this out on HAPPA TRADEMART!;
       }
       await navigator.share(shareData);
     } else {
-      navigator.clipboard?.writeText(${title}
-
-);
+      navigator.clipboard?.writeText(`${title}`);
       showToast('Product details copied! 📋', 'success');
     }
   } catch (err) {
@@ -1510,7 +1504,7 @@ function adminProductCardHTML(p) {
 
       <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;cursor:pointer">
 
-        <input type="checkbox" name="is_flash_sale" ${p.is_flash_sale?'checked':''} style="width:14px;height:14px"> ΓÜí Flash Sale
+        <input type="checkbox" name="is_flash_sale" ${p.is_flash_sale?'checked':''} style="width:14px;height:14px"> ⚡ Flash Sale
 
       </label>
 
