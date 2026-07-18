@@ -198,6 +198,26 @@ async function applyCoupon() {
   
   if (msg) msg.innerHTML = '<span><i class="fas fa-spinner fa-spin"></i> Validating…</span>';
   try {
+    // Intercept Personal Referral Coupons
+    if (code.startsWith('REF-')) {
+      const parts = code.split('-');
+      if (parts.length > 1 && String(parts[1]) === String(App.currentUser?.id)) {
+        const balance = await calculateUserReferralBalance(App.currentUser.id);
+        if (balance > 0) {
+          if (msg) msg.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check"></i> Referral Balance applied!</span>';
+          App.appliedCoupon = { code: code, type: 'GHS', value: balance, is_referral: true };
+        } else {
+          if (msg) msg.innerHTML = '<span style="color:var(--danger)">No referral balance available</span>';
+          App.appliedCoupon = null;
+        }
+      } else {
+        if (msg) msg.innerHTML = '<span style="color:var(--danger)">This referral coupon cannot be used by you</span>';
+        App.appliedCoupon = null;
+      }
+      updateCheckoutTotalsUI();
+      return;
+    }
+
     const res = await apiGet('settings', 'key=coupons');
     const couponRow = res?.data?.find(r => r.key === 'coupons');
     let coupons = [];
@@ -283,9 +303,11 @@ async function placeOrder() {
   };
   const savedCart = JSON.parse(JSON.stringify(App.cart));
   const savedReferral = App.appliedReferral;
+  const usedReferralDiscount = App.appliedCoupon?.is_referral ? totals.discount : 0;
 
   App.cart = [];
   App.appliedReferral = null;
+  App.appliedCoupon = null;
   saveCart();
   if (typeof updateCartBadge === 'function') updateCartBadge();
 
@@ -304,8 +326,13 @@ async function placeOrder() {
     if (setBtn) setBtn('failed');
     setTimeout(() => { if (setBtn) setBtn('idle'); }, 2000);
     showToast('Order failed - cart restored.', 'error', 5000);
-    showPage('checkout');
     return;
+  }
+  
+  if (usedReferralDiscount > 0 && App.currentUser) {
+    const newUsed = (parseFloat(App.currentUser.referral_commission_used) || 0) + usedReferralDiscount;
+    App.currentUser.referral_commission_used = newUsed;
+    apiPatch('users', App.currentUser.id, { referral_commission_used: newUsed });
   }
 
   // Create packages

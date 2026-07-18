@@ -9,10 +9,11 @@ async function renderBuyerDashboard() {
   const u = App.currentUser;
 
   // Fetch orders & packages
-  const [ordersRes, pkgsRes, refsRes] = await Promise.all([
+  const [ordersRes, pkgsRes, refsRes, refBalance] = await Promise.all([
     apiGet('orders', `search=${u.id}&limit=50`),
     apiGet('packages', `search=${u.id}&limit=50`),
-    apiGet('referrals', `search=${u.id}&limit=50`)
+    apiGet('referrals', `search=${u.id}&limit=50`),
+    calculateUserReferralBalance(u.id)
   ]);
 
   const myOrders   = (ordersRes?.data || []).filter(o => o.buyer_id === u.id);
@@ -24,16 +25,16 @@ async function renderBuyerDashboard() {
 
   c.innerHTML = `
 <div class="tab-nav" id="buyer-tabs" style="display:flex;overflow-x:auto;white-space:nowrap;gap:8px;padding-bottom:8px">
-  <div class="tab-btn active" onclick="switchTab(this,'buyer-overview')">Overview</div>
-  <div class="tab-btn" onclick="switchTab(this,'buyer-orders')">Orders</div>
-  <div class="tab-btn" onclick="switchTab(this,'buyer-wishlist');renderBuyerWishlist()">Wishlist</div>
-  <div class="tab-btn" onclick="switchTab(this,'buyer-addresses');renderBuyerAddresses()">Addresses</div>
-  <div class="tab-btn" onclick="switchTab(this,'buyer-coupons')">Coupons</div>
-  <div class="tab-btn" onclick="switchTab(this,'buyer-reviews');renderBuyerReviews()">My Reviews</div>
-
-  <div class="tab-btn" onclick="switchTab(this,'buyer-referral')">Referrals</div>
-  <div class="tab-btn" onclick="switchTab(this,'buyer-saved')">Saved Stores</div>
-  <div class="tab-btn" onclick="showPage('settings')">Settings</div>
+  <div class="tab-btn active" id="nav-buyer-overview" onclick="switchTab(this,'buyer-overview')">Overview</div>
+  <div class="tab-btn" id="nav-buyer-wishlist" onclick="switchTab(this,'buyer-wishlist');renderBuyerWishlist()">Wishlist</div>
+  <div class="tab-btn" id="nav-buyer-addresses" onclick="switchTab(this,'buyer-addresses');renderBuyerAddresses()">Addresses</div>
+  <div class="tab-btn" id="nav-buyer-reviews" onclick="switchTab(this,'buyer-reviews');renderBuyerReviews()">My Reviews</div>
+  <div class="tab-btn" id="nav-buyer-settings" onclick="showPage('settings')">Settings</div>
+  
+  <!-- Hidden tabs for programmatic switching -->
+  <div class="tab-btn" id="nav-buyer-orders" style="display:none" onclick="switchTab(this,'buyer-orders')">Orders</div>
+  <div class="tab-btn" id="nav-buyer-referral" style="display:none" onclick="switchTab(this,'buyer-referral')">Referrals</div>
+  <div class="tab-btn" id="nav-buyer-saved" style="display:none" onclick="switchTab(this,'buyer-saved')">Saved Stores</div>
 </div>
 
 <!-- ── Overview ── -->
@@ -57,18 +58,18 @@ async function renderBuyerDashboard() {
     </div>
 
     <div class="stats-grid">
-      <div class="stat-card">
+      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('nav-buyer-orders').click()">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-shopping-bag" style="color:#1d4ed8"></i></div>
         <div class="stat-value">${myOrders.length}</div>
         <div class="stat-label">Total Orders</div>
       </div>
 
-      <div class="stat-card">
+      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('nav-buyer-referral').click()">
         <div class="stat-icon" style="background:#ede9fe"><i class="fas fa-users" style="color:#7c3aed"></i></div>
         <div class="stat-value">${u.referral_count||0}</div>
         <div class="stat-label">Referrals</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('nav-buyer-saved').click()">
         <div class="stat-icon" style="background:#fef3c7"><i class="fas fa-bookmark" style="color:#d97706"></i></div>
         <div class="stat-value">${App.savedStores.length}</div>
         <div class="stat-label">Saved Stores</div>
@@ -116,6 +117,29 @@ async function renderBuyerDashboard() {
 <!-- ── Referral Tab ── -->
 <div class="tab-content" id="buyer-referral">
   <div class="dashboard-wrap">
+    
+    <!-- Personal Referral Coupon Card -->
+    <div class="referral-code-card" style="margin-bottom:16px; background: linear-gradient(135deg, #1d4ed8, #3b82f6)">
+      <div style="font-size:.78rem;opacity:.8;margin-bottom:4px;color:#fff">Your Personal Referral Coupon</div>
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:12px;opacity:.9;color:#fff">Use this code at checkout to spend your referral earnings!</div>
+      
+      <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:800;color:#fff;letter-spacing:1px">REF-${u.id}</div>
+        </div>
+        <div style="flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:.75rem;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:.5px">Available Balance</div>
+          <div style="font-size:1.4rem;font-weight:800;color:#fff">GHS ${refBalance.toFixed(2)}</div>
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff;background:rgba(255,255,255,.1)" onclick="navigator.clipboard.writeText('REF-${u.id}'); showToast('Coupon code copied!', 'success')">
+          <i class="fas fa-copy"></i> Copy Coupon Code
+        </button>
+      </div>
+    </div>
+
     <!-- Referral Link Card -->
     <div class="referral-code-card" style="margin-bottom:16px">
       <div style="font-size:.78rem;opacity:.8;margin-bottom:4px">Your Referral Link</div>
@@ -249,30 +273,7 @@ async function renderBuyerDashboard() {
   </div>
 </div>
 
-<!-- ── Coupons Tab ── -->
-<div class="tab-content" id="buyer-coupons">
-  <div class="dashboard-wrap">
-    <div class="card">
-      <div class="card-header"><h3>🎁 Available Coupons</h3></div>
-      <div class="card-body" style="display:grid;gap:12px">
-        <div style="border:1.5px dashed var(--primary);border-radius:10px;padding:12px;display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-weight:800;color:var(--primary)">WELCOME10</div>
-            <div style="font-size:.75rem;color:var(--text-muted)">10% discount on your first order.</div>
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText('WELCOME10'); showToast('Copied coupon! ✂️', 'success')">Copy</button>
-        </div>
-        <div style="border:1.5px dashed var(--primary);border-radius:10px;padding:12px;display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-weight:800;color:var(--primary)">FREESHIP</div>
-            <div style="font-size:.75rem;color:var(--text-muted)">Free shipping on orders above GHS 500.</div>
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText('FREESHIP'); showToast('Copied coupon! ✂️', 'success')">Copy</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+
 
 <!-- ── Reviews Tab ── -->
 <div class="tab-content" id="buyer-reviews">

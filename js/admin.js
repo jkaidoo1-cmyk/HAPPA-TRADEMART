@@ -62,7 +62,23 @@ async function renderAdminDashboard() {
   <div class="tab-btn" onclick="switchTab(this,'admin-analytics')">Analytics</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-wallet');renderAdminTransactions('admin-txn-wrap')">Wallet</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-ads');loadAdminAds()">🎯 Ads</div>
+  <div class="tab-btn" onclick="switchTab(this,'admin-referrals');loadAdminReferrals()">🔗 Referrals</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-settings');loadAdminSettings()">Settings</div>
+</div>
+
+<!-- ── Referrals Board ── -->
+<div class="tab-content" id="admin-referrals">
+  <div class="dashboard-wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <h3 style="font-size:.95rem;font-weight:700">🔗 Referral Board</h3>
+        <p style="font-size:.78rem;color:var(--text-muted);margin-top:2px">Track user referrals and their earned commissions.</p>
+      </div>
+    </div>
+    <div id="admin-referrals-list">
+      <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+    </div>
+  </div>
 </div>
 
 <!-- ── Ads Manager ── -->
@@ -2946,3 +2962,80 @@ async function adminRevokeSubscription(sfId) {
   renderAdminStorefronts();
 }
 
+// ── Admin Referral Board ──────────────────────────────────
+async function loadAdminReferrals() {
+  const container = document.getElementById('admin-referrals-list');
+  if (!container) return;
+
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+
+  try {
+    const [usersRes, refsRes, ordersRes] = await Promise.all([
+      apiGet('users'),
+      apiGet('referrals'),
+      apiGet('orders')
+    ]);
+
+    const users = usersRes?.data || [];
+    const referrals = refsRes?.data || [];
+    const orders = ordersRes?.data || [];
+
+    // Group referrals by referrer
+    const grouped = {};
+    for (const ref of referrals) {
+      if (!grouped[ref.referrer_id]) {
+        grouped[ref.referrer_id] = { count: 0, users: [] };
+      }
+      grouped[ref.referrer_id].count++;
+      grouped[ref.referrer_id].users.push(ref.referred_user_id);
+    }
+
+    const rows = [];
+    for (const [referrerId, data] of Object.entries(grouped)) {
+      const referrer = users.find(u => String(u.id) === String(referrerId));
+      if (!referrer) continue;
+
+      let totalEarned = 0;
+      for (const referredUserId of data.users) {
+        const userOrders = orders.filter(o => String(o.buyer_id) === String(referredUserId) && o.status === 'completed');
+        for (const order of userOrders) {
+          const amt = parseFloat(order.total) || parseFloat(order.total_amount) || 0;
+          const pct = typeof getEffectiveReferralCommissionPct === 'function' ? getEffectiveReferralCommissionPct(amt) : 3;
+          totalEarned += amt * (pct / 100);
+        }
+      }
+
+      const totalUsed = parseFloat(referrer.referral_commission_used) || 0;
+      const balance = totalEarned - totalUsed;
+
+      rows.push(`
+        <div class="card" style="margin-bottom:12px;padding:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-weight:700;font-size:.95rem">${escHtml(referrer.name)}</div>
+            <div style="font-size:.75rem;color:var(--text-muted);margin-top:4px">
+              <i class="fas fa-users" style="margin-right:4px"></i> Referred ${data.count} users
+            </div>
+            <div style="font-size:.7rem;color:var(--text-light);margin-top:2px;font-family:monospace">
+              Coupon Code: REF-${referrerId}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:.85rem;font-weight:600;color:var(--success)">Earned: GHS ${totalEarned.toFixed(2)}</div>
+            <div style="font-size:.75rem;color:var(--danger)">Spent: GHS ${totalUsed.toFixed(2)}</div>
+            <div style="font-size:.85rem;font-weight:700;margin-top:4px;color:var(--text)">Balance: GHS ${balance > 0 ? balance.toFixed(2) : '0.00'}</div>
+          </div>
+        </div>
+      `);
+    }
+
+    if (rows.length === 0) {
+      container.innerHTML = '<div class="empty-state"><i class="fas fa-users-slash"></i><h3>No referrals yet</h3><p>Users who refer others will appear here.</p></div>';
+    } else {
+      container.innerHTML = rows.join('');
+    }
+
+  } catch (err) {
+    console.error('Error loading referrals board', err);
+    container.innerHTML = '<div style="color:var(--danger);padding:20px">Error loading referrals.</div>';
+  }
+}

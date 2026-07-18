@@ -313,4 +313,77 @@ function getEffectiveReferralCommissionPct(amount) {
   return 3; // absolute fallback
 }
 
+// ── Hero Banners Editor ─────────────────────────────────────
+function renderHeroBannersEditor() {
+  const container = document.getElementById('admin-hero-banners-container');
+  if (!container) return;
+  if (!_heroBanners.length) {
+    container.innerHTML = '<div style="font-size:.8rem;color:var(--text-muted);font-style:italic">No banners uploaded. Using default gradient.</div>';
+    return;
+  }
+  container.innerHTML = _heroBanners.map((b64, i) => `
+    <div style="position:relative;width:120px;height:60px;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+      <img src="${b64}" style="width:100%;height:100%;object-fit:cover;display:block">
+      <button type="button" onclick="removeHeroBanner(${i})" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(220,38,38,.85);color:#fff;border:none;font-size:.65rem;display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+window.uploadHeroBanner = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _heroBanners.push(e.target.result);
+    renderHeroBannersEditor();
+  };
+  reader.readAsDataURL(file);
+};
+
+window.removeHeroBanner = function(index) {
+  _heroBanners.splice(index, 1);
+  renderHeroBannersEditor();
+};
+
+// ── Coupons Editor ──────────────────────────────────────────
+function renderCouponsEditor() {
+  const container = document.getElementById('admin-coupons-list');
+  if (!container) return;
+  if (!_coupons.length) {
+    container.innerHTML = '<div style="font-size:.8rem;color:var(--text-muted);font-style:italic">No coupons active.</div>';
+    return;
+  }
+  container.innerHTML = _coupons.map((c, i) => `
+    <div style="display:grid;grid-template-columns:1fr 80px 80px auto;gap:6px;margin-bottom:6px;align-items:center">
+      <input class="form-control" placeholder="Code (e.g. SAVE10)" value="${escHtml(c.code)}" oninput="updateCoupon(${i},'code',this.value)">
+      <select class="form-control form-select" onchange="updateCoupon(${i},'type',this.value)">
+        <option value="%" ${c.type === '%' ? 'selected' : ''}>%</option>
+        <option value="GHS" ${c.type === 'GHS' ? 'selected' : ''}>GHS</option>
+      </select>
+      <input class="form-control" type="number" min="0" step="0.01" value="${c.value}" oninput="updateCoupon(${i},'value',this.value)">
+      <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:var(--danger);padding:0;width:34px;height:34px;display:flex;align-items:center;justify-content:center" onclick="removeCoupon(${i})">
+        <i class="fas fa-trash"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+window.addCoupon = function() {
+  _coupons.push({ code: '', type: '%', value: 0 });
+  renderCouponsEditor();
+};
+
+window.updateCoupon = function(i, field, val) {
+  _coupons[i][field] = field === 'value' ? parseFloat(val) || 0 : val;
+};
+
+window.removeCoupon = function(i) {
+  _coupons.splice(i, 1);
+  renderCouponsEditor();
+};
+
+window.renderCouponsEditor = renderCouponsEditor;
+
 // getSetting is defined in app.js

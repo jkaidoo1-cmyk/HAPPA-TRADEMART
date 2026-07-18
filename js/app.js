@@ -127,7 +127,7 @@ window.addEventListener('DOMContentLoaded', () => {
       let found = null;
       if (isStorefrontPage || isStoreAdmin || searchParams.has('storefront')) {
         // Resolve storefront first
-        const sf = allStorefronts.find(item => item.url_slug === storeSlug || item.id === storeSlug || item.store_id === storeSlug);
+        const sf = allStorefronts.find(item => String(item.url_slug) === storeSlug || String(item.id) === storeSlug || String(item.store_id) === storeSlug);
         if (sf) {
           found = allStores.find(s => String(s.id) === String(sf.store_id));
         }
@@ -135,7 +135,7 @@ window.addEventListener('DOMContentLoaded', () => {
       
       // Fallback/Direct Store Lookup
       if (!found) {
-        found = allStores.find(s => s.slug === storeSlug || s.id === storeSlug);
+        found = allStores.find(s => String(s.slug) === storeSlug || String(s.id) === storeSlug);
       }
       
       if (found) {
@@ -165,19 +165,19 @@ window.addEventListener('DOMContentLoaded', () => {
     const newHash = window.location.hash;
     if (newHash.startsWith('#store/')) {
       const slug = newHash.substring(7);
-      const found = App.allStores.find(s => s.slug === slug || s.id === slug);
+      const found = App.allStores.find(s => String(s.slug) === slug || String(s.id) === slug);
       if (found) {
         showPage('store-detail', found.id);
       }
     } else if (newHash.startsWith('#storefront/')) {
       const slug = newHash.substring(12);
       let found = null;
-      const sf = (App.allStorefronts || []).find(item => item.url_slug === slug || item.id === slug || item.store_id === slug);
+      const sf = (App.allStorefronts || []).find(item => String(item.url_slug) === slug || String(item.id) === slug || String(item.store_id) === slug);
       if (sf) {
         found = App.allStores.find(s => String(s.id) === String(sf.store_id));
       }
       if (!found) {
-        found = App.allStores.find(s => s.slug === slug || s.id === slug);
+        found = App.allStores.find(s => String(s.slug) === slug || String(s.id) === slug);
       }
       if (found) {
         showPage('storefront', found.id);
@@ -2324,3 +2324,65 @@ window.autoCreateStoreForVendor = async function(vendor) {
 
   return finalStore;
 };
+
+// ── Referral Balance Calculation ──────────────────────────
+async function calculateUserReferralBalance(userId) {
+  try {
+    // Fetch all users to see their referrals
+    const usersRes = await apiGet('users');
+    const allUsers = usersRes?.data || [];
+    
+    // Find all users referred by this user
+    const referredUsers = allUsers.filter(u => String(u.referred_by) === String(userId));
+    if (!referredUsers.length) return 0;
+    
+    // Fetch all completed orders
+    const ordersRes = await apiGet('orders');
+    const allOrders = ordersRes?.data || [];
+    
+    // Fetch referral commission tiers from settings
+    const settingsRes = await apiGet('settings');
+    const tiersRow = settingsRes?.data?.find(r => r.key === 'referral_commission_tiers');
+    let tiers = [];
+    if (tiersRow && tiersRow.value) {
+      try { tiers = JSON.parse(tiersRow.value); } catch(e) {}
+    }
+    
+    // Fallback if tiers aren't configured
+    const getPct = (amount) => {
+      if (tiers.length) {
+        for (const t of tiers) {
+          const maxVal = t.max >= 99999 ? Infinity : t.max;
+          if (amount >= t.min && amount <= maxVal) return t.pct;
+        }
+        return tiers[tiers.length - 1]?.pct || 3;
+      }
+      return 3;
+    };
+    
+    let totalEarned = 0;
+    
+    for (const refUser of referredUsers) {
+      // Find completed orders for this referred user
+      const userOrders = allOrders.filter(o => 
+        String(o.user_id) === String(refUser.id) && 
+        o.status === 'completed'
+      );
+      
+      for (const order of userOrders) {
+        const amt = parseFloat(order.total_amount) || 0;
+        const pct = getPct(amt);
+        totalEarned += amt * (pct / 100);
+      }
+    }
+    
+    const user = allUsers.find(u => String(u.id) === String(userId));
+    const totalUsed = parseFloat(user?.referral_commission_used) || 0;
+    
+    const balance = totalEarned - totalUsed;
+    return balance > 0 ? balance : 0;
+  } catch (err) {
+    console.error('Error calculating referral balance:', err);
+    return 0;
+  }
+}

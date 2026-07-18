@@ -438,9 +438,9 @@ async function renderProductDetail(id) {
 
 
 
-  const p = App.allProducts.find(p => p.id === id) || await apiGet(`products/${id}`);
+  const p = App.allProducts.find(p => String(p.id) === String(id)) || await apiGet(`products/${id}`);
 
-  if (!p) { c.innerHTML = '<div class="empty-state"><i class="fas fa-box-open"></i><h3>Product not found</h3></div>'; return; }
+  if (!p || (p.error && !p.id)) { c.innerHTML = '<div class="empty-state"><i class="fas fa-box-open"></i><h3>Product not found</h3></div>'; return; }
 
 
 
@@ -893,19 +893,8 @@ async function shareProduct(productId) {
 
   try {
     if (navigator.share) {
-      const imgUrl = p.images && p.images.length > 0 ? p.images[0] : null;
-      if (imgUrl && navigator.canShare) {
-        try {
-          const response = await fetch(imgUrl);
-          const blob = await response.blob();
-          const file = new File([blob], 'product.jpg', { type: blob.type });
-          if (navigator.canShare({ files: [file] })) {
-            shareData.files = [file];
-          }
-        } catch (e) {
-          console.log('Could not fetch image for sharing:', e);
-        }
-      }
+      // Intentionally NOT attaching files (images) because OS share sheets often split files and text into separate messages.
+      // By sending only the URL, we rely on the Open Graph meta tags to render a proper rich link preview.
       await navigator.share(shareData);
     } else {
       navigator.clipboard?.writeText(text);
