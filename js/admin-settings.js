@@ -61,6 +61,20 @@ async function loadAdminSettings() {
   // Also load commission tiers
   loadCommissionTiersFromRows(rows);
 
+  // Load hero banners
+  const heroRow = rows.find(r => r.key === 'hero_banners');
+  try {
+    _heroBanners = heroRow && heroRow.value ? JSON.parse(heroRow.value) : [];
+  } catch(e) { _heroBanners = []; }
+  renderHeroBannersEditor();
+
+  // Load coupons
+  const couponRow = rows.find(r => r.key === 'coupons');
+  try {
+    _coupons = couponRow && couponRow.value ? JSON.parse(couponRow.value) : [];
+  } catch(e) { _coupons = []; }
+  if (typeof renderCouponsEditor === 'function') renderCouponsEditor();
+
   // Refresh the sidebar "AI Keys" badge
   if (typeof window.refreshAIBadge === 'function') {
     try { await window.refreshAIBadge(); } catch (_) {}
@@ -105,6 +119,12 @@ async function saveAdminSettings(e) {
 
   // Save commission tiers
   await saveCommissionTiers(rows);
+
+  // Save hero banners
+  await upsert('hero_banners', JSON.stringify(_heroBanners));
+
+  // Save coupons
+  await upsert('coupons', JSON.stringify(_coupons));
 
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save All Settings'; }
 

@@ -87,15 +87,19 @@ function renderCheckout() {
     </div>
   </div>
 
-  <!-- Referral Discount -->
+
+
+  <!-- Discount Coupon -->
   <div class="card" style="margin-bottom:14px">
-    <div class="card-header"><h3>🎁 Referral Code</h3></div>
+    <div class="card-header"><h3>🏷️ Discount Coupon</h3></div>
     <div class="card-body">
       <div style="display:flex;gap:8px">
-        <input class="form-control" id="checkout-refcode" placeholder="Enter referral code (optional)">
-        <button class="btn btn-outline btn-sm" onclick="applyReferral()">Apply</button>
+        <input class="form-control" id="checkout-coupon" placeholder="Enter coupon code (optional)" value="${App.appliedCoupon ? escHtml(App.appliedCoupon.code) : ''}">
+        <button class="btn btn-outline btn-sm" onclick="applyCoupon()">Apply</button>
       </div>
-      <div id="referral-msg" style="margin-top:6px;font-size:.8rem"></div>
+      <div id="coupon-msg" style="margin-top:6px;font-size:.8rem">
+        ${App.appliedCoupon ? '<span style="color:var(--success)"><i class="fas fa-check"></i> Coupon applied!</span>' : ''}
+      </div>
     </div>
   </div>
 
@@ -154,7 +158,7 @@ function renderCheckout() {
     <div class="summary-row"><span>Subtotal (${App.cart.reduce((s,i)=>s+i.qty,0)} items)</span><span>GHS ${totals.subtotal.toFixed(2)}</span></div>
     <div class="summary-row"><span>Platform Fee (${PLATFORM_FEE_PCT}%)</span><span>GHS ${totals.platformFee.toFixed(2)}</span></div>
     <div class="summary-row"><span>Delivery Fee</span><span id="checkout-delivery">GHS ${totals.deliveryFee.toFixed(2)}</span></div>
-    <div class="summary-row" id="discount-row" style="display:none"><span style="color:var(--success)">Discount</span><span id="discount-amt" style="color:var(--success)">- GHS 0.00</span></div>
+    <div class="summary-row" id="discount-row" style="display:${totals.discount > 0 ? 'flex' : 'none'}"><span style="color:var(--success)">Discount</span><span id="discount-amt" style="color:var(--success)">- GHS ${(totals.discount || 0).toFixed(2)}</span></div>
     <div class="summary-row total"><span>Total</span><span class="amount" id="checkout-total">GHS ${totals.total.toFixed(2)}</span></div>
   </div>
 
@@ -176,39 +180,62 @@ function groupByVendor(cart) {
   });
   return storeGroups;
 }
+
 function selectPayment(method) {
   selectedPayment = method;
   renderCheckout();
 }
 
-async function applyReferral() {
-  const code = document.getElementById('checkout-refcode')?.value.trim().toUpperCase();
-  if (!code) return;
-  const msg = document.getElementById('referral-msg');
-  if (code === App.currentUser?.referral_code) {
-    if (msg) msg.innerHTML = '<span style="color:var(--danger)">You cannot use your own code</span>';
+async function applyCoupon() {
+  const code = document.getElementById('checkout-coupon')?.value.trim().toUpperCase();
+  const msg = document.getElementById('coupon-msg');
+  if (!code) {
+    App.appliedCoupon = null;
+    if (msg) msg.innerHTML = '';
+    updateCheckoutTotalsUI();
     return;
   }
+  
   if (msg) msg.innerHTML = '<span><i class="fas fa-spinner fa-spin"></i> Validating…</span>';
   try {
-    const res = await apiGet('users', 'limit=200');
-    const users = res?.data || [];
-    const referrer = users.find(u => u.referral_code && u.referral_code.toUpperCase() === code);
-    if (!referrer) {
-      if (msg) msg.innerHTML = '<span style="color:var(--danger)">Invalid referral code</span>';
-      App.appliedReferral = null;
+    const res = await apiGet('settings', 'key=coupons');
+    const couponRow = res?.data?.find(r => r.key === 'coupons');
+    let coupons = [];
+    if (couponRow && couponRow.value) coupons = JSON.parse(couponRow.value);
+    
+    const validCoupon = coupons.find(c => c.code === code);
+    if (!validCoupon) {
+      if (msg) msg.innerHTML = '<span style="color:var(--danger)">Invalid or expired coupon code</span>';
+      App.appliedCoupon = null;
     } else {
-      if (msg) msg.innerHTML = `<span style="color:var(--success)"><i class="fas fa-check"></i> Referral code applied (Referrer: ${escHtml(referrer.name)})!</span>`;
-      App.appliedReferral = code;
+      if (msg) msg.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check"></i> Coupon applied!</span>';
+      App.appliedCoupon = validCoupon;
     }
   } catch(e) {
-    if (msg) msg.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check"></i> Referral code applied!</span>';
-    App.appliedReferral = code;
+    if (msg) msg.innerHTML = '<span style="color:var(--danger)">Error validating coupon</span>';
+    App.appliedCoupon = null;
   }
+  
+  updateCheckoutTotalsUI();
+}
+
+function updateCheckoutTotalsUI() {
+  const totals = getCartTotals();
+  const discRow = document.getElementById('discount-row');
+  const discAmt = document.getElementById('discount-amt');
+  const totAmt = document.getElementById('checkout-total');
+  const btnBtn = document.getElementById('place-order-btn');
+  
+  if (discRow) discRow.style.display = totals.discount > 0 ? 'flex' : 'none';
+  if (discAmt) discAmt.innerHTML = `- GHS ${totals.discount.toFixed(2)}`;
+  if (totAmt) totAmt.innerHTML = `GHS ${totals.total.toFixed(2)}`;
+  if (btnBtn) btnBtn.innerHTML = `<i class="fas fa-lock"></i> Place Order · GHS ${totals.total.toFixed(2)}`;
+  
+  if (typeof renderCart === 'function') renderCart();
 }
 
 function updateDeliveryFee() {
-  renderCheckout();
+  updateCheckoutTotalsUI();
 }
 
 async function placeOrder() {
@@ -242,7 +269,9 @@ async function placeOrder() {
     delivery_fee: totals.deliveryFee, total: totals.total,
     payment_method: selectedPayment, payment_ref: 'REF' + Date.now(),
     status: 'paid', delivery_address: address, ship_date: sat.toISOString(),
-    referral_code: App.appliedReferral || '', discount: 0,
+    referral_code: App.currentUser ? (App.currentUser.referred_by || '') : '', 
+    discount: totals.discount || 0,
+    coupon_code: App.appliedCoupon ? App.appliedCoupon.code : '',
     buyer_location: dest
   };
 

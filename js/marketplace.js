@@ -883,7 +883,7 @@ async function shareProduct(productId) {
   const url = baseUrl + '?product=' + productId;
   const title = p.name;
   const desc = p.description ? `${p.description}` : '';
-  const text = `${title} Check this out on HAPPA TRADEMART!`;
+  const text = `${title}\n\n${desc ? desc + '\n\n' : ''}Check this out on HAPPA TRADEMART!\n${url}`;
 
   const shareData = {
     title: title,
@@ -908,7 +908,7 @@ async function shareProduct(productId) {
       }
       await navigator.share(shareData);
     } else {
-      navigator.clipboard?.writeText(`${title}`);
+      navigator.clipboard?.writeText(text);
       showToast('Product details copied! 📋', 'success');
     }
   } catch (err) {

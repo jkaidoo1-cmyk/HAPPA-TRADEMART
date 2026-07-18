@@ -87,10 +87,20 @@ async function initAdBanners(pageKey) {
   const campaign = _pickCampaignForPage(pageKey);
   _clearSlot(slotId);
 
-  if (!campaign) { _hideSlot(slot); return; }
+  const state = _buildSlotState(campaign, pageKey);
+  if (!state) { 
+    _hideSlot(slot); 
+    if (pageKey === 'home') {
+      const hd = document.getElementById('hero-default');
+      if (hd) hd.style.display = '';
+    }
+    return; 
+  }
 
-  const state = _buildSlotState(campaign);
-  if (!state) { _hideSlot(slot); return; }
+  if (pageKey === 'home') {
+    const hd = document.getElementById('hero-default');
+    if (hd) hd.style.display = 'none';
+  }
 
   AdEngine.slots[slotId] = state;
   slot.style.display = '';
@@ -142,6 +152,13 @@ async function _ensureCampaigns() {
         }
         return c;
       });
+
+    const settingsRes = await apiGet('settings', 'key=hero_banners');
+    const heroRow = settingsRes?.data?.find(r => r.key === 'hero_banners');
+    try {
+      AdEngine.heroBanners = heroRow && heroRow.value ? JSON.parse(heroRow.value) : [];
+    } catch(e) { AdEngine.heroBanners = []; }
+
     AdEngine.lastFetch = nowMs;
   } catch (e) { console.warn('[AdEngine] fetch failed:', e); }
 }
@@ -196,15 +213,27 @@ function _slideDuration(campaign) {
  *   spentKey: string,
  * }
  */
-function _buildSlotState(campaign) {
-  const storeIds = Array.isArray(campaign.store_ids) ? campaign.store_ids : [];
-  if (!storeIds.length) return null;
-
-  const budgets   = campaign.store_budgets || {};
-  const { key: spentKey, spent } = _loadSpent(campaign.id);
+function _buildSlotState(campaign, pageKey) {
+  const storeIds = campaign && Array.isArray(campaign.store_ids) ? campaign.store_ids : [];
+  const budgets   = campaign ? (campaign.store_budgets || {}) : {};
+  const { key: spentKey, spent } = campaign ? _loadSpent(campaign.id) : { key: '', spent: {} };
 
   // Build one entry per store that actually has eligible products
   const allStoreEntries = [];
+
+  if (pageKey === 'home' && AdEngine.heroBanners && AdEngine.heroBanners.length > 0) {
+    // Inject admin hero banners as a pseudo-store
+    const heroProducts = AdEngine.heroBanners.map((url, i) => ({
+      id: `hero-${i}`,
+      name: '',
+      images: [url],
+      is_hero: true,
+      price: 0,
+      original_price: 0
+    }));
+    allStoreEntries.push({ sid: 'admin_hero', products: heroProducts, cursor: 0 });
+  }
+
   for (const sid of storeIds) {
     const products = AdEngine.products.filter(p =>
       p.status !== 'archived' && p.store_id === sid
@@ -216,6 +245,7 @@ function _buildSlotState(campaign) {
 
   // Active ring = stores that still have budget today
   const activeRing = allStoreEntries.filter(e => {
+    if (e.sid === 'admin_hero') return true;
     const budget = Number(budgets[e.sid]) || 30;
     return (spent[e.sid] || 0) < budget;
   });
@@ -223,8 +253,8 @@ function _buildSlotState(campaign) {
 
   return {
     campaign,
-    slideMs:       _slideDuration(campaign),
-    showStoreName: campaign.show_store_name !== false,
+    slideMs:       campaign ? _slideDuration(campaign) : AdEngine.DEFAULT_SLIDE_MS,
+    showStoreName: campaign ? campaign.show_store_name !== false : false,
     allStoreEntries,
     activeRing,
     ringIndex:     0,
@@ -290,6 +320,7 @@ function _tick(slotId, slot, firstRender) {
  */
 function _chargeEntry(state, entry) {
   const sid          = entry.sid;
+  if (sid === 'admin_hero') return; // Do not charge admin hero banners
   const slideMinutes = state.slideMs / 60000;
 
   state.spent[sid] = (state.spent[sid] || 0) + slideMinutes;
@@ -337,6 +368,7 @@ function _chargeEntry(state, entry) {
  * reset all spent counters and restore the full activeRing.
  */
 function _maybeResetBudgets(state) {
+  if (!state.campaign) return;
   const todayKey = `happa_ads_${state.campaign.id}_${_todayStr()}`;
   if (state.spentKey === todayKey) return;   // still same day
 
@@ -357,26 +389,27 @@ function _maybeResetBudgets(state) {
 
 function _renderSlide(slot, slotId, product, store, state) {
   const img      = product.images?.[0] || '';
-  const discount = (product.original_price > product.price)
+  const isHero   = product.is_hero;
+  const discount = !isHero && (product.original_price > product.price)
     ? Math.round((1 - product.price / product.original_price) * 100) : 0;
 
   const slideHTML = `
 <div class="ads-slide ads-slide--active"
-     onclick="openProduct('${product.id}')"
-     role="button" tabindex="0"
-     aria-label="Sponsored: ${escHtml(product.name)}">
+     ${!isHero ? `onclick="openProduct('${product.id}')" role="button" tabindex="0" aria-label="Sponsored: ${escHtml(product.name)}"` : ''}>
 
   ${img
     ? `<div class="ads-slide-bg" style="background-image:url('${escHtml(img)}')"></div>`
     : `<div class="ads-slide-bg ads-slide-bg--empty"></div>`}
 
-  <div class="ads-img-wrap">
+  <div class="ads-img-wrap" ${isHero ? 'style="width:100%;height:100%;padding:0;max-width:none"' : ''}>
     ${img
-      ? `<img class="ads-img" src="${escHtml(img)}" alt="${escHtml(product.name)}" loading="lazy"
+      ? `<img class="ads-img" src="${escHtml(img)}" alt="${isHero ? 'Hero Banner' : escHtml(product.name)}" loading="lazy"
+              ${isHero ? 'style="width:100%;height:100%;object-fit:cover;border-radius:0"' : ''}
               onerror="this.closest('.ads-img-wrap').classList.add('ads-img-wrap--err')">`
       : `<div class="ads-img-placeholder"><i class="fas fa-shopping-bag"></i></div>`}
   </div>
 
+  ${!isHero ? `
   <div class="ads-info">
     <div class="ads-badges">
       <span class="ads-badge-sponsored"><i class="fas fa-ad"></i> Sponsored</span>
@@ -393,7 +426,7 @@ function _renderSlide(slot, slotId, product, store, state) {
         : ''}
     </div>
     <button class="ads-cta" tabindex="-1">Shop Now <i class="fas fa-arrow-right"></i></button>
-  </div>
+  </div>` : ''}
 </div>`;
 
   const dotsHTML     = _buildStoreDots(state);

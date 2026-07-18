@@ -223,21 +223,24 @@
     <!-- ══════════ HOME PAGE ══════════ -->
     <div class="page active" id="page-home">
 
-      <!-- Hero Banner -->
-      <div class="hero-banner" style="margin-top: -12px;">
-        <h1>Shop Ghana's Best Stores</h1>
-        <p>Discover local vendors across Accra, Kumasi, Takoradi & more</p>
-        <div class="hero-chips">
-          <span class="hero-chip" onclick="setLocationFilter('Accra')">📍 Accra</span>
-          <span class="hero-chip" onclick="setLocationFilter('Kumasi')">📍 Kumasi</span>
-          <span class="hero-chip" onclick="setLocationFilter('Takoradi')">📍 Takoradi</span>
-          <span class="hero-chip" onclick="setLocationFilter('Tamale')">📍 Tamale</span>
-          <span class="hero-chip" onclick="showPage('marketplace')"><i class="fas fa-tags"></i> All Deals</span>
+      <!-- Hero Carousel Wrapper -->
+      <div id="hero-carousel-wrapper" style="margin-top: -12px; margin-bottom: 16px;">
+        <!-- Fallback Default Hero Banner -->
+        <div id="hero-default" class="hero-banner" style="margin-top: 0; margin-bottom: 0;">
+          <h1>Shop Ghana's Best Stores</h1>
+          <p>Discover local vendors across Accra, Kumasi, Takoradi & more</p>
+          <div class="hero-chips">
+            <span class="hero-chip" onclick="setLocationFilter('Accra')">📍 Accra</span>
+            <span class="hero-chip" onclick="setLocationFilter('Kumasi')">📍 Kumasi</span>
+            <span class="hero-chip" onclick="setLocationFilter('Takoradi')">📍 Takoradi</span>
+            <span class="hero-chip" onclick="setLocationFilter('Tamale')">📍 Tamale</span>
+            <span class="hero-chip" onclick="showPage('marketplace')"><i class="fas fa-tags"></i> All Deals</span>
+          </div>
         </div>
-      </div>
 
-      <!-- Ad Banner — Home (injected by AdEngine) -->
-      <div id="ad-banner-home" style="display:none"></div>
+        <!-- Ad Banner / Hero Carousel — Home (injected by AdEngine) -->
+        <div id="ad-banner-home" style="display:none"></div>
+      </div>
 
       <!-- Flash Sale Section -->
       <div class="section">

@@ -340,7 +340,7 @@ async function autoGenerateProductInfo(base64Image) {
   await new Promise(resolve => setTimeout(resolve, 1500));
   
   // Grab name from DOM if possible, otherwise use random sample
-  let nameEl = document.getElementById('addProductName') || document.getElementById('editProductName');
+  let nameEl = document.getElementById('new-p-name') || document.getElementById('edit-p-name') || document.getElementById('addProductName');
   let name = nameEl && nameEl.value.trim() ? nameEl.value : SAMPLE_AI_PRODUCTS[Math.floor(Math.random() * SAMPLE_AI_PRODUCTS.length)];
 
   const res = localPredictAndGenerate(name);

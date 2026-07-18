@@ -613,6 +613,43 @@ async function renderAdminDashboard() {
         </div>
       </div>
 
+      <!-- 7. Hero Banners -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header">
+          <h3>🖼️ Hero Banners</h3>
+        </div>
+        <div class="card-body">
+          <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:12px">Upload images to display in the home page hero carousel. These will rotate along with any active ads.</p>
+          <div id="admin-hero-banners-container" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+          <div class="form-group" style="margin-bottom:0">
+            <input type="file" id="hero-banner-upload" accept="image/*" style="display:none" onchange="uploadHeroBanner(event)">
+            <button type="button" class="btn btn-outline" onclick="document.getElementById('hero-banner-upload').click()">
+              <i class="fas fa-upload"></i> Upload Banner
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8. Coupons -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+          <h3>🎟️ Platform Coupons</h3>
+        </div>
+        <div class="card-body">
+          <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:12px">Create platform-wide discount codes that buyers can apply at checkout.</p>
+          
+          <div style="display:grid;grid-template-columns:1fr 80px 80px auto;gap:6px;margin-bottom:6px;font-size:.72rem;font-weight:700;color:var(--text-muted);padding:0 2px">
+            <span>Code</span><span>Type</span><span>Value</span><span></span>
+          </div>
+          <div id="admin-coupons-list">
+            <!-- Rendered by renderCouponsEditor() -->
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="addCoupon()">
+            <i class="fas fa-plus"></i> Add Coupon
+          </button>
+        </div>
+      </div>
+
       <button class="btn btn-primary btn-block" type="submit">
         <i class="fas fa-save"></i> Save All Settings
       </button>

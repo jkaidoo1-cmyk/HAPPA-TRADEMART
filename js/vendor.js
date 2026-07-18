@@ -1078,8 +1078,9 @@ function _onProductImgPick(input, prefix, idx) {
 // prefix = 'new-p' (Add modal) or 'edit-p' (Edit modal)
 async function _aiAutoFill(prefix, base64Image) {
   // Determine field IDs for this prefix
-  const nameId = prefix === 'new-p' ? 'new-p-name' : null;   // Edit modal has no name field
-  const descId = prefix === 'new-p' ? 'new-p-desc' : null;
+  const nameId = prefix === 'new-p' ? 'new-p-name' : (prefix === 'edit-p' ? 'edit-p-name' : null);
+  const descId = prefix === 'new-p' ? 'new-p-desc' : (prefix === 'edit-p' ? 'edit-p-desc' : null);
+  const catId  = prefix === 'new-p' ? 'new-p-cat'  : (prefix === 'edit-p' ? 'edit-p-cat'  : null);
 
   // Show spinner badge near the image slot
   const spinId  = prefix + '-ai-spin';
@@ -1099,6 +1100,7 @@ async function _aiAutoFill(prefix, base64Image) {
   // Pre-fill fields with loading text if it's the Add modal
   const nameEl = nameId ? document.getElementById(nameId) : null;
   const descEl = descId ? document.getElementById(descId) : null;
+  const catEl  = catId  ? document.getElementById(catId)  : null;
   if (nameEl) nameEl.placeholder = '✨ Generating…';
   if (descEl) descEl.placeholder = '✨ Generating description…';
 
@@ -1107,6 +1109,10 @@ async function _aiAutoFill(prefix, base64Image) {
 
     if (nameEl && result.name)        nameEl.value = result.name;
     if (descEl && result.description) descEl.value = result.description;
+    if (catEl && result.category) {
+      const option = Array.from(catEl.options).find(opt => opt.value === result.category);
+      if (option) catEl.value = result.category;
+    }
 
     spinner.innerHTML = '<i class="fas fa-check-circle" style="color:var(--success)"></i> AI filled name & description ✨';
     spinner.style.background = '#dcfce7';

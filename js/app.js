@@ -152,6 +152,12 @@ window.addEventListener('DOMContentLoaded', () => {
     }).catch(() => showPage('home'));
   } else {
     showPage('home');
+    if (searchParams.has('product')) {
+      const productId = searchParams.get('product');
+      setTimeout(() => {
+        if (typeof openProduct === 'function') openProduct(productId);
+      }, 500);
+    }
   }
 
   // Listen to hash changes dynamically

@@ -100,8 +100,17 @@ function getCartTotals() {
     deliveryFee += d.rate;
   });
 
-  const total = subtotal + platformFee + deliveryFee;
-  return { subtotal, commissionTotal, platformFee, deliveryFee, total };
+  let discount = 0;
+  if (App.appliedCoupon) {
+    if (App.appliedCoupon.type === 'pct') {
+      discount = subtotal * (App.appliedCoupon.value / 100);
+    } else {
+      discount = Math.min(subtotal, App.appliedCoupon.value);
+    }
+  }
+
+  const total = Math.max(0, subtotal + platformFee + deliveryFee - discount);
+  return { subtotal, commissionTotal, platformFee, deliveryFee, discount, total };
 }
 
 function renderCart() {
@@ -176,6 +185,7 @@ ${Object.values(storeGroups).map(sg => `
   <div class="summary-row"><span>Subtotal</span><span>GHS ${totals.subtotal.toFixed(2)}</span></div>
   <div class="summary-row"><span>Platform Fee (${PLATFORM_FEE_PCT}%)</span><span>GHS ${totals.platformFee.toFixed(2)}</span></div>
   <div class="summary-row"><span>Estimated Delivery</span><span>GHS ${totals.deliveryFee.toFixed(2)}</span></div>
+  ${totals.discount > 0 ? `<div class="summary-row" style="color:var(--success)"><span>Discount</span><span>- GHS ${totals.discount.toFixed(2)}</span></div>` : ''}
   <div class="summary-row total"><span>Total</span><span class="amount">GHS ${totals.total.toFixed(2)}</span></div>
 </div>
 
