@@ -50,14 +50,7 @@
       "rendor_sub_plan": "monthly"
     }
   ],
-  "stores": [
-    {
-      "name": "Test Store",
-      "slug": "test-store",
-      "location": "Accra",
-      "id": "sto-1093-0e97"
-    }
-  ],
+  "stores": [],
   "storefronts": [],
   "products": [],
   "orders": [],

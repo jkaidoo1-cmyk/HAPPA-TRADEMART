@@ -20,7 +20,7 @@ async function renderAdminDashboard() {
   ]);
 
   const allUsers    = (usersRes?.data || []).filter(u => u.role !== 'admin');
-  const allStores   = storesRes?.data   || [];
+  const allStores   = (storesRes?.data || []).filter(s => s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin'));
   const allProducts = productsRes?.data || [];
   const allOrders   = ordersRes?.data   || [];
   const allPkgs     = pkgsRes?.data     || [];
@@ -1751,7 +1751,7 @@ async function refreshAdminVendorsFull() {
     apiGet('stores', 'limit=200')
   ]);
   const allUsers  = (usersRes?.data || []).filter(u => u.role !== 'admin');
-  const allStores = storesRes?.data || [];
+  const allStores = (storesRes?.data || []).filter(s => s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin'));
   App.allStores = allStores;
   App.allUsers = allUsers;
   const vendors = allUsers.filter(u => u.role === 'vendor');
