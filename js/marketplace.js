@@ -842,7 +842,10 @@ async function addToCartFromDetail(productId) {
 
 
 async function buyNow(productId) {
-
+  if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
+    showToast('Vendors and Admins cannot purchase items.', 'warning');
+    return;
+  }
   if (!App.currentUser) { showPage('auth'); return; }
 
   const p = App.allProducts.find(p => p.id === productId) || await apiGet(`products/${productId}`);
@@ -851,9 +854,9 @@ async function buyNow(productId) {
 
   const qty = parseInt(document.getElementById('detail-qty')?.textContent) || 1;
 
-  addToCart(p, qty);
-
-  showPage('checkout');
+  if (addToCart(p, qty)) {
+    showPage('checkout');
+  }
 
 }
 

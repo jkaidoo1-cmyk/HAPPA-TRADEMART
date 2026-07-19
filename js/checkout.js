@@ -5,6 +5,11 @@
 let selectedPayment = 'mobile_money';
 
 function renderCheckout() {
+  if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
+    showToast('Vendors and Admins cannot purchase items.', 'warning');
+    showPage('home');
+    return;
+  }
   if (!App.cart.length) { showPage('cart'); return; }
 
   const c = document.getElementById('checkout-content');

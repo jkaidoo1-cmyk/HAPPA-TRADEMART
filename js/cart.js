@@ -3,10 +3,14 @@
    ============================================================ */
 
 function addToCart(product, qty = 1, buyerNote = '') {
-  if (!product) return;
+  if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
+    showToast('Vendors and Admins cannot purchase items.', 'warning');
+    return false;
+  }
+  if (!product) return false;
   if (product.stock_qty === 0 || product.status === 'sold_out') {
     showToast('This item is out of stock', 'error');
-    return;
+    return false;
   }
 
   // ── Optimistic UI: capture pre-state, render immediately, ──
@@ -52,6 +56,8 @@ function addToCart(product, qty = 1, buyerNote = '') {
       updateCartBadge();
     };
   }
+
+  return true;
 }
 
 function removeFromCart(productId) {
@@ -205,6 +211,10 @@ ${Object.values(storeGroups).map(sg => `
 }
 
 function proceedToCheckout() {
+  if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
+    showToast('Vendors and Admins cannot purchase items.', 'warning');
+    return;
+  }
   if (!App.currentUser) { showPage('auth'); return; }
   if (!App.cart.length) { showToast('Your cart is empty', 'warning'); return; }
   showPage('checkout');
