@@ -1777,7 +1777,7 @@ function showReviewModal(targetId, targetType) {
 
     <div style="display:flex;gap:8px;font-size:1.8rem" id="star-picker">
 
-      ${[1,2,3,4,5].map(n=>`<span style="cursor:pointer;color:var(--border)" onclick="pickStar(${n})" data-star="${n}">Γÿà</span>`).join('')}
+      ${[1,2,3,4,5].map(n=>`<span style="cursor:pointer;color:var(--border)" onclick="pickStar(${n})" data-star="${n}">&#9733;</span>`).join('')}
 
     </div>
 

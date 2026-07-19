@@ -488,7 +488,7 @@ async function renderVendorDashboard() {
           <div class="card-header"><h3>Customization Preview</h3></div>
           <div class="card-body" style="font-size:.85rem;color:var(--text-light);display:grid;gap:8px">
             <div><strong>Slogan:</strong> ${escHtml(sfSlogan || 'None')}</div>
-            <div><strong>Friendly URL Slug:</strong> happamart.com/storefront/${sfSlug}</div>
+            <div><strong>Friendly URL Slug:</strong> ${window.location.origin}/#storefront/${sfSlug}</div>
             <div><strong>Primary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${sfPrimaryColor}"></span> ${sfPrimaryColor}</div>
             <div><strong>Secondary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${sfSecondaryColor}"></span> ${sfSecondaryColor}</div>
             <div><strong>About Us:</strong> ${escHtml(sfDescription || 'None')}</div>
@@ -560,8 +560,8 @@ async function renderVendorDashboard() {
             <div style="font-size:.8rem;line-height:1.5">
               Your independent storefront is active. Use the links below to share with customers or manage settings:
               <div style="margin-top:6px;display:grid;gap:4px">
-                <div><strong>Storefront Website (Buyer Link):</strong> <a href="#storefront/${sfSlug}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/storefront/${sfSlug}</a></div>
-                <div><strong>Storefront Admin Control (Vendor Link):</strong> <a href="#store-admin/${sfSlug}" style="font-weight:700;color:#065f46;text-decoration:underline">happamart.com/store-admin/${sfSlug}</a></div>
+                <div><strong>Storefront Website (Buyer Link):</strong> <a href="#storefront/${sfSlug}" style="font-weight:700;color:#065f46;text-decoration:underline">${window.location.origin}/#storefront/${sfSlug}</a></div>
+                <div><strong>Storefront Admin Control (Vendor Link):</strong> <a href="#store-admin/${sfSlug}" style="font-weight:700;color:#065f46;text-decoration:underline">${window.location.origin}/#store-admin/${sfSlug}</a></div>
               </div>
             </div>
             <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
@@ -757,8 +757,8 @@ async function renderVendorDashboard() {
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Store Slug / Friendly URL</label>
                   <div style="display:flex;align-items:center;gap:6px">
-                    <span style="font-size:.8rem;color:var(--text-muted)">happamart.com/storefront/</span>
-                    <input type="text" id="store-slug" value="${sfSlug}" class="form-control" style="font-size:.8rem;font-weight:700" placeholder="my-store-link" oninput="window.updateStorefrontPreview()">
+                    <span style="font-size:.8rem;color:var(--text-muted)">${window.location.origin}/#storefront/</span>
+                    <input type="text" id="store-slug" value="${sfSlug}" class="form-control" style="font-size:.8rem;font-weight:700" placeholder="my-store-link" oninput="window.handleSlugChange(this.value)">
                   </div>
                 </div>
                 <div>
@@ -783,7 +783,7 @@ async function renderVendorDashboard() {
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span>
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981"></span>
-                <span style="font-size:0.75rem;color:#64748b;font-weight:700;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="preview-url-bar">happamart.com/store/${myStore.slug || myStore.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}</span>
+                <span style="font-size:0.75rem;color:#64748b;font-weight:700;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="preview-url-bar">${window.location.origin}/#storefront/${myStore.slug || myStore.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}</span>
               </div>
               <div class="card-body" style="padding:0;background:#f8f9fa;max-height:480px;position:relative;overflow-y:scroll !important" id="storefront-live-preview-box">
                 <!-- Rendered dynamically -->
@@ -2615,6 +2615,21 @@ window.saveVendorStoreSettings = async function(storeId) {
   const youtube_url = document.getElementById('store-youtube')?.value || '';
   
   const slug = document.getElementById('store-slug')?.value || '';
+  const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
+  if (!cleanSlug) {
+    showToast('Please enter a valid URL slug.', 'error');
+    return;
+  }
+  
+  const duplicate = (App.allStorefronts || []).find(sf => 
+    String(sf.url_slug).toLowerCase() === cleanSlug && 
+    String(sf.store_id) !== String(storeId)
+  );
+  if (duplicate) {
+    showToast('This URL slug is already taken. Please choose another.', 'error');
+    return;
+  }
+
   const meta_description = document.getElementById('store-meta-desc')?.value || '';
   const theme = document.querySelector('input[name="store-theme"]:checked')?.value || 'classic';
   const font_family = document.getElementById('store-font-family')?.value || 'Outfit';
@@ -2636,7 +2651,7 @@ window.saveVendorStoreSettings = async function(storeId) {
     facebook_url,
     instagram_url,
     youtube_url,
-    url_slug: slug,
+    url_slug: cleanSlug,
     meta_description,
     theme,
     font_family
@@ -2658,8 +2673,8 @@ window.saveVendorStoreSettings = async function(storeId) {
       status: 'draft'
     };
     const res = await apiPost('storefronts', payload).catch(() => null);
-    if (res?.data) {
-      App.myStorefront = res.data;
+    if (res) {
+      App.myStorefront = res.data || res;
       if (!App.allStorefronts) App.allStorefronts = [];
       App.allStorefronts.push(App.myStorefront);
       try {
@@ -2830,7 +2845,7 @@ window.updateStorefrontPreview = function() {
 
   // Update preview URL bar
   const urlBar = document.getElementById('preview-url-bar');
-  if (urlBar) urlBar.textContent = `happamart.com/storefront/${slug}`;
+  if (urlBar) urlBar.textContent = `${window.location.origin}/#storefront/${slug}`;
 
   const previewBox = document.getElementById('storefront-live-preview-box');
   if (!previewBox) return;
@@ -3143,6 +3158,16 @@ window.handleStoreNameChange = function(val) {
     slugInput.value = val.toLowerCase()
                          .replace(/[^a-z0-9]+/g, '-')
                          .replace(/^-+|-+$/g, '');
+  }
+  window.updateStorefrontPreview();
+};
+
+window.handleSlugChange = function(val) {
+  const slugInput = document.getElementById('store-slug');
+  if (slugInput) {
+    slugInput.value = val.toLowerCase()
+                         .replace(/[^a-z0-9-]+/g, '-')
+                         .replace(/-+/g, '-');
   }
   window.updateStorefrontPreview();
 };
