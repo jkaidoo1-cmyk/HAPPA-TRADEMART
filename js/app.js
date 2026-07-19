@@ -225,8 +225,10 @@ window.addEventListener('DOMContentLoaded', () => {
   // ── Background Prefetching ──
   // Start preloading all static pages in the background to speed up navigation
   setTimeout(() => {
-    const prefetchPages = ['marketplace', 'stores', 'cart', 'checkout', 'settings', 'notifications', 'delivery', 'privacy'];
+    const prefetchPages = ['marketplace', 'stores', 'cart', 'notifications', 'delivery', 'privacy'];
+    if (App.cart && App.cart.length) prefetchPages.push('checkout');
     if (App.currentUser) {
+      prefetchPages.push('settings');
       if (App.currentUser.role === 'buyer') prefetchPages.push('buyer-dashboard');
       else if (App.currentUser.role === 'vendor' || App.currentUser.role === 'seller') prefetchPages.push('vendor-dashboard', 'vendor-my-store', 'vendor-orders');
       else if (App.currentUser.role === 'rendor') prefetchPages.push('rendor-dashboard');

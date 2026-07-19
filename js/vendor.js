@@ -1057,20 +1057,28 @@ function _addProductImgSlot(prefix) {
   if (btn && newCount >= 5) btn.style.display = 'none';
 }
 
-function _onProductImgPick(input, prefix, idx) {
+async function _onProductImgPick(input, prefix, idx) {
   const file = input.files?.[0];
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024) { showToast('Image too large. Max 5MB.', 'warning'); input.value = ''; return; }
-  const reader = new FileReader();
-  reader.onload = ev => {
+  const maxBytes = 15 * 1024 * 1024;
+  if (file.size > maxBytes) { showToast('Image too large. Max 15MB.', 'warning'); input.value = ''; return; }
+  
+  try {
+    const base64 = await compressImage(file, 1200, 0.8);
     const thumb       = document.getElementById(prefix + '-thumb-' + idx);
     const placeholder = document.getElementById(prefix + '-slot-placeholder-' + idx);
     const hid         = document.getElementById(prefix + '-img-b64-' + idx);
-    if (thumb)       { thumb.src = ev.target.result; thumb.style.display = 'block'; }
+    if (thumb)       { thumb.src = base64; thumb.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
-    if (hid)         hid.value = ev.target.result;
-  };
-  reader.readAsDataURL(file);
+    if (hid)         hid.value = base64;
+    
+    if (idx === 0) {
+      _aiAutoFill(prefix, base64);
+    }
+  } catch (err) {
+    showToast('Failed to process image', 'error');
+    console.error(err);
+  }
 }
 
 // ── AI Auto-Fill helper ─────────────────────────────────────
@@ -1574,14 +1582,14 @@ function simulateIdUpload(userId) {
   <!-- 1. ID document -->
   <div class="form-group" style="margin-bottom:14px">
     <label class="form-label" style="font-weight:700">1. ID Document (Ghana Card / Passport / License)</label>
-    <div class="upload-area" id="id-upload-area" style="cursor:pointer;padding:12px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
-      <i class="fas fa-id-card" style="color:var(--primary);font-size:1.4rem;margin-bottom:4px"></i>
-      <p style="font-size:.78rem;margin:0">Tap to upload ID photo</p>
+    <div class="upload-area" id="id-upload-area" style="cursor:pointer;padding:12px;border:${u.id_image ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:100px;display:flex;flex-direction:column;justify-content:center;${u.id_image ? `background-image:url('${u.id_image}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
+      <div style="${u.id_image ? 'display:none;' : ''}">
+        <i class="fas fa-id-card" style="color:var(--primary);font-size:1.4rem;margin-bottom:4px"></i>
+        <p style="font-size:.78rem;margin:0">Tap to upload ID photo</p>
+      </div>
     </div>
     <input type="file" id="id-doc-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'id-doc-preview', 'id-doc-thumb')">
-    <div id="id-doc-preview" style="${u.id_image ? '' : 'display:none;'}margin-top:8px;text-align:center">
-      <img id="id-doc-thumb" src="${u.id_image || ''}" style="max-height:100px;border-radius:4px;border:1px solid var(--border)">
-    </div>
+    <img id="id-doc-thumb" src="${u.id_image || ''}" style="display:none">
   </div>
 
   <!-- 2. Proof of Previous Sales (3 images) -->
@@ -1591,36 +1599,36 @@ function simulateIdUpload(userId) {
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
       <!-- Slot 1 -->
       <div>
-        <div class="upload-area" id="sales-1-area" style="cursor:pointer;padding:10px 4px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
-          <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
-          <p style="font-size:.7rem;margin:0">Image 1</p>
+        <div class="upload-area" id="sales-1-area" style="cursor:pointer;padding:10px 4px;border:${u.proof_sales_1 ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:80px;display:flex;flex-direction:column;justify-content:center;${u.proof_sales_1 ? `background-image:url('${u.proof_sales_1}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
+          <div style="${u.proof_sales_1 ? 'display:none;' : ''}">
+            <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
+            <p style="font-size:.7rem;margin:0">Image 1</p>
+          </div>
         </div>
         <input type="file" id="sales-1-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-1-preview', 'sales-1-thumb')">
-        <div id="sales-1-preview" style="${u.proof_sales_1 ? '' : 'display:none;'}margin-top:6px;text-align:center">
-          <img id="sales-1-thumb" src="${u.proof_sales_1 || ''}" style="max-height:60px;max-width:100%;border-radius:4px;border:1px solid var(--border)">
-        </div>
+        <img id="sales-1-thumb" src="${u.proof_sales_1 || ''}" style="display:none">
       </div>
       <!-- Slot 2 -->
       <div>
-        <div class="upload-area" id="sales-2-area" style="cursor:pointer;padding:10px 4px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
-          <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
-          <p style="font-size:.7rem;margin:0">Image 2</p>
+        <div class="upload-area" id="sales-2-area" style="cursor:pointer;padding:10px 4px;border:${u.proof_sales_2 ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:80px;display:flex;flex-direction:column;justify-content:center;${u.proof_sales_2 ? `background-image:url('${u.proof_sales_2}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
+          <div style="${u.proof_sales_2 ? 'display:none;' : ''}">
+            <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
+            <p style="font-size:.7rem;margin:0">Image 2</p>
+          </div>
         </div>
         <input type="file" id="sales-2-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-2-preview', 'sales-2-thumb')">
-        <div id="sales-2-preview" style="${u.proof_sales_2 ? '' : 'display:none;'}margin-top:6px;text-align:center">
-          <img id="sales-2-thumb" src="${u.proof_sales_2 || ''}" style="max-height:60px;max-width:100%;border-radius:4px;border:1px solid var(--border)">
-        </div>
+        <img id="sales-2-thumb" src="${u.proof_sales_2 || ''}" style="display:none">
       </div>
       <!-- Slot 3 -->
       <div>
-        <div class="upload-area" id="sales-3-area" style="cursor:pointer;padding:10px 4px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
-          <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
-          <p style="font-size:.7rem;margin:0">Image 3</p>
+        <div class="upload-area" id="sales-3-area" style="cursor:pointer;padding:10px 4px;border:${u.proof_sales_3 ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:80px;display:flex;flex-direction:column;justify-content:center;${u.proof_sales_3 ? `background-image:url('${u.proof_sales_3}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
+          <div style="${u.proof_sales_3 ? 'display:none;' : ''}">
+            <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
+            <p style="font-size:.7rem;margin:0">Image 3</p>
+          </div>
         </div>
         <input type="file" id="sales-3-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-3-preview', 'sales-3-thumb')">
-        <div id="sales-3-preview" style="${u.proof_sales_3 ? '' : 'display:none;'}margin-top:6px;text-align:center">
-          <img id="sales-3-thumb" src="${u.proof_sales_3 || ''}" style="max-height:60px;max-width:100%;border-radius:4px;border:1px solid var(--border)">
-        </div>
+        <img id="sales-3-thumb" src="${u.proof_sales_3 || ''}" style="display:none">
       </div>
     </div>
   </div>
@@ -1629,14 +1637,14 @@ function simulateIdUpload(userId) {
   <div class="form-group" style="margin-bottom:18px">
     <label class="form-label" style="font-weight:700">3. Proof of Link Sharing</label>
     <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">Screenshot showing HAPPA website link shared to your status or group chat.</p>
-    <div class="upload-area" id="share-upload-area" style="cursor:pointer;padding:12px;border:2px dashed var(--border);border-radius:var(--radius-sm);text-align:center">
-      <i class="fas fa-share-alt" style="color:var(--primary);font-size:1.4rem;margin-bottom:4px"></i>
-      <p style="font-size:.78rem;margin:0">Tap to upload screenshot</p>
+    <div class="upload-area" id="share-upload-area" style="cursor:pointer;padding:12px;border:${u.proof_share ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:100px;display:flex;flex-direction:column;justify-content:center;${u.proof_share ? `background-image:url('${u.proof_share}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
+      <div style="${u.proof_share ? 'display:none;' : ''}">
+        <i class="fas fa-share-alt" style="color:var(--primary);font-size:1.4rem;margin-bottom:4px"></i>
+        <p style="font-size:.78rem;margin:0">Tap to upload screenshot</p>
+      </div>
     </div>
     <input type="file" id="share-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'share-preview', 'share-thumb')">
-    <div id="share-preview" style="${u.proof_share ? '' : 'display:none;'}margin-top:8px;text-align:center">
-      <img id="share-thumb" src="${u.proof_share || ''}" style="max-height:100px;border-radius:4px;border:1px solid var(--border)">
-    </div>
+    <img id="share-thumb" src="${u.proof_share || ''}" style="display:none">
   </div>
 
   <button class="btn btn-primary btn-block" id="id-confirm-btn" onclick="submitVerificationDocuments('${userId}')" disabled>
@@ -1655,16 +1663,27 @@ function simulateIdUpload(userId) {
   }, 100);
 }
 
-function previewDocField(input, previewId, thumbId) {
+async function previewDocField(input, previewId, thumbId) {
   const file = input.files?.[0];
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024) { showToast('File too large. Max 5MB.', 'warning'); input.value = ''; return; }
-  const reader = new FileReader();
-  reader.onload = e => {
+  const maxBytes = 15 * 1024 * 1024;
+  if (file.size > maxBytes) { showToast('File too large. Max 15MB.', 'warning'); input.value = ''; return; }
+
+  try {
+    const base64 = await compressImage(file, 1200, 0.8);
     const thumb = document.getElementById(thumbId);
-    const preview = document.getElementById(previewId);
-    if (thumb) { thumb.src = e.target.result; }
-    if (preview) { preview.style.display = 'block'; }
+    if (thumb) { thumb.src = base64; }
+    
+    const area = input.previousElementSibling;
+    if (area && area.classList.contains('upload-area')) {
+      area.style.backgroundImage = `url('${base64}')`;
+      area.style.backgroundSize = 'contain';
+      area.style.backgroundPosition = 'center';
+      area.style.backgroundRepeat = 'no-repeat';
+      area.style.border = '1px solid var(--border)';
+      Array.from(area.children).forEach(c => c.style.display = 'none');
+    }
+    
     checkVerificationFormReady();
   };
   reader.readAsDataURL(file);
@@ -2051,7 +2070,7 @@ ${_bapHeader('Bulk Add Products', 'up to 10 items at once')}
 }
 
 // ── Handle file selection ────────────────────────────────────
-function _bapOnFilePick(input) {
+async function _bapOnFilePick(input) {
   const files = Array.from(input.files || []);
   if (!files.length) return;
 
@@ -2064,24 +2083,24 @@ function _bapOnFilePick(input) {
   const countEl = document.getElementById('bap-sel-count');
   if (!strip) return;
 
-  files.forEach(file => {
-    // Cap at 10 drafts total
-    if (_bap.drafts.length >= 10) return;
-    if (file.size > 5 * 1024 * 1024) {
-      showToast(`"${file.name}" is too large (max 5MB)`, 'warning');
-      return;
+  for (const file of files) {
+    if (_bap.drafts.length >= 10) break;
+    const maxBytes = 15 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      showToast(`"${file.name}" is too large (max 15MB)`, 'warning');
+      continue;
     }
 
     const idx = _bap.drafts.length;
     _bap.drafts.push({ b64: '', name: '', desc: '', price: '', orig: '', stock: '', weight: '0.5', cat: 'Other', tags: '', flash: false, allowNote: false, notePrompt: '' });
 
-    const reader = new FileReader();
-    reader.onload = ev => {
-      _bap.drafts[idx].b64 = ev.target.result;
+    try {
+      const base64 = await compressImage(file, 1200, 0.8);
+      _bap.drafts[idx].b64 = base64;
 
       // ── AI Auto-Generation for bulk drafts ──────────────────
       if (typeof autoGenerateProductInfo === 'function') {
-        autoGenerateProductInfo(ev.target.result).then(res => {
+        autoGenerateProductInfo(base64).then(res => {
           if (_bap.drafts[idx]) {
             if (res.name)        _bap.drafts[idx].name = res.name;
             if (res.description) _bap.drafts[idx].desc = res.description;
@@ -2099,20 +2118,22 @@ function _bapOnFilePick(input) {
       thumb.className = 'bap-thumb';
       thumb.id = 'bap-thumb-' + idx;
       thumb.innerHTML = `
-        <img src="${ev.target.result}" alt="Image ${idx+1}">
+        <img src="${base64}" alt="Image ${idx+1}">
         <button class="bap-thumb-rm" onclick="_bapRemoveDraft(${idx})" type="button" aria-label="Remove">
           <i class="fas fa-times"></i>
         </button>`;
       strip.appendChild(thumb);
 
       // Update UI
-      const filled = _bap.drafts.filter(d => d.b64).length;
+      const filled = _bap.drafts.filter(d => d && d.b64).length;
       if (countEl) countEl.textContent = `${filled} image${filled !== 1 ? 's' : ''} selected`;
       if (nextBtn) nextBtn.disabled = filled === 0;
       if (hint)    hint.style.display = filled > 0 ? 'block' : 'none';
-    };
-    reader.readAsDataURL(file);
-  });
+    } catch (err) {
+      console.error(err);
+      showToast(`Failed to process ${file.name}`, 'error');
+    }
+  }
 
   if (_bap.drafts.length >= 10) showToast('Maximum 10 images reached', 'info');
 }

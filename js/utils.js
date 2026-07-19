@@ -110,31 +110,70 @@ document.addEventListener('error', (e) => {
 // previewWrapperId : id of the wrapper div shown after selection
 // hiddenId         : id of <input type="hidden"> storing base64 data-URL
 // Thumb element id is derived by replacing 'preview' → 'thumb' in previewWrapperId.
-function previewProductImage(input, previewWrapperId, hiddenId) {
+async function compressImage(file, maxWidth = 1200, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = ev => {
+      const img = new Image();
+      img.src = ev.target.result;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+}
+
+async function previewProductImage(input, previewWrapperId, hiddenId) {
   const file = input.files?.[0];
   if (!file) return;
 
-  const maxBytes = hiddenId.includes('banner') ? 3 * 1024 * 1024   // 3 MB for banners
-                 : hiddenId.includes('logo')   ? 2 * 1024 * 1024   // 2 MB for logos
-                 :                               5 * 1024 * 1024;  // 5 MB for products
-
+  const maxBytes = 15 * 1024 * 1024; // 15 MB limit before compression
   if (file.size > maxBytes) {
-    const mb = (maxBytes / (1024 * 1024)).toFixed(0);
-    showToast(`Image too large. Max ${mb}MB for this field.`, 'warning');
+    showToast(`Image too large. Max 15MB.`, 'warning');
     input.value = '';
     return;
   }
 
-  const reader = new FileReader();
-  reader.onload = ev => {
+  try {
+    const base64 = await compressImage(file);
+    
     const wrap  = document.getElementById(previewWrapperId);
     const thumb = document.getElementById(previewWrapperId.replace('preview', 'thumb'));
     const hid   = document.getElementById(hiddenId);
-    if (thumb) thumb.src = ev.target.result;
-    if (wrap)  wrap.style.display = 'flex';
-    if (hid)   hid.value = ev.target.result; // store full base64 data-URL
-  };
-  reader.readAsDataURL(file);
+    if (hid) hid.value = base64;
+
+    const area = input.previousElementSibling;
+    if (area && area.classList.contains('upload-area')) {
+      area.style.backgroundImage = `url('${base64}')`;
+      area.style.backgroundSize = 'contain';
+      area.style.backgroundPosition = 'center';
+      area.style.backgroundRepeat = 'no-repeat';
+      area.style.border = '1px solid var(--border)';
+      Array.from(area.children).forEach(c => c.style.display = 'none');
+      if (thumb) thumb.style.display = 'none';
+      if (wrap) wrap.style.display = 'flex';
+    } else {
+      if (thumb) thumb.src = base64;
+      if (wrap) wrap.style.display = 'flex';
+    }
+  } catch (err) {
+    showToast('Failed to process image', 'error');
+    console.error(err);
+  }
 }
 
 function clearProductImage(previewWrapperId, fileInputId, hiddenId) {
@@ -142,8 +181,17 @@ function clearProductImage(previewWrapperId, fileInputId, hiddenId) {
   const thumb = document.getElementById(previewWrapperId.replace('preview', 'thumb'));
   const input = document.getElementById(fileInputId);
   const hid   = document.getElementById(hiddenId);
+  
   if (wrap)  wrap.style.display  = 'none';
   if (thumb) thumb.src           = '';
+  
+  const area = input?.previousElementSibling;
+  if (area && area.classList.contains('upload-area')) {
+    area.style.backgroundImage = '';
+    area.style.border = '';
+    Array.from(area.children).forEach(c => c.style.display = '');
+  }
+
   if (input) input.value         = '';
   if (hid)   hid.value           = '';
 }
