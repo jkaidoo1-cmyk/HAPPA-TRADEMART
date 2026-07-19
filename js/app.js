@@ -1562,7 +1562,7 @@ function renderLocalProducts() {
 function renderFeaturedStores() {
   const list = document.getElementById('featured-stores-list');
   if (!list) return;
-  const stores = App.allStores.filter(s => s.status === 'active').slice(0, 6);
+  const stores = App.allStores.filter(s => s.status === 'active' && s.vendor_id !== 'admin' && s.name !== "Admin User's Store").slice(0, 6);
   list.innerHTML = stores.map(s => storeCardHTML(s, true)).join('');
 }
 
@@ -2269,6 +2269,7 @@ function requestAccountDeletion() {
 
 window.autoCreateStoreForVendor = async function(vendor) {
   if (!vendor) return null;
+  if (vendor.role === 'admin' || vendor.id === 'admin') return null;
   
   // 1. Double check if store already exists to prevent duplicate stores
   const storeRes = await apiGet('stores', 'limit=200').catch(() => null);

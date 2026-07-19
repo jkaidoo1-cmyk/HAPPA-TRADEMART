@@ -390,7 +390,7 @@ async function renderStores() {
 
 
 
-  let stores = App.allStores.filter(s => s.status === 'active');
+  let stores = App.allStores.filter(s => s.status === 'active' && s.vendor_id !== 'admin' && s.name !== "Admin User's Store");
 
   const ul = App.currentUser?.location || '';
 
