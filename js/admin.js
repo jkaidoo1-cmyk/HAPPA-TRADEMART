@@ -19,7 +19,7 @@ async function renderAdminDashboard() {
     apiGet('packages', 'limit=200')
   ]);
 
-  const allUsers    = usersRes?.data    || [];
+  const allUsers    = (usersRes?.data || []).filter(u => u.role !== 'admin');
   const allStores   = storesRes?.data   || [];
   const allProducts = productsRes?.data || [];
   const allOrders   = ordersRes?.data   || [];
@@ -101,7 +101,7 @@ async function renderAdminDashboard() {
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-users" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">${allUsers.filter(u => u.role !== 'admin').length}</div>
+        <div class="stat-value">${allUsers.length}</div>
         <div class="stat-label">Total Users</div>
       </div>
       <div class="stat-card">
@@ -1732,7 +1732,7 @@ async function refreshAdminUsersList() {
   if (!list) return;
   list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
   const res = await apiGet('users', 'limit=200');
-  const users = res?.data || [];
+  const users = (res?.data || []).filter(u => u.role !== 'admin');
   App.allUsers = users;
   list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
 }
@@ -1750,7 +1750,7 @@ async function refreshAdminVendorsFull() {
     apiGet('users',  'limit=200'),
     apiGet('stores', 'limit=200')
   ]);
-  const allUsers  = usersRes?.data  || [];
+  const allUsers  = (usersRes?.data || []).filter(u => u.role !== 'admin');
   const allStores = storesRes?.data || [];
   App.allStores = allStores;
   App.allUsers = allUsers;
