@@ -151,7 +151,7 @@ async function renderRendorDashboard() {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-wallet" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">GHS ${(u.wallet_balance||0).toFixed(2)}</div>
+        <div class="stat-value">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
         <div class="stat-label">Wallet</div>
       </div>
       <div class="stat-card">
@@ -695,7 +695,7 @@ function renderRendorWallet() {
   el.innerHTML = `
 <div style="background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-radius:var(--radius-md);padding:20px;margin-bottom:20px">
   <div style="font-size:.75rem;opacity:.8">Wallet Balance</div>
-  <div style="font-size:2rem;font-weight:900">GHS ${(u.wallet_balance||0).toFixed(2)}</div>
+  <div style="font-size:2rem;font-weight:900">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
   <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
     <button class="btn btn-sm" onclick="showDepositModal()" style="background:rgba(255,255,255,.2);color:#fff;border-color:transparent">
       <i class="fas fa-arrow-down"></i> Top Up

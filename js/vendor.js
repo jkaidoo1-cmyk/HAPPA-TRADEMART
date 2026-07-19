@@ -162,7 +162,7 @@ async function renderVendorDashboard() {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-wallet" style="color:var(--success)"></i></div>
-        <div class="stat-value">GHS ${(u.wallet_balance||0).toFixed(0)}</div>
+        <div class="stat-value">GHS ${parseFloat(u.wallet_balance||0).toFixed(0)}</div>
         <div class="stat-label">Wallet Balance</div>
       </div>
       <div class="stat-card">
@@ -233,7 +233,7 @@ async function renderVendorDashboard() {
     <!-- Balance + Action Buttons -->
     <div style="background:linear-gradient(135deg,var(--success),#16a34a);border-radius:var(--radius-md);padding:18px;color:#fff;margin-bottom:16px">
       <div style="font-size:.78rem;opacity:.8;margin-bottom:4px">Available Balance</div>
-      <div style="font-size:2rem;font-weight:800;line-height:1">GHS ${(u.wallet_balance||0).toFixed(2)}</div>
+      <div style="font-size:2rem;font-weight:800;line-height:1">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
       <div style="font-size:.75rem;opacity:.7;margin:4px 0 14px">Earnings release after delivery is confirmed</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.4)"
@@ -306,7 +306,7 @@ async function renderVendorDashboard() {
     <!-- Balance Header -->
     <div style="background:linear-gradient(135deg,var(--secondary),#16213e);border-radius:var(--radius-md);padding:18px;color:#fff;margin-bottom:16px">
       <div style="font-size:.78rem;opacity:.75;margin-bottom:4px">Wallet Balance</div>
-      <div style="font-size:2rem;font-weight:800;line-height:1">GHS ${(u.wallet_balance||0).toFixed(2)}</div>
+      <div style="font-size:2rem;font-weight:800;line-height:1">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
       <div style="font-size:.73rem;opacity:.7;margin:4px 0 0">Your earnings from sales</div>
       <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
         <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1.5px solid rgba(255,255,255,.3)"

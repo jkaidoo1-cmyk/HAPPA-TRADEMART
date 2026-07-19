@@ -38,7 +38,7 @@ function showDepositModal() {
   <div style="background:linear-gradient(135deg,var(--secondary),#16213e);border-radius:var(--radius-md);padding:14px 16px;color:#fff;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <div style="font-size:.75rem;opacity:.75">Current Balance</div>
-      <div style="font-size:1.4rem;font-weight:800">GHS ${(u.wallet_balance||0).toFixed(2)}</div>
+      <div style="font-size:1.4rem;font-weight:800">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
     </div>
     <i class="fas fa-wallet" style="font-size:1.8rem;opacity:.5"></i>
   </div>
