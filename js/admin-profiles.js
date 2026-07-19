@@ -390,7 +390,7 @@ function _apRenderVendorProducts(userId, data) {
     wrap.innerHTML = '<div class="empty-state" style="padding:40px 0"><i class="fas fa-cube"></i><h3>No products yet</h3><p>This vendor has not added any products.</p></div>';
     return;
   }
-  wrap.innerHTML = products.sort((a,b) => (b.created_at||0) - (a.created_at||0)).map(p => {
+  wrap.innerHTML = `<div class="product-grid">` + products.sort((a,b) => (b.created_at||0) - (a.created_at||0)).map(p => {
     const avail = p.is_available !== false;
     const editId = 'ap-prod-edit-'+p.id;
     const priceSafe = (p.price||0).toFixed(2);
@@ -399,32 +399,23 @@ function _apRenderVendorProducts(userId, data) {
     const weightSafe = (p.weight_kg || '');
     const imgSafe = escHtml((p.images||[])[0] || '');
     return `
-    <div class="ap-prod-card">
-      <div class="ap-prod-main">
-        <img src="${imgSafe||'https://placehold.co/128x128?text=Product'}" alt="" class="ap-prod-img" onerror="this.src='https://placehold.co/128x128?text=Product'">
-        <div class="ap-prod-info">
-          <div class="ap-prod-name">${escHtml(p.name)}</div>
-          <div class="ap-prod-meta">
-            <span class="status-badge status-${avail?'active':'inactive'}" style="font-size:.65rem">${avail?'Available':'Hidden'}</span>
-            ${p.is_flash_sale?'<span class="status-badge" style="background:#fffbea;color:#b45309;border:none">⚡ Flash Sale</span>':''}
-            <span style="color:var(--text-muted);font-size:.8rem">${escHtml(p.category||'—')}</span>
-          </div>
-          <div class="ap-prod-price">
-            GHS ${priceSafe}
-            ${p.original_price ? `<span style="color:var(--text-muted);text-decoration:line-through;margin-left:6px">GHS ${parseFloat(p.original_price).toFixed(2)}</span>` : ''}
-          </div>
-          <div class="ap-prod-bottom" style="display:flex;justify-content:space-between;align-items:center;width:100%">
-            <span style="font-size:.8rem;color:var(--text-muted)">Stock: <strong style="color:${stockSafe===0?'var(--danger)':'var(--text)'}">${stockSafe}</strong> unit${stockSafe===1?'':'s'}</span>
-            <span style="font-size:.75rem;color:var(--text-muted)">${weightSafe?weightSafe+'kg':'—'}</span>
-          </div>
-        </div>
-        <div class="ap-prod-actions">
-          <button class="btn btn-ghost btn-sm" title="Toggle availability" onclick="_apToggleProductAvail('${p.id}','${userId}')"><i class="fas fa-eye${avail?'-slash':''}"></i></button>
-          <button class="btn btn-ghost btn-sm" title="Edit product" onclick="document.getElementById('${editId}').style.display=document.getElementById('${editId}').style.display==='none'?'block':'none'"><i class="fas fa-pen"></i></button>
-          <button class="btn btn-ghost btn-sm" title="Delete product" onclick="_apDeleteProduct('${p.id}','${userId}')"><i class="fas fa-trash-alt" style="color:var(--danger)"></i></button>
+    <div style="display:flex;flex-direction:column;position:relative;background:#fff;border-radius:var(--radius-md);overflow:visible">
+      ${productCardHTML(p)}
+      <div style="padding:8px;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);display:flex;justify-content:space-between;align-items:center;background:var(--bg-alt);margin-top:-5px">
+        <span class="status-badge status-${avail?'active':'inactive'}" style="font-size:.6rem">${avail?'Available':'Hidden'}</span>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:var(--primary)" title="Edit product" onclick="document.getElementById('${editId}').style.display=document.getElementById('${editId}').style.display==='none'?'block':'none'">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:${avail?'#b45309':'var(--success)'}" title="${avail?'Hide product':'Make available'}" onclick="_apToggleProductAvail('${p.id}','${userId}')">
+            <i class="fas fa-eye${avail?'-slash':''}"></i>
+          </button>
+          <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:var(--danger)" title="Delete product" onclick="_apDeleteProduct('${p.id}','${userId}')">
+            <i class="fas fa-trash-alt"></i>
+          </button>
         </div>
       </div>
-      <div id="${editId}" style="display:none;background:var(--bg-alt,#f8fafc);border-top:1px solid var(--border);padding:14px;margin-top:12px">
+      <div id="${editId}" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;background:var(--bg-alt,#f8fafc);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;box-shadow:var(--shadow-lg);margin-top:5px">
         <div style="font-weight:800;margin-bottom:10px">Edit product</div>
         <form onsubmit="event.preventDefault();_apSaveProductEdit('${p.id}','${userId}',this)">
           <div class="form-group">
@@ -485,7 +476,7 @@ function _apRenderVendorProducts(userId, data) {
       </div>
     </div>
     `;
-  }).join('');
+  }).join('') + '</div>';
 }
 
 // ── Render vendor packages into orders tab ────────────────
@@ -651,6 +642,7 @@ function _apRenderVendorProductsForPage(userId, data) {
           <div style="font-size:.7rem;color:#92400e">Flash Sale</div>
         </div>` : '<div></div>'}
       </div>
+      <div class="product-grid">
       ${products.sort((a,b) => (b.created_at||0) - (a.created_at||0)).map(p => {
         const avail = p.is_available !== false;
         const editId = 'ap-v-prod-edit-' + p.id;
@@ -660,36 +652,23 @@ function _apRenderVendorProductsForPage(userId, data) {
         const weightSafe = (p.weight_kg || '');
         const imgSafe = escHtml((p.images||[])[0] || '');
         return `
-        <div style="border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:10px;overflow:hidden">
-          <div style="display:flex;align-items:center;gap:10px;padding:10px">
-            <img src="${imgSafe||'https://placehold.co/48x48?text=Product'}" style="width:48px;height:48px;object-fit:cover;border-radius:var(--radius-sm);flex-shrink:0" onerror="this.src='https://placehold.co/48x48?text=Product'">
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:800;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.name)}</div>
-              <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px">
-                ${escHtml(p.category||'—')} · Stock: <strong>${stockSafe}</strong>${stockSafe===0?' ⚠️':''}
-                ${p.is_flash_sale ? ' · <span style="color:#b45309">⚡ Flash</span>' : ''}
-              </div>
-              <div style="font-size:.8rem;margin-top:2px">
-                <strong style="color:var(--primary)">GHS ${priceSafe}</strong>
-                ${p.original_price ? '<span style="color:var(--text-muted);text-decoration:line-through;margin-left:5px">GHS ' + parseFloat(p.original_price).toFixed(2) + '</span>' : ''}
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">
-              <span class="status-badge status-${avail?'active':'inactive'}" style="font-size:.6rem">${avail?'Available':'Hidden'}</span>
-              <div style="display:flex;gap:5px">
-                <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:var(--primary)" title="Edit product" onclick="document.getElementById('${editId}').style.display=document.getElementById('${editId}').style.display==='none'?'block':'none'">
-                  <i class="fas fa-pen"></i>
-                </button>
-                <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:${avail?'#b45309':'var(--success)'}" title="${avail?'Hide product':'Make available'}" onclick="_apToggleProductAvail('${p.id}','${userId}');_apRenderVendorProductsForPage('${userId}')">
-                  <i class="fas fa-eye${avail?'-slash':''}"></i>
-                </button>
-                <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:var(--danger)" title="Delete product" onclick="if(confirm('Delete this product permanently?'))_apDeleteProduct('${p.id}','${userId}');_apRenderVendorProductsForPage('${userId}')">
-                  <i class="fas fa-trash-alt"></i>
-                </button>
-              </div>
+        <div style="display:flex;flex-direction:column;position:relative;background:#fff;border-radius:var(--radius-md);overflow:visible">
+          ${productCardHTML(p)}
+          <div style="padding:8px;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);display:flex;justify-content:space-between;align-items:center;background:var(--bg-alt);margin-top:-5px">
+            <span class="status-badge status-${avail?'active':'inactive'}" style="font-size:.6rem">${avail?'Available':'Hidden'}</span>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:var(--primary)" title="Edit product" onclick="document.getElementById('${editId}').style.display=document.getElementById('${editId}').style.display==='none'?'block':'none'">
+                <i class="fas fa-pen"></i>
+              </button>
+              <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:${avail?'#b45309':'var(--success)'}" title="${avail?'Hide product':'Make available'}" onclick="_apToggleProductAvail('${p.id}','${userId}');_apRenderVendorProductsForPage('${userId}')">
+                <i class="fas fa-eye${avail?'-slash':''}"></i>
+              </button>
+              <button class="btn btn-ghost btn-sm" style="padding:3px 7px;font-size:.7rem;color:var(--danger)" title="Delete product" onclick="if(confirm('Delete this product permanently?'))_apDeleteProduct('${p.id}','${userId}');_apRenderVendorProductsForPage('${userId}')">
+                <i class="fas fa-trash-alt"></i>
+              </button>
             </div>
           </div>
-          <div id="${editId}" style="display:none;background:var(--bg-alt,#f8fafc);border-top:1px solid var(--border);padding:12px">
+          <div id="${editId}" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;background:var(--bg-alt,#f8fafc);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;box-shadow:var(--shadow-lg);margin-top:5px">
             <div style="font-size:.72rem;font-weight:900;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Edit Product</div>
             <form onsubmit="event.preventDefault();_apSaveProductEdit('${p.id}','${userId}',this);_apRenderVendorProductsForPage('${userId}')">
               <div class="form-group">
@@ -750,6 +729,7 @@ function _apRenderVendorProductsForPage(userId, data) {
           </div>
         </div>`;
       }).join('')}
+      </div>
     </div>`;
 }
 
