@@ -4,7 +4,6 @@
 
 function addToCart(product, qty = 1, buyerNote = '') {
   if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
-    showToast('Vendors and Admins cannot purchase items.', 'warning');
     return false;
   }
   if (!product) return false;
@@ -212,7 +211,6 @@ ${Object.values(storeGroups).map(sg => `
 
 function proceedToCheckout() {
   if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
-    showToast('Vendors and Admins cannot purchase items.', 'warning');
     return;
   }
   if (!App.currentUser) { showPage('auth'); return; }

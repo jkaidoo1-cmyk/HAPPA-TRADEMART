@@ -843,7 +843,6 @@ async function addToCartFromDetail(productId) {
 
 async function buyNow(productId) {
   if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
-    showToast('Vendors and Admins cannot purchase items.', 'warning');
     return;
   }
   if (!App.currentUser) { showPage('auth'); return; }

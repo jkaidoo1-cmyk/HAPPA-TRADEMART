@@ -1685,8 +1685,10 @@ async function previewDocField(input, previewId, thumbId) {
     }
     
     checkVerificationFormReady();
-  };
-  reader.readAsDataURL(file);
+  } catch (e) {
+    console.error('Error compressing image:', e);
+    showToast('Failed to process image.', 'error');
+  }
 }
 
 function checkVerificationFormReady() {

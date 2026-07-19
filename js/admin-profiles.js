@@ -393,7 +393,7 @@ function _apRenderVendorProducts(userId, data) {
   wrap.innerHTML = `<div class="product-grid">` + products.sort((a,b) => (b.created_at||0) - (a.created_at||0)).map(p => {
     const avail = p.is_available !== false;
     const editId = 'ap-prod-edit-'+p.id;
-    const priceSafe = (p.price||0).toFixed(2);
+    const priceSafe = parseFloat(p.price||0).toFixed(2);
     const origSafe = (p.original_price||'');
     const stockSafe = (p.stock_qty || 0);
     const weightSafe = (p.weight_kg || '');
@@ -646,7 +646,7 @@ function _apRenderVendorProductsForPage(userId, data) {
       ${products.sort((a,b) => (b.created_at||0) - (a.created_at||0)).map(p => {
         const avail = p.is_available !== false;
         const editId = 'ap-v-prod-edit-' + p.id;
-        const priceSafe = (p.price||0).toFixed(2);
+        const priceSafe = parseFloat(p.price||0).toFixed(2);
         const origSafe = (p.original_price||'');
         const stockSafe = (p.stock_qty || 0);
         const weightSafe = (p.weight_kg || '');
