@@ -1514,26 +1514,49 @@ async function loadHomeData() {
   ];
 
 
+  // Progressive Loading: Quick initial fetch for above-the-fold content (12 products, 6 stores)
   try {
-    const [prodRes, storeRes] = await Promise.all([
-      apiGet('products', 'limit=500'),
-      apiGet('stores', 'limit=500')
+    const [quickProdRes, quickStoreRes] = await Promise.all([
+      apiGet('products', 'limit=12'),
+      apiGet('stores', 'limit=6')
     ]);
-
-    App.allProducts = prodRes?.data || [];
-    App.allStores = storeRes?.data || [];
-
+    App.allProducts = quickProdRes?.data || [];
+    App.allStores = quickStoreRes?.data || [];
   } catch (e) {
-    console.warn('[loadHomeData] API error, falling back to mock lists:', e);
+    console.warn('[loadHomeData] Quick load error, falling back to empty lists:', e);
     App.allProducts = MOCK_PRODUCTS;
     App.allStores = MOCK_STORES;
   }
 
+  // Render initial quick load data immediately to unlock the screen
   renderFlashSale();
   renderLocalProducts();
   renderFeaturedStores();
   renderTrending();
   renderHomeServices();
+
+  // Background Prefetch: Load the remaining full datasets in the background without blocking the UI
+  (async () => {
+    try {
+      const [fullProdRes, fullStoreRes] = await Promise.all([
+        apiGet('products', 'limit=500'),
+        apiGet('stores', 'limit=500')
+      ]);
+      App.allProducts = fullProdRes?.data || App.allProducts;
+      App.allStores = fullStoreRes?.data || App.allStores;
+      
+      // Re-render only if the user is still on the home page
+      if (App.currentPage === 'home') {
+        renderFlashSale();
+        renderLocalProducts();
+        renderFeaturedStores();
+        renderTrending();
+        renderHomeServices();
+      }
+    } catch (e) {
+      console.warn('[loadHomeData] Background prefetch failed:', e);
+    }
+  })();
 }
 
 // ── Flash Sale ────────────────────────────────────────────

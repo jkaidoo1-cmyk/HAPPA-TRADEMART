@@ -2774,17 +2774,19 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
   renderVendorDashboard();
 };
 
-window.handleImageUpload = function(type) {
+window.handleImageUpload = async function(type) {
   const fileInput = document.getElementById(`store-${type}-file`);
   const hiddenInput = document.getElementById(`store-${type}-url`);
   if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
   
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    hiddenInput.value = e.target.result;
+  try {
+    const base64 = await compressImage(fileInput.files[0], 1200, 0.8);
+    hiddenInput.value = base64;
     window.updateStorefrontPreview();
-  };
-  reader.readAsDataURL(fileInput.files[0]);
+  } catch (err) {
+    console.error('Failed to compress image:', err);
+    showToast('Failed to process image.', 'error');
+  }
 };
 
 window.applyColorCombo = function(primary, secondary) {
