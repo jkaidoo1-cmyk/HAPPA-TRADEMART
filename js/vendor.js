@@ -16,8 +16,10 @@ async function renderVendorDashboard() {
   // is reflected without requiring a logout/login cycle.
   try {
     const freshUser = await apiFetch('users/' + App.currentUser.id);
-    if (freshUser && freshUser.id) {
-      // Merge server data into the local session (preserving any client-only keys)
+    // Only merge if the result is a plain user object with same id — never an array or list wrapper.
+    if (freshUser && typeof freshUser === 'object' && !Array.isArray(freshUser) &&
+        !freshUser.data && freshUser.id && String(freshUser.id) === String(App.currentUser.id) &&
+        (freshUser.role === 'vendor' || freshUser.role === 'seller')) {
       Object.assign(App.currentUser, freshUser);
       saveSessions();
     }
@@ -552,6 +554,8 @@ async function renderVendorDashboard() {
             ` : ''}
           </div>
         </div>
+
+        <div id="sf-status-card" style="margin-bottom:8px"></div>
 
         ${(myStorefront && myStorefront.status === 'approved') ? `
           ${window.getSubscriptionBannerHTML ? window.getSubscriptionBannerHTML(myStore) : ''}
@@ -2684,7 +2688,20 @@ window.saveVendorStoreSettings = async function(storeId) {
   }
 
   showToast('Storefront settings saved! 🎉', 'success');
-  renderVendorDashboard();
+  
+  // Refresh only the storefront status card in-place to avoid resetting the page
+  // (full re-render would re-fetch from the API and risk losing in-memory changes,
+  // and also kick the user back to the Overview tab).
+  try {
+    const statusCard = document.getElementById('sf-status-card');
+    if (statusCard && App.myStorefront) {
+      const slug = App.myStorefront.url_slug || '';
+      const liveUrl = `${window.location.origin}/#storefront/${slug}`;
+      statusCard.innerHTML = `<div style="font-size:.82rem;color:#065f46;font-weight:600"><i class="fas fa-check-circle" style="color:#16a34a"></i> Settings saved. Slug: <a href="${liveUrl}" target="_blank" style="color:#0284c7;text-decoration:underline">${liveUrl}</a></div>`;
+    }
+  } catch(e){}
+  // Update the preview URL bar with the new slug
+  if (typeof window.updateStorefrontPreview === 'function') window.updateStorefrontPreview();
 };
 
 window.setStorefrontStatus = async function(storeId, status) {
