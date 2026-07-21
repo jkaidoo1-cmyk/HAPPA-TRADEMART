@@ -2892,7 +2892,7 @@ window.updateStorefrontPreview = function() {
   let displayProducts = [];
   if (window.App && Array.isArray(App.allProducts)) {
     const storeNameVal = document.getElementById('store-name')?.value || '';
-    const myStore = App.allStores.find(s => s.name === storeNameVal || s.id === 1 || s.id === '1') || {};
+    const myStore = (App.allStores || []).find(s => s.name === storeNameVal || s.id === 1 || s.id === '1') || {};
     displayProducts = App.allProducts.filter(p => String(p.store_id) === String(myStore.id) && p.status === 'active');
     if (displayProducts.length === 0) {
       displayProducts = App.allProducts.filter(p => p.status === 'active');
@@ -3295,7 +3295,7 @@ window.openStorefrontSubscribeModal = function(storeId, preSelectedPlan, price) 
   const existing = document.getElementById('storefront-sub-modal');
   if (existing) existing.remove();
 
-  const store = App.allStores.find(s => String(s.id) === String(storeId)) || {};
+  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || {};
   const plan = STOREFRONT_PLANS[preSelectedPlan] || STOREFRONT_PLANS.growth;
 
   const html = `
