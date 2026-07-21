@@ -99,7 +99,7 @@ const TABLE_COLUMNS = {
   delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
   referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'status', 'created_at'],
   wallet_transactions: ['id', 'user_id', 'type', 'amount', 'description', 'reference', 'created_at', 'extra'],
-  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'created_at', 'updated_at']
+  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'name', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'business_hours', 'shipping_policy', 'return_policy', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'created_at', 'updated_at']
 };
 
 function prepareRecordForDb(table, record) {
@@ -238,6 +238,54 @@ app.get('/api/:table', async (req, res) => {
     const table = req.params.table;
     const { search, limit, page, sort, ...filters } = req.query;
 
+    if (table === 'storefronts') {
+      let stores = [];
+      if (!supabase) {
+        dataStore.ensureTable('stores');
+        const store = dataStore.getStore();
+        stores = store.stores.map(serializeRecord);
+      } else {
+        const { data, error } = await supabase.from('stores').select('*');
+        if (error) return res.status(500).json({ error: error.message });
+        stores = (data || []).map(serializeRecord);
+      }
+
+      let rows = stores.map(st => ({
+        id: st.id,
+        store_id: st.id,
+        vendor_id: st.vendor_id,
+        status: st.storefront_status || 'draft',
+        url_slug: st.slug || '',
+        theme: st.theme || 'classic',
+        font_family: st.font_family || 'Outfit',
+        slogan: st.slogan || '',
+        about_us: st.description || st.about_us || '',
+        logo_url: st.logo_url || '',
+        banner_url: st.banner_url || '',
+        primary_color: st.primary_color || '#e85d04',
+        secondary_color: st.secondary_color || '#faf9f6',
+        tertiary_color: st.tertiary_color || '#e85d04',
+        business_hours: st.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
+        shipping_policy: st.shipping_policy || '',
+        return_policy: st.return_policy || '',
+        facebook_url: st.facebook || st.facebook_url || '',
+        instagram_url: st.instagram || st.instagram_url || '',
+        youtube_url: st.youtube_url || '',
+        meta_description: st.meta_description || '',
+        subscription_plan: st.subscription_plan || 'starter',
+        subscription_status: st.subscription_status || 'active',
+        created_at: st.created_at,
+        updated_at: st.updated_at
+      }));
+
+      if (search) rows = applyClientFilters(rows, { search, limit, page });
+      for (const [k, v] of Object.entries(filters)) {
+        if (!v) continue;
+        rows = rows.filter(r => String(r[k] ?? '').toLowerCase() === String(v).toLowerCase());
+      }
+      return res.json({ data: rows });
+    }
+
     if (!supabase) {
       // In-memory/file-backed path
       dataStore.ensureTable(table);
@@ -289,7 +337,52 @@ app.get('/api/:table/:id', async (req, res) => {
     const supabase = getSupabase();
     const table = req.params.table;
     const id = req.params.id;
-    
+
+    if (table === 'storefronts') {
+      let stores = [];
+      if (!supabase) {
+        dataStore.ensureTable('stores');
+        const store = dataStore.getStore();
+        stores = store.stores.map(serializeRecord);
+      } else {
+        const { data, error } = await supabase.from('stores').select('*');
+        if (error) return res.status(500).json({ error: error.message });
+        stores = (data || []).map(serializeRecord);
+      }
+
+      const st = stores.find(s => String(s.id) === String(id) || String(s.vendor_id) === String(id) || (s.slug && String(s.slug).toLowerCase() === String(id).toLowerCase()));
+      if (!st) return res.status(404).json({ error: 'Storefront not found' });
+
+      const sf = {
+        id: st.id,
+        store_id: st.id,
+        vendor_id: st.vendor_id,
+        status: st.storefront_status || 'draft',
+        url_slug: st.slug || '',
+        theme: st.theme || 'classic',
+        font_family: st.font_family || 'Outfit',
+        slogan: st.slogan || '',
+        about_us: st.description || st.about_us || '',
+        logo_url: st.logo_url || '',
+        banner_url: st.banner_url || '',
+        primary_color: st.primary_color || '#e85d04',
+        secondary_color: st.secondary_color || '#faf9f6',
+        tertiary_color: st.tertiary_color || '#e85d04',
+        business_hours: st.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
+        shipping_policy: st.shipping_policy || '',
+        return_policy: st.return_policy || '',
+        facebook_url: st.facebook || st.facebook_url || '',
+        instagram_url: st.instagram || st.instagram_url || '',
+        youtube_url: st.youtube_url || '',
+        meta_description: st.meta_description || '',
+        subscription_plan: st.subscription_plan || 'starter',
+        subscription_status: st.subscription_status || 'active',
+        created_at: st.created_at,
+        updated_at: st.updated_at
+      };
+      return res.json(sf);
+    }
+
     if (!supabase) {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();
@@ -312,6 +405,85 @@ app.post('/api/:table', async (req, res) => {
     const supabase = getSupabase();
     const table = req.params.table;
     const body = req.body || {};
+
+    if (table === 'storefronts') {
+      const storeId = body.store_id || body.id;
+      let st = null;
+      if (!supabase) {
+        dataStore.ensureTable('stores');
+        const store = dataStore.getStore();
+        st = store.stores.find(s => String(s.id) === String(storeId));
+      } else {
+        const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).maybeSingle();
+        if (!error && data) st = serializeRecord(data);
+      }
+
+      if (!st) {
+        return res.status(404).json({ error: 'Store not found to attach storefront' });
+      }
+
+      const storeUpdates = {
+        storefront_status: body.status || 'draft',
+        slug: body.url_slug || st.slug || '',
+        theme: body.theme || 'classic',
+        font_family: body.font_family || 'Outfit',
+        slogan: body.slogan || '',
+        description: body.about_us || st.description || '',
+        logo_url: body.logo_url || '',
+        banner_url: body.banner_url || '',
+        primary_color: body.primary_color || '#e85d04',
+        secondary_color: body.secondary_color || '#faf9f6',
+        tertiary_color: body.tertiary_color || '#e85d04',
+        business_hours: body.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
+        return_policy: body.return_policy || '',
+        facebook: body.facebook_url || '',
+        instagram: body.instagram_url || '',
+        subscription_plan: body.subscription_plan || st.subscription_plan || 'starter',
+        subscription_status: body.subscription_status || st.subscription_status || 'active',
+        updated_at: new Date().toISOString()
+      };
+
+      if (!supabase) {
+        const store = dataStore.getStore();
+        const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
+        if (idx !== -1) {
+          store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
+          dataStore.saveToFile();
+        }
+      } else {
+        const dbRecord = prepareRecordForDb('stores', storeUpdates);
+        await supabase.from('stores').update(dbRecord).eq('id', storeId);
+      }
+
+      const sf = {
+        id: storeId,
+        store_id: storeId,
+        vendor_id: st.vendor_id,
+        status: storeUpdates.storefront_status,
+        url_slug: storeUpdates.slug,
+        theme: storeUpdates.theme,
+        font_family: storeUpdates.font_family,
+        slogan: storeUpdates.slogan,
+        about_us: storeUpdates.description,
+        logo_url: storeUpdates.logo_url,
+        banner_url: storeUpdates.banner_url,
+        primary_color: storeUpdates.primary_color,
+        secondary_color: storeUpdates.secondary_color,
+        tertiary_color: storeUpdates.tertiary_color,
+        business_hours: storeUpdates.business_hours,
+        shipping_policy: storeUpdates.return_policy,
+        return_policy: storeUpdates.return_policy,
+        facebook_url: storeUpdates.facebook,
+        instagram_url: storeUpdates.instagram,
+        youtube_url: body.youtube_url || '',
+        meta_description: body.meta_description || '',
+        subscription_plan: storeUpdates.subscription_plan,
+        subscription_status: storeUpdates.subscription_status,
+        created_at: st.created_at,
+        updated_at: storeUpdates.updated_at
+      };
+      return res.status(201).json(sf);
+    }
     if (!body.id) body.id = generateId();
     body.id = String(body.id);
     if (!body.created_at) body.created_at = new Date().toISOString();
@@ -384,19 +556,113 @@ app.patch('/api/:table/:id', async (req, res) => {
     const id = req.params.id;
     const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
     const record = serializeRecord(body);
+
+    if (table === 'storefronts') {
+      let st = null;
+      if (!supabase) {
+        dataStore.ensureTable('stores');
+        const store = dataStore.getStore();
+        st = store.stores.find(s => String(s.id) === String(id));
+      } else {
+        const { data, error } = await supabase.from('stores').select('*').eq('id', id).maybeSingle();
+        if (!error && data) st = serializeRecord(data);
+      }
+
+      if (!st) {
+        if (!supabase) {
+          const store = dataStore.getStore();
+          st = store.stores.find(s => String(s.vendor_id) === String(id));
+        } else {
+          const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', id).limit(1);
+          if (!error && data && data.length > 0) st = serializeRecord(data[0]);
+        }
+      }
+
+      if (!st) {
+        return res.status(404).json({ error: 'Store not found to update storefront' });
+      }
+
+      const storeId = st.id;
+      const storeUpdates = {};
+      if ('status' in body) storeUpdates.storefront_status = body.status;
+      if ('url_slug' in body) storeUpdates.slug = body.url_slug;
+      if ('theme' in body) storeUpdates.theme = body.theme;
+      if ('font_family' in body) storeUpdates.font_family = body.font_family;
+      if ('slogan' in body) storeUpdates.slogan = body.slogan;
+      if ('about_us' in body) storeUpdates.description = body.about_us;
+      if ('logo_url' in body) storeUpdates.logo_url = body.logo_url;
+      if ('banner_url' in body) storeUpdates.banner_url = body.banner_url;
+      if ('primary_color' in body) storeUpdates.primary_color = body.primary_color;
+      if ('secondary_color' in body) storeUpdates.secondary_color = body.secondary_color;
+      if ('tertiary_color' in body) storeUpdates.tertiary_color = body.tertiary_color;
+      if ('business_hours' in body) storeUpdates.business_hours = body.business_hours;
+      if ('return_policy' in body) storeUpdates.return_policy = body.return_policy;
+      if ('facebook_url' in body) storeUpdates.facebook = body.facebook_url;
+      if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
+      if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
+      if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+      storeUpdates.updated_at = new Date().toISOString();
+
+      if (!supabase) {
+        const store = dataStore.getStore();
+        const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
+        if (idx !== -1) {
+          store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
+          dataStore.saveToFile();
+        }
+      } else {
+        const dbRecord = prepareRecordForDb('stores', storeUpdates);
+        await supabase.from('stores').update(dbRecord).eq('id', storeId);
+      }
+
+      let updatedSt = { ...st, ...storeUpdates };
+      const sf = {
+        id: storeId,
+        store_id: storeId,
+        vendor_id: updatedSt.vendor_id,
+        status: updatedSt.storefront_status || 'draft',
+        url_slug: updatedSt.slug || '',
+        theme: updatedSt.theme || 'classic',
+        font_family: updatedSt.font_family || 'Outfit',
+        slogan: updatedSt.slogan || '',
+        about_us: updatedSt.description || updatedSt.about_us || '',
+        logo_url: updatedSt.logo_url || '',
+        banner_url: updatedSt.banner_url || '',
+        primary_color: updatedSt.primary_color || '#e85d04',
+        secondary_color: updatedSt.secondary_color || '#faf9f6',
+        tertiary_color: updatedSt.tertiary_color || '#e85d04',
+        business_hours: updatedSt.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
+        shipping_policy: updatedSt.return_policy || '',
+        return_policy: updatedSt.return_policy || '',
+        facebook_url: updatedSt.facebook || updatedSt.facebook_url || '',
+        instagram_url: updatedSt.instagram || updatedSt.instagram_url || '',
+        youtube_url: body.youtube_url || '',
+        meta_description: body.meta_description || '',
+        subscription_plan: updatedSt.subscription_plan || 'starter',
+        subscription_status: updatedSt.subscription_status || 'active',
+        created_at: updatedSt.created_at,
+        updated_at: updatedSt.updated_at
+      };
+      return res.json(sf);
+    }
     
     if (!supabase) {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();
       const idx = store[table].findIndex(r => String(r.id) === String(id));
-      if (idx === -1) return res.status(404).json({ error: 'Record not found' });
-      store[table][idx] = { ...store[table][idx], ...record };
+      if (idx === -1) {
+        // Upsert: insert the record if not found (handles first-time save)
+        store[table].push(record);
+      } else {
+        store[table][idx] = { ...store[table][idx], ...record };
+      }
       dataStore.saveToFile();
-      return res.json(serializeRecord(store[table][idx]));
+      return res.json(serializeRecord(idx === -1 ? record : store[table][store[table].length - 1]));
     }
     
     const dbRecord = prepareRecordForDb(table, record);
-    const { data, error } = await supabase.from(table).update(dbRecord).eq('id', id).select().single();
+    // Use upsert so PATCH works even when the record doesn't exist yet (first-time save)
+    const { data, error } = await supabase.from(table).upsert(dbRecord, { onConflict: 'id' }).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
   } catch (err) {

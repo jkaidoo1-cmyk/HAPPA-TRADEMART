@@ -2618,11 +2618,14 @@ window.saveVendorStoreSettings = async function(storeId) {
   const instagram_url = document.getElementById('store-instagram')?.value || '';
   const youtube_url = document.getElementById('store-youtube')?.value || '';
   
-  const slug = document.getElementById('store-slug')?.value || '';
-  const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
+  const slug = document.getElementById('store-slug')?.value?.trim() || '';
+  // Auto-generate slug from store name if empty
+  let cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
   if (!cleanSlug) {
-    showToast('Please enter a valid URL slug.', 'error');
-    return;
+    const nameEl = document.getElementById('store-name');
+    const nameVal = nameEl?.value?.trim() || '';
+    cleanSlug = nameVal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '') || `store-${storeId}`;
+    if (document.getElementById('store-slug')) document.getElementById('store-slug').value = cleanSlug;
   }
   
   const duplicate = (App.allStorefronts || []).find(sf => 
@@ -2665,43 +2668,41 @@ window.saveVendorStoreSettings = async function(storeId) {
     Object.assign(App.myStorefront, sfFields);
     const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
     if (sfIdx !== -1) App.allStorefronts[sfIdx] = App.myStorefront;
-    try {
-      localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
-    } catch(e){}
-    await apiPatch('storefronts', App.myStorefront.id, sfFields).catch(() => {});
+    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+    const patchRes = await apiPatch('storefronts', App.myStorefront.id, sfFields);
+    if (!patchRes) {
+      showToast('⚠️ Could not reach server — changes saved locally only.', 'warning');
+    }
   } else {
-    const payload = {
-      ...sfFields,
-      store_id: storeId,
-      vendor_id: App.currentUser?.id || '',
-      status: 'draft'
-    };
-    const res = await apiPost('storefronts', payload).catch(() => null);
+    const payload = { ...sfFields, store_id: storeId, vendor_id: App.currentUser?.id || '', status: 'draft' };
+    const res = await apiPost('storefronts', payload);
     if (res) {
       App.myStorefront = res.data || res;
       if (!App.allStorefronts) App.allStorefronts = [];
-      App.allStorefronts.push(App.myStorefront);
-      try {
-        localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
-      } catch(e){}
+      // Avoid duplicates
+      const existing = App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id));
+      if (existing === -1) App.allStorefronts.push(App.myStorefront);
+      else App.allStorefronts[existing] = App.myStorefront;
+      try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+    } else {
+      showToast('❌ Failed to create storefront record. Check your connection.', 'error');
+      return;
     }
   }
 
   showToast('Storefront settings saved! 🎉', 'success');
   
-  // Refresh only the storefront status card in-place to avoid resetting the page
-  // (full re-render would re-fetch from the API and risk losing in-memory changes,
-  // and also kick the user back to the Overview tab).
+  // Update sf-status-card in-place (no full re-render)
   try {
     const statusCard = document.getElementById('sf-status-card');
     if (statusCard && App.myStorefront) {
       const slug = App.myStorefront.url_slug || '';
       const liveUrl = `${window.location.origin}/#storefront/${slug}`;
-      statusCard.innerHTML = `<div style="font-size:.82rem;color:#065f46;font-weight:600"><i class="fas fa-check-circle" style="color:#16a34a"></i> Settings saved. Slug: <a href="${liveUrl}" target="_blank" style="color:#0284c7;text-decoration:underline">${liveUrl}</a></div>`;
+      statusCard.innerHTML = `<div style="font-size:.82rem;background:#d1fae5;border:1px solid #a7f3d0;border-radius:8px;padding:8px 12px;color:#065f46;font-weight:600"><i class="fas fa-check-circle"></i> Settings saved. URL: <a href="${liveUrl}" target="_blank" style="color:#0284c7;text-decoration:underline">${liveUrl}</a></div>`;
     }
   } catch(e){}
-  // Update the preview URL bar with the new slug
   if (typeof window.updateStorefrontPreview === 'function') window.updateStorefrontPreview();
+  return true; // signal success to callers
 };
 
 window.setStorefrontStatus = async function(storeId, status) {
@@ -2721,13 +2722,31 @@ window.setStorefrontStatus = async function(storeId, status) {
   await apiPatch('storefronts', App.myStorefront.id, { status }).catch(() => {});
   
   // Notify admin
-  if (status === 'pending_approval' && typeof addNotification === 'function') {
+  if (status === 'pending_approval') {
     const storeObj = App.allStores?.find(s => String(s.id) === String(storeId));
-    addNotification('u-admin-001', 'system', '🎨 New Storefront Request', `${storeObj?.name || 'A vendor'} has requested storefront layout approval.`);
+    const storeName = storeObj?.name || App.currentUser?.name || 'A vendor';
+    // Find any admin user, fallback to hardcoded ID
+    const adminUser = (App.allUsers || []).find(u => u.role === 'admin');
+    const adminId = adminUser?.id || 'u-admin-001';
+    if (typeof addNotification === 'function') {
+      addNotification(adminId, 'system', '🎨 New Storefront Request',
+        `${storeName} has requested storefront layout approval.`,
+        '#admin-dashboard');
+    }
   }
 
   showToast(status === 'pending_approval' ? 'Storefront request submitted! 🚀' : 'Storefront status updated', 'success');
-  renderVendorDashboard();
+  
+  // Update the status badge in-place without a full dashboard re-render
+  try {
+    const statusCard = document.getElementById('sf-status-card');
+    if (statusCard) {
+      const msg = status === 'pending_approval'
+        ? '⏳ Storefront request submitted! Admin will review it shortly.'
+        : `Status updated to: ${status}`;
+      statusCard.innerHTML = `<div style="font-size:.82rem;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;color:#713f12;font-weight:600">${msg}</div>`;
+    }
+  } catch(e){}
 };
 
 window.activateStorefrontPlan = async function(storeId, planKey, price) {
@@ -3192,7 +3211,16 @@ window.handleSlugChange = function(val) {
 };
 
 window.submitStorefrontRequest = async function(storeId) {
-  await window.saveVendorStoreSettings(storeId);
+  showToast('Saving settings…', 'info');
+  const saved = await window.saveVendorStoreSettings(storeId);
+  if (!saved) {
+    showToast('❌ Could not save storefront settings. Please try again.', 'error');
+    return;
+  }
+  if (!App.myStorefront || !App.myStorefront.id) {
+    showToast('❌ Storefront record missing after save. Please try again.', 'error');
+    return;
+  }
   await window.setStorefrontStatus(storeId, 'pending_approval');
 };
 
