@@ -787,7 +787,7 @@ async function renderVendorDashboard() {
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span>
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981"></span>
-                <span style="font-size:0.75rem;color:#64748b;font-weight:700;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="preview-url-bar">${window.location.origin}/#storefront/${myStore.slug || myStore.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}</span>
+                <span style="font-size:0.75rem;color:#64748b;font-weight:700;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="preview-url-bar">${window.location.origin}/#storefront/${myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || ''}</span>
               </div>
               <div class="card-body" style="padding:0;background:#f8f9fa;max-height:480px;position:relative;overflow-y:scroll !important" id="storefront-live-preview-box">
                 <!-- Rendered dynamically -->
