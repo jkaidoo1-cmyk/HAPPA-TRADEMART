@@ -539,7 +539,7 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      ${(!myStorefront || myStorefront.status === 'draft' || myStorefront.status === 'approved') ? `
+      ${(!myStorefront || (myStorefront.status !== 'pending_approval' && myStorefront.status !== 'approved_pending_payment')) ? `
         <!-- State 3: Editing / Approved Customization Form -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
           <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
@@ -557,7 +557,7 @@ async function renderVendorDashboard() {
 
         <div id="sf-status-card" style="margin-bottom:8px"></div>
 
-        ${(myStorefront && myStorefront.status === 'approved') ? `
+        ${(myStorefront && (myStorefront.status === 'approved' || myStorefront.status === 'active')) ? `
           ${window.getSubscriptionBannerHTML ? window.getSubscriptionBannerHTML(myStore) : ''}
           <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;gap:8px">
             <div style="font-weight:800;font-size:.9rem"><i class="fas fa-check-circle"></i> Storefront Live!</div>

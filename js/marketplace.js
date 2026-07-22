@@ -1077,7 +1077,7 @@ async function renderStorefront(id) {
   const isAdmin = App.currentUser && App.currentUser.role === 'admin';
   const storefrontStatus = sf?.status || 'inactive';
 
-  if (storefrontStatus !== 'approved' && !isOwner && !isAdmin) {
+  if (storefrontStatus !== 'approved' && storefrontStatus !== 'active' && !isOwner && !isAdmin) {
     c.innerHTML = `
       <div class="empty-state" style="padding: 40px 20px; text-align: center;">
         <div style="font-size: 3rem; margin-bottom: 16px;">🏪</div>
