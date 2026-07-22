@@ -209,12 +209,12 @@ function showOrderReviewModal(storeId, packageId) {
   </p>
   <div class="form-group">
     <label class="form-label">Your Rating</label>
-    <div id="star-row" style="display:flex;gap:10px;font-size:2rem;margin-bottom:4px">
-      <span class="rating-star" onclick="selectRating(1)">☆</span>
-      <span class="rating-star" onclick="selectRating(2)">☆</span>
-      <span class="rating-star" onclick="selectRating(3)">☆</span>
-      <span class="rating-star" onclick="selectRating(4)">☆</span>
-      <span class="rating-star" onclick="selectRating(5)">☆</span>
+    <div id="star-row" style="display:flex;gap:10px;font-size:2rem;margin-bottom:4px;cursor:pointer">
+      <i class="far fa-star rating-star" onclick="selectRating(1)"></i>
+      <i class="far fa-star rating-star" onclick="selectRating(2)"></i>
+      <i class="far fa-star rating-star" onclick="selectRating(3)"></i>
+      <i class="far fa-star rating-star" onclick="selectRating(4)"></i>
+      <i class="far fa-star rating-star" onclick="selectRating(5)"></i>
     </div>
     <div id="rating-label" style="font-size:.8rem;color:var(--text-muted)">Select a rating</div>
     <input type="hidden" id="review-rating" value="0">
@@ -239,8 +239,13 @@ function selectRating(rating) {
   if (input) input.value = rating;
   if (label) label.textContent = RATING_WORDS[rating] || '';
   document.querySelectorAll('#star-row .rating-star').forEach((s, i) => {
-    s.textContent = i < rating ? '★' : '☆';
-    s.style.color  = i < rating ? '#fbbf24' : '#9ca3af';
+    if (i < rating) {
+      s.className = 'fas fa-star rating-star';
+      s.style.color = '#fbbf24';
+    } else {
+      s.className = 'far fa-star rating-star';
+      s.style.color = '#9ca3af';
+    }
   });
 }
 

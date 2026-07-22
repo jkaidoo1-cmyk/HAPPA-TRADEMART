@@ -9,8 +9,8 @@ def test():
         page.on("pageerror", lambda err: errors.append(f"PageError: {err}"))
         page.on("console", lambda msg: errors.append(f"Console {msg.type}: {msg.text}") if msg.type in ['error', 'warning'] else None)
         
-        print("Navigating to localhost:8080...")
-        page.goto("http://localhost:8080/")
+        print("Navigating to localhost:9000...")
+        page.goto("http://localhost:9000/")
         page.wait_for_timeout(2000)
         
         print("Clicking a product...")
@@ -23,7 +23,7 @@ def test():
             print("No product cards found on home page")
             
         print("Clicking a store...")
-        page.goto("http://localhost:8080/#stores")
+        page.goto("http://localhost:9000/#stores")
         page.wait_for_timeout(2000)
         store_cards = page.locator(".card").all()
         if store_cards:

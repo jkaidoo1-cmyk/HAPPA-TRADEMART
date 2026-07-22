@@ -724,15 +724,15 @@ async function renderVendorDashboard() {
                 </div>
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Business Hours</label>
-                  <input type="text" id="store-hours" value="${sfHours}" class="form-control" placeholder="e.g. Mon - Fri: 8 AM - 6 PM">
+                  <input type="text" id="store-hours" value="${sfHours}" class="form-control" placeholder="e.g. Mon - Fri: 8 AM - 6 PM" oninput="window.updateStorefrontPreview()">
                 </div>
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Shipping Policy</label>
-                  <textarea id="store-shipping-policy" class="form-control" rows="2" placeholder="Describe shipping estimates, rates...">${sfShipping}</textarea>
+                  <textarea id="store-shipping-policy" class="form-control" rows="2" placeholder="Describe shipping estimates, rates..." oninput="window.updateStorefrontPreview()">${sfShipping}</textarea>
                 </div>
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Return Policy</label>
-                  <textarea id="store-return-policy" class="form-control" rows="2" placeholder="Describe return periods, terms...">${sfReturn}</textarea>
+                  <textarea id="store-return-policy" class="form-control" rows="2" placeholder="Describe return periods, terms..." oninput="window.updateStorefrontPreview()">${sfReturn}</textarea>
                 </div>
               </div>
             </div>
@@ -742,15 +742,15 @@ async function renderVendorDashboard() {
               <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
                 <div style="display:flex;align-items:center;gap:8px">
                   <i class="fab fa-facebook" style="color:#1877f2;width:20px;text-align:center"></i>
-                  <input type="text" id="store-facebook" value="${sfFacebook}" class="form-control" placeholder="Facebook URL">
+                  <input type="text" id="store-facebook" value="${sfFacebook}" class="form-control" placeholder="Facebook URL" oninput="window.updateStorefrontPreview()">
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
                   <i class="fab fa-instagram" style="color:#e1306c;width:20px;text-align:center"></i>
-                  <input type="text" id="store-instagram" value="${sfInstagram}" class="form-control" placeholder="Instagram URL">
+                  <input type="text" id="store-instagram" value="${sfInstagram}" class="form-control" placeholder="Instagram URL" oninput="window.updateStorefrontPreview()">
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
                   <i class="fab fa-youtube" style="color:#ff0000;width:20px;text-align:center"></i>
-                  <input type="text" id="store-youtube" value="${sfYoutube}" class="form-control" placeholder="YouTube Channel URL">
+                  <input type="text" id="store-youtube" value="${sfYoutube}" class="form-control" placeholder="YouTube Channel URL" oninput="window.updateStorefrontPreview()">
                 </div>
               </div>
             </div>
@@ -767,7 +767,7 @@ async function renderVendorDashboard() {
                 </div>
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Meta Description</label>
-                  <input type="text" id="store-meta-desc" value="${sfMetaDesc}" class="form-control" placeholder="Brief SEO snippet for Google search">
+                  <input type="text" id="store-meta-desc" value="${sfMetaDesc}" class="form-control" placeholder="Brief SEO snippet for Google search" oninput="window.updateStorefrontPreview()">
                 </div>
               </div>
             </div>
@@ -953,7 +953,7 @@ function showAddProductModal(storeId, vendorId) {
     <div class="form-group">
       <label class="form-label">Product Name *</label>
       <div style="display:flex;gap:8px">
-        <input class="form-control" id="new-p-name" placeholder="e.g. Nike Air Max 90" required style="flex:1">
+        <input class="form-control" id="new-p-name" placeholder="e.g. Nike Air Max 90" required style="flex:1" oninput="_localAutoFill('new-p')">
         <button type="button" onclick="_localAutoFill('new-p', true)" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;padding:0 14px;cursor:pointer;font-size:.8rem;font-weight:700">
           <i class="fas fa-wand-magic-sparkles"></i> Autofill
         </button>

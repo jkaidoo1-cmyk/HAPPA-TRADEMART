@@ -23,10 +23,10 @@ cmd = [
     chrome_path,
     "--headless=new",
     "--remote-debugging-port=9222",
-    "http://localhost:8080/"
+    "http://localhost:9000/"
 ]
 process = subprocess.Popen(cmd)
-time.sleep(4)
+time.sleep(6)
 
 def parse_frame(data):
     if len(data) < 2: return None, data
@@ -116,7 +116,7 @@ try:
         targets = json.loads(response.read().decode())
     ws_url = None
     for t in targets:
-        if t.get('type') == 'page' and 'localhost:8080' in t.get('url', ''):
+        if t.get('type') == 'page' and 'localhost:9000' in t.get('url', ''):
             ws_url = t.get('webSocketDebuggerUrl')
             break
             

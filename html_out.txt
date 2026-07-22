@@ -1,5 +1,3 @@
 [
-  "{\"id\":1,\"result\":{\"result\":{\"type\":\"number\",\"value\":0,\"description\":\"0\"}}}",
-  "{\"id\":2,\"result\":{\"result\":{\"type\":\"string\",\"value\":\"No cards\"}}}",
-  "{\"id\":3,\"result\":{\"result\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"TypeError\",\"description\":\"TypeError: Cannot read properties of null (reading 'innerHTML')\\n    at <anonymous>:1:40\",\"objectId\":\"2733681964464446637.1.1\"},\"exceptionDetails\":{\"exceptionId\":1,\"text\":\"Uncaught\",\"lineNumber\":0,\"columnNumber\":39,\"scriptId\":\"9\",\"exception\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"TypeError\",\"description\":\"TypeError: Cannot read properties of null (reading 'innerHTML')\\n    at <anonymous>:1:40\",\"objectId\":\"2733681964464446637.1.2\"}}}}"
+  "{\"id\":3,\"result\":{\"result\":{\"type\":\"string\",\"value\":\"\\n      <div id=\\\"product-detail-content\\\"></div>\\n    \"}}}"
 ]

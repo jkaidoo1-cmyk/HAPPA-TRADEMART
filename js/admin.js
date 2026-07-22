@@ -48,6 +48,9 @@ async function renderAdminDashboard() {
 <div class="tab-nav" id="admin-tabs">
   <div class="tab-btn active" onclick="switchTab(this,'admin-overview')">Overview</div>
 
+  <div class="tab-btn" onclick="switchTab(this,'admin-vendors');refreshAdminVendorsFull()">Vendors</div>
+  <div class="tab-btn" onclick="switchTab(this,'admin-create-store')">Add Vendor</div>
+  <div class="tab-btn" onclick="switchTab(this,'admin-users')">Users</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-rendors');loadAdminRendors()">
     Rendors ${pendingRendors.length ? `<span style="background:#7c3aed;color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:3px">${pendingRendors.length}</span>` : ''}
   </div>
@@ -59,6 +62,8 @@ async function renderAdminDashboard() {
 
   <div class="tab-btn" onclick="switchTab(this,'admin-ads');loadAdminAds()">🎯 Ads</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-referrals');loadAdminReferrals()">🔗 Referrals</div>
+  <div class="tab-btn" onclick="switchTab(this,'admin-wallet');renderAdminTransactions('admin-txn-wrap')">Wallet</div>
+  <div class="tab-btn" onclick="switchTab(this,'admin-analytics')">Analytics</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-settings');loadAdminSettings()">Settings</div>
 </div>
 
