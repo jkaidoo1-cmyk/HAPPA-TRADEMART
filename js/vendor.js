@@ -1042,6 +1042,7 @@ function showAddProductModal(storeId, vendorId) {
         <input class="form-control" id="new-p-note-prompt" placeholder="e.g. Specify your color and size" style="font-size:.8rem">
         <div style="font-size:.68rem;color:var(--text-muted);margin-top:3px">This shows as the hint text in the buyer's note box.</div>
       </div>
+    </div>
     <button class="btn btn-primary btn-block" type="submit">
       <i class="fas fa-plus-circle"></i> Add Product
     </button>
@@ -1398,9 +1399,18 @@ async function submitAddProduct(e, storeId, vendorId) {
     localLearnCorrection(name, cat, desc);
   }
 
-  const commission = getCommission(price);
+  let finalPrice = price;
+  let finalOrig = orig;
+  if (isFlash) {
+    if (finalOrig <= price) {
+      finalOrig = price;
+      finalPrice = Math.round(price * 0.8 * 100) / 100; // Apply 20% off for flash sale
+    }
+  }
+
+  const commission = getCommission(finalPrice);
   const prod = await apiPost('products', {
-    name, description: desc, price, original_price: orig,
+    name, description: desc, price: finalPrice, original_price: finalOrig,
     store_id: storeId, vendor_id: vendorId, category: cat,
     images,
     stock_qty: stock, sold_count: 0, views: 0,
@@ -1563,22 +1573,35 @@ async function saveProductEdit(productId) {
   const buyerNotePrompt = (document.getElementById('edit-p-note-prompt')?.value || '').trim() || 'Add a note (e.g. color, size)';
   const status = stock === 0 ? 'sold_out' : 'active';
   
-  if (name && category && description) {
-    localLearnCorrection(name, category, description);
+  const p = App.allProducts.find(p => String(p.id) === String(productId));
+  let finalPrice = price;
+  let finalOrig = p ? (p.original_price || p.price) : price;
+
+  if (flash) {
+    if (finalOrig <= price) {
+      finalOrig = price;
+      finalPrice = Math.round(price * 0.8 * 100) / 100; // Apply 20% off for flash sale
+    }
+  } else {
+    if (p && p.is_flash_sale) {
+      finalPrice = finalOrig;
+    }
   }
-  
+
   await apiPatch('products', productId, {
     name, description, category,
-    stock_qty: stock, price, is_flash_sale: flash, status, images,
+    stock_qty: stock, price: finalPrice, original_price: finalOrig, is_flash_sale: flash, status, images,
     allow_buyer_note: allowBuyerNote,
     buyer_note_prompt: allowBuyerNote ? buyerNotePrompt : ''
   });
 
-  const p = App.allProducts.find(p => String(p.id) === String(productId));
   if (p) {
     p.name = name; p.description = description; p.category = category;
-    p.stock_qty = stock; p.price = price; p.is_flash_sale = flash; p.status = status; p.images = images;
+    p.stock_qty = stock; p.price = finalPrice; p.original_price = finalOrig; p.is_flash_sale = flash; p.status = status; p.images = images;
     p.allow_buyer_note = allowBuyerNote; p.buyer_note_prompt = allowBuyerNote ? buyerNotePrompt : '';
+  }
+  if (name && category && description) {
+    localLearnCorrection(name, category, description);
   }
   closeModalForce();
   showToast('Product updated! ✅', 'success');

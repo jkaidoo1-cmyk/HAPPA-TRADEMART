@@ -1238,17 +1238,123 @@ function calcDaysToSaturday() {
   if (el) el.textContent = diff;
 }
 
-// ── Flash Sale Countdown ──────────────────────────────────
+// ── Flash Sale Countdown & Group Rotation ──────────────────
+function syncFlashSaleStates() {
+  if (!App.allProducts || !App.allProducts.length) return;
+
+  const allFlash = App.allProducts.filter(p => p.is_flash_sale_flag || p.is_flash_sale);
+  allFlash.forEach(p => {
+    if (p.is_flash_sale_flag === undefined) {
+      p.is_flash_sale_flag = p.is_flash_sale;
+    }
+  });
+
+  allFlash.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+
+  // Distribute items into 5 groups
+  const groups = [[], [], [], [], []];
+  allFlash.forEach((p, idx) => {
+    let groupIdx;
+    if (idx < 25) {
+      groupIdx = Math.floor(idx / 5);
+    } else {
+      groupIdx = (idx - 25) % 5;
+    }
+    groups[groupIdx].push(p);
+  });
+
+  const activeGroupsCount = groups.filter(g => g.length > 0).length;
+  const fiveHoursMs = 5 * 3600 * 1000;
+  const nowMs = Date.now();
+  
+  let activeGroupIndex = -1;
+  let nextResetTime;
+  let isPaused = false;
+
+  if (activeGroupsCount === 1) {
+    const cycleMs = 15 * 3600 * 1000;
+    const positionInCycle = nowMs % cycleMs;
+    if (positionInCycle < fiveHoursMs) {
+      activeGroupIndex = 0;
+      nextResetTime = new Date(Math.floor(nowMs / cycleMs) * cycleMs + fiveHoursMs);
+    } else {
+      activeGroupIndex = -1;
+      nextResetTime = new Date(Math.floor(nowMs / cycleMs) * cycleMs + cycleMs);
+      isPaused = true;
+    }
+  } else if (activeGroupsCount === 2) {
+    const cycleMs = 20 * 3600 * 1000;
+    const positionInCycle = nowMs % cycleMs;
+    if (positionInCycle < fiveHoursMs) {
+      activeGroupIndex = 0;
+      nextResetTime = new Date(Math.floor(nowMs / cycleMs) * cycleMs + fiveHoursMs);
+    } else if (positionInCycle < 2 * fiveHoursMs) {
+      activeGroupIndex = -1;
+      nextResetTime = new Date(Math.floor(nowMs / cycleMs) * cycleMs + 2 * fiveHoursMs);
+      isPaused = true;
+    } else if (positionInCycle < 3 * fiveHoursMs) {
+      activeGroupIndex = 1;
+      nextResetTime = new Date(Math.floor(nowMs / cycleMs) * cycleMs + 3 * fiveHoursMs);
+    } else {
+      activeGroupIndex = -1;
+      nextResetTime = new Date(Math.floor(nowMs / cycleMs) * cycleMs + cycleMs);
+      isPaused = true;
+    }
+  } else if (activeGroupsCount > 2) {
+    const cycleMs = activeGroupsCount * fiveHoursMs;
+    const positionInCycle = nowMs % cycleMs;
+    const periodIdx = Math.floor(positionInCycle / fiveHoursMs);
+    activeGroupIndex = periodIdx;
+    nextResetTime = new Date(Math.floor(nowMs / cycleMs) * cycleMs + (periodIdx + 1) * fiveHoursMs);
+  } else {
+    activeGroupIndex = -1;
+    nextResetTime = new Date(nowMs + fiveHoursMs);
+  }
+
+  App.flashSaleEnd = nextResetTime;
+  App.flashSaleState = isPaused ? 'paused' : 'active';
+
+  let stateChanged = false;
+  groups.forEach((groupItems, gIdx) => {
+    const isThisGroupActive = (gIdx === activeGroupIndex);
+    groupItems.forEach(p => {
+      const shouldBeFlash = isThisGroupActive;
+      if (p.is_flash_sale !== shouldBeFlash) {
+        p.is_flash_sale = shouldBeFlash;
+        stateChanged = true;
+      }
+      if (shouldBeFlash) {
+        if (p.original_price && p.original_price > p.price) {
+          // Keep it
+        } else {
+          p.original_price = p.price;
+          p.price = Math.round(p.price * 0.8 * 100) / 100;
+        }
+      } else {
+        if (p.original_price) {
+          p.price = p.original_price;
+        }
+      }
+    });
+  });
+
+  if (stateChanged && typeof renderFlashSale === 'function') {
+    renderFlashSale();
+  }
+}
+
 function initCountdown() {
-  // Set flash sale end to next 6 hours from now
-  App.flashSaleEnd = new Date(Date.now() + 6 * 3600 * 1000);
+  syncFlashSaleStates();
   updateCountdown();
-  setInterval(updateCountdown, 1000);
+  setInterval(() => {
+    syncFlashSaleStates();
+    updateCountdown();
+  }, 1000);
 }
 function updateCountdown() {
+  if (!App.flashSaleEnd) return;
   const now = new Date();
   let diff = Math.max(0, App.flashSaleEnd - now);
-  if (diff === 0) App.flashSaleEnd = new Date(Date.now() + 6 * 3600 * 1000);
   const h = String(Math.floor(diff / 3600000)).padStart(2,'0');
   diff %= 3600000;
   const m = String(Math.floor(diff / 60000)).padStart(2,'0');
@@ -1260,6 +1366,17 @@ function updateCountdown() {
   if (eh) eh.textContent = h;
   if (em) em.textContent = m;
   if (es) es.textContent = s;
+
+  // Sync banner dynamic status title
+  const bannerTitle = document.getElementById('flash-sale-banner-title');
+  if (bannerTitle) {
+    bannerTitle.textContent = (App.flashSaleState === 'paused') ? 'Next Sale Starts In' : 'Limited Time Deals';
+  }
+
+  // Sync detail page countdown values
+  document.querySelectorAll('.cd-detail-h').forEach(el => el.textContent = h);
+  document.querySelectorAll('.cd-detail-m').forEach(el => el.textContent = m);
+  document.querySelectorAll('.cd-detail-s').forEach(el => el.textContent = s);
 }
 
 // ── Load Home Data ────────────────────────────────────────
@@ -1544,10 +1661,12 @@ async function loadHomeData() {
     ]);
     App.allProducts = quickProdRes?.data || [];
     App.allStores = quickStoreRes?.data || [];
+    syncFlashSaleStates();
   } catch (e) {
     console.warn('[loadHomeData] Quick load error, falling back to empty lists:', e);
     App.allProducts = MOCK_PRODUCTS;
     App.allStores = MOCK_STORES;
+    syncFlashSaleStates();
   }
 
   // Render initial quick load data immediately to unlock the screen
@@ -1566,6 +1685,7 @@ async function loadHomeData() {
       ]);
       App.allProducts = fullProdRes?.data || App.allProducts;
       App.allStores = fullStoreRes?.data || App.allStores;
+      syncFlashSaleStates();
       
       // Re-render only if the user is still on the home page
       if (App.currentPage === 'home') {
@@ -1586,8 +1706,14 @@ function renderFlashSale() {
   const list = document.getElementById('flash-sale-list');
   if (!list) return;
   const items = App.allProducts.filter(p => p.is_flash_sale && p.status !== 'archived');
-  list.innerHTML = items.length ? items.map(p => productCardSmall(p)).join('') :
-    '<div style="padding:20px;color:var(--text-muted);font-size:.85rem">No flash sales right now</div>';
+  if (items.length) {
+    list.innerHTML = items.map(p => productCardSmall(p)).join('');
+  } else {
+    list.innerHTML = `<div style="padding:20px;color:var(--text-muted);font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:6px">
+      <i class="fas fa-clock" style="color:var(--primary)"></i> 
+      ${App.flashSaleState === 'paused' ? 'Current flash sale ended. Stay tuned for the next batch!' : 'No flash sales right now'}
+    </div>`;
+  }
 }
 
 // ── Local Products ─────────────────────────────────────────

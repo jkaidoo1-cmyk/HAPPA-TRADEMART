@@ -539,14 +539,22 @@ async function renderProductDetail(id) {
   </div>
 
   <div style="display:flex;align-items:center;gap:8px;margin:8px 0">
-
     <span style="font-size:1.4rem;font-weight:800;color:var(--primary)">GHS ${p.price}</span>
-
     ${p.original_price > p.price ? `<span style="font-size:.9rem;color:var(--text-muted);text-decoration:line-through">GHS ${p.original_price}</span>` : ''}
-
-
-
   </div>
+
+  ${p.is_flash_sale ? `
+  <div style="background:linear-gradient(135deg,#ffe4cc,#ffd2b3);border:1px solid #ffd2b3;border-radius:var(--radius-md);padding:10px 12px;margin:12px 0;display:flex;justify-content:space-between;align-items:center">
+    <div style="display:flex;align-items:center;gap:6px;color:var(--primary);font-weight:800;font-size:.85rem">
+      <i class="fas fa-bolt" style="animation:pulse 1.5s infinite"></i> FLASH SALE DEAL
+    </div>
+    <div style="display:flex;align-items:center;gap:5px;font-size:.78rem;font-weight:700;color:#7c2d12">
+      <span>Ends in:</span>
+      <span style="background:#7c2d12;color:#fff;padding:2px 5px;border-radius:3px;font-family:monospace" class="cd-detail-h">00</span>:
+      <span style="background:#7c2d12;color:#fff;padding:2px 5px;border-radius:3px;font-family:monospace" class="cd-detail-m">00</span>:
+      <span style="background:#7c2d12;color:#fff;padding:2px 5px;border-radius:3px;font-family:monospace" class="cd-detail-s">00</span>
+    </div>
+  </div>` : ''}
 
   <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
 
@@ -856,8 +864,9 @@ async function buyNow(productId) {
   if (!p) return;
 
   const qty = parseInt(document.getElementById('detail-qty')?.textContent) || 1;
+  const note = (document.getElementById('buyer-note-' + productId)?.value || '').trim();
 
-  if (addToCart(p, qty)) {
+  if (addToCart(p, qty, note)) {
     showPage('checkout');
   }
 
