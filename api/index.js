@@ -254,7 +254,7 @@ app.get('/api/:table', async (req, res) => {
         id: st.id,
         store_id: st.id,
         vendor_id: st.vendor_id,
-        status: st.storefront_status || 'draft',
+        status: st.storefront_status || 'none',
         url_slug: st.slug || '',
         theme: st.theme || 'classic',
         font_family: st.font_family || 'Outfit',

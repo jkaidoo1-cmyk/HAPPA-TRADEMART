@@ -471,80 +471,71 @@ function togglePw(id, icon) {
 
 
 async function doLogin(e) {
-
   e.preventDefault();
 
-  const email = document.getElementById('login-email')?.value.trim().toLowerCase();
+  const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    if (submitBtn.disabled) return;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
+  }
 
+  const resetBtn = () => {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = 'Sign In <i class="fas fa-arrow-right"></i>';
+    }
+  };
+
+  const email = document.getElementById('login-email')?.value.trim().toLowerCase();
   const pass  = document.getElementById('login-pass')?.value;
 
-  if (!email || !pass) return;
-
-
+  if (!email || !pass) {
+    showToast('Please enter your email and password.', 'warning');
+    resetBtn();
+    return;
+  }
 
   // Find user in DB
-
   const res = await apiGet('users', `search=${encodeURIComponent(email)}&limit=10`);
-
   const users = res ? res.data || [] : [];
-
   const user = users.find(u =>
-
     (u.email?.toLowerCase() === email || u.phone === email) &&
-
     u.password_hash === pass && u.status !== 'deleted'
-
   );
-
-
 
   if (!user) {
     showToast('Invalid email or password. Please try again.', 'error');
+    resetBtn();
     return;
   }
 
   if (user.status === 'suspended') {
-
     showToast('Your account has been suspended. Contact support.', 'error');
-
+    resetBtn();
     return;
-
   }
 
   if (user.status === 'pending_approval') {
-
-    // Let them log in but show the waiting screen
-
     App.currentUser = user;
-
     saveSessions();
-
     showToast(`Welcome, ${user.name}! Your account is still under review.`, 'info');
-
     showVendorPendingScreen();
-
+    resetBtn();
     return;
-
   }
 
   // Migrate legacy 'seller' role to 'vendor'
-
   if (user.role === 'seller') {
-
     user.role = 'vendor';
-
     await apiPatch('users', user.id, { role: 'vendor' }).catch(() => {});
-
   }
 
   App.currentUser = user;
-
   saveSessions();
-
   showToast(`Welcome back, ${user.name}! 🎉`, 'success');
-
   showPage('dashboard');
-
+  resetBtn();
 }
 
 

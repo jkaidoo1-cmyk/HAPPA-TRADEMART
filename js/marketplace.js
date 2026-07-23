@@ -84,13 +84,17 @@ async function renderMarketplace() {
 
   if (f === 'flash')    items = items.filter(p => p.is_flash_sale);
 
-  if (f === 'Fashion')  items = items.filter(p => p.category?.includes('Fashion') || p.category?.includes('Footwear'));
+  if (f === 'Fashion')     items = items.filter(p => p.category?.includes('Fashion') || p.category?.includes('Footwear') || p.category?.includes('Clothing') || p.category?.includes('Sneaker') || p.category?.includes('Sandal') || p.category?.includes('Boot') || p.category?.includes('Apparel'));
 
-  if (f === 'Electronics') items = items.filter(p => p.category?.includes('Electronic') || p.category?.includes('Audio') || p.category?.includes('Cable'));
+  if (f === 'Electronics') items = items.filter(p => p.category?.includes('Electronic') || p.category?.includes('Audio') || p.category?.includes('Cable') || p.category?.includes('Phone') || p.category?.includes('Computer') || p.category?.includes('Laptop') || p.category?.includes('Tablet'));
 
-  if (f === 'Beauty')   items = items.filter(p => p.category?.includes('Beauty') || p.category?.includes('Skin') || p.category?.includes('Makeup'));
+  if (f === 'Beauty')      items = items.filter(p => p.category?.includes('Beauty') || p.category?.includes('Skin') || p.category?.includes('Makeup') || p.category?.includes('Hair') || p.category?.includes('Body'));
 
-  if (f === 'Food')     items = items.filter(p => p.category?.includes('Food') || p.category?.includes('Grocer'));
+  if (f === 'Food')        items = items.filter(p => p.category?.includes('Food') || p.category?.includes('Drink') || p.category?.includes('Grocer'));
+
+  if (f === 'Health')      items = items.filter(p => p.category?.includes('Health') || p.category?.includes('Wellness') || p.category?.includes('Fitness') || p.category?.includes('Sport'));
+
+  if (f === 'Home')        items = items.filter(p => p.category?.includes('Home') || p.category?.includes('Kitchen') || p.category?.includes('Dining') || p.category?.includes('Living'));
 
 
 
@@ -1029,11 +1033,11 @@ async function renderStoreDetail(id) {
 
       <!-- Search product within store -->
       <div style="padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--border)">
-        <div style="position:relative">
-          <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted)"></i>
+        <div style="position: relative; display: flex; align-items: center;">
+          <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; font-size: .85rem; z-index: 2; line-height: 1;"></i>
           <input type="text" placeholder="Search products in this store..." id="store-search-input" 
                  oninput="handleStoreProductSearch('${s.id}', this.value)"
-                 style="width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border);border-radius:25px;font-size:.82rem">
+                 style="width: 100%; padding: 9px 14px 9px 38px; border: 1px solid var(--border); border-radius: 25px; font-size: .82rem; outline: none; background: var(--bg);">
         </div>
       </div>
       <!-- Tab Content Area (Used for handleStoreProductSearch) -->
@@ -1072,18 +1076,17 @@ async function renderStorefront(id) {
   sf = allSF.find(sfRecord => String(sfRecord.store_id) === String(id)) || null;
 
   // Enforce storefront visibility: only allow approved storefronts to load.
-  // Exception: Let admins or the store owner vendor view/review the storefront.
-  const isOwner = App.currentUser && String(App.currentUser.id) === String(s.vendor_id);
   const isAdmin = App.currentUser && App.currentUser.role === 'admin';
-  const storefrontStatus = sf?.status || 'inactive';
+  const storefrontStatus = sf?.status || 'none';
+  const isLive = storefrontStatus === 'active' || storefrontStatus === 'approved';
 
-  if (storefrontStatus !== 'approved' && storefrontStatus !== 'active' && !isOwner && !isAdmin) {
+  if (!isLive && !isAdmin) {
     c.innerHTML = `
-      <div class="empty-state" style="padding: 40px 20px; text-align: center;">
-        <div style="font-size: 3rem; margin-bottom: 16px;">🏪</div>
-        <h3>Storefront under construction</h3>
-        <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 4px;">
-          This storefront has not been approved or requested yet.
+      <div class="empty-state" style="padding: 60px 20px; text-align: center;">
+        <div style="font-size: 3.5rem; margin-bottom: 16px;">🏪</div>
+        <h3 style="font-size: 1.25rem; font-weight: 800;">Storefront Under Construction</h3>
+        <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 6px; max-width: 450px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+          This storefront is currently not active. Once the vendor completes setup, receives admin approval, and activates their subscription, this page will go live.
         </p>
       </div>`;
     return;
@@ -1283,51 +1286,91 @@ async function renderStorefront(id) {
   </div>
 </div>` : '';
 
+  const description = sf?.about_us || s.description || 'Welcome to our store!';
+  const business_hours = sf?.business_hours || s.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM';
+  const shipping_policy = sf?.shipping_policy || s.shipping_policy || 'Standard delivery within Ghana.';
+  const return_policy = sf?.return_policy || s.return_policy || 'Items can be returned within 3 days.';
+  const facebook_url = sf?.facebook_url || s.facebook_url || '';
+  const instagram_url = sf?.instagram_url || s.instagram_url || '';
+  const youtube_url = sf?.youtube_url || s.youtube_url || '';
+
+  let socialLinksHTML = '';
+  if (facebook_url || instagram_url || youtube_url) {
+    socialLinksHTML = `
+      <div style="display:flex; gap:14px; font-size:1.2rem; margin-top:10px">
+        ${facebook_url ? `<a href="${facebook_url}" target="_blank" style="color:#60a5fa" title="Facebook"><i class="fab fa-facebook"></i></a>` : ''}
+        ${instagram_url ? `<a href="${instagram_url}" target="_blank" style="color:#f472b6" title="Instagram"><i class="fab fa-instagram"></i></a>` : ''}
+        ${youtube_url ? `<a href="${youtube_url}" target="_blank" style="color:#f87171" title="YouTube"><i class="fab fa-youtube"></i></a>` : ''}
+      </div>
+    `;
+  }
+
   c.innerHTML = `
     <div id="storefront-page-container" style="position:relative">
       ${customStyles}
       ${adminToolbarHTML}
 
-      <!-- Storefront Top Bar (Floating navigation, search trigger, and cart) -->
-      <div class="storefront-top-bar" style="position:absolute; top:12px; left:12px; right:12px; display:flex; justify-content:space-between; z-index:100; pointer-events:none">
-        <div style="display:flex; gap:8px; pointer-events:auto">
-          <button class="storefront-nav-btn" onclick="showPage('home')" style="background:rgba(255,255,255,0.9); backdrop-filter:blur(5px); border:none; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.1); cursor:pointer; color:var(--text)" title="Back to Marketplace">
-            <i class="fas fa-arrow-left"></i>
-          </button>
-          <button class="storefront-nav-btn" onclick="window.toggleStorefrontSearch('${s.id}')" style="background:rgba(255,255,255,0.9); backdrop-filter:blur(5px); border:none; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.1); cursor:pointer; color:var(--text)" title="Search Store">
-            <i class="fas fa-search"></i>
-          </button>
-        </div>
-        <div style="pointer-events:auto">
-          <button class="storefront-nav-btn" onclick="switchStorefrontTab('cart','${s.id}')" style="background:rgba(255,255,255,0.9); backdrop-filter:blur(5px); border:none; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.1); cursor:pointer; position:relative; color:var(--text)" title="View Cart">
-            <i class="fas fa-shopping-cart"></i>
-            <span id="store-cart-badge-${s.id}" style="position:absolute; top:-4px; right:-4px; background:var(--primary); color:#fff; border-radius:50%; width:16px; height:16px; font-size:0.6rem; font-weight:800; display:none; align-items:center; justify-content:center">0</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Slide-down Search Bar -->
-      <div id="store-search-overlay-${s.id}" style="display:none; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--border)">
-        <div style="position:relative">
-          <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted)"></i>
-          <input type="text" placeholder="Search products in this store..." id="store-search-input" 
-                 oninput="handleStoreProductSearch('${s.id}', this.value)"
-                 style="width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border);border-radius:25px;font-size:.82rem">
-        </div>
-      </div>
-      
+      <!-- Banner at very top -->
       ${headerHTML}
 
-      <!-- Store Tabs Navigation -->
-      <div class="store-tab-list" style="display:flex;overflow-x:auto;sticky:top">
-        <button class="store-tab-btn active" data-tab="home" onclick="switchStorefrontTab('home','${s.id}')">Home</button>
-        <button class="store-tab-btn" data-tab="products" onclick="switchStorefrontTab('products','${s.id}')">Products</button>
-        <button class="store-tab-btn" data-tab="about" onclick="switchStorefrontTab('about','${s.id}')">About</button>
-        <button class="store-tab-btn" data-tab="admin" onclick="switchStorefrontTab('admin','${s.id}')">Admin Portal</button>
+      <!-- Search bar & Cart button toolbar directly below banner -->
+      <div style="padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
+        <div style="position: relative; flex: 1; display: flex; align-items: center;">
+          <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; font-size: .85rem; z-index: 2; line-height: 1;"></i>
+          <input type="text" placeholder="Search products in this store..." id="store-search-input" 
+                 oninput="handleStoreProductSearch('${s.id}', this.value)"
+                 style="width: 100%; padding: 9px 14px 9px 38px; border: 1px solid var(--border); border-radius: 25px; font-size: .82rem; outline: none; background: var(--bg);">
+        </div>
+        <button class="btn" onclick="switchStorefrontTab('cart','${s.id}')" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 25px; font-size: .82rem; font-weight: 700; background: var(--primary); color: #fff; border: none; cursor: pointer; position: relative; flex-shrink: 0;" title="View Store Cart">
+          <i class="fas fa-shopping-cart"></i>
+          <span>Cart</span>
+          <span id="store-cart-badge-${s.id}" style="background: #fff; color: var(--primary); border-radius: 10px; padding: 1px 6px; font-size: 0.65rem; font-weight: 900; display: none;">0</span>
+        </button>
       </div>
 
-      <!-- Tab Content Area -->
+      <!-- Main Content Area -->
       <div class="store-tab-content" id="store-tab-content"></div>
+
+      <!-- Storefront Footer (About, Contact, Policies, Social) -->
+      <footer class="storefront-footer" style="background:#111827; color:#9ca3af; padding:32px 16px 24px; margin-top:32px; font-size:.82rem; border-top:3px solid var(--primary)">
+        <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:24px">
+          
+          <div>
+            <h4 style="font-size:.95rem; font-weight:800; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+              <i class="fas fa-store" style="color:var(--primary)"></i> About ${escHtml(s.name)}
+            </h4>
+            <p style="line-height:1.6; color:#d1d5db">${escHtml(description)}</p>
+            ${socialLinksHTML}
+          </div>
+
+          <div>
+            <h4 style="font-size:.95rem; font-weight:800; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+              <i class="fas fa-clock" style="color:var(--primary)"></i> Hours & Contact
+            </h4>
+            <div style="display:grid; gap:8px">
+              <div><i class="fas fa-calendar-alt" style="width:20px; color:var(--primary)"></i> ${escHtml(business_hours)}</div>
+              <div><i class="fas fa-map-marker-alt" style="width:20px; color:var(--primary)"></i> ${s.location}</div>
+              <div><i class="fas fa-envelope" style="width:20px; color:var(--primary)"></i> ${escHtml(s.email || 'support@happamart.com')}</div>
+              <div><i class="fas fa-phone" style="width:20px; color:var(--primary)"></i> ${escHtml(s.phone || '+233 (0) 244 123 456')}</div>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="font-size:.95rem; font-weight:800; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+              <i class="fas fa-shield-alt" style="color:var(--primary)"></i> Store Policies
+            </h4>
+            <div style="display:grid; gap:8px">
+              <div><strong style="color:#fff">Shipping:</strong> ${escHtml(shipping_policy)}</div>
+              <div><strong style="color:#fff">Returns:</strong> ${escHtml(return_policy)}</div>
+            </div>
+          </div>
+
+        </div>
+
+        <div style="border-top:1px solid #1f2937; margin-top:24px; padding-top:16px; text-align:center; color:#6b7280; font-size:.75rem">
+          © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
+        </div>
+      </footer>
     </div>
   `;
 
@@ -2412,13 +2455,15 @@ window.switchStorefrontTab = async function(tabName, storeId) {
     contentEl.innerHTML = `
       <div class="store-hero-banner">
         <h2 style="font-size:1.5rem;font-weight:900;margin-bottom:6px">${escHtml(slogan)}</h2>
-        <p style="font-size:.85rem;opacity:.9">Best Gadgets & Offers in Ghana</p>
-        <button class="btn btn-sm btn-light" onclick="switchStorefrontTab('products','${s.id}')" style="margin-top:10px;font-weight:700">Shop Now</button>
+        <p style="font-size:.85rem;opacity:.9">Best Offers & Quality Products</p>
+        <button class="btn btn-sm btn-light" onclick="document.getElementById('all-store-products-${s.id}')?.scrollIntoView({behavior:'smooth'})" style="margin-top:10px;font-weight:700">Shop Now</button>
       </div>
 
       ${renderSection('⚡ Flash Deals', featured)}
       ${renderSection('🔥 Popular Products', popular)}
-      ${renderSection('📦 Recently Added', recent)}
+      <div id="all-store-products-${s.id}">
+        ${renderSection('🛍️ All Products', storeProds)}
+      </div>
     `;
 
   } else if (tabName === 'products') {

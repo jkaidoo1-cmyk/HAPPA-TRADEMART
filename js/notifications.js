@@ -3,13 +3,16 @@
    ============================================================ */
 
 function renderNotifBadge() {
-  const uid = App.currentUser?.id;
-  // Count unread only for current user (server-synced or local)
-  const unread = uid
-    ? App.notifications.filter(n => !n.is_read && n.user_id === uid).length
-    : App.notifications.filter(n => !n.is_read).length;
-  const badge  = document.getElementById('notif-badge');
+  const badge = document.getElementById('notif-badge');
   if (!badge) return;
+  const uid = App.currentUser?.id;
+  if (!uid) {
+    badge.textContent = '0';
+    badge.classList.add('hidden');
+    return;
+  }
+  // Count unread only for current user
+  const unread = App.notifications.filter(n => !n.is_read && n.user_id === uid).length;
   if (unread > 0) {
     badge.textContent = unread > 99 ? '99+' : unread;
     badge.classList.remove('hidden');
@@ -129,9 +132,15 @@ function renderNotificationsLocal() {
   if (!c) return;
 
   const uid = App.currentUser?.id;
-  let userNotifs = uid
-    ? App.notifications.filter(n => n.user_id === uid)
-    : App.notifications.slice(0, 5);
+  if (!uid) {
+    c.innerHTML = `
+      <div class="empty-state" style="padding:60px 20px">
+        <i class="fas fa-bell-slash"></i>
+        <h3>Sign in to see notifications</h3>
+      </div>`;
+    return;
+  }
+  let userNotifs = App.notifications.filter(n => n.user_id === uid);
   userNotifs = userNotifs.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
 
   c.innerHTML = _buildNotifListHTML(userNotifs);

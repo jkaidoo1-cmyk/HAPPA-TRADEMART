@@ -471,40 +471,57 @@ async function renderVendorDashboard() {
   <div class="dashboard-wrap">
     ${myStore ? `
 
+      <!-- State 1: No Storefront Created Yet -->
+      ${(!myStorefront || myStorefront.status === 'none') ? `
+        <div style="text-align:center;padding:50px 20px;background:#fff;border-radius:16px;border:1px solid var(--border);margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,0.04)">
+          <div style="font-size:3.5rem;margin-bottom:16px;">🎨</div>
+          <h2 style="font-weight:800;font-size:1.35rem;margin-bottom:8px">Build Your Standalone Storefront</h2>
+          <p style="font-size:.875rem;color:var(--text-light);margin-bottom:24px;line-height:1.7;max-width:520px;margin-left:auto;margin-right:auto">
+            Create a unique branded website for your store with custom colors, slogan, policies, and a dedicated shareable URL link.
+          </p>
+          <button class="btn btn-primary" onclick="window.createStorefrontDraft('${myStore.id}')" style="padding:12px 24px;font-weight:700">
+            <i class="fas fa-plus-circle"></i> Create Storefront
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- State 3: Pending Approval -->
       ${(myStorefront && myStorefront.status === 'pending_approval') ? `
-        <!-- State 2: Pending Approval -->
         <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
           <div style="font-size:3rem;margin-bottom:16px;">⏳</div>
           <h2 style="font-weight:800;font-size:1.25rem;margin-bottom:8px;color:#d97706">Storefront Request Under Review</h2>
           <p style="font-size:.875rem;color:var(--text-light);margin-bottom:24px;line-height:1.7;max-width:500px;margin-left:auto;margin-right:auto">
-            Your custom storefront layout is pending admin review and approval. Once approved, your storefront link will automatically go live.
+            Your storefront request is currently pending admin review. Admin will set subscription pricing and approve your storefront shortly.
           </p>
           <div style="display:flex;gap:10px;justify-content:center">
-            <button class="btn btn-outline" onclick="window.setStorefrontStatus('${myStore.id}', 'draft')">
-              <i class="fas fa-edit"></i> Edit Customization
+            <button class="btn btn-outline" onclick="window.setStorefrontStatus('${myStore.id}', 'draft').then(() => renderVendorDashboard())">
+              <i class="fas fa-edit"></i> Revert to Draft & Edit
             </button>
-          </div>
-        </div>
-        
-        <div class="card">
-          <div class="card-header"><h3>Customization Preview</h3></div>
-          <div class="card-body" style="font-size:.85rem;color:var(--text-light);display:grid;gap:8px">
-            <div><strong>Slogan:</strong> ${escHtml(sfSlogan || 'None')}</div>
-            <div><strong>Friendly URL Slug:</strong> ${window.location.origin}/#storefront/${sfSlug}</div>
-            <div><strong>Primary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${sfPrimaryColor}"></span> ${sfPrimaryColor}</div>
-            <div><strong>Secondary Color:</strong> <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${sfSecondaryColor}"></span> ${sfSecondaryColor}</div>
-            <div><strong>About Us:</strong> ${escHtml(sfDescription || 'None')}</div>
           </div>
         </div>
       ` : ''}
 
+      <!-- State 4: Rejected -->
+      ${(myStorefront && myStorefront.status === 'rejected') ? `
+        <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid #fca5a5;margin-bottom:16px">
+          <div style="font-size:3rem;margin-bottom:16px;">❌</div>
+          <h2 style="font-weight:800;font-size:1.25rem;margin-bottom:8px;color:#dc2626">Storefront Request Rejected</h2>
+          <p style="font-size:.875rem;color:var(--text-light);margin-bottom:16px;line-height:1.7;max-width:500px;margin-left:auto;margin-right:auto">
+            Reason: <strong>${escHtml(myStorefront.admin_feedback || 'Does not meet storefront guidelines')}</strong>
+          </p>
+          <button class="btn btn-primary btn-sm" onclick="window.setStorefrontStatus('${myStore.id}', 'draft').then(() => renderVendorDashboard())">
+            <i class="fas fa-redo"></i> Re-apply & Edit Customization
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- State 5: Approved, Pending Payment -->
       ${(myStorefront && myStorefront.status === 'approved_pending_payment') ? `
-        <!-- State 2.5: Approved, Pending Payment -->
         <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
           <div style="font-size:3rem;margin-bottom:16px;">🎉</div>
           <h2 style="font-weight:800;font-size:1.25rem;margin-bottom:8px;color:#16a34a">Storefront Approved!</h2>
           <p style="font-size:.875rem;color:var(--text-light);margin-bottom:24px;line-height:1.7;max-width:500px;margin-left:auto;margin-right:auto">
-            Your custom storefront layout has been approved. Please select a subscription plan below to activate your storefront.
+            Your storefront layout has been approved. Please select a subscription plan below to complete payment and activate your live URL.
           </p>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:800px;margin:0 auto">
             <!-- Starter Plan -->
@@ -539,15 +556,15 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      ${(!myStorefront || (myStorefront.status !== 'pending_approval' && myStorefront.status !== 'approved_pending_payment')) ? `
-        <!-- State 3: Editing / Approved Customization Form -->
+      <!-- Customization Form for Draft and Active States -->
+      ${(myStorefront && (myStorefront.status === 'draft' || myStorefront.status === 'active' || myStorefront.status === 'approved')) ? `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
           <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-              <i class="fas fa-save"></i> ${(!myStorefront || myStorefront.status === 'draft') ? 'Save Draft' : 'Save Settings'}
+              <i class="fas fa-save"></i> Save Settings
             </button>
-            ${(!myStorefront || myStorefront.status === 'draft') ? `
+            ${(myStorefront.status === 'draft') ? `
               <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
                 <i class="fas fa-paper-plane"></i> Request Storefront
               </button>
@@ -557,27 +574,14 @@ async function renderVendorDashboard() {
 
         <div id="sf-status-card" style="margin-bottom:8px"></div>
 
-        ${(myStorefront && (myStorefront.status === 'approved' || myStorefront.status === 'active')) ? `
-          ${window.getSubscriptionBannerHTML ? window.getSubscriptionBannerHTML(myStore) : ''}
+        ${(myStorefront.status === 'approved' || myStorefront.status === 'active') ? `
           <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;gap:8px">
-            <div style="font-weight:800;font-size:.9rem"><i class="fas fa-check-circle"></i> Storefront Live!</div>
+            <div style="font-weight:800;font-size:.9rem"><i class="fas fa-check-circle"></i> Storefront Active & Live!</div>
             <div style="font-size:.8rem;line-height:1.5">
-              Your independent storefront is active. Use the links below to share with customers or manage settings:
-              <div style="margin-top:6px;display:grid;gap:4px">
-                <div><strong>Storefront Website (Buyer Link):</strong> <a href="#storefront/${sfSlug}" style="font-weight:700;color:#065f46;text-decoration:underline">${window.location.origin}/#storefront/${sfSlug}</a></div>
-                <div><strong>Storefront Admin Control (Vendor Link):</strong> <a href="#store-admin/${sfSlug}" style="font-weight:700;color:#065f46;text-decoration:underline">${window.location.origin}/#store-admin/${sfSlug}</a></div>
+              Your independent storefront URL is live and active:
+              <div style="margin-top:6px">
+                <strong>Buyer Link:</strong> <a href="#storefront/${sfSlug}" target="_blank" style="font-weight:700;color:#065f46;text-decoration:underline">${window.location.origin}/#storefront/${sfSlug}</a>
               </div>
-            </div>
-            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-sm" style="background:#065f46;color:#fff;border:none" onclick="showPage('storefront'); renderStorefront('${myStore.id}')">
-                <i class="fas fa-external-link-alt"></i> View Storefront
-              </button>
-              <button class="btn btn-sm" style="background:#0284c7;color:#fff;border:none" onclick="window.location.hash = '#store-admin/${sfSlug}'">
-                <i class="fas fa-cog"></i> Open Admin Panel
-              </button>
-              <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="window.showSubscriptionDetails('${myStore.id}')">
-                <i class="fas fa-credit-card"></i> Manage Subscription
-              </button>
             </div>
           </div>
         ` : ''}
@@ -986,8 +990,36 @@ function showAddProductModal(storeId, vendorId) {
     <div class="form-group">
       <label class="form-label">Category</label>
       <select class="form-control form-select" id="new-p-cat" onchange="this.dataset.autoGenerated='false'">
-        <option>Sneakers</option><option>Sandals</option><option>Boots</option><option>Electronics</option>
-        <option>Accessories</option><option>Audio</option><option>Skincare</option><option>Makeup</option><option>Other</option>
+        <optgroup label="Footwear">
+          <option>Sneakers</option><option>Sandals</option><option>Boots</option>
+        </optgroup>
+        <optgroup label="Clothing">
+          <option>Clothing &amp; Apparel</option>
+        </optgroup>
+        <optgroup label="Electronics">
+          <option>Electronics</option><option>Phones &amp; Tablets</option>
+          <option>Computers &amp; Laptops</option><option>Audio &amp; Sound</option>
+        </optgroup>
+        <optgroup label="Accessories &amp; Jewellery">
+          <option>Accessories</option>
+        </optgroup>
+        <optgroup label="Beauty">
+          <option>Skincare</option><option>Makeup &amp; Beauty</option><option>Hair &amp; Body</option>
+        </optgroup>
+        <optgroup label="Food &amp; Drinks">
+          <option>Food &amp; Drinks</option>
+        </optgroup>
+        <optgroup label="Health &amp; Fitness">
+          <option>Health &amp; Wellness</option><option>Sports &amp; Fitness</option>
+        </optgroup>
+        <optgroup label="Home">
+          <option>Home &amp; Living</option><option>Kitchen &amp; Dining</option>
+        </optgroup>
+        <optgroup label="Others">
+          <option>Books &amp; Stationery</option><option>Toys &amp; Games</option>
+          <option>Art &amp; Crafts</option><option>Automotive</option>
+          <option>Pet Supplies</option><option>Services</option><option>Other</option>
+        </optgroup>
       </select>
     </div>
     <div class="form-group">
@@ -1010,8 +1042,6 @@ function showAddProductModal(storeId, vendorId) {
         <input class="form-control" id="new-p-note-prompt" placeholder="e.g. Specify your color and size" style="font-size:.8rem">
         <div style="font-size:.68rem;color:var(--text-muted);margin-top:3px">This shows as the hint text in the buyer's note box.</div>
       </div>
-    </div>
-    <button class="btn btn-primary btn-block" type="submit">
     <button class="btn btn-primary btn-block" type="submit">
       <i class="fas fa-plus-circle"></i> Add Product
     </button>
@@ -1145,45 +1175,125 @@ async function _aiAutoFill(prefix, base64Image) {
   }
 }
 
-// ── Manual re-trigger button (used in Add modal) ────────
+// ── Manual / auto-trigger autofill ───────────────────────
 function _localAutoFill(prefix, isManual = false) {
-  const nameId = prefix === 'new-p' ? 'new-p-name' : (prefix === 'edit-p' ? 'edit-p-name' : null);
-  const descId = prefix === 'new-p' ? 'new-p-desc' : (prefix === 'edit-p' ? 'edit-p-desc' : null);
-  const catId  = prefix === 'new-p' ? 'new-p-cat'  : (prefix === 'edit-p' ? 'edit-p-cat'  : null);
-  
-  const nameEl = nameId ? document.getElementById(nameId) : null;
-  const descEl = descId ? document.getElementById(descId) : null;
-  const catEl  = catId  ? document.getElementById(catId)  : null;
-  
+  const nameId = prefix + '-name';
+  const descId = prefix + '-desc';
+  const catId  = prefix + '-cat';
+
+  const nameEl = document.getElementById(nameId);
+  const descEl = document.getElementById(descId);
+  const catEl  = document.getElementById(catId);
+
   if (!nameEl) return;
-  
+
   const name = nameEl.value.trim();
-  if (!name) return;
+  if (!name || name.length < 2) {
+    if (isManual) showToast('Enter a product name first', 'warning');
+    return;
+  }
+
+  // Find the Autofill button for this prefix so we can lock it
+  const btn = nameEl.parentElement
+    ? nameEl.parentElement.querySelector('button[onclick*="_localAutoFill"]')
+    : null;
+
+  // Helper: set category on <select> using case-insensitive text/value matching
+  // Falls back to 'Other' if no option matches at all
+  function applyCategory(catEl, catStr) {
+    if (!catEl || !catStr) return false;
+    const target = catStr.trim().toLowerCase();
+    // Try exact value match first, then text content match
+    const option = Array.from(catEl.options).find(
+      o => o.value.toLowerCase() === target || o.text.toLowerCase() === target
+    ) || Array.from(catEl.options).find(
+      o => o.value.toLowerCase() === 'other'
+    );
+    if (option) {
+      catEl.value = option.value;
+      catEl.dataset.autoGenerated = 'true';
+      return true;
+    }
+    return false;
+  }
+
+  // Remove any existing feedback badge
+  const feedbackId = prefix + '-autofill-feedback';
+  const existing = document.getElementById(feedbackId);
+  if (existing) existing.remove();
+
+  const showFeedback = (success, msg) => {
+    const badge = document.createElement('div');
+    badge.id = feedbackId;
+    badge.style.cssText = `
+      display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;
+      margin-top:6px;padding:5px 10px;border-radius:6px;border:1px solid;
+      ${success
+        ? 'color:#166534;background:#dcfce7;border-color:#bbf7d0'
+        : 'color:#991b1b;background:#fee2e2;border-color:#fca5a5'}
+    `;
+    badge.innerHTML = success
+      ? `<i class="fas fa-check-circle" style="color:#16a34a"></i> ${msg}`
+      : `<i class="fas fa-exclamation-triangle" style="color:#dc2626"></i> ${msg}`;
+    nameEl.closest('.form-group')?.appendChild(badge);
+    setTimeout(() => badge.remove(), 4000);
+  };
 
   const applyResult = (result) => {
+    let filledDesc = false;
+    let filledCat  = false;
+
     if (catEl && result.category) {
       if (isManual || !catEl.value || catEl.value === 'Other' || catEl.dataset.autoGenerated === 'true') {
-        const option = Array.from(catEl.options).find(opt => opt.value === result.category);
-        if (option) {
-          catEl.value = result.category;
-          catEl.dataset.autoGenerated = 'true';
-        }
+        filledCat = applyCategory(catEl, result.category);
       }
     }
+
     if (descEl && result.description) {
       if (isManual || !descEl.value.trim() || descEl.dataset.autoGenerated === 'true') {
         descEl.value = result.description;
         descEl.dataset.autoGenerated = 'true';
+        filledDesc = true;
       }
     }
-    if (isManual) showToast('Category & description filled!', 'success');
+
+    if (isManual) {
+      if (filledDesc || filledCat) {
+        const parts = [];
+        if (filledCat)  parts.push(`category → <strong>${catEl.value}</strong>`);
+        if (filledDesc) parts.push('description');
+        showFeedback(true, `Filled: ${parts.join(' & ')}`);
+      } else {
+        showFeedback(false, 'Nothing to fill — already set manually');
+      }
+    }
+
+    // Re-enable button
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Autofill';
+    }
   };
 
   if (isManual) {
-    // Manual trigger: run immediately, no debounce
-    applyResult(localPredictAndGenerate(name));
+    // Lock button, show spinner
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+    // Run synchronously (localPredictAndGenerate is CPU-only, no async needed)
+    try {
+      applyResult(localPredictAndGenerate(name));
+    } catch(e) {
+      console.error('[Autofill]', e);
+      showFeedback(false, 'Autofill failed — fill manually');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Autofill';
+      }
+    }
   } else {
-    // Auto-trigger: debounce to avoid re-running on every keystroke
+    // Auto-trigger on keystroke: debounce, no button locking
     localPredictDebounced(prefix, name, applyResult);
   }
 }
@@ -1240,9 +1350,26 @@ function _collectProductImages(prefix) {
 
 async function submitAddProduct(e, storeId, vendorId) {
   e.preventDefault();
+  
+  // Submit button locking to prevent double/triple-click duplicates
+  const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    if (submitBtn.disabled) return;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+  }
+
+  const resetBtn = () => {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="fas fa-plus-circle"></i> Add Product';
+    }
+  };
+
   // Double-check approval status (in case the modal was already open)
   if (App.currentUser && App.currentUser.status === 'pending_approval') {
     showToast('Your vendor account is still pending approval. You cannot add products yet.', 'warning');
+    resetBtn();
     return;
   }
   const name     = document.getElementById('new-p-name')?.value.trim();
@@ -1260,7 +1387,11 @@ async function submitAddProduct(e, storeId, vendorId) {
   const store    = App.allStores.find(s => s.id === storeId) || {};
   const tags     = tagsStr ? tagsStr.split(',').map(t=>t.trim()).filter(Boolean) : [];
 
-  if (!name || isNaN(price) || isNaN(stock)) { showToast('Fill in all required fields with valid numbers', 'warning'); return; }
+  if (!name || isNaN(price) || isNaN(stock)) {
+    showToast('Fill in all required fields with valid numbers', 'warning');
+    resetBtn();
+    return;
+  }
 
   // Learn from user's input
   if (name && cat && desc) {
@@ -1282,7 +1413,11 @@ async function submitAddProduct(e, storeId, vendorId) {
     buyer_note_prompt: allowBuyerNote ? buyerNotePrompt : ''
   });
 
-  if (!prod) { showToast('Failed to add product. Try again.', 'error'); return; }
+  if (!prod) {
+    showToast('Failed to add product. Try again.', 'error');
+    resetBtn();
+    return;
+  }
   App.allProducts.push(prod);
   closeModalForce();
   showToast(`"${name}" added successfully! 🎉`, 'success');
@@ -1343,15 +1478,48 @@ function showEditProductModal(productId) {
   <div class="form-group">
     <label class="form-label">Category</label>
     <select class="form-control form-select" id="edit-p-cat">
-      <option ${p.category==='Sneakers'?'selected':''}>Sneakers</option>
-      <option ${p.category==='Sandals'?'selected':''}>Sandals</option>
-      <option ${p.category==='Boots'?'selected':''}>Boots</option>
-      <option ${p.category==='Electronics'?'selected':''}>Electronics</option>
-      <option ${p.category==='Accessories'?'selected':''}>Accessories</option>
-      <option ${p.category==='Audio'?'selected':''}>Audio</option>
-      <option ${p.category==='Skincare'?'selected':''}>Skincare</option>
-      <option ${p.category==='Makeup'?'selected':''}>Makeup</option>
-      <option ${p.category==='Other'?'selected':''}>Other</option>
+      <optgroup label="Footwear">
+        <option ${p.category==='Sneakers'?'selected':''}>Sneakers</option>
+        <option ${p.category==='Sandals'?'selected':''}>Sandals</option>
+        <option ${p.category==='Boots'?'selected':''}>Boots</option>
+      </optgroup>
+      <optgroup label="Clothing">
+        <option ${p.category==='Clothing & Apparel'?'selected':''}>Clothing &amp; Apparel</option>
+      </optgroup>
+      <optgroup label="Electronics">
+        <option ${p.category==='Electronics'?'selected':''}>Electronics</option>
+        <option ${p.category==='Phones & Tablets'?'selected':''}>Phones &amp; Tablets</option>
+        <option ${p.category==='Computers & Laptops'?'selected':''}>Computers &amp; Laptops</option>
+        <option ${p.category==='Audio & Sound'?'selected':''}>Audio &amp; Sound</option>
+      </optgroup>
+      <optgroup label="Accessories &amp; Jewellery">
+        <option ${p.category==='Accessories'?'selected':''}>Accessories</option>
+      </optgroup>
+      <optgroup label="Beauty">
+        <option ${p.category==='Skincare'?'selected':''}>Skincare</option>
+        <option ${p.category==='Makeup & Beauty'?'selected':''}>Makeup &amp; Beauty</option>
+        <option ${p.category==='Hair & Body'?'selected':''}>Hair &amp; Body</option>
+      </optgroup>
+      <optgroup label="Food &amp; Drinks">
+        <option ${p.category==='Food & Drinks'?'selected':''}>Food &amp; Drinks</option>
+      </optgroup>
+      <optgroup label="Health &amp; Fitness">
+        <option ${p.category==='Health & Wellness'?'selected':''}>Health &amp; Wellness</option>
+        <option ${p.category==='Sports & Fitness'?'selected':''}>Sports &amp; Fitness</option>
+      </optgroup>
+      <optgroup label="Home">
+        <option ${p.category==='Home & Living'?'selected':''}>Home &amp; Living</option>
+        <option ${p.category==='Kitchen & Dining'?'selected':''}>Kitchen &amp; Dining</option>
+      </optgroup>
+      <optgroup label="Others">
+        <option ${p.category==='Books & Stationery'?'selected':''}>Books &amp; Stationery</option>
+        <option ${p.category==='Toys & Games'?'selected':''}>Toys &amp; Games</option>
+        <option ${p.category==='Art & Crafts'?'selected':''}>Art &amp; Crafts</option>
+        <option ${p.category==='Automotive'?'selected':''}>Automotive</option>
+        <option ${p.category==='Pet Supplies'?'selected':''}>Pet Supplies</option>
+        <option ${p.category==='Services'?'selected':''}>Services</option>
+        <option ${p.category==='Other'?'selected':''}>Other</option>
+      </optgroup>
     </select>
   </div>
   <div class="form-group"><label class="form-label">Stock Quantity</label>
@@ -1994,9 +2162,13 @@ let _bap = {
 };
 
 const PRODUCT_CATS = [
-  'Sneakers','Sandals','Boots','Electronics','Accessories',
-  'Audio','Skincare','Makeup','Fashion','Food & Drinks',
-  'Home & Living','Books','Sports','Toys','Art','Services','Other'
+  'Sneakers','Sandals','Boots','Clothing & Apparel',
+  'Electronics','Phones & Tablets','Computers & Laptops','Audio & Sound',
+  'Accessories','Skincare','Makeup & Beauty','Hair & Body',
+  'Food & Drinks','Health & Wellness','Sports & Fitness',
+  'Home & Living','Kitchen & Dining','Books & Stationery',
+  'Toys & Games','Art & Crafts','Automotive','Pet Supplies',
+  'Services','Other'
 ];
 
 // ── Open the panel ──────────────────────────────────────────
@@ -2705,6 +2877,50 @@ window.saveVendorStoreSettings = async function(storeId) {
   return true; // signal success to callers
 };
 
+window.createStorefrontDraft = async function(storeId) {
+  showToast('Initializing storefront draft...', 'info');
+  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || {};
+  const cleanSlug = (store.slug || store.name || 'store').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const payload = {
+    store_id: storeId,
+    vendor_id: App.currentUser?.id || store.vendor_id || '',
+    status: 'draft',
+    url_slug: cleanSlug,
+    theme: 'classic',
+    font_family: 'Outfit',
+    slogan: store.slogan || 'Welcome to our store!',
+    about_us: store.description || '',
+    primary_color: '#e85d04',
+    secondary_color: '#faf9f6',
+    tertiary_color: '#e85d04',
+    business_hours: 'Mon - Sat: 8:00 AM - 6:00 PM',
+    shipping_policy: 'Standard Ghana delivery rates apply.',
+    return_policy: 'Items can be returned within 3 days.'
+  };
+
+  const res = await apiPost('storefronts', payload);
+  if (res) {
+    App.myStorefront = res.data || res;
+    if (!App.allStorefronts) App.allStorefronts = [];
+    const idx = App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id));
+    if (idx === -1) App.allStorefronts.push(App.myStorefront);
+    else App.allStorefronts[idx] = App.myStorefront;
+    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+    showToast('Storefront draft created! Customize your store below. 🎨', 'success');
+    renderVendorDashboard();
+  } else {
+    showToast('Failed to create storefront draft. Please try again.', 'error');
+  }
+};
+
+window.submitStorefrontRequest = async function(storeId) {
+  showToast('Saving customization & submitting request...', 'info');
+  const saved = await window.saveVendorStoreSettings(storeId);
+  if (!saved) return;
+  await window.setStorefrontStatus(storeId, 'pending_approval');
+  renderVendorDashboard();
+};
+
 window.setStorefrontStatus = async function(storeId, status) {
   if (!App.myStorefront) {
     showToast('Storefront record not found. Save settings first.', 'error');
@@ -2774,11 +2990,11 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
   App.walletBalance -= price;
   if (typeof updateWalletUI === 'function') updateWalletUI();
   
-  // 2. Update storefront status
-  App.myStorefront.status = 'approved';
-  await apiPatch('storefronts', App.myStorefront.id, { status: 'approved' }).catch(() => {});
+  // 2. Update storefront status to active
+  App.myStorefront.status = 'active';
+  await apiPatch('storefronts', App.myStorefront.id, { status: 'active' }).catch(() => {});
   const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
-  if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'approved';
+  if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'active';
   
   // 3. Update store subscription details
   const storeIdx = App.allStores ? App.allStores.findIndex(s => String(s.id) === String(storeId)) : -1;

@@ -7,8 +7,11 @@
 // ── Constants ──────────────────────────────────────────────
 const API = '/api/';
 const LOCATIONS = ['Accra','Kumasi','Takoradi','Tamale','Cape Coast','Tema','Sunyani','Koforidua'];
-const CATEGORIES = ['Fashion & Footwear','Electronics','Beauty & Skincare','Food & Groceries',
-                    'Books & Stationery','Health & Fitness','Home & Living','Sports & Outdoor'];
+const CATEGORIES = [
+  'Fashion & Footwear','Electronics','Beauty & Skincare','Food & Groceries',
+  'Health & Wellness','Sports & Fitness','Home & Living','Books & Stationery',
+  'Toys & Games','Art & Crafts','Automotive','Pet Supplies'
+];
 const SERVICE_CATEGORIES = [
   'Writing & Content','Graphic Design','Social Media','Web & Tech',
   'Tutoring & Education','Photography & Video','Music & Audio',
@@ -272,7 +275,21 @@ function saveNotifs() {
 function logout() {
   if (!confirm('Sign out of HAPPA TRADEMART?')) return;
   App.currentUser = null;
-  localStorage.removeItem('happa_session');
+  App.notifications = [];
+  try {
+    localStorage.removeItem('happa_session');
+    localStorage.removeItem('happa_notifs');
+  } catch(e){}
+  if (typeof stopNotifPolling === 'function') stopNotifPolling();
+  if (typeof renderNotifBadge === 'function') renderNotifBadge();
+  const notifContent = document.getElementById('notifications-content');
+  if (notifContent) {
+    notifContent.innerHTML = `
+      <div class="empty-state" style="padding:60px 20px">
+        <i class="fas fa-bell-slash"></i>
+        <h3>Sign in to see notifications</h3>
+      </div>`;
+  }
   showPage('home');
   showToast('Signed out successfully', 'info');
   updateNavForUser();
@@ -410,6 +427,11 @@ async function runPageInit(pageId) {
 }
 
 function showPage(pageId, entityId = null) {
+  if (pageId === 'storefront' || pageId === 'store-admin') {
+    const splash = document.getElementById('pwa-splash-screen');
+    if (splash) splash.remove();
+  }
+
   if (entityId) {
     if (pageId === 'store-detail' || pageId === 'storefront' || pageId === 'store-admin') {
       App.currentStoreId = entityId;

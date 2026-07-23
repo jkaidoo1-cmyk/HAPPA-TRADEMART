@@ -154,15 +154,23 @@
     </div>
   </div>
   <script>
-    // Bulletproof Splash Screen Auto-Dismiss (exactly 4 seconds)
-    setTimeout(() => {
+    // Immediately bypass splash screen animation on direct storefront URLs
+    const currentHash = window.location.hash || '';
+    const currentSearch = window.location.search || '';
+    if (currentHash.includes('storefront') || currentHash.includes('store-admin') || currentSearch.includes('storefront') || currentSearch.includes('store=')) {
       const splash = document.getElementById('pwa-splash-screen');
-      if (splash) {
-        splash.style.opacity = '0';
-        splash.style.visibility = 'hidden';
-        setTimeout(() => splash.remove(), 500);
-      }
-    }, 4000);
+      if (splash) splash.remove();
+    } else {
+      // Bulletproof Splash Screen Auto-Dismiss for main marketplace
+      setTimeout(() => {
+        const splash = document.getElementById('pwa-splash-screen');
+        if (splash) {
+          splash.style.opacity = '0';
+          splash.style.visibility = 'hidden';
+          setTimeout(() => splash.remove(), 500);
+        }
+      }, 4000);
+    }
   </script>
 
   <!-- ============================================================

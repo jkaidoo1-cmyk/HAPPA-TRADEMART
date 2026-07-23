@@ -259,36 +259,79 @@ function localPredictAndGenerate(name) {
   const catRes = classifyProduct(name);
   const desc = buildHumanDesc(catRes.category, name, attrs);
 
+  // Map internal category keys to dropdown option values.
+  // Updated to match expanded product dropdown categories.
   const CAT_MAP = {
     'electronics': 'Electronics',
-    'clothing': 'Fashion',
-    'home-kitchen': 'Home & Living',
-    'beauty': 'Skincare',
-    'sports': 'Sports',
-    'toys': 'Toys',
-    'books': 'Books',
-    'food': 'Food & Drinks',
-    'jewelry': 'Accessories',
-    'automotive': 'Other',
-    'pet-supplies': 'Other',
-    'health': 'Other',
-    'office': 'Other',
-    'garden': 'Other'
+    'clothing':    'Clothing & Apparel', // refined below to Sneakers/Sandals/Boots
+    'home-kitchen':'Home & Living',      // refined below to Kitchen & Dining
+    'beauty':      'Skincare',           // refined below to Makeup & Beauty / Hair & Body
+    'sports':      'Sports & Fitness',
+    'toys':        'Toys & Games',
+    'books':       'Books & Stationery',
+    'food':        'Food & Drinks',
+    'jewelry':     'Accessories',
+    'automotive':  'Automotive',
+    'pet-supplies':'Pet Supplies',
+    'health':      'Health & Wellness',
+    'office':      'Books & Stationery',
+    'garden':      'Home & Living'
   };
 
   let uiCat = CAT_MAP[catRes.category] || 'Other';
   const lower = name.toLowerCase();
 
-  // Refine
-  if (uiCat === 'Skincare' && lower.includes('makeup')) uiCat = 'Makeup';
-  if (uiCat === 'Fashion') {
-    if (lower.includes('sneaker') || lower.includes('shoe')) uiCat = 'Sneakers';
-    if (lower.includes('sandal')) uiCat = 'Sandals';
-    if (lower.includes('boot')) uiCat = 'Boots';
+  // Refine beauty → Makeup & Beauty or Hair & Body
+  if (uiCat === 'Skincare') {
+    if (lower.includes('makeup') || lower.includes('lipstick') || lower.includes('mascara') ||
+        lower.includes('foundation') || lower.includes('concealer') || lower.includes('blush') ||
+        lower.includes('eyeshadow') || lower.includes('eyeliner') || lower.includes('lip gloss') ||
+        lower.includes('primer') || lower.includes('contour') || lower.includes('highlighter')) {
+      uiCat = 'Makeup & Beauty';
+    } else if (lower.includes('shampoo') || lower.includes('conditioner') || lower.includes('hair') ||
+               lower.includes('body wash') || lower.includes('lotion') || lower.includes('shower')) {
+      uiCat = 'Hair & Body';
+    }
   }
-  if (uiCat === 'Electronics' && (lower.includes('headphone') || lower.includes('audio') || lower.includes('speaker') || lower.includes('earbud'))) {
-    uiCat = 'Audio';
+
+  // Refine clothing/footwear → specific category
+  if (catRes.category === 'clothing') {
+    if (lower.includes('sneaker') || lower.includes('shoe') || lower.includes('trainer') || lower.includes('runner')) uiCat = 'Sneakers';
+    else if (lower.includes('sandal') || lower.includes('flip flop') || lower.includes('slipper')) uiCat = 'Sandals';
+    else if (lower.includes('boot') || lower.includes('stiletto') || lower.includes('heel')) uiCat = 'Boots';
+    else if (lower.includes('watch') || lower.includes('bag') || lower.includes('purse') || lower.includes('wallet') || lower.includes('belt') || lower.includes('scarf') || lower.includes('sunglasses') || lower.includes('hat') || lower.includes('cap')) uiCat = 'Accessories';
   }
+
+  // Refine home-kitchen → Kitchen & Dining for cookware/appliances
+  if (catRes.category === 'home-kitchen') {
+    if (lower.includes('pan') || lower.includes('pot') || lower.includes('knife') || lower.includes('blender') ||
+        lower.includes('toaster') || lower.includes('microwave') || lower.includes('oven') || lower.includes('fryer') ||
+        lower.includes('kettle') || lower.includes('cookware') || lower.includes('bakeware') || lower.includes('cutlery') ||
+        lower.includes('dish') || lower.includes('cup') || lower.includes('mug') || lower.includes('bowl') ||
+        lower.includes('plate') || lower.includes('coffee maker') || lower.includes('mixer')) {
+      uiCat = 'Kitchen & Dining';
+    }
+  }
+
+  // Refine electronics → specific subcategory
+  if (uiCat === 'Electronics') {
+    if (lower.includes('headphone') || lower.includes('earphone') || lower.includes('earbuds') || lower.includes('earbud') ||
+        lower.includes('speaker') || lower.includes('audio') || lower.includes('sound') || lower.includes('music') ||
+        lower.includes('airpods') || lower.includes('buds') || lower.includes('bose') || lower.includes('jbl') ||
+        lower.includes('sonos') || lower.includes('subwoofer') || lower.includes('amp') || lower.includes('amplifier')) {
+      uiCat = 'Audio & Sound';
+    } else if (lower.includes('phone') || lower.includes('iphone') || lower.includes('samsung') || lower.includes('tablet') ||
+               lower.includes('ipad') || lower.includes('android') || lower.includes('mobile') || lower.includes('galaxy')) {
+      uiCat = 'Phones & Tablets';
+    } else if (lower.includes('laptop') || lower.includes('macbook') || lower.includes('notebook') || lower.includes('computer') ||
+               lower.includes('pc') || lower.includes('desktop') || lower.includes('chromebook') || lower.includes('lenovo') ||
+               lower.includes('dell') || lower.includes('hp') || lower.includes('asus') || lower.includes('acer')) {
+      uiCat = 'Computers & Laptops';
+    }
+  }
+
+  // Refine jewelry → Accessories
+  if (catRes.category === 'jewelry') uiCat = 'Accessories';
 
   return { category: uiCat, description: desc };
 }

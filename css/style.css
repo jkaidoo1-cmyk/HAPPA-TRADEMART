@@ -159,10 +159,12 @@ ul { list-style: none; }
   flex: 1;
   position: relative;
   max-width: 400px;
+  display: flex;
+  align-items: center;
 }
 .nav-search-wrap input {
   width: 100%;
-  padding: 8px 36px 8px 12px;
+  padding: 8px 12px 8px 36px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-full);
   font-size: 0.875rem;
@@ -172,10 +174,13 @@ ul { list-style: none; }
 }
 .nav-search-wrap input:focus { border-color: var(--primary); }
 .nav-search-wrap .search-icon {
-  position: absolute; right: 10px; top: 50%;
+  position: absolute; left: 12px; top: 50%;
   transform: translateY(-50%);
   color: var(--text-light);
   font-size: 0.9rem;
+  pointer-events: none;
+  z-index: 2;
+  line-height: 1;
 }
 
 /* ----- Responsive Search (Mobile Expandable, Desktop Inline) ----- */
