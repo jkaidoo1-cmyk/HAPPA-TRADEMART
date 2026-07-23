@@ -1284,14 +1284,30 @@ async function renderStorefront(id) {
 </div>` : '';
 
   c.innerHTML = `
-    <div id="storefront-page-container">
+    <div id="storefront-page-container" style="position:relative">
       ${customStyles}
       ${adminToolbarHTML}
-      
-      ${headerHTML}
 
-      <!-- Search product within store -->
-      <div style="padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--border)">
+      <!-- Storefront Top Bar (Floating navigation, search trigger, and cart) -->
+      <div class="storefront-top-bar" style="position:absolute; top:12px; left:12px; right:12px; display:flex; justify-content:space-between; z-index:100; pointer-events:none">
+        <div style="display:flex; gap:8px; pointer-events:auto">
+          <button class="storefront-nav-btn" onclick="showPage('home')" style="background:rgba(255,255,255,0.9); backdrop-filter:blur(5px); border:none; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.1); cursor:pointer; color:var(--text)" title="Back to Marketplace">
+            <i class="fas fa-arrow-left"></i>
+          </button>
+          <button class="storefront-nav-btn" onclick="window.toggleStorefrontSearch('${s.id}')" style="background:rgba(255,255,255,0.9); backdrop-filter:blur(5px); border:none; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.1); cursor:pointer; color:var(--text)" title="Search Store">
+            <i class="fas fa-search"></i>
+          </button>
+        </div>
+        <div style="pointer-events:auto">
+          <button class="storefront-nav-btn" onclick="switchStorefrontTab('cart','${s.id}')" style="background:rgba(255,255,255,0.9); backdrop-filter:blur(5px); border:none; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.1); cursor:pointer; position:relative; color:var(--text)" title="View Cart">
+            <i class="fas fa-shopping-cart"></i>
+            <span id="store-cart-badge-${s.id}" style="position:absolute; top:-4px; right:-4px; background:var(--primary); color:#fff; border-radius:50%; width:16px; height:16px; font-size:0.6rem; font-weight:800; display:none; align-items:center; justify-content:center">0</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Slide-down Search Bar -->
+      <div id="store-search-overlay-${s.id}" style="display:none; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--border)">
         <div style="position:relative">
           <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted)"></i>
           <input type="text" placeholder="Search products in this store..." id="store-search-input" 
@@ -1300,11 +1316,12 @@ async function renderStorefront(id) {
         </div>
       </div>
       
+      ${headerHTML}
+
       <!-- Store Tabs Navigation -->
       <div class="store-tab-list" style="display:flex;overflow-x:auto;sticky:top">
         <button class="store-tab-btn active" data-tab="home" onclick="switchStorefrontTab('home','${s.id}')">Home</button>
         <button class="store-tab-btn" data-tab="products" onclick="switchStorefrontTab('products','${s.id}')">Products</button>
-        <button class="store-tab-btn" data-tab="cart" onclick="switchStorefrontTab('cart','${s.id}')">Cart <span id="store-cart-count-${s.id}" style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 6px;font-size:0.6rem;font-weight:700;display:none">0</span></button>
         <button class="store-tab-btn" data-tab="about" onclick="switchStorefrontTab('about','${s.id}')">About</button>
         <button class="store-tab-btn" data-tab="admin" onclick="switchStorefrontTab('admin','${s.id}')">Admin Portal</button>
       </div>
@@ -1319,17 +1336,48 @@ async function renderStorefront(id) {
   setTimeout(() => {
     const storeCart = JSON.parse(localStorage.getItem('happa_store_cart_' + s.id) || '[]');
     const totalQty = storeCart.reduce((acc, curr) => acc + curr.qty, 0);
-    const countBadge = document.getElementById('store-cart-count-' + s.id);
-    if (countBadge) {
-      if (totalQty > 0) {
-        countBadge.textContent = totalQty;
-        countBadge.style.display = 'inline-block';
-      } else {
-        countBadge.style.display = 'none';
-      }
-    }
+    window.updateStorefrontCartBadge(s.id, totalQty);
   }, 100);
 }
+
+window.toggleStorefrontSearch = function(storeId) {
+  const el = document.getElementById('store-search-overlay-' + storeId);
+  if (el) {
+    if (el.style.display === 'none') {
+      el.style.display = 'block';
+      const inp = document.getElementById('store-search-input');
+      if (inp) inp.focus();
+    } else {
+      el.style.display = 'none';
+      const inp = document.getElementById('store-search-input');
+      if (inp) {
+        inp.value = '';
+        handleStoreProductSearch(storeId, '');
+      }
+    }
+  }
+};
+
+window.updateStorefrontCartBadge = function(storeId, totalQty) {
+  const countBadge = document.getElementById('store-cart-count-' + storeId);
+  const floatBadge = document.getElementById('store-cart-badge-' + storeId);
+  if (countBadge) {
+    if (totalQty > 0) {
+      countBadge.textContent = totalQty;
+      countBadge.style.display = 'inline-block';
+    } else {
+      countBadge.style.display = 'none';
+    }
+  }
+  if (floatBadge) {
+    if (totalQty > 0) {
+      floatBadge.textContent = totalQty;
+      floatBadge.style.display = 'flex';
+    } else {
+      floatBadge.style.display = 'none';
+    }
+  }
+};
 
 
 
@@ -2609,11 +2657,7 @@ window.addStorefrontCartItem = function(storeId, productId) {
 
   // Update badge
   const totalQty = storeCart.reduce((acc, curr) => acc + curr.qty, 0);
-  const countBadge = document.getElementById('store-cart-count-' + storeId);
-  if (countBadge) {
-    countBadge.textContent = totalQty;
-    countBadge.style.display = 'inline-block';
-  }
+  window.updateStorefrontCartBadge(storeId, totalQty);
 
   // Remove modal
   const modal = document.getElementById('storefront-product-modal');
@@ -2696,8 +2740,7 @@ window.updateStorefrontCartItemQty = function(storeId, productId, delta) {
     
     // Update badge count
     const totalQty = storeCart.reduce((acc, curr) => acc + curr.qty, 0);
-    const countBadge = document.getElementById('store-cart-count-' + storeId);
-    if (countBadge) countBadge.textContent = totalQty;
+    window.updateStorefrontCartBadge(storeId, totalQty);
 
     window.renderStorefrontCart(storeId);
   }
@@ -2711,14 +2754,7 @@ window.removeStorefrontCartItem = function(storeId, productId) {
   
   // Update badge count
   const totalQty = storeCart.reduce((acc, curr) => acc + curr.qty, 0);
-  const countBadge = document.getElementById('store-cart-count-' + storeId);
-  if (countBadge) {
-    if (totalQty > 0) {
-      countBadge.textContent = totalQty;
-    } else {
-      countBadge.style.display = 'none';
-    }
-  }
+  window.updateStorefrontCartBadge(storeId, totalQty);
 
   window.renderStorefrontCart(storeId);
   showToast('Item removed from cart', 'info');
@@ -2875,8 +2911,7 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     localStorage.removeItem(key);
 
     // Reset badge
-    const countBadge = document.getElementById('store-cart-count-' + storeId);
-    if (countBadge) countBadge.style.display = 'none';
+    window.updateStorefrontCartBadge(storeId, 0);
 
     // Show confirmation tab content
     const contentEl = getStoreTabContentEl();

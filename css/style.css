@@ -95,6 +95,12 @@ ul { list-style: none; }
   width: 100%;
   margin-top: var(--nav-h);  /* keep nav offset even when active */
 }
+#page-storefront, #page-store-admin {
+  margin-top: 0 !important;
+}
+#page-storefront.active, #page-store-admin.active {
+  margin-top: 0 !important;
+}
 
 /* ----- Top Navigation ----- */
 #top-nav {
