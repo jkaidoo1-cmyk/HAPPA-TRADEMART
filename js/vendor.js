@@ -137,7 +137,6 @@ async function renderVendorDashboard() {
   c.innerHTML = `
 <div class="tab-nav" id="vendor-tabs">
   <div class="tab-btn active" onclick="switchTab(this,'vendor-overview')">Overview</div>
-  <div class="tab-btn" onclick="switchTab(this,'vendor-products')">Products</div>
   <div class="tab-btn" onclick="switchTab(this,'vendor-earnings')">Earnings</div>
   <div class="tab-btn" onclick="switchTab(this,'vendor-wallet');renderWalletHistory('vendor-txn-list')">Wallet</div>
   <div class="tab-btn" onclick="switchTab(this,'vendor-referral')">Referrals</div>
@@ -485,7 +484,7 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      <!-- State 3: Pending Approval -->
+      <!-- State 2: Pending Approval -->
       ${(myStorefront && myStorefront.status === 'pending_approval') ? `
         <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
           <div style="font-size:3rem;margin-bottom:16px;">⏳</div>
@@ -501,7 +500,7 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      <!-- State 4: Rejected -->
+      <!-- State 3: Rejected -->
       ${(myStorefront && myStorefront.status === 'rejected') ? `
         <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid #fca5a5;margin-bottom:16px">
           <div style="font-size:3rem;margin-bottom:16px;">❌</div>
@@ -515,7 +514,7 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      <!-- State 5: Approved, Pending Payment -->
+      <!-- State 4: Approved, Pending Payment -->
       ${(myStorefront && myStorefront.status === 'approved_pending_payment') ? `
         <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
           <div style="font-size:3rem;margin-bottom:16px;">🎉</div>
@@ -556,15 +555,15 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      <!-- Customization Form for Draft and Active States -->
-      ${(myStorefront && (myStorefront.status === 'draft' || myStorefront.status === 'active' || myStorefront.status === 'approved')) ? `
+      <!-- Customization Form (default for draft, approved, active, or any new storefront) -->
+      ${(!myStorefront || !['none', 'pending_approval', 'rejected', 'approved_pending_payment'].includes(myStorefront.status)) ? `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
           <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
               <i class="fas fa-save"></i> Save Settings
             </button>
-            ${(myStorefront.status === 'draft') ? `
+            ${(!myStorefront || myStorefront.status === 'draft') ? `
               <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
                 <i class="fas fa-paper-plane"></i> Request Storefront
               </button>
@@ -2157,16 +2156,27 @@ async function purchaseStore(storeId, price) {
 // NOTE: previewProductImage and clearProductImage are defined in js/utils.js
 
 function switchTab(el, tabId) {
-  if (!el) return;
-  const parent = el.closest('.tab-nav') || el.parentElement;
-  if (parent) parent.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  // Look inside the dashboard-content wrapper first, then the whole page
-  const dashContent = el.closest('#vendor-dashboard-content, #buyer-dashboard-content, #admin-dashboard-content, #rendor-dashboard-content');
-  const container   = dashContent || el.closest('.page') || document.getElementById('main-content');
-  container.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  if (typeof el === 'string' && !tabId) {
+    tabId = el;
+    el = null;
+  }
   const target = document.getElementById(tabId);
-  if (target) target.classList.add('active');
+  if (!target) return;
+
+  const container = target.closest('#vendor-dashboard-content, #buyer-dashboard-content, #admin-dashboard-content, #rendor-dashboard-content, .page') || document.getElementById('main-content');
+  if (container) {
+    container.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    container.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  }
+
+  target.classList.add('active');
+
+  if (el) {
+    el.classList.add('active');
+  } else if (container) {
+    const matchingBtn = container.querySelector(`.tab-btn[onclick*="${tabId}"]`);
+    if (matchingBtn) matchingBtn.classList.add('active');
+  }
 }
 
 

@@ -3089,8 +3089,8 @@ window.renderStorefrontAdminPortalPage = async function(storeId) {
         </div>
       </div>
 
-      <!-- Content wrapper targeting HAPPA's vendor-dashboard-content div -->
-      <div id="vendor-dashboard-content" style="flex:1; padding:16px"></div>
+      <!-- Content wrapper targeting storefront admin portal div -->
+      <div id="sf-admin-vendor-dashboard-content" style="flex:1; padding:16px"></div>
     </div>
   `;
 

@@ -48,9 +48,6 @@ async function renderAdminDashboard() {
 <div class="tab-nav" id="admin-tabs">
   <div class="tab-btn active" onclick="switchTab(this,'admin-overview')">Overview</div>
 
-  <div class="tab-btn" onclick="switchTab(this,'admin-vendors');refreshAdminVendorsFull()">Vendors</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-create-store')">Add Vendor</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-users')">Users</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-rendors');loadAdminRendors()">
     Rendors ${pendingRendors.length ? `<span style="background:#7c3aed;color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:3px">${pendingRendors.length}</span>` : ''}
   </div>
@@ -62,8 +59,6 @@ async function renderAdminDashboard() {
 
   <div class="tab-btn" onclick="switchTab(this,'admin-ads');loadAdminAds()">🎯 Ads</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-referrals');loadAdminReferrals()">🔗 Referrals</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-wallet');renderAdminTransactions('admin-txn-wrap')">Wallet</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-analytics')">Analytics</div>
   <div class="tab-btn" onclick="switchTab(this,'admin-settings');loadAdminSettings()">Settings</div>
 </div>
 
@@ -170,22 +165,22 @@ async function renderAdminDashboard() {
 
     <h3 style="font-size:.9rem;font-weight:700;margin:16px 0 10px">Admin Actions</h3>
     <div class="admin-actions-grid">
-      <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=admin-vendors]'),'admin-vendors');refreshAdminVendorsFull()">
+      <div class="admin-action-btn" onclick="switchTab(null,'admin-vendors');refreshAdminVendorsFull()">
         <i class="fas fa-store"></i><span>Manage Vendors</span>
       </div>
-      <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=admin-create-store]'),'admin-create-store')">
+      <div class="admin-action-btn" onclick="switchTab(null,'admin-create-store')">
         <i class="fas fa-plus-circle"></i><span>Add Vendor</span>
       </div>
-      <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=admin-users]'),'admin-users')">
+      <div class="admin-action-btn" onclick="switchTab(null,'admin-users')">
         <i class="fas fa-users"></i><span>Manage Users</span>
       </div>
-      <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=admin-analytics]'),'admin-analytics')">
+      <div class="admin-action-btn" onclick="switchTab(null,'admin-analytics')">
         <i class="fas fa-chart-bar"></i><span>Analytics</span>
       </div>
       <div class="admin-action-btn" onclick="showAdminReviewsModal()">
         <i class="fas fa-star-half-alt"></i><span>Reviews</span>
       </div>
-      <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=admin-wallet]'),'admin-wallet');renderAdminTransactions('admin-txn-wrap')">
+      <div class="admin-action-btn" onclick="switchTab(null,'admin-wallet');renderAdminTransactions('admin-txn-wrap')">
         <i class="fas fa-money-bill-wave"></i><span>Withdrawals</span>
       </div>
       <div class="admin-action-btn" onclick="showPage('delivery')">
@@ -197,14 +192,14 @@ async function renderAdminDashboard() {
     <div class="verify-banner" style="margin-top:8px;background:linear-gradient(90deg,#fef3c7,#fde68a);border-color:#f59e0b">
       <i class="fas fa-user-clock" style="color:#b45309"></i>
       <p style="color:#78350f"><strong>${pendingVendors.length} vendor(s)</strong> awaiting approval.
-        <a href="#" onclick="switchTab(document.querySelector('[onclick*=admin-vendors]'),'admin-vendors');refreshAdminVendorsFull()"
+        <a href="#" onclick="switchTab(null,'admin-vendors');refreshAdminVendorsFull()"
            style="color:#b45309;font-weight:700">Approve now →</a></p>
     </div>` : ''}
     ${pendingRendors.length ? `
     <div class="verify-banner" style="margin-top:8px;background:linear-gradient(90deg,#ede9fe,#ddd6fe);border-color:#a78bfa">
       <i class="fas fa-briefcase" style="color:#7c3aed"></i>
       <p style="color:#4c1d95"><strong>${pendingRendors.length} rendor(s)</strong> awaiting approval.
-        <a href="#" onclick="switchTab(document.querySelector('[onclick*=admin-rendors]'),'admin-rendors');loadAdminRendors()"
+        <a href="#" onclick="switchTab(null,'admin-rendors');loadAdminRendors()"
            style="color:#7c3aed;font-weight:700">Approve now →</a></p>
     </div>` : ''}
 
