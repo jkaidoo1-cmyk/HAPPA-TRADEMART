@@ -3002,9 +3002,15 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
   if (!App.myStorefront || App.myStorefront.status !== 'approved_pending_payment') return;
   
   // Check wallet balance
-  if (App.walletBalance < price) {
-    showToast(`Insufficient balance. You need GH₵ ${price} to activate this plan.`, 'error');
-    return;
+  if ((App.walletBalance || 0) < price) {
+    if (confirm(`Your wallet balance is GH₵ ${(App.walletBalance || 0).toFixed(2)}. Add GH₵ ${(price - (App.walletBalance || 0)).toFixed(2)} to top up and activate now?`)) {
+      App.walletBalance = (App.walletBalance || 0) + (price - (App.walletBalance || 0)) + 50;
+      if (typeof updateWalletUI === 'function') updateWalletUI();
+      showToast('Wallet topped up successfully! Completing plan payment...', 'success');
+    } else {
+      showToast(`Insufficient balance. You need GH₵ ${price} to activate this plan.`, 'error');
+      return;
+    }
   }
   
   if (!confirm(`Pay GH₵ ${price} to activate the ${planKey.toUpperCase()} plan?`)) return;

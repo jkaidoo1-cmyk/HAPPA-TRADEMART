@@ -2726,8 +2726,8 @@ async function renderAdminStorefronts() {
       <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
-      <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="approveStorefront('${s.id}')">
-        <i class="fas fa-check"></i> Approve
+      <button class="btn btn-sm btn-primary" onclick="showAdminStorefrontReviewModal('${s.id}')">
+        <i class="fas fa-tasks"></i> Review & Set Prices
       </button>
       <button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="rejectStorefront('${s.id}')">
         <i class="fas fa-times"></i> Reject
@@ -2797,49 +2797,125 @@ async function renderAdminStorefronts() {
   listEl.innerHTML = html;
 }
 
-async function approveStorefront(sfId) {
-  const starterPrice = prompt('Enter price for STARTER plan (e.g. 50):', '50');
-  if (starterPrice === null) return;
-  const growthPrice = prompt('Enter price for GROWTH plan (e.g. 100):', '100');
-  if (growthPrice === null) return;
-  const proPrice = prompt('Enter price for PRO plan (e.g. 200):', '200');
-  if (proPrice === null) return;
+window.showAdminStorefrontReviewModal = function(sfId) {
+  const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
+  if (!sf) return;
+  const store = (App.allStores || []).find(st => String(st.id) === String(sf.store_id)) || {};
 
-  showToast('Approving storefront...', 'info');
-  const plan_prices = {
-    starter: parseFloat(starterPrice) || 50,
-    growth: parseFloat(growthPrice) || 100,
-    pro: parseFloat(proPrice) || 200
-  };
+  const modalHtml = `
+    <div class="modal active" id="modal-sf-review" style="z-index:999999;display:flex;align-items:center;justify-content:center;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5)">
+      <div class="modal-content" style="max-width:650px;width:92%;padding:24px;border-radius:16px;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,0.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px">
+          <h3 style="font-size:1.1rem;font-weight:800;margin:0;color:var(--text)"><i class="fas fa-store" style="color:var(--primary)"></i> Review Storefront Request</h3>
+          <button class="modal-close" onclick="closeModal('modal-sf-review')" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text-muted)">✕</button>
+        </div>
 
+        <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px">
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:6px;color:var(--text)">${escHtml(store.name || 'Store Request')}</div>
+          <div style="font-size:.82rem;color:var(--text-muted);display:grid;gap:4px">
+            <div><strong>Slogan:</strong> ${escHtml(sf.slogan || 'None')}</div>
+            <div><strong>URL Slug:</strong> <code style="background:#e2e8f0;padding:2px 6px;border-radius:4px">happamart.com/storefront/${sf.url_slug || 'slug'}</code></div>
+            <div><strong>Business Hours:</strong> ${escHtml(sf.business_hours || 'N/A')}</div>
+            <div><strong>Theme:</strong> ${sf.theme || 'classic'} (${sf.primary_color || '#e85d04'})</div>
+          </div>
+          <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="showPage('storefront'); renderStorefront('${sf.store_id}'); closeModal('modal-sf-review');">
+            <i class="fas fa-external-link-alt"></i> Preview Full Storefront Live
+          </button>
+        </div>
+
+        <h4 style="font-size:.9rem;font-weight:800;margin-bottom:10px;color:var(--text)">Set Subscription Pricing for Vendor</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+          <div>
+            <label style="font-size:.78rem;font-weight:700;display:block;margin-bottom:4px">🌱 Starter Plan (GHS/mo)</label>
+            <input type="number" id="admin-price-starter" value="${sf.plan_prices?.starter || 50}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
+          </div>
+          <div>
+            <label style="font-size:.78rem;font-weight:700;display:block;margin-bottom:4px">🚀 Growth Plan (GHS/mo)</label>
+            <input type="number" id="admin-price-growth" value="${sf.plan_prices?.growth || 100}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
+          </div>
+          <div>
+            <label style="font-size:.78rem;font-weight:700;display:block;margin-bottom:4px">💎 Pro Plan (GHS/mo)</label>
+            <input type="number" id="admin-price-pro" value="${sf.plan_prices?.pro || 200}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="closeModal('modal-sf-review')">Cancel</button>
+          <button class="btn btn-danger" style="background:var(--danger);color:#fff;border:none" onclick="rejectStorefrontWithModal('${sf.id}')">
+            <i class="fas fa-times"></i> Reject Request
+          </button>
+          <button class="btn btn-success" style="background:#16a34a;border:none;color:#fff" onclick="approveStorefrontWithModal('${sf.id}')">
+            <i class="fas fa-check"></i> Approve & Set Prices
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const old = document.getElementById('modal-sf-review');
+  if (old) old.remove();
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.approveStorefrontWithModal = async function(sfId) {
+  const starter = parseFloat(document.getElementById('admin-price-starter')?.value) || 50;
+  const growth = parseFloat(document.getElementById('admin-price-growth')?.value) || 100;
+  const pro = parseFloat(document.getElementById('admin-price-pro')?.value) || 200;
+
+  const plan_prices = { starter, growth, pro };
+
+  showToast('Approving storefront & setting plan pricing...', 'info');
   await apiPatch('storefronts', sfId, { status: 'approved_pending_payment', plan_prices }).catch(() => {});
 
-  const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(sfId)) : -1;
-  if (idx !== -1) {
-    App.allStorefronts[idx].status = 'approved_pending_payment';
-    App.allStorefronts[idx].plan_prices = plan_prices;
+  const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
+  if (sf) {
+    sf.status = 'approved_pending_payment';
+    sf.plan_prices = plan_prices;
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+    
+    if (typeof addNotification === 'function' && sf.vendor_id) {
+      addNotification(sf.vendor_id, 'system', '🎉 Storefront Approved!',
+        `Your storefront has been approved by admin! Choose your subscription plan to activate.`,
+        '#vendor-dashboard');
+    }
   }
 
+  closeModal('modal-sf-review');
   showToast('Storefront approved! Waiting for vendor payment. 🎉', 'success');
   renderAdminStorefronts();
+};
+
+window.rejectStorefrontWithModal = async function(sfId) {
+  const reason = prompt('Enter a reason for rejecting this storefront request:');
+  if (reason === null) return;
+
+  showToast('Rejecting storefront request...', 'info');
+  await apiPatch('storefronts', sfId, { status: 'rejected', admin_feedback: reason }).catch(() => {});
+
+  const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
+  if (sf) {
+    sf.status = 'rejected';
+    sf.admin_feedback = reason;
+    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+
+    if (typeof addNotification === 'function' && sf.vendor_id) {
+      addNotification(sf.vendor_id, 'system', '❌ Storefront Request Rejected',
+        `Reason: ${reason}. You can edit your customization and re-apply.`,
+        '#vendor-dashboard');
+    }
+  }
+
+  closeModal('modal-sf-review');
+  showToast('Storefront request rejected.', 'error');
+  renderAdminStorefronts();
+};
+
+async function approveStorefront(sfId) {
+  window.showAdminStorefrontReviewModal(sfId);
 }
 
 async function rejectStorefront(sfId) {
-  const reason = prompt('Enter a reason for rejecting this storefront request (will be saved in draft):');
-  if (reason === null) return;
-  showToast('Rejecting storefront request...', 'info');
-  await apiPatch('storefronts', sfId, { status: 'draft', admin_feedback: reason }).catch(() => {});
-
-  const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(sfId)) : -1;
-  if (idx !== -1) {
-    App.allStorefronts[idx].status = 'draft';
-    App.allStorefronts[idx].admin_feedback = reason;
-    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
-  }
-
-  showToast('Storefront request rejected.', 'warning');
-  renderAdminStorefronts();
+  window.rejectStorefrontWithModal(sfId);
 }
 
 async function disableStorefront(sfId) {

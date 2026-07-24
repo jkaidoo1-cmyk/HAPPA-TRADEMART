@@ -1042,20 +1042,11 @@ async function adminOpenVendorProfile(userId) {
   // Store userId for later use
   window.currentAdminVendorId = userId;
   
-  // Show loading state using showAdminPanel modal skeleton
-  showAdminPanel(`
-    <div class="ap-panel-inner" id="ap-vendor-modal">
-      <div class="ap-panel-topbar" style="background:linear-gradient(135deg,#b45309,#d97706)">
-        <span class="ap-panel-title"><i class="fas fa-store"></i> Vendor Profile</span>
-        <button class="ap-panel-close" onclick="closeAdminPanel()">✕</button>
-      </div>
-      <div id="admin-vendor-profile-content" class="ap-panel-body" style="padding:0">
-        <div style="text-align:center;padding:40px;color:var(--text-muted)">
-          <i class="fas fa-spinner fa-spin"></i> Loading…
-        </div>
-      </div>
-    </div>
-  `);
+  showPage('admin-vendor-profile');
+  const c = document.getElementById('admin-vendor-profile-content');
+  if (c) {
+    c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>`;
+  }
 
   try {
     // Step 1: fetch user + store + orders + txns first so we have store.id for the products query
