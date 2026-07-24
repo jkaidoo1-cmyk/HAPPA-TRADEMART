@@ -470,8 +470,8 @@ async function renderVendorDashboard() {
   <div class="dashboard-wrap">
     ${myStore ? `
 
-      <!-- State 1: No Storefront Created Yet -->
-      ${(!myStorefront || myStorefront.status === 'none') ? `
+      <!-- State 1: No Storefront Created Yet (or status not initialized) -->
+      ${(!myStorefront || !myStorefront.status || myStorefront.status === 'none') ? `
         <div style="text-align:center;padding:50px 20px;background:#fff;border-radius:16px;border:1px solid var(--border);margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,0.04)">
           <div style="font-size:3.5rem;margin-bottom:16px;">🎨</div>
           <h2 style="font-weight:800;font-size:1.35rem;margin-bottom:8px">Build Your Standalone Storefront</h2>
@@ -556,14 +556,14 @@ async function renderVendorDashboard() {
       ` : ''}
 
       <!-- Customization Form (shown after draft is created) -->
-      ${(myStorefront && !['none', 'pending_approval', 'rejected', 'approved_pending_payment'].includes(myStorefront.status)) ? `
+      ${(myStorefront && myStorefront.status && !['none', 'pending_approval', 'rejected', 'approved_pending_payment'].includes(myStorefront.status)) ? `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
           <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
               <i class="fas fa-save"></i> Save Settings
             </button>
-            ${(myStorefront.status === 'draft') ? `
+            ${(myStorefront.status !== 'approved' && myStorefront.status !== 'active') ? `
               <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
                 <i class="fas fa-paper-plane"></i> Send Request
               </button>
@@ -574,13 +574,23 @@ async function renderVendorDashboard() {
         <div id="sf-status-card" style="margin-bottom:8px"></div>
 
         ${(myStorefront?.status === 'approved' || myStorefront?.status === 'active') ? `
-          <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;gap:8px">
-            <div style="font-weight:800;font-size:.9rem"><i class="fas fa-check-circle"></i> Storefront Active & Live!</div>
-            <div style="font-size:.8rem;line-height:1.5">
-              Your independent storefront URL is live and active:
-              <div style="margin-top:6px">
-                <strong>Buyer Link:</strong> <a href="#storefront/${sfSlug}" target="_blank" style="font-weight:700;color:#065f46;text-decoration:underline">${window.location.origin}/#storefront/${sfSlug}</a>
+          <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:16px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-weight:800;font-size:1rem;margin-bottom:4px"><i class="fas fa-check-circle" style="color:#10b981"></i> Storefront Active & Live!</div>
+              <div style="font-size:.83rem;line-height:1.5">
+                Your independent storefront URL is live and accepting customer orders:
+                <div style="margin-top:6px">
+                  <code style="background:#ecfdf5;padding:4px 10px;border-radius:6px;border:1px solid #a7f3d0;font-weight:700;font-size:.85rem;color:#047857">${window.location.origin}/#storefront/${sfSlug}</code>
+                </div>
               </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-sm btn-outline" style="border-color:#059669;color:#059669;background:#fff" onclick="navigator.clipboard.writeText('${window.location.origin}/#storefront/${sfSlug}'); showToast('Live storefront URL copied! 📋', 'success')">
+                <i class="fas fa-copy"></i> Copy Link
+              </button>
+              <a href="#storefront/${sfSlug}" target="_blank" class="btn btn-sm btn-primary" style="background:#059669;border:none;color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+                <i class="fas fa-external-link-alt"></i> Visit Live Site
+              </a>
             </div>
           </div>
         ` : ''}
@@ -779,7 +789,7 @@ async function renderVendorDashboard() {
               <button class="btn btn-primary" style="flex:1;font-weight:700" onclick="window.saveVendorStoreSettings('${myStore.id}')">
                 <i class="fas fa-save"></i> Save Settings
               </button>
-              ${(myStorefront?.status === 'draft') ? `
+              ${(myStorefront?.status !== 'approved' && myStorefront?.status !== 'active') ? `
                 <button class="btn btn-success" style="flex:1;background:#16a34a;border:none;color:#fff;font-weight:700" onclick="window.submitStorefrontRequest('${myStore.id}')">
                   <i class="fas fa-paper-plane"></i> Send Request
                 </button>
@@ -2921,6 +2931,17 @@ window.createStorefrontDraft = async function(storeId) {
   showToast('Initializing storefront draft...', 'info');
   const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || {};
   const cleanSlug = (store.slug || store.name || 'store').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+  if (App.myStorefront && App.myStorefront.id) {
+    App.myStorefront.status = 'draft';
+    await apiPatch('storefronts', App.myStorefront.id, { status: 'draft' }).catch(() => {});
+    const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
+    if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'draft';
+    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+    showToast('Storefront draft initialized! Customize your store below. 🎨', 'success');
+    renderVendorDashboard();
+    return;
+  }
   const payload = {
     store_id: storeId,
     vendor_id: App.currentUser?.id || store.vendor_id || '',
@@ -3078,7 +3099,16 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
     localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
     localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
   } catch(e){}
-  
+
+  const sfSlug = App.myStorefront?.url_slug || storeId;
+  const liveUrl = `${window.location.origin}/#storefront/${sfSlug}`;
+
+  if (typeof addNotification === 'function' && App.currentUser?.id) {
+    addNotification(App.currentUser.id, 'system', '🚀 Storefront Activated & Live!',
+      `Your storefront is active! Share your URL: ${liveUrl}`,
+      `#storefront/${sfSlug}`);
+  }
+
   showToast('Storefront activated successfully! 🎉', 'success');
   renderVendorDashboard();
 };
