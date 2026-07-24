@@ -192,6 +192,13 @@ async function _apDeleteUser(userId) {
     showToast('User deleted from local cache ✅', 'success');
   }
   closeAdminPanel();
+  
+  if (App.currentUser && String(App.currentUser.id) === String(userId)) {
+    showToast('Your account has been deleted. Signing out...', 'warning');
+    if (typeof logout === 'function') logout(true);
+    return;
+  }
+
   if (typeof refreshAdminVendorsFull === 'function') refreshAdminVendorsFull().catch(() => {});
   if (typeof loadAdminRendors === 'function') loadAdminRendors().catch(() => {});
   if (typeof refreshAdminUsersList === 'function') refreshAdminUsersList().catch(() => {});

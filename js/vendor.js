@@ -555,17 +555,17 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      <!-- Customization Form (default for draft, approved, active, or any new storefront) -->
-      ${(!myStorefront || !['none', 'pending_approval', 'rejected', 'approved_pending_payment'].includes(myStorefront.status)) ? `
+      <!-- Customization Form (shown after draft is created) -->
+      ${(myStorefront && !['none', 'pending_approval', 'rejected', 'approved_pending_payment'].includes(myStorefront.status)) ? `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
           <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
               <i class="fas fa-save"></i> Save Settings
             </button>
-            ${(!myStorefront || myStorefront.status === 'draft') ? `
+            ${(myStorefront.status === 'draft') ? `
               <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
-                <i class="fas fa-paper-plane"></i> Request Storefront
+                <i class="fas fa-paper-plane"></i> Send Request
               </button>
             ` : ''}
           </div>
@@ -573,7 +573,7 @@ async function renderVendorDashboard() {
 
         <div id="sf-status-card" style="margin-bottom:8px"></div>
 
-        ${(myStorefront.status === 'approved' || myStorefront.status === 'active') ? `
+        ${(myStorefront?.status === 'approved' || myStorefront?.status === 'active') ? `
           <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:grid;gap:8px">
             <div style="font-weight:800;font-size:.9rem"><i class="fas fa-check-circle"></i> Storefront Active & Live!</div>
             <div style="font-size:.8rem;line-height:1.5">
@@ -775,9 +775,16 @@ async function renderVendorDashboard() {
               </div>
             </div>
 
-            <button class="btn btn-primary btn-block" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-              <i class="fas fa-save"></i> ${(!myStorefront || myStorefront.status === 'draft') ? 'Save Draft' : 'Save Settings'}
-            </button>
+            <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+              <button class="btn btn-primary" style="flex:1;font-weight:700" onclick="window.saveVendorStoreSettings('${myStore.id}')">
+                <i class="fas fa-save"></i> Save Settings
+              </button>
+              ${(myStorefront?.status === 'draft') ? `
+                <button class="btn btn-success" style="flex:1;background:#16a34a;border:none;color:#fff;font-weight:700" onclick="window.submitStorefrontRequest('${myStore.id}')">
+                  <i class="fas fa-paper-plane"></i> Send Request
+                </button>
+              ` : ''}
+            </div>
           </div>
           
           <!-- Right Panel: Live Mock Preview -->
@@ -3001,10 +3008,17 @@ window.setStorefrontStatus = async function(storeId, status) {
 window.activateStorefrontPlan = async function(storeId, planKey, price) {
   if (!App.myStorefront || App.myStorefront.status !== 'approved_pending_payment') return;
   
+  const userBal = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
+  
   // Check wallet balance
-  if ((App.walletBalance || 0) < price) {
-    if (confirm(`Your wallet balance is GH₵ ${(App.walletBalance || 0).toFixed(2)}. Add GH₵ ${(price - (App.walletBalance || 0)).toFixed(2)} to top up and activate now?`)) {
-      App.walletBalance = (App.walletBalance || 0) + (price - (App.walletBalance || 0)) + 50;
+  if (userBal < price) {
+    const topUpNeeded = price - userBal;
+    if (confirm(`Your wallet balance is GH₵ ${userBal.toFixed(2)}. Add GH₵ ${topUpNeeded.toFixed(2)} to top up and activate now?`)) {
+      const newBal = userBal + topUpNeeded + 50;
+      if (App.currentUser) App.currentUser.wallet_balance = newBal;
+      App.walletBalance = newBal;
+      await apiPatch('users', App.currentUser?.id, { wallet_balance: newBal }).catch(() => {});
+      if (typeof saveSessions === 'function') saveSessions();
       if (typeof updateWalletUI === 'function') updateWalletUI();
       showToast('Wallet topped up successfully! Completing plan payment...', 'success');
     } else {
@@ -3017,7 +3031,7 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
   
   showToast('Processing payment & activating storefront...', 'info');
   
-  // 1. Deduct balance (mock via API)
+  // 1. Deduct balance
   await apiPost('wallet_transactions', {
     user_id: App.currentUser.id,
     type: 'payment',
@@ -3026,7 +3040,11 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
     status: 'completed'
   }).catch(() => {});
   
-  App.walletBalance -= price;
+  const finalBal = Math.max(0, (parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? price) - price));
+  if (App.currentUser) App.currentUser.wallet_balance = finalBal;
+  App.walletBalance = finalBal;
+  await apiPatch('users', App.currentUser?.id, { wallet_balance: finalBal }).catch(() => {});
+  if (typeof saveSessions === 'function') saveSessions();
   if (typeof updateWalletUI === 'function') updateWalletUI();
   
   // 2. Update storefront status to active

@@ -260,8 +260,28 @@ function loadSession() {
     const n = localStorage.getItem('happa_notifs');
     if (n) App.notifications = JSON.parse(n);
   } catch(e) { console.warn('Session load error', e); }
+
+  if (App.currentUser && App.currentUser.id) {
+    App.notifications = (App.notifications || []).filter(notif => String(notif.user_id) === String(App.currentUser.id));
+    verifySessionUser();
+  } else {
+    App.currentUser = null;
+    App.notifications = [];
+  }
   updateCartBadge();
 }
+
+async function verifySessionUser() {
+  if (!App.currentUser || !App.currentUser.id) return;
+  try {
+    const res = await apiGet('users', App.currentUser.id).catch(() => null);
+    if (!res || !res.data || res.data.status === 'deleted') {
+      console.warn('Current session user is deleted or invalid. Logging out...');
+      logout(true);
+    }
+  } catch(e){}
+}
+
 function saveCart() {
   localStorage.setItem('happa_cart', JSON.stringify(App.cart));
   updateCartBadge();
@@ -272,13 +292,16 @@ function saveSessions() {
 function saveNotifs() {
   localStorage.setItem('happa_notifs', JSON.stringify(App.notifications));
 }
-function logout() {
-  if (!confirm('Sign out of HAPPA TRADEMART?')) return;
+function logout(skipConfirm = false) {
+  if (!skipConfirm && typeof confirm === 'function' && !confirm('Sign out of HAPPA TRADEMART?')) return;
   App.currentUser = null;
   App.notifications = [];
+  App.loadedPages = {};
   try {
     localStorage.removeItem('happa_session');
     localStorage.removeItem('happa_notifs');
+    localStorage.removeItem('happa_saved');
+    localStorage.removeItem('happa_wishlist');
   } catch(e){}
   if (typeof stopNotifPolling === 'function') stopNotifPolling();
   if (typeof renderNotifBadge === 'function') renderNotifBadge();
@@ -290,8 +313,21 @@ function logout() {
         <h3>Sign in to see notifications</h3>
       </div>`;
   }
+  const containersToClear = [
+    'buyer-dashboard-content',
+    'vendor-dashboard-content',
+    'admin-dashboard-content',
+    'rendor-dashboard-content',
+    'orders-list',
+    'wallet-container',
+    'settings-content'
+  ];
+  containersToClear.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
   showPage('home');
-  showToast('Signed out successfully', 'info');
+  if (!skipConfirm) showToast('Signed out successfully', 'info');
   updateNavForUser();
 }
 
@@ -2432,11 +2468,16 @@ function renderPrivacyPage() {
 </p>`;
 }
 
-function requestAccountDeletion() {
+async function requestAccountDeletion() {
   if (!App.currentUser) { showToast('Please sign in first', 'warning'); return; }
-  if (confirm('Are you sure you want to delete your account? This is irreversible.\n\nA confirmation email will be sent and your data will be permanently deleted within 30 days.')) {
-    showToast('Account deletion request submitted. Check your email for the next step.', 'info', 5000);
-    // In a real implementation, call apiPost('account-deletion-requests', {...})
+  if (confirm('Are you sure you want to permanently delete your account? This action is irreversible.\n\nAll your data including store, notifications, and orders will be deleted immediately.')) {
+    const uid = App.currentUser.id;
+    if (typeof _apDeleteUser === 'function') {
+      await _apDeleteUser(uid);
+    } else {
+      await apiDelete('users', uid).catch(() => {});
+      logout(true);
+    }
   }
 }
 

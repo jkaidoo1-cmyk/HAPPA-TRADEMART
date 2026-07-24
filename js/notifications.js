@@ -12,11 +12,12 @@ function renderNotifBadge() {
     return;
   }
   // Count unread only for current user
-  const unread = App.notifications.filter(n => !n.is_read && n.user_id === uid).length;
+  const unread = App.notifications.filter(n => !n.is_read && String(n.user_id) === String(uid)).length;
   if (unread > 0) {
     badge.textContent = unread > 99 ? '99+' : unread;
     badge.classList.remove('hidden');
   } else {
+    badge.textContent = '0';
     badge.classList.add('hidden');
   }
 }
@@ -24,7 +25,12 @@ function renderNotifBadge() {
 // ── Fetch server-side notifications and merge into App.notifications ──
 // This is the key function that pulls announcement notifications from the DB
 async function fetchServerNotifications() {
-  if (!App.currentUser) return;
+  if (!App.currentUser || !App.currentUser.id) {
+    App.notifications = [];
+    saveNotifs();
+    renderNotifBadge();
+    return;
+  }
   const uid = App.currentUser.id;
   try {
     // Fetch notifications for this user — try two pages to catch announcements
@@ -36,36 +42,15 @@ async function fetchServerNotifications() {
     // Deduplicate by id, then filter to this user
     const seen = new Set();
     const unique = all.filter(n => { if (seen.has(n.id)) return false; seen.add(n.id); return true; });
-    const serverNotifs = unique.filter(n => n.user_id === uid);
-    if (!serverNotifs.length) return;
+    const serverNotifs = unique.filter(n => String(n.user_id) === String(uid));
 
-    // Build a Set of IDs already in local cache
-    const localIds = new Set(App.notifications.map(n => n.id));
-    let changed = false;
+    // Synchronize App.notifications for current user
+    App.notifications = serverNotifs
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 200);
 
-    for (const sn of serverNotifs) {
-      if (!localIds.has(sn.id)) {
-        // New notification from server — prepend
-        App.notifications.unshift(sn);
-        changed = true;
-      } else {
-        // Sync is_read status from server (server is source of truth)
-        const local = App.notifications.find(n => n.id === sn.id);
-        if (local && sn.is_read && !local.is_read) {
-          local.is_read = true;
-          changed = true;
-        }
-      }
-    }
-
-    if (changed) {
-      // Sort newest-first and cap at 200
-      App.notifications = App.notifications
-        .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
-        .slice(0, 200);
-      saveNotifs();
-      renderNotifBadge();
-    }
+    saveNotifs();
+    renderNotifBadge();
   } catch(e) {
     console.warn('Failed to fetch server notifications', e);
   }

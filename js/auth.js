@@ -1320,10 +1320,13 @@ function addNotification(userId, type, title, message, actionUrl = '') {
     created_at: new Date().toISOString()
   };
 
-  App.notifications.unshift(notif);
-  if (App.notifications.length > 50) App.notifications.pop();
-  saveNotifs();
-  renderNotifBadge();
+  // Only update local notifications list and badge if target userId matches current user
+  if (App.currentUser && String(App.currentUser.id) === String(userId)) {
+    App.notifications.unshift(notif);
+    if (App.notifications.length > 50) App.notifications.pop();
+    saveNotifs();
+    renderNotifBadge();
+  }
 
   // Asynchronously upload to database
   apiPost('notifications', notif).catch(err => {

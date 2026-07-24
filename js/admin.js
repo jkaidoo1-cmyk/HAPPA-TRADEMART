@@ -2645,7 +2645,9 @@ async function renderAdminStorefronts() {
   
   const pending = allStorefronts.filter(s => s.status === 'pending_approval');
   const pendingPayment = allStorefronts.filter(s => s.status === 'approved_pending_payment');
-  const approved = allStorefronts.filter(s => s.status === 'approved');
+  // 'active' is the status set by activateStorefrontPlan — treat as approved/live
+  const approved = allStorefronts.filter(s => s.status === 'approved' || s.status === 'active');
+  const rejected = allStorefronts.filter(s => s.status === 'rejected');
   const draft = allStorefronts.filter(s => s.status === 'draft' || s.status === 'inactive');
   
   // Helper: get a small subscription badge for admin view
@@ -2709,11 +2711,11 @@ async function renderAdminStorefronts() {
         <div style="font-size:.72rem;color:var(--text-muted)">Draft/Disabled Sites</div>
       </div>
       <div class="card" style="padding:12px;text-align:center">
-        <div style="font-size:1.1rem;font-weight:800;color:#7c3aed">${stores.filter(s => s.subscription_status === 'active' && s.subscription_end && new Date(s.subscription_end) > new Date()).length}</div>
+        <div style="font-size:1.1rem;font-weight:800;color:#7c3aed">${allStores.filter(s => s.subscription_status === 'active' && s.subscription_end && new Date(s.subscription_end) > new Date()).length}</div>
         <div style="font-size:.72rem;color:var(--text-muted)">Active Subscriptions</div>
       </div>
       <div class="card" style="padding:12px;text-align:center">
-        <div style="font-size:1.1rem;font-weight:800;color:#dc2626">${stores.filter(s => s.subscription_end && new Date(s.subscription_end) < new Date()).length}</div>
+        <div style="font-size:1.1rem;font-weight:800;color:#dc2626">${allStores.filter(s => s.subscription_end && new Date(s.subscription_end) < new Date()).length}</div>
         <div style="font-size:.72rem;color:var(--text-muted)">Expired Subs</div>
       </div>
     </div>
@@ -2794,8 +2796,24 @@ async function renderAdminStorefronts() {
     html += '<p style="font-size:.8rem;color:var(--text-muted);padding:10px 0">No draft storefronts.</p>';
   }
 
+  // 4. Rejected Section
+  html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-times-circle" style="color:#dc2626"></i> Rejected Requests (${rejected.length})</h3>`;
+  if (rejected.length) {
+    html += rejected.map(s => renderItemHTML(s, 'Rejected', '#fef2f2', '#991b1b', `
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showAdminStorefrontReviewModal('${s.id}')">
+        <i class="fas fa-tasks"></i> Re-Review
+      </button>
+      <button class="btn btn-sm btn-danger" style="background:var(--danger);border:none;color:#fff" onclick="deleteStorefront('${s.id}')">
+        <i class="fas fa-trash"></i> Delete
+      </button>
+    `)).join('');
+  } else {
+    html += '<p style="font-size:.8rem;color:var(--text-muted);padding:10px 0">No rejected storefront requests.</p>';
+  }
+
   listEl.innerHTML = html;
 }
+
 
 window.showAdminStorefrontReviewModal = function(sfId) {
   const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
