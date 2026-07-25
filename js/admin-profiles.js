@@ -186,25 +186,21 @@ async function _apDeleteUser(userId) {
     return null;
   });
 
-  if (res !== null) {
-    showToast('User deleted ✅', 'success');
-  } else {
-    showToast('User deleted from local cache ✅', 'success');
-  }
+  // Signal cross-tab logout to instantly revoke deleted session in any open tab
+  try { localStorage.setItem('happa_logout_user_id', userId); } catch(e){}
 
   if (App.currentUser && String(App.currentUser.id) === String(userId)) {
     console.warn('[Session Terminated] Current logged in user was deleted. Logging out immediately.');
     if (typeof stopNotifPolling === 'function') stopNotifPolling();
+    showToast('Your account has been deleted. Signing out...', 'warning');
     if (typeof logout === 'function') logout(true);
+    closeAdminPanel();
+    return;
+  } else {
+    showToast('User account deleted ✅', 'success');
   }
 
   closeAdminPanel();
-  
-  if (App.currentUser && String(App.currentUser.id) === String(userId)) {
-    showToast('Your account has been deleted. Signing out...', 'warning');
-    if (typeof logout === 'function') logout(true);
-    return;
-  }
 
   if (typeof refreshAdminVendorsFull === 'function') refreshAdminVendorsFull().catch(() => {});
   if (typeof loadAdminRendors === 'function') loadAdminRendors().catch(() => {});

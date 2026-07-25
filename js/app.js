@@ -299,15 +299,50 @@ function loadSession() {
 }
 
 async function verifySessionUser() {
-  if (!App.currentUser || !App.currentUser.id) return;
+  if (!App.currentUser || !App.currentUser.id) return true;
+  const uid = String(App.currentUser.id);
   try {
-    const res = await apiGet('users', App.currentUser.id).catch(() => null);
-    if (!res || !res.data || res.data.status === 'deleted') {
-      console.warn('Current session user is deleted or invalid. Logging out...');
+    const usersRes = await apiFetch('users').catch(() => null);
+    const userList = usersRes?.data || (Array.isArray(usersRes) ? usersRes : []);
+    const foundUser = userList.find(u => String(u.id) === uid);
+
+    if (!foundUser || foundUser.status === 'deleted') {
+      console.warn(`[Session Revoked] Account "${uid}" is deleted or no longer exists. Logging out.`);
+      if (typeof stopNotifPolling === 'function') stopNotifPolling();
+      logout(true);
+      showToast('Your account has been deleted or deactivated.', 'warning');
+      try { localStorage.setItem('happa_logout_user_id', uid); } catch(e){}
+      return false;
+    }
+    return true;
+  } catch(e) {
+    return true;
+  }
+}
+
+// ── Session Heartbeat & Cross-Tab Logout Listener ────────────────
+setInterval(() => {
+  if (App.currentUser && App.currentUser.id) {
+    verifySessionUser();
+  }
+}, 5000);
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && App.currentUser && App.currentUser.id) {
+    verifySessionUser();
+  }
+});
+
+window.addEventListener('storage', (e) => {
+  if (e.key === 'happa_logout_user_id' || e.key === 'happa_session') {
+    const deletedId = e.newValue;
+    if (!localStorage.getItem('happa_session') || (App.currentUser && String(App.currentUser.id) === String(deletedId))) {
+      console.warn('[Cross-Tab Logout] Current user session deleted in another tab/window. Logging out.');
+      if (typeof stopNotifPolling === 'function') stopNotifPolling();
       logout(true);
     }
-  } catch(e){}
-}
+  }
+});
 
 function saveCart() {
   localStorage.setItem('happa_cart', JSON.stringify(App.cart));

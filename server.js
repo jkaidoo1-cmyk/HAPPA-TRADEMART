@@ -666,6 +666,25 @@ app.delete('/api/:table/:id', async (req, res) => {
   const table = req.params.table;
   const id = req.params.id;
 
+  if (table === 'users') {
+    if (supabase) {
+      try {
+        await supabase.from('notifications').delete().eq('user_id', id);
+        await supabase.from('users').delete().eq('id', id);
+        return res.status(204).send();
+      } catch (err) {}
+    }
+    const db = loadDb();
+    if (db.notifications) {
+      db.notifications = db.notifications.filter(n => String(n.user_id) !== String(id));
+    }
+    if (db.users) {
+      db.users = db.users.filter(u => String(u.id) !== String(id));
+    }
+    saveDb(db);
+    return res.status(204).send();
+  }
+
   if (supabase) {
     try {
       const { error } = await supabase.from(table).delete().eq('id', id);

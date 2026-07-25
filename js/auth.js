@@ -1308,10 +1308,25 @@ function generateRefCode(name) {
 
 
 
-function addNotification(userId, type, title, message, actionUrl = '') {
+async function addNotification(userId, type, title, message, actionUrl = '') {
+  if (!userId) return;
+  const targetId = String(userId);
+
+  // Check if target user is deleted or no longer exists
+  try {
+    const usersRes = await apiFetch('users').catch(() => null);
+    const userList = usersRes?.data || (Array.isArray(usersRes) ? usersRes : []);
+    const targetUser = userList.find(u => String(u.id) === targetId);
+
+    if (targetUser && targetUser.status === 'deleted') {
+      console.warn(`[Notification Suppressed] User ${targetId} is deleted. Notification suppressed.`);
+      return;
+    }
+  } catch(e) {}
+
   const notif = {
     id: 'n' + Date.now() + Math.random().toString(36).substr(2, 5),
-    user_id: userId,
+    user_id: targetId,
     type,
     title,
     message,
@@ -1321,7 +1336,7 @@ function addNotification(userId, type, title, message, actionUrl = '') {
   };
 
   // Only update local notifications list and badge if target userId matches current user
-  if (App.currentUser && String(App.currentUser.id) === String(userId)) {
+  if (App.currentUser && String(App.currentUser.id) === targetId) {
     App.notifications.unshift(notif);
     if (App.notifications.length > 50) App.notifications.pop();
     saveNotifs();

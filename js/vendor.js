@@ -109,20 +109,29 @@ async function renderVendorDashboard() {
 
   // Fetch storefront (separate entity) for this vendor's store, if any
   let myStorefront = null;
-  if (myStore) {
-    const sfRes = await apiGet('storefronts', `limit=200`);
+  if (myStore && myStore.id) {
+    const sfRes = await apiGet('storefronts', `limit=200`).catch(() => null);
     const allSF = sfRes?.data || [];
-    let fetchedSF = allSF.find(s => String(s.store_id) === String(myStore.id) || String(s.vendor_id) === String(u.id)) || null;
-    if (App.myStorefront && App.myStorefront.status && App.myStorefront.status !== 'none') {
-      if (!fetchedSF || fetchedSF.status === 'none') {
-        fetchedSF = { ...fetchedSF, ...App.myStorefront };
-      } else {
-        fetchedSF = { ...fetchedSF, ...App.myStorefront, status: App.myStorefront.status };
-      }
+    const targetStoreId = String(myStore.id).trim();
+    const targetVendorId = String(u?.id || '').trim();
+
+    let fetchedSF = allSF.find(s => {
+      if (!s) return false;
+      const sStoreId = s.store_id ? String(s.store_id).trim() : '';
+      const sVendorId = s.vendor_id ? String(s.vendor_id).trim() : '';
+      return (sStoreId && sStoreId === targetStoreId) || (sVendorId && sVendorId === targetVendorId);
+    }) || null;
+
+    if (fetchedSF && fetchedSF.status && fetchedSF.status !== 'none') {
+      myStorefront = fetchedSF;
+    } else {
+      myStorefront = null;
     }
-    myStorefront = fetchedSF;
     App.myStorefront = myStorefront;
+  } else {
+    App.myStorefront = null;
   }
+  window.previewTheme = myStorefront?.theme || myStore?.theme || 'classic';
 
   // Helper variables for storefront configuration form to decouple from stores
   const sfTheme = myStorefront?.theme || myStore?.theme || 'classic';
@@ -3571,6 +3580,39 @@ window.handleSlugChange = function(val) {
   window.updateStorefrontPreview();
 };
 
+window.updateStoreTheme = function(themeName) {
+  window.previewTheme = themeName;
+  ['classic', 'bold', 'modern', 'neumorphic'].forEach(t => {
+    const label = document.getElementById('theme-label-' + t);
+    if (label) {
+      if (t === themeName) {
+        label.style.border = '2px solid var(--primary)';
+        label.style.background = 'var(--primary-light)';
+      } else {
+        label.style.border = '2px solid var(--border)';
+        label.style.background = 'transparent';
+      }
+    }
+  });
+  window.updateStorefrontPreview();
+};
+
+window.handleImageUpload = function(type) {
+  const fileInput = document.getElementById(type === 'logo' ? 'store-logo-file' : 'store-banner-file');
+  const urlInput = document.getElementById(type === 'logo' ? 'store-logo-url' : 'store-banner-url');
+  if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    if (urlInput) urlInput.value = dataUrl;
+    window.updateStorefrontPreview();
+    showToast(`${type === 'logo' ? 'Logo' : 'Banner'} image loaded!`, 'success');
+  };
+  reader.readAsDataURL(file);
+};
+
 window.createStorefrontDraft = async function(storeId) {
   const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || App.myStore;
   if (!store) { showToast('Store not found', 'warning'); return; }
@@ -3579,6 +3621,7 @@ window.createStorefrontDraft = async function(storeId) {
   const draftSF = {
     id: 'sft-' + store.id,
     store_id: store.id,
+    vendor_id: App.currentUser?.id || store.vendor_id,
     name: store.name || 'My Storefront',
     url_slug: store.slug || (store.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     theme: 'classic',
@@ -3607,20 +3650,21 @@ window.saveVendorStoreSettings = async function(storeId) {
   const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || App.myStore;
   if (!store) { showToast('Store not found', 'warning'); return; }
 
-  const sfName = (document.getElementById('store-display-name')?.value || store.name || '').trim();
+  const sfName = (document.getElementById('store-name')?.value || document.getElementById('store-display-name')?.value || store.name || '').trim();
   const sfSlug = (document.getElementById('store-slug')?.value || store.slug || '').trim();
   const theme = window.previewTheme || 'classic';
-  const fontFamily = document.getElementById('store-font')?.value || 'Outfit';
+  const fontFamily = document.getElementById('store-font-family')?.value || document.getElementById('store-font')?.value || 'Outfit';
   const primaryColor = document.getElementById('store-primary-color')?.value || '#e85d04';
   const secondaryColor = document.getElementById('store-secondary-color')?.value || '#0d0d0d';
   const slogan = (document.getElementById('store-slogan')?.value || '').trim();
-  const aboutUs = (document.getElementById('store-about-us')?.value || '').trim();
+  const aboutUs = (document.getElementById('store-description')?.value || document.getElementById('store-about-us')?.value || '').trim();
   const businessHours = (document.getElementById('store-hours')?.value || '').trim();
   const shippingPolicy = (document.getElementById('store-shipping-policy')?.value || '').trim();
   const returnPolicy = (document.getElementById('store-return-policy')?.value || '').trim();
   const facebookUrl = (document.getElementById('store-facebook')?.value || '').trim();
   const instagramUrl = (document.getElementById('store-instagram')?.value || '').trim();
   const youtubeUrl = (document.getElementById('store-youtube')?.value || '').trim();
+  const metaDesc = (document.getElementById('store-meta-desc')?.value || '').trim();
   const bannerUrl = (document.getElementById('store-banner-url')?.value || store.banner_url || '').trim();
   const logoUrl = (document.getElementById('store-logo-url')?.value || store.logo_url || '').trim();
 
@@ -3643,6 +3687,7 @@ window.saveVendorStoreSettings = async function(storeId) {
     facebook_url: facebookUrl,
     instagram_url: instagramUrl,
     youtube_url: youtubeUrl,
+    meta_description: metaDesc,
     banner_url: bannerUrl,
     logo_url: logoUrl,
     updated_at: new Date().toISOString()
