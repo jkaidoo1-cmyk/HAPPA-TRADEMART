@@ -272,16 +272,23 @@ app.get('/api/:table', async (req, res) => {
   const table = req.params.table;
 
   if (table === 'storefronts') {
-    let stores = [];
+    let supaStores = [];
     if (supabase) {
       try {
         const { data, error } = await supabase.from('stores').select('*');
-        if (!error && data) stores = data.map(serializeRecord);
+        if (!error && data) supaStores = data.map(serializeRecord);
       } catch (err) {}
-    } else {
-      const db = loadDb();
-      stores = getTable(db, 'stores').map(serializeRecord);
     }
+    const db = loadDb();
+    const localStores = getTable(db, 'stores').map(serializeRecord);
+    const storeMap = new Map();
+    supaStores.forEach(s => storeMap.set(String(s.id), s));
+    localStores.forEach(s => {
+      const key = String(s.id);
+      const existing = storeMap.get(key) || {};
+      storeMap.set(key, { ...existing, ...s });
+    });
+    const stores = Array.from(storeMap.values());
 
     let rows = stores.map(st => ({
       id: st.id,
@@ -407,20 +414,16 @@ app.post('/api/:table', async (req, res) => {
 
   if (table === 'storefronts') {
     const storeId = body.store_id || body.id;
-    let st = null;
+    let supaSt = null;
     if (supabase) {
       try {
         const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).maybeSingle();
-        if (!error && data) st = serializeRecord(data);
+        if (!error && data) supaSt = serializeRecord(data);
       } catch (err) {}
-    } else {
-      const db = loadDb();
-      st = getTable(db, 'stores').find(s => String(s.id) === String(storeId));
     }
-
-    if (!st) {
-      return res.status(404).json({ error: 'Store not found to attach storefront' });
-    }
+    const dbLookup = loadDb();
+    const localSt = getTable(dbLookup, 'stores').find(s => String(s.id) === String(storeId));
+    let st = supaSt || localSt || { id: storeId, vendor_id: body.vendor_id || '', created_at: new Date().toISOString() };
 
     const storeUpdates = {
       storefront_status: body.status || 'draft',
@@ -448,19 +451,21 @@ app.post('/api/:table', async (req, res) => {
         const dbRecord = prepareRecordForDb('stores', storeUpdates);
         await supabase.from('stores').update(dbRecord).eq('id', storeId);
       } catch (err) {}
+    }
+    const db = loadDb();
+    const idx = getTable(db, 'stores').findIndex(s => String(s.id) === String(storeId));
+    if (idx !== -1) {
+      db.stores[idx] = { ...db.stores[idx], ...storeUpdates };
+      saveDb(db);
     } else {
-      const db = loadDb();
-      const idx = getTable(db, 'stores').findIndex(s => String(s.id) === String(storeId));
-      if (idx !== -1) {
-        db.stores[idx] = { ...db.stores[idx], ...storeUpdates };
-        saveDb(db);
-      }
+      db.stores.push({ id: storeId, vendor_id: st.vendor_id || body.vendor_id || '', ...storeUpdates });
+      saveDb(db);
     }
 
     const sf = {
       id: storeId,
       store_id: storeId,
-      vendor_id: st.vendor_id,
+      vendor_id: st.vendor_id || body.vendor_id || '',
       status: storeUpdates.storefront_status,
       url_slug: storeUpdates.slug,
       theme: storeUpdates.theme,
@@ -481,7 +486,7 @@ app.post('/api/:table', async (req, res) => {
       meta_description: body.meta_description || '',
       subscription_plan: storeUpdates.subscription_plan,
       subscription_status: storeUpdates.subscription_status,
-      created_at: st.created_at,
+      created_at: st.created_at || new Date().toISOString(),
       updated_at: storeUpdates.updated_at
     };
     return res.status(201).json(sf);
@@ -491,23 +496,21 @@ app.post('/api/:table', async (req, res) => {
   if (!body.created_at) body.created_at = new Date().toISOString();
   body.updated_at = new Date().toISOString();
 
-  if (supabase) {
-    try {
-      const record = serializeRecord(body);
-      const dbRecord = prepareRecordForDb(table, record);
-      const { data, error } = await supabase.from(table).insert(dbRecord).select().single();
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(201).json(serializeRecord(data));
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
-  }
-
   const db = loadDb();
   const rows = getTable(db, table);
   const record = normalizeRecord(table, body);
   rows.push(record);
   saveDb(db);
+
+  if (supabase) {
+    try {
+      const supaRecord = serializeRecord(body);
+      const dbRecord = prepareRecordForDb(table, supaRecord);
+      const { data, error } = await supabase.from(table).insert(dbRecord).select().single();
+      if (!error && data) return res.status(201).json(serializeRecord(data));
+    } catch (err) {}
+  }
+
   res.status(201).json(record);
 });
 
@@ -596,13 +599,15 @@ app.patch('/api/:table/:id', async (req, res) => {
         const dbRecord = prepareRecordForDb('stores', storeUpdates);
         await supabase.from('stores').update(dbRecord).eq('id', storeId);
       } catch (err) {}
+    }
+    const db = loadDb();
+    const idx = getTable(db, 'stores').findIndex(s => String(s.id) === String(storeId));
+    if (idx !== -1) {
+      db.stores[idx] = { ...db.stores[idx], ...storeUpdates };
+      saveDb(db);
     } else {
-      const db = loadDb();
-      const idx = getTable(db, 'stores').findIndex(s => String(s.id) === String(storeId));
-      if (idx !== -1) {
-        db.stores[idx] = { ...db.stores[idx], ...storeUpdates };
-        saveDb(db);
-      }
+      db.stores.push({ id: storeId, vendor_id: st.vendor_id, ...storeUpdates });
+      saveDb(db);
     }
 
     let updatedSt = { ...st, ...storeUpdates };

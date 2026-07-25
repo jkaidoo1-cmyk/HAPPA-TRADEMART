@@ -92,6 +92,7 @@ async function renderVendorDashboard() {
     // Update App.allStores with fresh data
     App.allStores = newAllStores;
   }
+  App.myStore = myStore;
 
   // Fetch vendor's products
   let myProducts = [];
@@ -111,7 +112,15 @@ async function renderVendorDashboard() {
   if (myStore) {
     const sfRes = await apiGet('storefronts', `limit=200`);
     const allSF = sfRes?.data || [];
-    myStorefront = allSF.find(s => String(s.store_id) === String(myStore.id) || String(s.vendor_id) === String(u.id)) || null;
+    let fetchedSF = allSF.find(s => String(s.store_id) === String(myStore.id) || String(s.vendor_id) === String(u.id)) || null;
+    if (App.myStorefront && App.myStorefront.status && App.myStorefront.status !== 'none') {
+      if (!fetchedSF || fetchedSF.status === 'none') {
+        fetchedSF = { ...fetchedSF, ...App.myStorefront };
+      } else {
+        fetchedSF = { ...fetchedSF, ...App.myStorefront, status: App.myStorefront.status };
+      }
+    }
+    myStorefront = fetchedSF;
     App.myStorefront = myStorefront;
   }
 
@@ -470,7 +479,7 @@ async function renderVendorDashboard() {
   <div class="dashboard-wrap">
     ${myStore ? `
 
-      <!-- State 1: No Storefront Created Yet (or status not initialized) -->
+      <!-- State 1: No Storefront Created Yet (storefront_status is 'none' or not set) -->
       ${(!myStorefront || !myStorefront.status || myStorefront.status === 'none') ? `
         <div style="text-align:center;padding:50px 20px;background:#fff;border-radius:16px;border:1px solid var(--border);margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,0.04)">
           <div style="font-size:3.5rem;margin-bottom:16px;">🎨</div>
@@ -484,96 +493,84 @@ async function renderVendorDashboard() {
         </div>
       ` : ''}
 
-      <!-- State 2: Pending Approval -->
-      ${(myStorefront && myStorefront.status === 'pending_approval') ? `
-        <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
-          <div style="font-size:3rem;margin-bottom:16px;">⏳</div>
-          <h2 style="font-weight:800;font-size:1.25rem;margin-bottom:8px;color:#d97706">Storefront Request Under Review</h2>
-          <p style="font-size:.875rem;color:var(--text-light);margin-bottom:24px;line-height:1.7;max-width:500px;margin-left:auto;margin-right:auto">
-            Your storefront request is currently pending admin review. Admin will set subscription pricing and approve your storefront shortly.
-          </p>
-          <div style="display:flex;gap:10px;justify-content:center">
-            <button class="btn btn-outline" onclick="window.setStorefrontStatus('${myStore.id}', 'draft').then(() => renderVendorDashboard())">
+      <!-- ─── Storefront exists (any status except 'none') ─── -->
+      ${(myStorefront && myStorefront.status && myStorefront.status !== 'none') ? `
+
+        <!-- ── Status Banner: Pending Admin Review ── -->
+        ${myStorefront.status === 'pending_approval' ? `
+          <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-weight:800;font-size:.95rem;color:#92400e;margin-bottom:4px"><i class="fas fa-clock" style="color:#d97706"></i> Storefront Request Under Review</div>
+              <div style="font-size:.82rem;color:#78350f;line-height:1.5">
+                Your storefront customization has been submitted and is pending admin approval. You can still view your settings below.
+                To make changes, revert to draft first.
+              </div>
+            </div>
+            <button class="btn btn-sm btn-outline" style="border-color:#d97706;color:#92400e;white-space:nowrap" onclick="window.setStorefrontStatus('${myStore.id}', 'draft').then(() => renderVendorDashboard())">
               <i class="fas fa-edit"></i> Revert to Draft & Edit
             </button>
           </div>
-        </div>
-      ` : ''}
+        ` : ''}
 
-      <!-- State 3: Rejected -->
-      ${(myStorefront && myStorefront.status === 'rejected') ? `
-        <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid #fca5a5;margin-bottom:16px">
-          <div style="font-size:3rem;margin-bottom:16px;">❌</div>
-          <h2 style="font-weight:800;font-size:1.25rem;margin-bottom:8px;color:#dc2626">Storefront Request Rejected</h2>
-          <p style="font-size:.875rem;color:var(--text-light);margin-bottom:16px;line-height:1.7;max-width:500px;margin-left:auto;margin-right:auto">
-            Reason: <strong>${escHtml(myStorefront.admin_feedback || 'Does not meet storefront guidelines')}</strong>
-          </p>
-          <button class="btn btn-primary btn-sm" onclick="window.setStorefrontStatus('${myStore.id}', 'draft').then(() => renderVendorDashboard())">
-            <i class="fas fa-redo"></i> Re-apply & Edit Customization
-          </button>
-        </div>
-      ` : ''}
-
-      <!-- State 4: Approved, Pending Payment -->
-      ${(myStorefront && myStorefront.status === 'approved_pending_payment') ? `
-        <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
-          <div style="font-size:3rem;margin-bottom:16px;">🎉</div>
-          <h2 style="font-weight:800;font-size:1.25rem;margin-bottom:8px;color:#16a34a">Storefront Approved!</h2>
-          <p style="font-size:.875rem;color:var(--text-light);margin-bottom:24px;line-height:1.7;max-width:500px;margin-left:auto;margin-right:auto">
-            Your storefront layout has been approved. Please select a subscription plan below to complete payment and activate your live URL.
-          </p>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:800px;margin:0 auto">
-            <!-- Starter Plan -->
-            <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
-              <div style="font-size:1.6rem;margin-bottom:6px">🌱</div>
-              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Starter</div>
-              <div style="font-size:1.5rem;font-weight:900;color:var(--text);margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.starter || 50}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-              <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'starter', ${myStorefront.plan_prices?.starter || 50})">
-                Pay & Activate
-              </button>
+        <!-- ── Status Banner: Rejected ── -->
+        ${myStorefront.status === 'rejected' ? `
+          <div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:12px;padding:14px 18px;margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+              <div>
+                <div style="font-weight:800;font-size:.95rem;color:#991b1b;margin-bottom:4px"><i class="fas fa-times-circle" style="color:#dc2626"></i> Storefront Request Rejected</div>
+                <div style="font-size:.82rem;color:#7f1d1d;line-height:1.5">
+                  Reason: <strong>${escHtml(myStorefront.admin_feedback || 'Does not meet storefront guidelines')}</strong>
+                </div>
+              </div>
             </div>
-            <!-- Growth Plan -->
-            <div style="border:2px solid var(--primary);border-radius:14px;padding:22px 18px;text-align:center;background:#fff;position:relative">
-              <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px">RECOMMENDED</div>
-              <div style="font-size:1.6rem;margin-bottom:6px">🚀</div>
-              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Growth</div>
-              <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.growth || 100}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-              <button class="btn btn-primary btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'growth', ${myStorefront.plan_prices?.growth || 100})">
-                Pay & Activate
-              </button>
-            </div>
-            <!-- Pro Plan -->
-            <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
-              <div style="font-size:1.6rem;margin-bottom:6px">💎</div>
-              <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Pro</div>
-              <div style="font-size:1.5rem;font-weight:900;color:#7c3aed;margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.pro || 200}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-              <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem;border-color:#7c3aed;color:#7c3aed" onclick="window.activateStorefrontPlan('${myStore.id}', 'pro', ${myStorefront.plan_prices?.pro || 200})">
-                Pay & Activate
-              </button>
+            <div style="font-size:.82rem;color:#991b1b;margin-top:8px;line-height:1.5">
+              Edit your customization below and re-submit when ready.
             </div>
           </div>
-        </div>
-      ` : ''}
+        ` : ''}
 
-      <!-- Customization Form (shown after draft is created) -->
-      ${(myStorefront && myStorefront.status && !['none', 'pending_approval', 'rejected', 'approved_pending_payment'].includes(myStorefront.status)) ? `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-          <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-              <i class="fas fa-save"></i> Save Settings
-            </button>
-            ${(myStorefront.status !== 'approved' && myStorefront.status !== 'active') ? `
-              <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
-                <i class="fas fa-paper-plane"></i> Send Request
-              </button>
-            ` : ''}
+        <!-- ── Status Banner: Approved, Pending Payment ── -->
+        ${myStorefront.status === 'approved_pending_payment' ? `
+          <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px 18px;margin-bottom:16px">
+            <div style="font-weight:800;font-size:.95rem;color:#166534;margin-bottom:8px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Storefront Layout Approved!</div>
+            <div style="font-size:.82rem;color:#14532d;line-height:1.5;margin-bottom:16px">
+              Your storefront layout has been approved by admin. Select a subscription plan below to activate your live URL.
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:800px">
+              <!-- Starter Plan -->
+              <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
+                <div style="font-size:1.6rem;margin-bottom:6px">🌱</div>
+                <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Starter</div>
+                <div style="font-size:1.5rem;font-weight:900;color:var(--text);margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.starter || 50}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'starter', ${myStorefront.plan_prices?.starter || 50})">
+                  Pay & Activate
+                </button>
+              </div>
+              <!-- Growth Plan -->
+              <div style="border:2px solid var(--primary);border-radius:14px;padding:22px 18px;text-align:center;background:#fff;position:relative">
+                <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px">RECOMMENDED</div>
+                <div style="font-size:1.6rem;margin-bottom:6px">🚀</div>
+                <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Growth</div>
+                <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.growth || 100}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                <button class="btn btn-primary btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'growth', ${myStorefront.plan_prices?.growth || 100})">
+                  Pay & Activate
+                </button>
+              </div>
+              <!-- Pro Plan -->
+              <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
+                <div style="font-size:1.6rem;margin-bottom:6px">💎</div>
+                <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Pro</div>
+                <div style="font-size:1.5rem;font-weight:900;color:#7c3aed;margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.pro || 200}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem;border-color:#7c3aed;color:#7c3aed" onclick="window.activateStorefrontPlan('${myStore.id}', 'pro', ${myStorefront.plan_prices?.pro || 200})">
+                  Pay & Activate
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        ` : ''}
 
-        <div id="sf-status-card" style="margin-bottom:8px"></div>
-
-        ${(myStorefront?.status === 'approved' || myStorefront?.status === 'active') ? `
+        <!-- ── Status Banner: Active & Live ── -->
+        ${(myStorefront.status === 'approved' || myStorefront.status === 'active') ? `
           <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:16px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
             <div>
               <div style="font-weight:800;font-size:1rem;margin-bottom:4px"><i class="fas fa-check-circle" style="color:#10b981"></i> Storefront Active & Live!</div>
@@ -595,7 +592,27 @@ async function renderVendorDashboard() {
           </div>
         ` : ''}
 
-        <div class="storefront-split-wrap" style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+        <!-- ── Customization Form Header with Action Buttons ── -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+          <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
+          <div style="display:flex;gap:8px">
+            ${myStorefront.status !== 'pending_approval' ? `
+              <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
+                <i class="fas fa-save"></i> Save Settings
+              </button>
+            ` : ''}
+            ${(myStorefront.status === 'draft' || myStorefront.status === 'rejected') ? `
+              <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
+                <i class="fas fa-paper-plane"></i> Send Request
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div id="sf-status-card" style="margin-bottom:8px"></div>
+
+        <!-- ── Customization Form Body (always visible when storefront exists) ── -->
+        <div class="storefront-split-wrap" style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start${myStorefront.status === 'pending_approval' ? ';opacity:.7;pointer-events:none' : ''}">
           
           <!-- Left Panel: Form Inputs -->
           <div style="flex:1.2;min-width:320px;display:flex;flex-direction:column;gap:16px">
@@ -786,10 +803,12 @@ async function renderVendorDashboard() {
             </div>
 
             <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
-              <button class="btn btn-primary" style="flex:1;font-weight:700" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-                <i class="fas fa-save"></i> Save Settings
-              </button>
-              ${(myStorefront?.status !== 'approved' && myStorefront?.status !== 'active') ? `
+              ${myStorefront.status !== 'pending_approval' ? `
+                <button class="btn btn-primary" style="flex:1;font-weight:700" onclick="window.saveVendorStoreSettings('${myStore.id}')">
+                  <i class="fas fa-save"></i> Save Settings
+                </button>
+              ` : ''}
+              ${(myStorefront.status === 'draft' || myStorefront.status === 'rejected') ? `
                 <button class="btn btn-success" style="flex:1;background:#16a34a;border:none;color:#fff;font-weight:700" onclick="window.submitStorefrontRequest('${myStore.id}')">
                   <i class="fas fa-paper-plane"></i> Send Request
                 </button>
@@ -3513,19 +3532,6 @@ window.handleSlugChange = function(val) {
   window.updateStorefrontPreview();
 };
 
-window.submitStorefrontRequest = async function(storeId) {
-  showToast('Saving settings…', 'info');
-  const saved = await window.saveVendorStoreSettings(storeId);
-  if (!saved) {
-    showToast('❌ Could not save storefront settings. Please try again.', 'error');
-    return;
-  }
-  if (!App.myStorefront || !App.myStorefront.id) {
-    showToast('❌ Storefront record missing after save. Please try again.', 'error');
-    return;
-  }
-  await window.setStorefrontStatus(storeId, 'pending_approval');
-};
 
 // ── Storefront Subscription System ───────────────────────────────────────────
 
