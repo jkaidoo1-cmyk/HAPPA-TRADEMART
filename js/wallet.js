@@ -381,7 +381,9 @@ async function submitWithdrawal(balance) {
     `GHS ${amount.toFixed(2)} withdrawal request submitted. Processed within 1–2 business days.`);
 
   // Notify admin
-  addNotification('u-admin-001', 'system', '💸 New Withdrawal Request',
+  const adminUser = (App.allUsers || []).find(usr => usr.role === 'admin');
+  const adminId = adminUser?.id || 'admin';
+  addNotification(adminId, 'system', '💸 New Withdrawal Request',
     `Vendor ${u.name} requested GHS ${amount.toFixed(2)} via ${method === 'mobile_money' ? network : 'Bank Transfer'}.`);
 
   closeModalForce();

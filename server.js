@@ -519,6 +519,103 @@ app.put('/api/:table/:id', async (req, res) => {
   const id = req.params.id;
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
 
+  if (table === 'storefronts') {
+    const cleanId = String(id).replace(/^sft-/, '');
+    let st = null;
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('stores').select('*').eq('id', cleanId).maybeSingle();
+        if (!error && data) st = serializeRecord(data);
+      } catch (err) {}
+    } else {
+      const db = loadDb();
+      st = getTable(db, 'stores').find(s => String(s.id) === String(cleanId));
+    }
+
+    if (!st) {
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', cleanId).limit(1);
+          if (!error && data && data.length > 0) st = serializeRecord(data[0]);
+        } catch (err) {}
+      } else {
+        const db = loadDb();
+        st = getTable(db, 'stores').find(s => String(s.vendor_id) === String(cleanId));
+      }
+    }
+
+    if (!st) {
+      return sendNotFound(res);
+    }
+
+    const storeId = st.id;
+    const storeUpdates = {};
+    if ('status' in body) storeUpdates.storefront_status = body.status;
+    if ('url_slug' in body) storeUpdates.slug = body.url_slug;
+    if ('theme' in body) storeUpdates.theme = body.theme;
+    if ('font_family' in body) storeUpdates.font_family = body.font_family;
+    if ('slogan' in body) storeUpdates.slogan = body.slogan;
+    if ('about_us' in body) storeUpdates.description = body.about_us;
+    if ('logo_url' in body) storeUpdates.logo_url = body.logo_url;
+    if ('banner_url' in body) storeUpdates.banner_url = body.banner_url;
+    if ('primary_color' in body) storeUpdates.primary_color = body.primary_color;
+    if ('secondary_color' in body) storeUpdates.secondary_color = body.secondary_color;
+    if ('tertiary_color' in body) storeUpdates.tertiary_color = body.tertiary_color;
+    if ('business_hours' in body) storeUpdates.business_hours = body.business_hours;
+    if ('return_policy' in body) storeUpdates.return_policy = body.return_policy;
+    if ('facebook_url' in body) storeUpdates.facebook = body.facebook_url;
+    if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
+    if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
+    if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+    storeUpdates.updated_at = new Date().toISOString();
+
+    if (supabase) {
+      try {
+        const dbRecord = prepareRecordForDb('stores', storeUpdates);
+        await supabase.from('stores').update(dbRecord).eq('id', storeId);
+      } catch (err) {}
+    }
+    const db = loadDb();
+    const idx = getTable(db, 'stores').findIndex(s => String(s.id) === String(storeId));
+    if (idx !== -1) {
+      db.stores[idx] = { ...db.stores[idx], ...storeUpdates };
+      saveDb(db);
+    } else {
+      db.stores.push({ id: storeId, vendor_id: st.vendor_id, ...storeUpdates });
+      saveDb(db);
+    }
+
+    let updatedSt = { ...st, ...storeUpdates };
+    const sf = {
+      id: storeId,
+      store_id: storeId,
+      vendor_id: updatedSt.vendor_id,
+      status: updatedSt.storefront_status || 'draft',
+      url_slug: updatedSt.slug || '',
+      theme: updatedSt.theme || 'classic',
+      font_family: updatedSt.font_family || 'Outfit',
+      slogan: updatedSt.slogan || '',
+      about_us: updatedSt.description || updatedSt.about_us || '',
+      logo_url: updatedSt.logo_url || '',
+      banner_url: updatedSt.banner_url || '',
+      primary_color: updatedSt.primary_color || '#e85d04',
+      secondary_color: updatedSt.secondary_color || '#faf9f6',
+      tertiary_color: updatedSt.tertiary_color || '#e85d04',
+      business_hours: updatedSt.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
+      shipping_policy: updatedSt.return_policy || '',
+      return_policy: updatedSt.return_policy || '',
+      facebook_url: updatedSt.facebook || updatedSt.facebook_url || '',
+      instagram_url: updatedSt.instagram || updatedSt.instagram_url || '',
+      youtube_url: body.youtube_url || '',
+      meta_description: body.meta_description || '',
+      subscription_plan: updatedSt.subscription_plan || 'starter',
+      subscription_status: updatedSt.subscription_status || 'active',
+      created_at: updatedSt.created_at,
+      updated_at: updatedSt.updated_at
+    };
+    return res.json(sf);
+  }
+
   if (supabase) {
     try {
       const record = serializeRecord(body);
@@ -546,26 +643,27 @@ app.patch('/api/:table/:id', async (req, res) => {
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
 
   if (table === 'storefronts') {
+    const cleanId = String(id).replace(/^sft-/, '');
     let st = null;
     if (supabase) {
       try {
-        const { data, error } = await supabase.from('stores').select('*').eq('id', id).maybeSingle();
+        const { data, error } = await supabase.from('stores').select('*').eq('id', cleanId).maybeSingle();
         if (!error && data) st = serializeRecord(data);
       } catch (err) {}
     } else {
       const db = loadDb();
-      st = getTable(db, 'stores').find(s => String(s.id) === String(id));
+      st = getTable(db, 'stores').find(s => String(s.id) === String(cleanId));
     }
 
     if (!st) {
       if (supabase) {
         try {
-          const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', id).limit(1);
+          const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', cleanId).limit(1);
           if (!error && data && data.length > 0) st = serializeRecord(data[0]);
         } catch (err) {}
       } else {
         const db = loadDb();
-        st = getTable(db, 'stores').find(s => String(s.vendor_id) === String(id));
+        st = getTable(db, 'stores').find(s => String(s.vendor_id) === String(cleanId));
       }
     }
 

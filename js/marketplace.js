@@ -1244,7 +1244,7 @@ async function renderStorefront(id) {
           <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
         </div>
         <h4 class="store-name-title" style="font-size:1.2rem; font-weight:900; margin:0; text-transform:uppercase">${storeName} ${verifiedBadge}</h4>
-        <div style="font-size:0.7rem; color:var(--text-light); font-weight:700; margin-top:2px"><i class="fas fa-star" style="color:#fbbf24"></i> 4.9 (15 reviews)</div>
+        <div style="font-size:0.7rem; color:var(--text-light); font-weight:700; margin-top:2px"><i class="fas fa-star" style="color:#fbbf24"></i> ${(s.avg_rating || 0).toFixed(1)} (${s.review_count || 0} reviews)</div>
       </div>
       <div style="background:${secondaryColor}; padding:10px 12px; text-align:center">
         <h5 class="store-slogan-text" style="font-size:0.8rem; font-weight:800; margin:0; text-transform:uppercase">${slogan}</h5>
@@ -1475,8 +1475,15 @@ async function renderStorefront(id) {
             <div style="display:grid; gap:8px; color:${footerTextColor}">
               <div><i class="fas fa-calendar-alt" style="width:20px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
               <div><i class="fas fa-map-marker-alt" style="width:20px; color:${primaryColor}"></i> ${s.location}</div>
-              <div><i class="fas fa-envelope" style="width:20px; color:${primaryColor}"></i> ${escHtml(s.email || 'support@happamart.com')}</div>
-              <div><i class="fas fa-phone" style="width:20px; color:${primaryColor}"></i> ${escHtml(s.phone || '+233 (0) 244 123 456')}</div>
+              ${(() => {
+                const vendorObj = (App.allUsers || []).find(u => String(u.id) === String(s.vendor_id)) || {};
+                const storeEmail = s.email || vendorObj.email || '';
+                const storePhone = s.phone || vendorObj.phone || '';
+                let contactHTML = '';
+                if (storeEmail) contactHTML += `<div><i class="fas fa-envelope" style="width:20px; color:${primaryColor}"></i> ${escHtml(storeEmail)}</div>`;
+                if (storePhone) contactHTML += `<div><i class="fas fa-phone" style="width:20px; color:${primaryColor}"></i> ${escHtml(storePhone)}</div>`;
+                return contactHTML;
+              })()}
             </div>
           </div>
 

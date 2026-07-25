@@ -2815,10 +2815,18 @@ async function renderAdminStorefronts() {
 }
 
 
-window.showAdminStorefrontReviewModal = function(sfId) {
+window.showAdminStorefrontReviewModal = async function(sfId) {
   const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
   if (!sf) return;
   const store = (App.allStores || []).find(st => String(st.id) === String(sf.store_id)) || {};
+
+  const defaultStarter = parseInt(await getSetting('storefront_price_starter', '50')) || 50;
+  const defaultGrowth  = parseInt(await getSetting('storefront_price_growth', '100')) || 100;
+  const defaultPro     = parseInt(await getSetting('storefront_price_pro', '200')) || 200;
+
+  const starterVal = sf.plan_prices?.starter || defaultStarter;
+  const growthVal  = sf.plan_prices?.growth || defaultGrowth;
+  const proVal     = sf.plan_prices?.pro || defaultPro;
 
   const modalHtml = `
     <div class="modal active" id="modal-sf-review" style="z-index:999999;display:flex;align-items:center;justify-content:center;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5)">
@@ -2845,15 +2853,15 @@ window.showAdminStorefrontReviewModal = function(sfId) {
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
           <div>
             <label style="font-size:.78rem;font-weight:700;display:block;margin-bottom:4px">🌱 Starter Plan (GHS/mo)</label>
-            <input type="number" id="admin-price-starter" value="${sf.plan_prices?.starter || 50}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
+            <input type="number" id="admin-price-starter" value="${starterVal}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
           </div>
           <div>
             <label style="font-size:.78rem;font-weight:700;display:block;margin-bottom:4px">🚀 Growth Plan (GHS/mo)</label>
-            <input type="number" id="admin-price-growth" value="${sf.plan_prices?.growth || 100}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
+            <input type="number" id="admin-price-growth" value="${growthVal}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
           </div>
           <div>
             <label style="font-size:.78rem;font-weight:700;display:block;margin-bottom:4px">💎 Pro Plan (GHS/mo)</label>
-            <input type="number" id="admin-price-pro" value="${sf.plan_prices?.pro || 200}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
+            <input type="number" id="admin-price-pro" value="${proVal}" class="form-control" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border)">
           </div>
         </div>
 
@@ -2876,9 +2884,13 @@ window.showAdminStorefrontReviewModal = function(sfId) {
 };
 
 window.approveStorefrontWithModal = async function(sfId) {
-  const starter = parseFloat(document.getElementById('admin-price-starter')?.value) || 50;
-  const growth = parseFloat(document.getElementById('admin-price-growth')?.value) || 100;
-  const pro = parseFloat(document.getElementById('admin-price-pro')?.value) || 200;
+  const defaultStarter = parseInt(await getSetting('storefront_price_starter', '50')) || 50;
+  const defaultGrowth  = parseInt(await getSetting('storefront_price_growth', '100')) || 100;
+  const defaultPro     = parseInt(await getSetting('storefront_price_pro', '200')) || 200;
+
+  const starter = parseFloat(document.getElementById('admin-price-starter')?.value) || defaultStarter;
+  const growth = parseFloat(document.getElementById('admin-price-growth')?.value) || defaultGrowth;
+  const pro = parseFloat(document.getElementById('admin-price-pro')?.value) || defaultPro;
 
   const plan_prices = { starter, growth, pro };
 

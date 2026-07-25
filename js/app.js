@@ -359,6 +359,8 @@ function logout(skipConfirm = false) {
   App.currentUser = null;
   App.notifications = [];
   App.loadedPages = {};
+  App.myStorefront = null;
+  App.myStore = null;
   try {
     localStorage.removeItem('happa_session');
     localStorage.removeItem('happa_notifs');

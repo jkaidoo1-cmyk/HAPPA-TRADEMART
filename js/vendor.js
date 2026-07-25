@@ -119,7 +119,14 @@ async function renderVendorDashboard() {
       if (!s) return false;
       const sStoreId = s.store_id ? String(s.store_id).trim() : '';
       const sVendorId = s.vendor_id ? String(s.vendor_id).trim() : '';
-      return (sStoreId && sStoreId === targetStoreId) || (sVendorId && sVendorId === targetVendorId);
+      
+      const hasValidStoreId = targetStoreId && targetStoreId !== 'undefined' && targetStoreId !== 'null';
+      const hasValidVendorId = targetVendorId && targetVendorId !== 'undefined' && targetVendorId !== 'null';
+      
+      const storeMatch = hasValidStoreId && sStoreId && sStoreId === targetStoreId;
+      const vendorMatch = hasValidVendorId && sVendorId && sVendorId === targetVendorId;
+      
+      return storeMatch || vendorMatch;
     }) || null;
 
     if (fetchedSF && fetchedSF.status && fetchedSF.status !== 'none') {
@@ -151,6 +158,14 @@ async function renderVendorDashboard() {
   const sfYoutube = myStorefront?.youtube_url || myStore?.youtube_url || '';
   const sfSlug = myStorefront?.url_slug || myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || '';
   const sfMetaDesc = myStorefront?.meta_description || myStore?.meta_description || '';
+
+  const defaultStarterPrice = parseInt(await getSetting('storefront_price_starter', '50')) || 50;
+  const defaultGrowthPrice  = parseInt(await getSetting('storefront_price_growth', '100')) || 100;
+  const defaultProPrice     = parseInt(await getSetting('storefront_price_pro', '200')) || 200;
+
+  const starterPrice = myStorefront?.plan_prices?.starter || defaultStarterPrice;
+  const growthPrice  = myStorefront?.plan_prices?.growth || defaultGrowthPrice;
+  const proPrice     = myStorefront?.plan_prices?.pro || defaultProPrice;
 
   c.innerHTML = `
 <div class="tab-nav" id="vendor-tabs">
@@ -550,8 +565,8 @@ async function renderVendorDashboard() {
               <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
                 <div style="font-size:1.6rem;margin-bottom:6px">🌱</div>
                 <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Starter</div>
-                <div style="font-size:1.5rem;font-weight:900;color:var(--text);margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.starter || 50}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'starter', ${myStorefront.plan_prices?.starter || 50})">
+                <div style="font-size:1.5rem;font-weight:900;color:var(--text);margin-bottom:2px">GH₵ ${starterPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'starter', ${starterPrice})">
                   Pay & Activate
                 </button>
               </div>
@@ -560,8 +575,8 @@ async function renderVendorDashboard() {
                 <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px">RECOMMENDED</div>
                 <div style="font-size:1.6rem;margin-bottom:6px">🚀</div>
                 <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Growth</div>
-                <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.growth || 100}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                <button class="btn btn-primary btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'growth', ${myStorefront.plan_prices?.growth || 100})">
+                <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:2px">GH₵ ${growthPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                <button class="btn btn-primary btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'growth', ${growthPrice})">
                   Pay & Activate
                 </button>
               </div>
@@ -569,8 +584,8 @@ async function renderVendorDashboard() {
               <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
                 <div style="font-size:1.6rem;margin-bottom:6px">💎</div>
                 <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Pro</div>
-                <div style="font-size:1.5rem;font-weight:900;color:#7c3aed;margin-bottom:2px">GH₵ ${myStorefront.plan_prices?.pro || 200}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem;border-color:#7c3aed;color:#7c3aed" onclick="window.activateStorefrontPlan('${myStore.id}', 'pro', ${myStorefront.plan_prices?.pro || 200})">
+                <div style="font-size:1.5rem;font-weight:900;color:#7c3aed;margin-bottom:2px">GH₵ ${proPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem;border-color:#7c3aed;color:#7c3aed" onclick="window.activateStorefrontPlan('${myStore.id}', 'pro', ${proPrice})">
                   Pay & Activate
                 </button>
               </div>
@@ -2850,209 +2865,7 @@ async function _bapSubmitAll() {
   }
 }
 
-window.saveVendorStoreSettings = async function(storeId) {
-  if (!storeId) { showToast('No store assigned', 'warning'); return; }
-  
-  const name = document.getElementById('store-name')?.value || 'Accra Streetwear Co.';
-  const primary_color = document.getElementById('store-primary-color')?.value || '#faf9f6';
-  const secondary_color = document.getElementById('store-secondary-color')?.value || '#faf9f6';
-  const logo_url = document.getElementById('store-logo-url')?.value || '';
-  const banner_url = document.getElementById('store-banner-url')?.value || '';
-  const slogan = document.getElementById('store-slogan')?.value || '';
-  const description = document.getElementById('store-description')?.value || '';
-  const business_hours = document.getElementById('store-hours')?.value || '';
-  const shipping_policy = document.getElementById('store-shipping-policy')?.value || '';
-  const return_policy = document.getElementById('store-return-policy')?.value || '';
-  
-  const facebook_url = document.getElementById('store-facebook')?.value || '';
-  const instagram_url = document.getElementById('store-instagram')?.value || '';
-  const youtube_url = document.getElementById('store-youtube')?.value || '';
-  
-  const slug = document.getElementById('store-slug')?.value?.trim() || '';
-  // Auto-generate slug from store name if empty
-  let cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
-  if (!cleanSlug) {
-    const nameEl = document.getElementById('store-name');
-    const nameVal = nameEl?.value?.trim() || '';
-    cleanSlug = nameVal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '') || `store-${storeId}`;
-    if (document.getElementById('store-slug')) document.getElementById('store-slug').value = cleanSlug;
-  }
-  
-  const duplicate = (App.allStorefronts || []).find(sf => 
-    String(sf.url_slug).toLowerCase() === cleanSlug && 
-    String(sf.store_id) !== String(storeId)
-  );
-  if (duplicate) {
-    showToast('This URL slug is already taken. Please choose another.', 'error');
-    return;
-  }
 
-  const meta_description = document.getElementById('store-meta-desc')?.value || '';
-  const theme = document.querySelector('input[name="store-theme"]:checked')?.value || 'classic';
-  const font_family = document.getElementById('store-font-family')?.value || 'Outfit';
-
-  // Show loading toast or lock btn
-  showToast('Saving storefront settings...', 'info');
-
-  const sfFields = {
-    name,
-    primary_color,
-    secondary_color,
-    logo_url,
-    banner_url,
-    slogan,
-    about_us: description,
-    business_hours,
-    shipping_policy,
-    return_policy,
-    facebook_url,
-    instagram_url,
-    youtube_url,
-    url_slug: cleanSlug,
-    meta_description,
-    theme,
-    font_family
-  };
-
-  if (App.myStorefront) {
-    Object.assign(App.myStorefront, sfFields);
-    const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
-    if (sfIdx !== -1) App.allStorefronts[sfIdx] = App.myStorefront;
-    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
-    const patchRes = await apiPatch('storefronts', App.myStorefront.id, sfFields);
-    if (!patchRes) {
-      showToast('⚠️ Could not reach server — changes saved locally only.', 'warning');
-    }
-  } else {
-    const payload = { ...sfFields, store_id: storeId, vendor_id: App.currentUser?.id || '', status: 'draft' };
-    const res = await apiPost('storefronts', payload);
-    if (res) {
-      App.myStorefront = res.data || res;
-      if (!App.allStorefronts) App.allStorefronts = [];
-      // Avoid duplicates
-      const existing = App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id));
-      if (existing === -1) App.allStorefronts.push(App.myStorefront);
-      else App.allStorefronts[existing] = App.myStorefront;
-      try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
-    } else {
-      showToast('❌ Failed to create storefront record. Check your connection.', 'error');
-      return;
-    }
-  }
-
-  showToast('Storefront settings saved! 🎉', 'success');
-  
-  // Update sf-status-card in-place (no full re-render)
-  try {
-    const statusCard = document.getElementById('sf-status-card');
-    if (statusCard && App.myStorefront) {
-      const slug = App.myStorefront.url_slug || '';
-      const liveUrl = `${window.location.origin}/#storefront/${slug}`;
-      statusCard.innerHTML = `<div style="font-size:.82rem;background:#d1fae5;border:1px solid #a7f3d0;border-radius:8px;padding:8px 12px;color:#065f46;font-weight:600"><i class="fas fa-check-circle"></i> Settings saved. URL: <a href="${liveUrl}" target="_blank" style="color:#0284c7;text-decoration:underline">${liveUrl}</a></div>`;
-    }
-  } catch(e){}
-  if (typeof window.updateStorefrontPreview === 'function') window.updateStorefrontPreview();
-  return true; // signal success to callers
-};
-
-window.createStorefrontDraft = async function(storeId) {
-  showToast('Initializing storefront draft...', 'info');
-  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || {};
-  const cleanSlug = (store.slug || store.name || 'store').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-  if (App.myStorefront && App.myStorefront.id) {
-    App.myStorefront.status = 'draft';
-    await apiPatch('storefronts', App.myStorefront.id, { status: 'draft' }).catch(() => {});
-    const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
-    if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'draft';
-    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
-    showToast('Storefront draft initialized! Customize your store below. 🎨', 'success');
-    renderVendorDashboard();
-    return;
-  }
-  const payload = {
-    store_id: storeId,
-    vendor_id: App.currentUser?.id || store.vendor_id || '',
-    status: 'draft',
-    url_slug: cleanSlug,
-    theme: 'classic',
-    font_family: 'Outfit',
-    slogan: store.slogan || 'Welcome to our store!',
-    about_us: store.description || '',
-    primary_color: '#e85d04',
-    secondary_color: '#faf9f6',
-    tertiary_color: '#e85d04',
-    business_hours: 'Mon - Sat: 8:00 AM - 6:00 PM',
-    shipping_policy: 'Standard Ghana delivery rates apply.',
-    return_policy: 'Items can be returned within 3 days.'
-  };
-
-  const res = await apiPost('storefronts', payload);
-  if (res) {
-    App.myStorefront = res.data || res;
-    if (!App.allStorefronts) App.allStorefronts = [];
-    const idx = App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id));
-    if (idx === -1) App.allStorefronts.push(App.myStorefront);
-    else App.allStorefronts[idx] = App.myStorefront;
-    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
-    showToast('Storefront draft created! Customize your store below. 🎨', 'success');
-    renderVendorDashboard();
-  } else {
-    showToast('Failed to create storefront draft. Please try again.', 'error');
-  }
-};
-
-window.submitStorefrontRequest = async function(storeId) {
-  showToast('Saving customization & submitting request...', 'info');
-  const saved = await window.saveVendorStoreSettings(storeId);
-  if (!saved) return;
-  await window.setStorefrontStatus(storeId, 'pending_approval');
-  renderVendorDashboard();
-};
-
-window.setStorefrontStatus = async function(storeId, status) {
-  if (!App.myStorefront) {
-    showToast('Storefront record not found. Save settings first.', 'error');
-    return;
-  }
-  
-  App.myStorefront.status = status;
-  const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
-  if (sfIdx !== -1) App.allStorefronts[sfIdx].status = status;
-  
-  try {
-    localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
-  } catch(e){}
-  
-  await apiPatch('storefronts', App.myStorefront.id, { status }).catch(() => {});
-  
-  // Notify admin
-  if (status === 'pending_approval') {
-    const storeObj = App.allStores?.find(s => String(s.id) === String(storeId));
-    const storeName = storeObj?.name || App.currentUser?.name || 'A vendor';
-    // Find any admin user, fallback to hardcoded ID
-    const adminUser = (App.allUsers || []).find(u => u.role === 'admin');
-    const adminId = adminUser?.id || 'u-admin-001';
-    if (typeof addNotification === 'function') {
-      addNotification(adminId, 'system', '🎨 New Storefront Request',
-        `${storeName} has requested storefront layout approval.`,
-        '#admin-dashboard');
-    }
-  }
-
-  showToast(status === 'pending_approval' ? 'Storefront request submitted! 🚀' : 'Storefront status updated', 'success');
-  
-  // Update the status badge in-place without a full dashboard re-render
-  try {
-    const statusCard = document.getElementById('sf-status-card');
-    if (statusCard) {
-      const msg = status === 'pending_approval'
-        ? '⏳ Storefront request submitted! Admin will review it shortly.'
-        : `Status updated to: ${status}`;
-      statusCard.innerHTML = `<div style="font-size:.82rem;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;color:#713f12;font-weight:600">${msg}</div>`;
-    }
-  } catch(e){}
-};
 
 window.activateStorefrontPlan = async function(storeId, planKey, price) {
   if (!App.myStorefront || App.myStorefront.status !== 'approved_pending_payment') return;
@@ -3221,12 +3034,12 @@ window.updateStorefrontPreview = function() {
 
   // Retrieve products from the main site context
   let displayProducts = [];
+  const storeNameVal = document.getElementById('store-name')?.value || '';
+  const myStore = (App.allStores || []).find(s => String(s.vendor_id) === String(App.currentUser?.id) || String(s.id) === String(App.myStore?.id) || s.name === storeNameVal) || App.myStore || {};
   if (window.App && Array.isArray(App.allProducts)) {
-    const storeNameVal = document.getElementById('store-name')?.value || '';
-    const myStore = (App.allStores || []).find(s => s.name === storeNameVal || s.id === 1 || s.id === '1') || {};
     displayProducts = App.allProducts.filter(p => String(p.store_id) === String(myStore.id) && p.status === 'active');
     if (displayProducts.length === 0) {
-      displayProducts = App.allProducts.filter(p => p.status === 'active');
+      displayProducts = App.allProducts.filter(p => String(p.vendor_id) === String(App.currentUser?.id) && p.status === 'active');
     }
   }
   if (displayProducts.length === 0) {
@@ -3283,7 +3096,7 @@ window.updateStorefrontPreview = function() {
           <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
         </div>
         <h4 style="font-size:1rem; font-weight:900; margin:0; color:var(--text); text-transform:uppercase">${storeName}</h4>
-        <div style="font-size:0.65rem; color:var(--text-light); font-weight:700; margin-top:2px"><i class="fas fa-star" style="color:#fbbf24"></i> 4.9 (15 reviews)</div>
+        <div style="font-size:0.65rem; color:var(--text-light); font-weight:700; margin-top:2px"><i class="fas fa-star" style="color:#fbbf24"></i> ${(myStore.avg_rating || 5.0).toFixed(1)} (${myStore.review_count || 0} reviews)</div>
       </div>
       <div class="prev-store-header" style="background:${secondary}; padding:8px 12px; text-align:center">
         <h5 style="font-size:0.75rem; font-weight:800; margin:0; color:#fff; text-transform:uppercase">${slogan}</h5>
@@ -3401,7 +3214,7 @@ window.updateStorefrontPreview = function() {
             <img src="${logoSrc}" style="width:40px; height:40px; border-radius:8px; border:2px solid #fff; object-fit:cover; box-shadow:var(--shadow-sm)" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
             <div style="flex:1; padding-top:14px">
               <h4 style="font-size:0.8rem; font-weight:800; margin:0">${storeName}</h4>
-              <div style="font-size:0.65rem; color:var(--text-muted); margin-top:1px"><i class="fas fa-star" style="color:#fbbf24"></i> 4.9 (15 reviews)</div>
+              <div style="font-size:0.65rem; color:var(--text-muted); margin-top:1px"><i class="fas fa-star" style="color:#fbbf24"></i> ${(myStore.avg_rating || 5.0).toFixed(1)} (${myStore.review_count || 0} reviews)</div>
             </div>
           </div>
         </div>
@@ -3431,8 +3244,8 @@ window.updateStorefrontPreview = function() {
                 <div class="product-name" style="font-size:0.65rem; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
                 <div class="product-price" style="font-size:0.75rem">GHS ${p.price}</div>
                 <div class="product-meta" style="font-size:0.55rem; display:flex; align-items:center; gap:4px">
-                  <span class="product-rating" style="font-size:0.55rem; color:#fbbf24"><i class="fas fa-star"></i> ${p.rating || '4.8'}</span>
-                  <span class="product-sold" style="font-size:0.55rem; color:var(--text-muted)">${p.sold_count || '10'} sold</span>
+                  <span class="product-rating" style="font-size:0.55rem; color:#fbbf24"><i class="fas fa-star"></i> ${p.rating || p.avg_rating || '5.0'}</span>
+                  <span class="product-sold" style="font-size:0.55rem; color:var(--text-muted)">${p.sold_count || p.total_sold || 0} sold</span>
                 </div>
                 <button class="prev-btn-theme" onclick="alert('Simulated product checkout for ${escHtml(p.name)}!')" style="width:100%; font-size:.55rem; padding:3px; border-radius:4px; margin-top:4px">Buy Now</button>
               </div>
@@ -3479,23 +3292,17 @@ window.updateStorefrontPreview = function() {
       <div style="padding:10px">
         <div class="prev-about-title" style="font-weight:800; font-size:0.7rem; margin-bottom:6px">🔥 Featured Products</div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
-          
-          <div class="product-card">
-            <div class="product-img" style="height:50px; display:flex; align-items:center; justify-content:center; font-size:1.2rem">👕</div>
-            <div class="product-body" style="padding:4px 6px; display:flex; flex-direction:column">
-              <div class="product-name" style="font-size:0.6rem; margin-bottom:2px">Ghana Premium Wear</div>
-              <div class="product-price" style="font-size:0.7rem">GHS 120</div>
+          ${displayProducts.slice(0, 2).map(p => `
+            <div class="product-card">
+              <div class="product-img" style="height:50px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; overflow:hidden">
+                ${getProductImageHTML(p)}
+              </div>
+              <div class="product-body" style="padding:4px 6px; display:flex; flex-direction:column">
+                <div class="product-name" style="font-size:0.6rem; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                <div class="product-price" style="font-size:0.7rem">GHS ${p.price}</div>
+              </div>
             </div>
-          </div>
-          
-          <div class="product-card">
-            <div class="product-img" style="height:50px; display:flex; align-items:center; justify-content:center; font-size:1.2rem">👟</div>
-            <div class="product-body" style="padding:4px 6px; display:flex; flex-direction:column">
-              <div class="product-name" style="font-size:0.6rem; margin-bottom:2px">Sneaker Classic</div>
-              <div class="product-price" style="font-size:0.7rem">GHS 350</div>
-            </div>
-          </div>
-
+          `).join('')}
         </div>
       </div>
     `;
@@ -3550,7 +3357,7 @@ window.updateStorefrontPreview = function() {
     <footer style="${prevFooterStyle}">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px">
         <div style="font-weight:800; color:${prevFooterHeadingColor}; display:flex; align-items:center; gap:5px">
-          <i class="fas fa-store" style="color:${primary}"></i> ${escHtml(sfName || 'Storefront')}
+          <i class="fas fa-store" style="color:${primary}"></i> ${escHtml(storeName || 'Storefront')}
         </div>
         <div style="color:${prevFooterTextColor}; font-size:0.6rem">
           Powered by HAPPA TRADEMART
@@ -4026,7 +3833,9 @@ window.confirmStorefrontSubscription = async function(storeId) {
 
   // Notify admin of subscription payment
   if (typeof addNotification === 'function') {
-    addNotification('u-admin-001', 'system', '💳 Storefront Subscription Payment', `${App.allStores[idx].name} subscribed to the ${plan.name} plan (GH₵${total}) via ${method === 'momo' ? 'MoMo' : 'Wallet'}.`);
+    const adminUser = (App.allUsers || []).find(u => u.role === 'admin');
+    const adminId = adminUser?.id || 'admin';
+    addNotification(adminId, 'system', '💳 Storefront Subscription Payment', `${App.allStores[idx].name} subscribed to the ${plan.name} plan (GH₵${total}) via ${method === 'momo' ? 'MoMo' : 'Wallet'}.`);
   }
 
   renderVendorDashboard();
