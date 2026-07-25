@@ -3571,6 +3571,146 @@ window.handleSlugChange = function(val) {
   window.updateStorefrontPreview();
 };
 
+window.createStorefrontDraft = async function(storeId) {
+  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || App.myStore;
+  if (!store) { showToast('Store not found', 'warning'); return; }
+
+  showToast('Initializing storefront draft...', 'info');
+  const draftSF = {
+    id: 'sft-' + store.id,
+    store_id: store.id,
+    name: store.name || 'My Storefront',
+    url_slug: store.slug || (store.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    theme: 'classic',
+    font_family: 'Outfit',
+    primary_color: '#e85d04',
+    secondary_color: '#0d0d0d',
+    slogan: store.slogan || 'Welcome to our store!',
+    about_us: store.description || '',
+    shipping_policy: store.shipping_policy || 'Standard Ghana shipping rates apply.',
+    return_policy: store.return_policy || 'Items can be returned within 3 days if seal is not broken.',
+    business_hours: store.business_hours || 'Open Mon - Sat 8:00 AM - 6:00 PM',
+    status: 'draft'
+  };
+
+  App.myStorefront = draftSF;
+  if (App.myStore) App.myStore.storefront_status = 'draft';
+
+  await apiPost('storefronts', draftSF).catch(() => null);
+  await apiPatch('stores', store.id, { storefront_status: 'draft' }).catch(() => null);
+
+  showToast('Storefront draft created! Customize your layout below 🎨', 'success');
+  renderVendorDashboard();
+};
+
+window.saveVendorStoreSettings = async function(storeId) {
+  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || App.myStore;
+  if (!store) { showToast('Store not found', 'warning'); return; }
+
+  const sfName = (document.getElementById('store-display-name')?.value || store.name || '').trim();
+  const sfSlug = (document.getElementById('store-slug')?.value || store.slug || '').trim();
+  const theme = window.previewTheme || 'classic';
+  const fontFamily = document.getElementById('store-font')?.value || 'Outfit';
+  const primaryColor = document.getElementById('store-primary-color')?.value || '#e85d04';
+  const secondaryColor = document.getElementById('store-secondary-color')?.value || '#0d0d0d';
+  const slogan = (document.getElementById('store-slogan')?.value || '').trim();
+  const aboutUs = (document.getElementById('store-about-us')?.value || '').trim();
+  const businessHours = (document.getElementById('store-hours')?.value || '').trim();
+  const shippingPolicy = (document.getElementById('store-shipping-policy')?.value || '').trim();
+  const returnPolicy = (document.getElementById('store-return-policy')?.value || '').trim();
+  const facebookUrl = (document.getElementById('store-facebook')?.value || '').trim();
+  const instagramUrl = (document.getElementById('store-instagram')?.value || '').trim();
+  const youtubeUrl = (document.getElementById('store-youtube')?.value || '').trim();
+  const bannerUrl = (document.getElementById('store-banner-url')?.value || store.banner_url || '').trim();
+  const logoUrl = (document.getElementById('store-logo-url')?.value || store.logo_url || '').trim();
+
+  showToast('Saving storefront settings...', 'info');
+
+  const sfData = {
+    id: 'sft-' + store.id,
+    store_id: store.id,
+    name: sfName,
+    url_slug: sfSlug,
+    theme: theme,
+    font_family: fontFamily,
+    primary_color: primaryColor,
+    secondary_color: secondaryColor,
+    slogan: slogan,
+    about_us: aboutUs,
+    business_hours: businessHours,
+    shipping_policy: shippingPolicy,
+    return_policy: returnPolicy,
+    facebook_url: facebookUrl,
+    instagram_url: instagramUrl,
+    youtube_url: youtubeUrl,
+    banner_url: bannerUrl,
+    logo_url: logoUrl,
+    updated_at: new Date().toISOString()
+  };
+
+  if (!App.myStorefront) App.myStorefront = {};
+  Object.assign(App.myStorefront, sfData);
+  if (!App.myStorefront.status || App.myStorefront.status === 'none') {
+    App.myStorefront.status = 'draft';
+  }
+
+  await apiPut('storefronts', 'sft-' + store.id, App.myStorefront).catch(() => null);
+  await apiPatch('stores', store.id, {
+    name: sfName,
+    slug: sfSlug,
+    theme: theme,
+    font_family: fontFamily,
+    primary_color: primaryColor,
+    secondary_color: secondaryColor,
+    slogan: slogan,
+    description: aboutUs,
+    banner_url: bannerUrl,
+    logo_url: logoUrl,
+    storefront_status: App.myStorefront.status
+  }).catch(() => null);
+
+  showToast('Storefront customization saved ✅', 'success');
+  renderVendorDashboard();
+};
+
+window.submitStorefrontRequest = async function(storeId) {
+  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || App.myStore;
+  if (!store) { showToast('Store not found', 'warning'); return; }
+
+  // Save latest form settings before submitting
+  await window.saveVendorStoreSettings(storeId);
+
+  const autoApproveSF = await getSetting('storefront_auto_approve', 'false');
+  const isAuto = autoApproveSF === 'true' || autoApproveSF === true;
+  const newStatus = isAuto ? 'active' : 'pending_approval';
+
+  showToast(isAuto ? 'Activating storefront...' : 'Submitting storefront request to admin...', 'info');
+
+  await apiPatch('storefronts', 'sft-' + store.id, { status: newStatus, updated_at: new Date().toISOString() }).catch(() => null);
+  await apiPatch('stores', store.id, { storefront_status: newStatus }).catch(() => null);
+
+  if (!App.myStorefront) App.myStorefront = {};
+  App.myStorefront.status = newStatus;
+  if (App.myStore) App.myStore.storefront_status = newStatus;
+
+  if (isAuto) {
+    showToast('Storefront activated & live! 🚀', 'success');
+  } else {
+    showToast('Storefront request submitted to admin for review! 🚀', 'success');
+    addNotification('admin', 'system', '🏪 New Storefront Request', `Vendor "${store.name}" submitted a storefront for review.`);
+  }
+
+  renderVendorDashboard();
+};
+
+window.setStorefrontStatus = async function(storeId, status) {
+  await apiPatch('storefronts', 'sft-' + storeId, { status: status, updated_at: new Date().toISOString() }).catch(() => null);
+  await apiPatch('stores', storeId, { storefront_status: status }).catch(() => null);
+  if (App.myStorefront) App.myStorefront.status = status;
+  if (App.myStore) App.myStore.storefront_status = status;
+  renderVendorDashboard();
+};
+
 
 // ── Storefront Subscription System ───────────────────────────────────────────
 

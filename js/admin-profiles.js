@@ -191,6 +191,13 @@ async function _apDeleteUser(userId) {
   } else {
     showToast('User deleted from local cache ✅', 'success');
   }
+
+  if (App.currentUser && String(App.currentUser.id) === String(userId)) {
+    console.warn('[Session Terminated] Current logged in user was deleted. Logging out immediately.');
+    if (typeof stopNotifPolling === 'function') stopNotifPolling();
+    if (typeof logout === 'function') logout(true);
+  }
+
   closeAdminPanel();
   
   if (App.currentUser && String(App.currentUser.id) === String(userId)) {
@@ -1279,6 +1286,19 @@ async function adminOpenVendorProfile(userId) {
           </button>
         </div>
         <div style="height:1px;background:var(--border);margin:14px 0"></div>
+        <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">🎨 Standalone Storefront Controls</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn btn-success btn-sm" onclick="_apApproveStorefront('${store.id}','${escHtml(store.name).replace(/'/g,"\\'")}')">
+            <i class="fas fa-check-circle"></i> Approve Storefront
+          </button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="_apRevokeStorefront('${store.id}','${escHtml(store.name).replace(/'/g,"\\'")}')">
+            <i class="fas fa-times-circle"></i> Revoke / Reject Storefront
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="closeAdminPanel();setTimeout(()=>showPage('storefront','${store.id}'),300)">
+            <i class="fas fa-external-link-alt"></i> Visit Live Storefront
+          </button>
+        </div>
+        <div style="height:1px;background:var(--border);margin:14px 0"></div>
         <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Edit Store Details</div>
         <form onsubmit="event.preventDefault();_apSaveStore('${store.id}',this)">
           <div class="form-group">
@@ -1632,4 +1652,67 @@ window.showZoomedImage = function(src, title = 'Image Preview') {
 <div class="modal-body" style="text-align:center;padding:10px">
   <img src="${src}" style="max-width:100%;max-height:75vh;object-fit:contain;border-radius:8px">
 </div>`);
+};
+
+window._apRevokeStorefront = async function(storeId, storeName) {
+  const reason = prompt(`Revoke/Reject storefront for "${storeName}"?\nEnter rejection reason for the vendor:`, 'Does not meet storefront guidelines');
+  if (reason === null) return;
+
+  showToast('Revoking storefront...', 'info');
+
+  await apiPatch('storefronts', 'sft-' + storeId, {
+    status: 'rejected',
+    admin_feedback: reason,
+    updated_at: new Date().toISOString()
+  }).catch(() => null);
+
+  await apiPatch('stores', storeId, {
+    storefront_status: 'rejected',
+    storefront_admin_feedback: reason
+  }).catch(() => null);
+
+  // Update local memory cache if present
+  const store = (App.allStores || []).find(s => String(s.id) === String(storeId));
+  if (store) store.storefront_status = 'rejected';
+
+  const sf = (App.allStorefronts || []).find(s => String(s.store_id) === String(storeId));
+  if (sf) {
+    sf.status = 'rejected';
+    sf.admin_feedback = reason;
+  }
+
+  if (store && store.vendor_id) {
+    addNotification(store.vendor_id, 'system', '❌ Storefront Request Revoked',
+      `Your storefront for "${storeName}" was revoked/rejected by admin. Reason: ${reason}. Please update your settings and re-submit.`);
+  }
+
+  showToast(`Storefront for "${storeName}" revoked ✅`, 'warning');
+  if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+};
+
+window._apApproveStorefront = async function(storeId, storeName) {
+  showToast('Approving storefront...', 'info');
+
+  await apiPatch('storefronts', 'sft-' + storeId, {
+    status: 'active',
+    updated_at: new Date().toISOString()
+  }).catch(() => null);
+
+  await apiPatch('stores', storeId, {
+    storefront_status: 'active'
+  }).catch(() => null);
+
+  const store = (App.allStores || []).find(s => String(s.id) === String(storeId));
+  if (store) store.storefront_status = 'active';
+
+  const sf = (App.allStorefronts || []).find(s => String(s.store_id) === String(storeId));
+  if (sf) sf.status = 'active';
+
+  if (store && store.vendor_id) {
+    addNotification(store.vendor_id, 'system', '✅ Storefront Approved & Live!',
+      `Congratulations! Your independent storefront for "${storeName}" has been approved and is now LIVE.`);
+  }
+
+  showToast(`Storefront for "${storeName}" approved & live ✅`, 'success');
+  if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
 };

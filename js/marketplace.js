@@ -1110,40 +1110,75 @@ async function renderStorefront(id) {
       </div>`;
   }
 
-  const s = App.allStores.find(st => String(st.id) === String(id)) || await apiGet(`stores/${id}`);
-  if (!s) { c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Storefront not found</h3></div>'; return; }
+  // Resilient Store & Storefront Lookup: Supports store ID, storefront ID, and URL slug
+  const targetId = String(id || '').trim();
+  let s = (App.allStores || []).find(st => 
+    String(st.id) === targetId || 
+    String(st.slug) === targetId || 
+    String(st.slug) === targetId.toLowerCase()
+  );
+
+  if (!s) {
+    const storesRes = await apiGet('stores', 'limit=500').catch(() => null);
+    if (storesRes?.data && storesRes.data.length) App.allStores = storesRes.data;
+    s = (App.allStores || []).find(st => 
+      String(st.id) === targetId || 
+      String(st.slug) === targetId || 
+      String(st.slug) === targetId.toLowerCase()
+    );
+  }
+
+  // Fetch storefront records
+  let sf = null;
+  const sfRes = await apiGet('storefronts', 'limit=500').catch(() => null);
+  const allSF = sfRes?.data || [];
+  if (allSF.length) App.allStorefronts = allSF;
+
+  sf = allSF.find(sfRecord => 
+    String(sfRecord.store_id) === targetId || 
+    String(sfRecord.url_slug) === targetId ||
+    String(sfRecord.id) === targetId
+  ) || null;
+
+  if (!s && sf) {
+    s = (App.allStores || []).find(st => String(st.id) === String(sf.store_id));
+  }
+
+  if (!s) { 
+    c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Storefront not found</h3></div>'; 
+    return; 
+  }
+
+  const realStoreId = s.id;
+  App.currentStoreId = realStoreId;
 
   // Ensure store products are loaded into App.allProducts before rendering
-  const hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(id));
+  const hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(realStoreId));
   if (!hasStoreProds) {
     try {
-      const prodRes = await apiGet('products', `search=${encodeURIComponent(id)}&limit=100`);
+      const prodRes = await apiGet('products', `search=${encodeURIComponent(realStoreId)}&limit=100`);
       if (prodRes && prodRes.data && prodRes.data.length) {
         const fetched = prodRes.data;
-        const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(id));
+        const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(realStoreId));
         App.allProducts = [...other, ...fetched];
       }
     } catch(e) {}
   }
 
-  // Look up storefront record for this store ID
-  let sf = null;
-  const sfRes = await apiGet('storefronts', 'limit=200');
-  const allSF = sfRes?.data || [];
-  sf = allSF.find(sfRecord => String(sfRecord.store_id) === String(id)) || null;
-
-  // Enforce storefront visibility: only allow approved storefronts to load.
+  // Enforce storefront visibility: allow owner, admin, or active/approved stores to view
+  const isOwner = App.currentUser && (String(App.currentUser.id) === String(s.vendor_id) || String(App.currentUser.id) === String(s.user_id));
   const isAdmin = App.currentUser && App.currentUser.role === 'admin';
-  const storefrontStatus = sf?.status || 'none';
-  const isLive = storefrontStatus === 'active' || storefrontStatus === 'approved';
+  const storefrontStatus = sf?.status || s.storefront_status || 'none';
+  const isStoreActive = s.status === 'active';
+  const isLive = (storefrontStatus === 'active' || storefrontStatus === 'approved') && isStoreActive;
 
-  if (!isLive && !isAdmin) {
+  if (!isLive && !isOwner && !isAdmin) {
     c.innerHTML = `
       <div class="empty-state" style="padding: 60px 20px; text-align: center;">
         <div style="font-size: 3.5rem; margin-bottom: 16px;">🏪</div>
         <h3 style="font-size: 1.25rem; font-weight: 800;">Storefront Under Construction</h3>
         <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 6px; max-width: 450px; margin-left: auto; margin-right: auto; line-height: 1.6;">
-          This storefront is currently not active. Once the vendor completes setup, receives admin approval, and activates their subscription, this page will go live.
+          This storefront is currently not active. Once the vendor completes setup and receives admin approval, this page will go live.
         </p>
       </div>`;
     return;

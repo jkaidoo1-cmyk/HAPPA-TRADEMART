@@ -32,6 +32,15 @@ async function fetchServerNotifications() {
     return;
   }
   const uid = App.currentUser.id;
+
+  // Validate session user status: if deleted, stop polling and log out immediately
+  const checkUser = await apiGet('users', uid).catch(() => null);
+  if (!checkUser || !checkUser.id || checkUser.status === 'deleted') {
+    console.warn('[Session Terminated] Polling user account is deleted or invalid. Logging out.');
+    stopNotifPolling();
+    if (typeof logout === 'function') logout(true);
+    return;
+  }
   try {
     // Fetch notifications for this user — try two pages to catch announcements
     const [res1, res2] = await Promise.all([
