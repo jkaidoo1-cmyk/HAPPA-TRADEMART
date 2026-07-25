@@ -154,12 +154,32 @@
     </div>
   </div>
   <script>
-    // Immediately bypass splash screen animation on direct storefront URLs
+    // Immediately bypass splash screen animation & suppress main home page flash on direct storefront URLs
     const currentHash = window.location.hash || '';
     const currentSearch = window.location.search || '';
-    if (currentHash.includes('storefront') || currentHash.includes('store-admin') || currentSearch.includes('storefront') || currentSearch.includes('store=')) {
+    if (currentHash.includes('storefront') || currentHash.includes('store-admin') || currentHash.includes('store/') || currentSearch.includes('storefront') || currentSearch.includes('store=')) {
+      document.body.classList.add('is-storefront-view');
       const splash = document.getElementById('pwa-splash-screen');
       if (splash) splash.remove();
+      
+      document.addEventListener('DOMContentLoaded', () => {
+        const homePage = document.getElementById('page-home');
+        if (homePage) {
+          homePage.classList.remove('active');
+          homePage.style.display = 'none';
+        }
+        const topNav = document.getElementById('top-nav');
+        const bNav = document.getElementById('bottom-nav');
+        if (topNav) topNav.style.display = 'none';
+        if (bNav) bNav.style.display = 'none';
+        
+        const sfPage = document.getElementById('page-storefront');
+        if (sfPage) {
+          sfPage.classList.add('active');
+          sfPage.style.display = 'block';
+          sfPage.innerHTML = '<div style="text-align:center;padding:120px 20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-3x" style="color:var(--primary);margin-bottom:16px"></i><div style="font-weight:700;font-size:1rem;color:var(--text)">Loading Storefront...</div></div>';
+        }
+      });
     } else {
       // Bulletproof Splash Screen Auto-Dismiss for main marketplace
       setTimeout(() => {

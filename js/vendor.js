@@ -3492,6 +3492,33 @@ window.updateStorefrontPreview = function() {
     `;
   }
 
+  // Theme-adaptive preview footer styling
+  let prevFooterStyle = '';
+  let prevFooterTextColor = '#9ca3af';
+  let prevFooterHeadingColor = '#ffffff';
+
+  if (window.previewTheme === 'modern') {
+    prevFooterStyle = `background: color-mix(in srgb, ${secondary} 30%, rgba(15, 23, 42, 0.85)); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px 12px 0 0; margin-top: 10px; padding: 14px 12px; color: #cbd5e1;`;
+    prevFooterHeadingColor = '#ffffff';
+    prevFooterTextColor = '#cbd5e1';
+  } else if (window.previewTheme === 'neumorphic') {
+    prevFooterStyle = `background: color-mix(in srgb, ${secondary} 10%, #faf9f6); border-radius: 14px 14px 0 0; margin-top: 10px; padding: 14px 12px; color: var(--text-muted); box-shadow: inset 1px 1px 4px rgba(165,175,190,0.25), inset -1px -1px 4px #ffffff; border-top: 1px solid rgba(255,255,255,0.8);`;
+    prevFooterHeadingColor = 'var(--text)';
+    prevFooterTextColor = 'var(--text-muted)';
+  } else if (window.previewTheme === 'bold') {
+    prevFooterStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primary} 30%, #000) 0%, ${secondary} 100%); color: #e2e8f0; padding: 14px 12px; margin-top: 10px; border-top: 3px solid ${primary};`;
+    prevFooterHeadingColor = '#ffffff';
+    prevFooterTextColor = '#e2e8f0';
+  } else if (window.previewTheme === 'minimal') {
+    prevFooterStyle = `background: #ffffff; color: #64748b; padding: 12px; margin-top: 10px; border-top: 1px solid var(--border);`;
+    prevFooterHeadingColor = 'var(--text)';
+    prevFooterTextColor = '#64748b';
+  } else {
+    prevFooterStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primary} 20%, #0f172a) 0%, color-mix(in srgb, ${secondary} 35%, #030712) 100%); color: #9ca3af; padding: 14px 12px; margin-top: 10px; border-top: 2px solid ${primary};`;
+    prevFooterHeadingColor = '#ffffff';
+    prevFooterTextColor = '#9ca3af';
+  }
+
   // Combine full mockup view
   previewBox.style.fontFamily = `'${font_family}', sans-serif`;
   previewBox.innerHTML = `
@@ -3506,9 +3533,21 @@ window.updateStorefrontPreview = function() {
     </div>
 
     <!-- Active body content wrapper -->
-    <div class="prev-body-container" style="min-height:160px; font-family: inherit;">
+    <div class="prev-body-container" style="min-height:140px; font-family: inherit;">
       ${bodyHTML}
     </div>
+
+    <!-- Live Theme-Adaptive Preview Footer -->
+    <footer style="${prevFooterStyle}">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px">
+        <div style="font-weight:800; color:${prevFooterHeadingColor}; display:flex; align-items:center; gap:5px">
+          <i class="fas fa-store" style="color:${primary}"></i> ${escHtml(sfName || 'Storefront')}
+        </div>
+        <div style="color:${prevFooterTextColor}; font-size:0.6rem">
+          Powered by HAPPA TRADEMART
+        </div>
+      </div>
+    </footer>
   `;
 };
 

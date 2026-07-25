@@ -216,6 +216,33 @@ window.addEventListener('DOMContentLoaded', () => {
   // Replace the initial entry so it has state, then listen for popstate
   history.replaceState({ page: App.currentPage, entityId: getPageEntityId(App.currentPage) }, '');
   window.addEventListener('popstate', (e) => {
+    const isStorefront = document.body.classList.contains('is-storefront-view') || App.currentPage === 'storefront';
+    if (isStorefront) {
+      // 1. Close product modal if open
+      const sfModal = document.getElementById('sf-product-modal') || document.querySelector('.storefront-modal.active');
+      if (sfModal && sfModal.style.display !== 'none') {
+        sfModal.style.display = 'none';
+        return;
+      }
+      // 2. If viewing a sub-tab (cart, checkout, products, about), navigate back to storefront home tab
+      if (window.currentStorefrontTab && window.currentStorefrontTab !== 'home' && App.currentStoreId) {
+        switchStorefrontTab('home', App.currentStoreId);
+        try { history.pushState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, ''); } catch(err){}
+        return;
+      }
+      // 3. Prevent popstate from escaping storefront to main website
+      if (!e.state || (e.state.page !== 'storefront' && e.state.page !== 'store-admin')) {
+        if (App.currentStoreId) {
+          App._skipPush = true;
+          showPage('storefront', App.currentStoreId);
+          if (typeof switchStorefrontTab === 'function') switchStorefrontTab('home', App.currentStoreId);
+          App._skipPush = false;
+          try { history.pushState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, ''); } catch(err){}
+        }
+        return;
+      }
+    }
+
     if (e.state && e.state.page) {
       // Navigate to the page stored in the history entry without pushing
       // a new entry (the browser already moved the pointer).
@@ -367,6 +394,35 @@ function injectSkeletonLoaders(pageId) {
   } else if (pageId === 'notifications') {
     const list = document.getElementById('notifications-content');
     if (list) list.innerHTML = Array(6).fill(rowHtml).join('');
+  } else if (pageId === 'storefront') {
+    const c = document.getElementById('storefront-content');
+    if (c) {
+      c.innerHTML = `
+        <div style="padding: 16px; display: grid; gap: 16px;">
+          <div class="skeleton-box" style="width: 100%; height: 150px; border-radius: 12px;"></div>
+          <div style="display: flex; align-items: center; gap: 14px; margin-top: -30px; padding: 0 12px; position: relative; z-index: 2;">
+            <div class="skeleton-box" style="width: 70px; height: 70px; border-radius: 50%; border: 3px solid #fff; flex-shrink: 0;"></div>
+            <div style="flex: 1; display: grid; gap: 8px; margin-top: 20px;">
+              <div class="skeleton-box" style="width: 50%; height: 18px; border-radius: 4px;"></div>
+              <div class="skeleton-box" style="width: 75%; height: 14px; border-radius: 4px;"></div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px;">
+            ${Array(4).fill(cardHtml).join('')}
+          </div>
+        </div>`;
+    }
+  } else if (pageId === 'store-detail') {
+    const c = document.getElementById('store-detail-content');
+    if (c) {
+      c.innerHTML = `
+        <div style="padding: 16px; display: grid; gap: 16px;">
+          <div class="skeleton-box" style="width: 100%; height: 140px; border-radius: 12px;"></div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px;">
+            ${Array(4).fill(cardHtml).join('')}
+          </div>
+        </div>`;
+    }
   }
 }
 
@@ -376,6 +432,14 @@ function updatePWAManifest(name, logoUrl, themeColor) {
     link = document.createElement('link');
     link.rel = 'manifest';
     document.head.appendChild(link);
+  }
+  
+  if (name) {
+    document.title = name;
+    const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (appleTitle) appleTitle.setAttribute('content', name);
+    const appName = document.querySelector('meta[name="application-name"]');
+    if (appName) appName.setAttribute('content', name);
   }
   
   let fullLogoUrl = logoUrl;
@@ -389,7 +453,7 @@ function updatePWAManifest(name, logoUrl, themeColor) {
 
   const dynamicManifest = {
     name: name,
-    short_name: name.substring(0, 12),
+    short_name: name.length > 15 ? name.substring(0, 15) : name,
     icons: [
       { src: fullLogoUrl, sizes: '192x192', type: 'image/png' },
       { src: fullLogoUrl, sizes: '512x512', type: 'image/png' }
@@ -397,7 +461,7 @@ function updatePWAManifest(name, logoUrl, themeColor) {
     start_url: window.location.href,
     display: 'standalone',
     background_color: '#ffffff',
-    theme_color: themeColor
+    theme_color: themeColor || '#e85d04'
   };
 
   const stringManifest = JSON.stringify(dynamicManifest);
@@ -463,6 +527,14 @@ async function runPageInit(pageId) {
 }
 
 function showPage(pageId, entityId = null) {
+  // Block any attempts to navigate away to main marketplace pages when viewing a standalone storefront
+  if (document.body.classList.contains('is-storefront-view')) {
+    if (pageId !== 'storefront' && pageId !== 'store-admin' && pageId !== 'auth') {
+      console.warn(`[Standalone Storefront] Blocked navigation to main site page "${pageId}".`);
+      return;
+    }
+  }
+
   if (pageId === 'storefront' || pageId === 'store-admin') {
     const splash = document.getElementById('pwa-splash-screen');
     if (splash) splash.remove();
@@ -478,8 +550,8 @@ function showPage(pageId, entityId = null) {
     }
   }
 
-  // Reset PWA manifest when leaving store detail or storefront page
-  if (pageId !== 'store-detail' && pageId !== 'storefront') {
+  // Reset PWA manifest when leaving store detail, storefront or store-admin page
+  if (pageId !== 'store-detail' && pageId !== 'storefront' && pageId !== 'store-admin') {
     updatePWAManifest('HAPPA TRADEMART', 'images/icon-192.png', '#e85d04');
   }
 
@@ -526,12 +598,23 @@ function showPage(pageId, entityId = null) {
   }
   
   const mainContent = document.getElementById('main-content');
-  if (mainContent) {
-    mainContent.scrollTop = 0;
-    if (pageId === 'storefront' || pageId === 'store-admin') {
+  const topNavEl = document.getElementById('top-nav');
+  const bNavEl = document.getElementById('bottom-nav');
+  if (pageId === 'storefront' || pageId === 'store-admin') {
+    document.body.classList.add('is-storefront-view');
+    if (topNavEl) topNavEl.style.display = 'none';
+    if (bNavEl) bNavEl.style.display = 'none';
+    if (mainContent) {
+      mainContent.scrollTop = 0;
       mainContent.style.height = '100vh';
       mainContent.style.paddingBottom = '0';
-    } else {
+    }
+  } else {
+    document.body.classList.remove('is-storefront-view');
+    if (topNavEl) topNavEl.style.display = '';
+    if (bNavEl) bNavEl.style.display = '';
+    if (mainContent) {
+      mainContent.scrollTop = 0;
       mainContent.style.height = '';
       mainContent.style.paddingBottom = '';
     }
@@ -558,6 +641,25 @@ function showPage(pageId, entityId = null) {
   });
 }
 function goBack() {
+  const isStorefront = document.body.classList.contains('is-storefront-view') || App.currentPage === 'storefront';
+  if (isStorefront) {
+    const sfModal = document.getElementById('sf-product-modal') || document.querySelector('.storefront-modal.active');
+    if (sfModal && sfModal.style.display !== 'none') {
+      sfModal.style.display = 'none';
+      return;
+    }
+    if (window.currentStorefrontTab && window.currentStorefrontTab !== 'home' && App.currentStoreId) {
+      switchStorefrontTab('home', App.currentStoreId);
+      return;
+    }
+    if (App.currentStoreId) {
+      showPage('storefront', App.currentStoreId);
+      if (typeof switchStorefrontTab === 'function') switchStorefrontTab('home', App.currentStoreId);
+      return;
+    }
+    return;
+  }
+
   // If there is real browser history to go back to, use it so the
   // history stack stays consistent. Otherwise fall back to prevPage.
   if (window.history.length > 1) {

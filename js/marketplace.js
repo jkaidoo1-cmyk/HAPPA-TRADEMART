@@ -956,6 +956,9 @@ async function renderStoreDetail(id) {
   const bannerSrc = s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
   const logoSrc = s.logo_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
   const storeName = s.name;
+  if (typeof updatePWAManifest === 'function') {
+    updatePWAManifest(storeName, logoSrc, s.primary_color || '#e85d04');
+  }
 
   const headerHTML = `
     <div style="position:relative;background:#f8f9fa">
@@ -1072,11 +1075,56 @@ async function renderStorefront(id) {
   const c = document.getElementById('storefront-content');
   if (!c) return;
   if (!App.isBackgroundRefresh) {
-    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+    c.innerHTML = `
+      <div style="padding: 16px; display: grid; gap: 16px;">
+        <div class="skeleton-box" style="width: 100%; height: 150px; border-radius: 12px;"></div>
+        <div style="display: flex; align-items: center; gap: 14px; margin-top: -30px; padding: 0 12px; position: relative; z-index: 2;">
+          <div class="skeleton-box" style="width: 70px; height: 70px; border-radius: 50%; border: 3px solid #fff; flex-shrink: 0;"></div>
+          <div style="flex: 1; display: grid; gap: 8px; margin-top: 20px;">
+            <div class="skeleton-box" style="width: 50%; height: 18px; border-radius: 4px;"></div>
+            <div class="skeleton-box" style="width: 75%; height: 14px; border-radius: 4px;"></div>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px;">
+          <div class="skeleton-card">
+            <div class="skeleton-box image" style="height: 120px; border-radius: 10px;"></div>
+            <div class="skeleton-box line1" style="height: 14px; margin-top: 8px;"></div>
+            <div class="skeleton-box line2" style="height: 14px; width: 60%; margin-top: 4px;"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-box image" style="height: 120px; border-radius: 10px;"></div>
+            <div class="skeleton-box line1" style="height: 14px; margin-top: 8px;"></div>
+            <div class="skeleton-box line2" style="height: 14px; width: 60%; margin-top: 4px;"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-box image" style="height: 120px; border-radius: 10px;"></div>
+            <div class="skeleton-box line1" style="height: 14px; margin-top: 8px;"></div>
+            <div class="skeleton-box line2" style="height: 14px; width: 60%; margin-top: 4px;"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-box image" style="height: 120px; border-radius: 10px;"></div>
+            <div class="skeleton-box line1" style="height: 14px; margin-top: 8px;"></div>
+            <div class="skeleton-box line2" style="height: 14px; width: 60%; margin-top: 4px;"></div>
+          </div>
+        </div>
+      </div>`;
   }
 
   const s = App.allStores.find(st => String(st.id) === String(id)) || await apiGet(`stores/${id}`);
   if (!s) { c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Storefront not found</h3></div>'; return; }
+
+  // Ensure store products are loaded into App.allProducts before rendering
+  const hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(id));
+  if (!hasStoreProds) {
+    try {
+      const prodRes = await apiGet('products', `search=${encodeURIComponent(id)}&limit=100`);
+      if (prodRes && prodRes.data && prodRes.data.length) {
+        const fetched = prodRes.data;
+        const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(id));
+        App.allProducts = [...other, ...fetched];
+      }
+    } catch(e) {}
+  }
 
   // Look up storefront record for this store ID
   let sf = null;
@@ -1314,6 +1362,39 @@ async function renderStorefront(id) {
     `;
   }
 
+  // Determine theme-adaptive footer styling
+  let footerStyle = '';
+  let footerHeadingColor = '#ffffff';
+  let footerTextColor = '#9ca3af';
+  let footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
+
+  if (theme === 'modern') {
+    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 30%, rgba(15, 23, 42, 0.85)); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px 20px 0 0; margin-top: 36px; padding: 36px 16px 24px; color: #cbd5e1; box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.2);`;
+    footerHeadingColor = '#ffffff';
+    footerTextColor = '#cbd5e1';
+    footerDividerColor = 'rgba(255, 255, 255, 0.12)';
+  } else if (theme === 'neumorphic') {
+    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); border-radius: 24px 24px 0 0; margin-top: 36px; padding: 36px 16px 24px; color: var(--text-muted); box-shadow: inset 2px 2px 6px rgba(165,175,190,0.25), inset -2px -2px 6px #ffffff; border-top: 1px solid rgba(255,255,255,0.8);`;
+    footerHeadingColor = 'var(--text)';
+    footerTextColor = 'var(--text-muted)';
+    footerDividerColor = 'rgba(0, 0, 0, 0.08)';
+  } else if (theme === 'bold') {
+    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 30%, #000) 0%, ${secondaryColor} 100%); color: #e2e8f0; padding: 38px 16px 24px; margin-top: 36px; border-top: 4px solid ${primaryColor}; box-shadow: 0 -6px 25px rgba(0,0,0,0.3);`;
+    footerHeadingColor = '#ffffff';
+    footerTextColor = '#e2e8f0';
+    footerDividerColor = `color-mix(in srgb, ${primaryColor} 40%, #334155)`;
+  } else if (theme === 'minimal') {
+    footerStyle = `background: #ffffff; color: #64748b; padding: 32px 16px 24px; margin-top: 36px; border-top: 1px solid var(--border);`;
+    footerHeadingColor = 'var(--text)';
+    footerTextColor = '#64748b';
+    footerDividerColor = 'var(--border)';
+  } else {
+    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 20%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 35%, #030712) 100%); color: #9ca3af; padding: 36px 16px 24px; margin-top: 36px; border-top: 3px solid ${primaryColor}; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);`;
+    footerHeadingColor = '#ffffff';
+    footerTextColor = '#9ca3af';
+    footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
+  }
+
   c.innerHTML = `
     <div id="storefront-page-container" style="position:relative">
       ${customStyles}
@@ -1330,53 +1411,53 @@ async function renderStorefront(id) {
                  oninput="handleStoreProductSearch('${s.id}', this.value)"
                  style="width: 100%; padding: 9px 14px 9px 38px; border: 1px solid var(--border); border-radius: 25px; font-size: .82rem; outline: none; background: var(--bg);">
         </div>
-        <button class="btn" onclick="switchStorefrontTab('cart','${s.id}')" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 25px; font-size: .82rem; font-weight: 700; background: var(--primary); color: #fff; border: none; cursor: pointer; position: relative; flex-shrink: 0;" title="View Store Cart">
+        <button class="btn" onclick="switchStorefrontTab('cart','${s.id}')" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 25px; font-size: .82rem; font-weight: 700; background: ${primaryColor}; color: #fff; border: none; cursor: pointer; position: relative; flex-shrink: 0; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent);" title="View Store Cart">
           <i class="fas fa-shopping-cart"></i>
           <span>Cart</span>
-          <span id="store-cart-badge-${s.id}" style="background: #fff; color: var(--primary); border-radius: 10px; padding: 1px 6px; font-size: 0.65rem; font-weight: 900; display: none;">0</span>
+          <span id="store-cart-badge-${s.id}" style="background: #fff; color: ${primaryColor}; border-radius: 10px; padding: 1px 6px; font-size: 0.65rem; font-weight: 900; display: none;">0</span>
         </button>
       </div>
 
       <!-- Main Content Area -->
       <div class="store-tab-content" id="store-tab-content"></div>
 
-      <!-- Storefront Footer (About, Contact, Policies, Social) -->
-      <footer class="storefront-footer" style="background:#111827; color:#9ca3af; padding:32px 16px 24px; margin-top:32px; font-size:.82rem; border-top:3px solid var(--primary)">
+      <!-- Theme-Adaptive Storefront Footer (About, Contact, Policies, Social) -->
+      <footer class="storefront-footer" style="${footerStyle}">
         <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:24px">
           
           <div>
-            <h4 style="font-size:.95rem; font-weight:800; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px">
-              <i class="fas fa-store" style="color:var(--primary)"></i> About ${escHtml(s.name)}
+            <h4 style="font-size:.95rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+              <i class="fas fa-store" style="color:${primaryColor}"></i> About ${escHtml(s.name)}
             </h4>
-            <p style="line-height:1.6; color:#d1d5db">${escHtml(description)}</p>
+            <p style="line-height:1.6; color:${footerTextColor}">${escHtml(description)}</p>
             ${socialLinksHTML}
           </div>
 
           <div>
-            <h4 style="font-size:.95rem; font-weight:800; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px">
-              <i class="fas fa-clock" style="color:var(--primary)"></i> Hours & Contact
+            <h4 style="font-size:.95rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+              <i class="fas fa-clock" style="color:${primaryColor}"></i> Hours & Contact
             </h4>
-            <div style="display:grid; gap:8px">
-              <div><i class="fas fa-calendar-alt" style="width:20px; color:var(--primary)"></i> ${escHtml(business_hours)}</div>
-              <div><i class="fas fa-map-marker-alt" style="width:20px; color:var(--primary)"></i> ${s.location}</div>
-              <div><i class="fas fa-envelope" style="width:20px; color:var(--primary)"></i> ${escHtml(s.email || 'support@happamart.com')}</div>
-              <div><i class="fas fa-phone" style="width:20px; color:var(--primary)"></i> ${escHtml(s.phone || '+233 (0) 244 123 456')}</div>
+            <div style="display:grid; gap:8px; color:${footerTextColor}">
+              <div><i class="fas fa-calendar-alt" style="width:20px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
+              <div><i class="fas fa-map-marker-alt" style="width:20px; color:${primaryColor}"></i> ${s.location}</div>
+              <div><i class="fas fa-envelope" style="width:20px; color:${primaryColor}"></i> ${escHtml(s.email || 'support@happamart.com')}</div>
+              <div><i class="fas fa-phone" style="width:20px; color:${primaryColor}"></i> ${escHtml(s.phone || '+233 (0) 244 123 456')}</div>
             </div>
           </div>
 
           <div>
-            <h4 style="font-size:.95rem; font-weight:800; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px">
-              <i class="fas fa-shield-alt" style="color:var(--primary)"></i> Store Policies
+            <h4 style="font-size:.95rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+              <i class="fas fa-shield-alt" style="color:${primaryColor}"></i> Store Policies
             </h4>
-            <div style="display:grid; gap:8px">
-              <div><strong style="color:#fff">Shipping:</strong> ${escHtml(shipping_policy)}</div>
-              <div><strong style="color:#fff">Returns:</strong> ${escHtml(return_policy)}</div>
+            <div style="display:grid; gap:8px; color:${footerTextColor}">
+              <div><strong style="color:${footerHeadingColor}">Shipping:</strong> ${escHtml(shipping_policy)}</div>
+              <div><strong style="color:${footerHeadingColor}">Returns:</strong> ${escHtml(return_policy)}</div>
             </div>
           </div>
 
         </div>
 
-        <div style="border-top:1px solid #1f2937; margin-top:24px; padding-top:16px; text-align:center; color:#6b7280; font-size:.75rem">
+        <div style="border-top:1px solid ${footerDividerColor}; margin-top:24px; padding-top:16px; text-align:center; color:${footerTextColor}; font-size:.75rem">
           © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
         </div>
       </footer>
@@ -2432,7 +2513,20 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
-  const storeProds = App.allProducts.filter(p => String(p.store_id) === String(storeId) && p.status === 'active');
+  // Ensure store's products are preloaded into App.allProducts
+  let hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(storeId));
+  if (!hasStoreProds) {
+    try {
+      const prodRes = await apiGet('products', `search=${encodeURIComponent(storeId)}&limit=100`);
+      if (prodRes && prodRes.data && prodRes.data.length) {
+        const fetched = prodRes.data;
+        const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(storeId));
+        App.allProducts = [...other, ...fetched];
+      }
+    } catch(e) {}
+  }
+
+  const storeProds = (App.allProducts || []).filter(p => String(p.store_id) === String(storeId) && p.status === 'active');
 
   const isStorefrontPage = App.currentPage === 'storefront';
   const slogan = isStorefrontPage ? (sf?.slogan || s.slogan || 'Welcome to our store!') : (s.slogan || 'Welcome to our store!');
@@ -2766,6 +2860,12 @@ window.renderStorefrontCart = function(storeId) {
 
   contentEl.innerHTML = `
     <div style="padding:16px; display:grid; gap:16px">
+      <div style="display:flex; align-items:center; justify-content:space-between">
+        <button class="btn btn-ghost btn-sm" onclick="switchStorefrontTab('home', '${storeId}')" style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.85rem">
+          <i class="fas fa-arrow-left"></i> Back to Store
+        </button>
+        <div style="font-weight:800; font-size:0.9rem">Cart (${storeCart.length} items)</div>
+      </div>
       <div class="card">
         <div class="card-header"><h3>🛍️ Shopping Cart</h3></div>
         <div class="card-body" style="padding:12px 16px">
@@ -2778,6 +2878,9 @@ window.renderStorefrontCart = function(storeId) {
       </div>
       <button onclick="switchStorefrontTab('checkout', '${storeId}')" style="background:${primaryColor}; color:#fff; border:none; padding:12px; border-radius:10px; font-weight:800; font-size:0.9rem; width:100%; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px">
         Proceed to Checkout <i class="fas fa-arrow-right"></i>
+      </button>
+      <button onclick="switchStorefrontTab('home', '${storeId}')" style="background:transparent; color:var(--text); border:1px solid var(--border); padding:10px; border-radius:10px; font-weight:700; font-size:0.85rem; width:100%; cursor:pointer">
+        Continue Shopping
       </button>
     </div>
   `;
@@ -2837,6 +2940,12 @@ window.renderStorefrontCheckout = function(storeId) {
 
   contentEl.innerHTML = `
     <div style="padding:16px; display:grid; gap:16px">
+      <div style="display:flex; align-items:center; justify-content:space-between">
+        <button class="btn btn-ghost btn-sm" onclick="switchStorefrontTab('cart', '${storeId}')" style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.85rem">
+          <i class="fas fa-arrow-left"></i> Back to Cart
+        </button>
+        <div style="font-weight:800; font-size:0.9rem">Checkout</div>
+      </div>
       <div class="card">
         <div class="card-header"><h3>📦 Delivery Details</h3></div>
         <div class="card-body" style="padding:16px; display:grid; gap:12px">
