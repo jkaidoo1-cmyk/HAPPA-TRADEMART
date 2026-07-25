@@ -2649,6 +2649,7 @@ window.autoCreateStoreForVendor = async function(vendor) {
     vendor_id:             vendor.id,
     intended_vendor_email: vendor.email,
     status:                'active',
+    storefront_status:     'none',
     avg_rating:            0,
     review_count:          0,
     total_sales:           0,

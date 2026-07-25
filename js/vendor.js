@@ -71,23 +71,25 @@ async function renderVendorDashboard() {
   // Fetch all stores then filter client-side by vendor_id (most reliable approach)
   const storeRes = await apiGet('stores', `limit=200`);
   let allStores = storeRes?.data || [];
-  if (u.id === 'u-vendor-001') {
+  const validVendorId = (u && u.id && String(u.id).trim() !== 'undefined' && String(u.id).trim() !== 'null') ? String(u.id).trim() : null;
+
+  if (validVendorId === 'u-vendor-001') {
     const s1 = allStores.find(s => s.id === '1');
     if (s1 && s1.vendor_id !== 'u-vendor-001') {
       s1.vendor_id = 'u-vendor-001';
       apiPatch('stores', '1', { vendor_id: 'u-vendor-001' }).catch(() => {});
     }
   }
-  let stores   = allStores.filter(s => s.vendor_id === u.id);
+  let stores   = validVendorId ? allStores.filter(s => s && s.vendor_id && String(s.vendor_id).trim() === validVendorId) : [];
   let myStore  = stores[0] || null;
   
   // If no store exists for this vendor, auto-create one
-  if (!myStore) {
+  if (!myStore && validVendorId) {
     myStore = await window.autoCreateStoreForVendor(u);
     // Refresh stores from API to get the newly created store
     const newStoreRes = await apiGet('stores', `limit=200`);
     const newAllStores = newStoreRes?.data || [];
-    stores = newAllStores.filter(s => s.vendor_id === u.id);
+    stores = validVendorId ? newAllStores.filter(s => s && s.vendor_id && String(s.vendor_id).trim() === validVendorId) : [];
     myStore = stores[0] || myStore;
     // Update App.allStores with fresh data
     App.allStores = newAllStores;
@@ -113,24 +115,26 @@ async function renderVendorDashboard() {
     const sfRes = await apiGet('storefronts', `limit=200`).catch(() => null);
     const allSF = sfRes?.data || [];
     const targetStoreId = String(myStore.id).trim();
-    const targetVendorId = String(u?.id || '').trim();
+    const targetVendorId = validVendorId;
 
     let fetchedSF = allSF.find(s => {
       if (!s) return false;
-      const sStoreId = s.store_id ? String(s.store_id).trim() : '';
+      const sStoreId = s.store_id ? String(s.store_id).trim() : (s.id ? String(s.id).trim() : '');
       const sVendorId = s.vendor_id ? String(s.vendor_id).trim() : '';
       
-      const hasValidStoreId = targetStoreId && targetStoreId !== 'undefined' && targetStoreId !== 'null';
-      const hasValidVendorId = targetVendorId && targetVendorId !== 'undefined' && targetVendorId !== 'null';
-      
-      const storeMatch = hasValidStoreId && sStoreId && sStoreId === targetStoreId;
-      const vendorMatch = hasValidVendorId && sVendorId && sVendorId === targetVendorId;
+      const storeMatch = targetStoreId && sStoreId && sStoreId === targetStoreId;
+      const vendorMatch = targetVendorId && sVendorId && sVendorId === targetVendorId;
       
       return storeMatch || vendorMatch;
     }) || null;
 
-    if (fetchedSF && fetchedSF.status && fetchedSF.status !== 'none') {
-      myStorefront = fetchedSF;
+    // Check store's storefront_status directly as ground truth
+    const storeStatus = myStore.storefront_status || 'none';
+    const sfStatus = (fetchedSF && fetchedSF.status && fetchedSF.status !== 'none') ? fetchedSF.status : storeStatus;
+
+    if (sfStatus && sfStatus !== 'none') {
+      myStorefront = fetchedSF || { status: storeStatus, store_id: myStore.id, vendor_id: myStore.vendor_id };
+      myStorefront.status = sfStatus;
     } else {
       myStorefront = null;
     }

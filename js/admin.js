@@ -2920,19 +2920,29 @@ window.rejectStorefrontWithModal = async function(sfId) {
   if (reason === null) return;
 
   showToast('Rejecting storefront request...', 'info');
+  const cleanId = String(sfId).replace(/^sft-/, '');
   await apiPatch('storefronts', sfId, { status: 'rejected', admin_feedback: reason }).catch(() => {});
+  await apiPatch('stores', cleanId, { storefront_status: 'rejected', storefront_admin_feedback: reason }).catch(() => {});
 
-  const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
+  const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId) || String(s.store_id) === cleanId);
   if (sf) {
     sf.status = 'rejected';
     sf.admin_feedback = reason;
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+  }
 
-    if (typeof addNotification === 'function' && sf.vendor_id) {
-      addNotification(sf.vendor_id, 'system', '❌ Storefront Request Rejected',
-        `Reason: ${reason}. You can edit your customization and re-apply.`,
-        '#vendor-dashboard');
-    }
+  const store = (App.allStores || []).find(st => String(st.id) === cleanId);
+  if (store) {
+    store.storefront_status = 'rejected';
+    store.storefront_admin_feedback = reason;
+    try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
+  }
+
+  const targetVendorId = sf?.vendor_id || store?.vendor_id;
+  if (typeof addNotification === 'function' && targetVendorId) {
+    addNotification(targetVendorId, 'system', '❌ Storefront Request Rejected',
+      `Reason: ${reason}. You can edit your customization and re-apply.`,
+      '#vendor-dashboard');
   }
 
   closeModal('modal-sf-review');

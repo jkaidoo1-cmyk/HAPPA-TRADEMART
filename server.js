@@ -323,23 +323,26 @@ app.get('/api/:table', async (req, res) => {
     return res.json({ data: filtered });
   }
   
+  let supaRows = [];
   if (supabase) {
     try {
       const { data, error } = await supabase.from(table).select('*');
-      if (error) return res.status(500).json({ error: error.message });
-      const rows = (data || []).map(serializeRecord);
-      const filtered = applyFilters(rows, parseQueryParams(req.query));
-      return res.json({ data: filtered });
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
+      if (!error && data) supaRows = (data || []).map(serializeRecord);
+    } catch (err) {}
   }
-
   const db = loadDb();
-  const rows = getTable(db, table);
+  const localRows = getTable(db, table).map(serializeRecord);
+  const rowMap = new Map();
+  supaRows.forEach(r => rowMap.set(String(r.id), r));
+  localRows.forEach(r => {
+    const key = String(r.id);
+    const existing = rowMap.get(key) || {};
+    rowMap.set(key, { ...existing, ...r });
+  });
+  const rows = Array.from(rowMap.values());
   const params = parseQueryParams(req.query);
   const filtered = applyFilters(rows, params);
-  res.json({ data: filtered });
+  return res.json({ data: filtered });
 });
 
 app.get('/api/:table/:id', async (req, res) => {
@@ -413,7 +416,8 @@ app.post('/api/:table', async (req, res) => {
   const body = req.body || {};
 
   if (table === 'storefronts') {
-    const storeId = body.store_id || body.id;
+    const rawStoreId = body.store_id || body.id || '';
+    const storeId = String(rawStoreId).replace(/^sft-/, '');
     let supaSt = null;
     if (supabase) {
       try {
@@ -527,7 +531,8 @@ app.put('/api/:table/:id', async (req, res) => {
         const { data, error } = await supabase.from('stores').select('*').eq('id', cleanId).maybeSingle();
         if (!error && data) st = serializeRecord(data);
       } catch (err) {}
-    } else {
+    }
+    if (!st) {
       const db = loadDb();
       st = getTable(db, 'stores').find(s => String(s.id) === String(cleanId));
     }
@@ -538,10 +543,11 @@ app.put('/api/:table/:id', async (req, res) => {
           const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', cleanId).limit(1);
           if (!error && data && data.length > 0) st = serializeRecord(data[0]);
         } catch (err) {}
-      } else {
-        const db = loadDb();
-        st = getTable(db, 'stores').find(s => String(s.vendor_id) === String(cleanId));
       }
+    }
+    if (!st) {
+      const db = loadDb();
+      st = getTable(db, 'stores').find(s => String(s.vendor_id) === String(cleanId));
     }
 
     if (!st) {
@@ -650,7 +656,8 @@ app.patch('/api/:table/:id', async (req, res) => {
         const { data, error } = await supabase.from('stores').select('*').eq('id', cleanId).maybeSingle();
         if (!error && data) st = serializeRecord(data);
       } catch (err) {}
-    } else {
+    }
+    if (!st) {
       const db = loadDb();
       st = getTable(db, 'stores').find(s => String(s.id) === String(cleanId));
     }
@@ -661,13 +668,16 @@ app.patch('/api/:table/:id', async (req, res) => {
           const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', cleanId).limit(1);
           if (!error && data && data.length > 0) st = serializeRecord(data[0]);
         } catch (err) {}
-      } else {
-        const db = loadDb();
-        st = getTable(db, 'stores').find(s => String(s.vendor_id) === String(cleanId));
       }
+    }
+    if (!st) {
+      const db = loadDb();
+      st = getTable(db, 'stores').find(s => String(s.vendor_id) === String(cleanId));
     }
 
     if (!st) {
+      const dbCheck = loadDb();
+      console.log('[DEBUG PATCH storefronts] cleanId:', cleanId, 'store IDs:', getTable(dbCheck, 'stores').map(s => String(s.id)));
       return sendNotFound(res);
     }
 
