@@ -302,15 +302,18 @@ async function verifySessionUser() {
   if (!App.currentUser || !App.currentUser.id) return true;
   const uid = String(App.currentUser.id);
   try {
-    const usersRes = await apiFetch('users').catch(() => null);
-    const userList = usersRes?.data || (Array.isArray(usersRes) ? usersRes : []);
+    const usersRes = await apiGet('users', 'limit=500').catch(() => null);
+    const userList = usersRes?.data || [];
+    if (!userList || !userList.length) return true; // Server/network hesitation: do NOT log out!
+    
     const foundUser = userList.find(u => String(u.id) === uid);
 
-    if (!foundUser || foundUser.status === 'deleted') {
-      console.warn(`[Session Revoked] Account "${uid}" is deleted or no longer exists. Logging out.`);
+    // ONLY log out if the API explicitly returns a user record with status 'deleted' or 'suspended'
+    if (foundUser && (foundUser.status === 'deleted' || foundUser.status === 'suspended')) {
+      console.warn(`[Session Revoked] Account "${uid}" status is ${foundUser.status}. Logging out.`);
       if (typeof stopNotifPolling === 'function') stopNotifPolling();
       logout(true);
-      showToast('Your account has been deleted or deactivated.', 'warning');
+      showToast(`Your account has been ${foundUser.status}.`, 'warning');
       try { localStorage.setItem('happa_logout_user_id', uid); } catch(e){}
       return false;
     }

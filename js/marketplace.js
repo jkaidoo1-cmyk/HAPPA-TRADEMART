@@ -1416,27 +1416,27 @@ async function renderStorefront(id) {
   let footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
 
   if (theme === 'modern') {
-    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 30%, rgba(15, 23, 42, 0.85)); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px 20px 0 0; margin-top: 36px; padding: 36px 16px 24px; color: #cbd5e1; box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.2);`;
+    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 30%, rgba(15, 23, 42, 0.85)); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.15); border-radius: 14px 14px 0 0; margin-top: 20px; padding: 20px 16px 14px; color: #cbd5e1; box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.15);`;
     footerHeadingColor = '#ffffff';
     footerTextColor = '#cbd5e1';
     footerDividerColor = 'rgba(255, 255, 255, 0.12)';
   } else if (theme === 'neumorphic') {
-    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); border-radius: 24px 24px 0 0; margin-top: 36px; padding: 36px 16px 24px; color: var(--text-muted); box-shadow: inset 2px 2px 6px rgba(165,175,190,0.25), inset -2px -2px 6px #ffffff; border-top: 1px solid rgba(255,255,255,0.8);`;
+    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); border-radius: 16px 16px 0 0; margin-top: 20px; padding: 20px 16px 14px; color: var(--text-muted); box-shadow: inset 1px 1px 4px rgba(165,175,190,0.25), inset -1px -1px 4px #ffffff; border-top: 1px solid rgba(255,255,255,0.8);`;
     footerHeadingColor = 'var(--text)';
     footerTextColor = 'var(--text-muted)';
     footerDividerColor = 'rgba(0, 0, 0, 0.08)';
   } else if (theme === 'bold') {
-    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 30%, #000) 0%, ${secondaryColor} 100%); color: #e2e8f0; padding: 38px 16px 24px; margin-top: 36px; border-top: 4px solid ${primaryColor}; box-shadow: 0 -6px 25px rgba(0,0,0,0.3);`;
+    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 30%, #000) 0%, ${secondaryColor} 100%); color: #e2e8f0; padding: 22px 16px 14px; margin-top: 20px; border-top: 3px solid ${primaryColor}; box-shadow: 0 -4px 18px rgba(0,0,0,0.25);`;
     footerHeadingColor = '#ffffff';
     footerTextColor = '#e2e8f0';
     footerDividerColor = `color-mix(in srgb, ${primaryColor} 40%, #334155)`;
   } else if (theme === 'minimal') {
-    footerStyle = `background: #ffffff; color: #64748b; padding: 32px 16px 24px; margin-top: 36px; border-top: 1px solid var(--border);`;
+    footerStyle = `background: #ffffff; color: #64748b; padding: 18px 16px 14px; margin-top: 20px; border-top: 1px solid var(--border);`;
     footerHeadingColor = 'var(--text)';
     footerTextColor = '#64748b';
     footerDividerColor = 'var(--border)';
   } else {
-    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 20%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 35%, #030712) 100%); color: #9ca3af; padding: 36px 16px 24px; margin-top: 36px; border-top: 3px solid ${primaryColor}; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);`;
+    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 20%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 35%, #030712) 100%); color: #9ca3af; padding: 20px 16px 14px; margin-top: 20px; border-top: 2px solid ${primaryColor}; box-shadow: 0 -3px 15px rgba(0,0,0,0.12);`;
     footerHeadingColor = '#ffffff';
     footerTextColor = '#9ca3af';
     footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
@@ -1451,14 +1451,14 @@ async function renderStorefront(id) {
       ${headerHTML}
 
       <!-- Search bar & Cart button toolbar directly below banner -->
-      <div style="padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
+      <div style="padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
         <div style="position: relative; flex: 1; display: flex; align-items: center;">
           <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; font-size: .85rem; z-index: 2; line-height: 1;"></i>
           <input type="text" placeholder="Search products in this store..." id="store-search-input" 
                  oninput="handleStoreProductSearch('${s.id}', this.value)"
-                 style="width: 100%; padding: 9px 14px 9px 38px; border: 1px solid var(--border); border-radius: 25px; font-size: .82rem; outline: none; background: var(--bg);">
+                 style="width: 100%; padding: 8px 14px 8px 38px; border: 1px solid var(--border); border-radius: 25px; font-size: .82rem; outline: none; background: var(--bg);">
         </div>
-        <button class="btn" onclick="switchStorefrontTab('cart','${s.id}')" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 25px; font-size: .82rem; font-weight: 700; background: ${primaryColor}; color: #fff; border: none; cursor: pointer; position: relative; flex-shrink: 0; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent);" title="View Store Cart">
+        <button class="btn" onclick="switchStorefrontTab('cart','${s.id}')" style="display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 25px; font-size: .8rem; font-weight: 700; background: ${primaryColor}; color: #fff; border: none; cursor: pointer; position: relative; flex-shrink: 0; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent);" title="View Store Cart">
           <i class="fas fa-shopping-cart"></i>
           <span>Cart</span>
           <span id="store-cart-badge-${s.id}" style="background: #fff; color: ${primaryColor}; border-radius: 10px; padding: 1px 6px; font-size: 0.65rem; font-weight: 900; display: none;">0</span>
@@ -1470,40 +1470,40 @@ async function renderStorefront(id) {
 
       <!-- Theme-Adaptive Storefront Footer (About, Contact, Policies, Social) -->
       <footer class="storefront-footer" style="${footerStyle}">
-        <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:24px">
+        <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; font-size:.8rem">
           
           <div>
-            <h4 style="font-size:.95rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+            <h4 style="font-size:.85rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:6px; display:flex; align-items:center; gap:6px">
               <i class="fas fa-store" style="color:${primaryColor}"></i> About ${escHtml(s.name)}
             </h4>
-            <p style="line-height:1.6; color:${footerTextColor}">${escHtml(description)}</p>
+            <p style="line-height:1.45; color:${footerTextColor}; margin-bottom:8px">${escHtml(description)}</p>
             ${socialLinksHTML}
           </div>
 
           <div>
-            <h4 style="font-size:.95rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+            <h4 style="font-size:.85rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:6px; display:flex; align-items:center; gap:6px">
               <i class="fas fa-clock" style="color:${primaryColor}"></i> Hours & Contact
             </h4>
-            <div style="display:grid; gap:8px; color:${footerTextColor}">
-              <div><i class="fas fa-calendar-alt" style="width:20px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
-              <div><i class="fas fa-map-marker-alt" style="width:20px; color:${primaryColor}"></i> ${s.location}</div>
+            <div style="display:grid; gap:6px; color:${footerTextColor}">
+              <div><i class="fas fa-calendar-alt" style="width:18px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
+              <div><i class="fas fa-map-marker-alt" style="width:18px; color:${primaryColor}"></i> ${s.location}</div>
               ${(() => {
                 const vendorObj = (App.allUsers || []).find(u => String(u.id) === String(s.vendor_id)) || {};
                 const storeEmail = s.email || vendorObj.email || '';
                 const storePhone = s.phone || vendorObj.phone || '';
                 let contactHTML = '';
-                if (storeEmail) contactHTML += `<div><i class="fas fa-envelope" style="width:20px; color:${primaryColor}"></i> ${escHtml(storeEmail)}</div>`;
-                if (storePhone) contactHTML += `<div><i class="fas fa-phone" style="width:20px; color:${primaryColor}"></i> ${escHtml(storePhone)}</div>`;
+                if (storeEmail) contactHTML += `<div><i class="fas fa-envelope" style="width:18px; color:${primaryColor}"></i> ${escHtml(storeEmail)}</div>`;
+                if (storePhone) contactHTML += `<div><i class="fas fa-phone" style="width:18px; color:${primaryColor}"></i> ${escHtml(storePhone)}</div>`;
                 return contactHTML;
               })()}
             </div>
           </div>
 
           <div>
-            <h4 style="font-size:.95rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:10px; display:flex; align-items:center; gap:8px">
+            <h4 style="font-size:.85rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:6px; display:flex; align-items:center; gap:6px">
               <i class="fas fa-shield-alt" style="color:${primaryColor}"></i> Store Policies
             </h4>
-            <div style="display:grid; gap:8px; color:${footerTextColor}">
+            <div style="display:grid; gap:6px; color:${footerTextColor}">
               <div><strong style="color:${footerHeadingColor}">Shipping:</strong> ${escHtml(shipping_policy)}</div>
               <div><strong style="color:${footerHeadingColor}">Returns:</strong> ${escHtml(return_policy)}</div>
             </div>
@@ -1511,7 +1511,7 @@ async function renderStorefront(id) {
 
         </div>
 
-        <div style="border-top:1px solid ${footerDividerColor}; margin-top:24px; padding-top:16px; text-align:center; color:${footerTextColor}; font-size:.75rem">
+        <div style="border-top:1px solid ${footerDividerColor}; margin-top:14px; padding-top:10px; text-align:center; color:${footerTextColor}; font-size:.72rem">
           © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
         </div>
       </footer>

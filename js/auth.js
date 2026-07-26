@@ -1322,8 +1322,8 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
 
   // Check if target user is deleted or no longer exists
   try {
-    const usersRes = await apiFetch('users').catch(() => null);
-    const userList = usersRes?.data || (Array.isArray(usersRes) ? usersRes : []);
+    const usersRes = await apiGet('users', 'limit=500').catch(() => null);
+    const userList = usersRes?.data || [];
     const targetUser = userList.find(u => String(u.id) === targetId);
 
     if (targetUser && targetUser.status === 'deleted') {
@@ -1331,6 +1331,15 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
       return;
     }
   } catch(e) {}
+
+  // Deduplication guard: do not add duplicate notification if identical title & user_id already exists in local memory
+  if (App.currentUser && String(App.currentUser.id) === targetId) {
+    const isDup = (App.notifications || []).some(n => n && String(n.title) === String(title) && String(n.user_id) === targetId);
+    if (isDup) {
+      console.log(`[Notification Deduplicated] Suppressed duplicate notification "${title}" for user ${targetId}`);
+      return;
+    }
+  }
 
   const notif = {
     id: 'n' + Date.now() + Math.random().toString(36).substr(2, 5),
