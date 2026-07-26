@@ -95,11 +95,17 @@ window.addEventListener('DOMContentLoaded', () => {
                     (isStorefrontPage ? (startupHash.startsWith('#storefront/') ? startupHash.substring(12) : null) : null);
 
   if (isDirectStorefront) {
+    App.isStandaloneStorefront = true;
     document.body.classList.add('is-storefront-view');
+    document.documentElement.classList.add('is-storefront-root');
     const splash = document.getElementById('pwa-splash-screen');
     if (splash) splash.remove();
     App.currentStoreId = storeSlug;
     showPage(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug);
+    try {
+      history.replaceState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
+      history.pushState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
+    } catch(e) {}
   } else {
     loadHomeData().then(() => { initAdBanners('home'); initHeroBanners(); });
   }
@@ -180,7 +186,24 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Listen to hash changes dynamically
   window.addEventListener('hashchange', () => {
+    const isStorefront = document.body.classList.contains('is-storefront-view') || document.documentElement.classList.contains('is-storefront-root') || App.isStandaloneStorefront;
     const newHash = window.location.hash;
+
+    if (isStorefront) {
+      if (!newHash.startsWith('#storefront/') && !newHash.startsWith('#store-admin/')) {
+        console.warn('[Standalone Storefront] Blocked hash change to main site:', newHash);
+        if (App.currentStoreId) {
+          const sf = (App.allStorefronts || []).find(item => String(item.store_id) === String(App.currentStoreId));
+          const slug = sf ? sf.url_slug : App.currentStoreId;
+          try {
+            history.replaceState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, '', `#storefront/${slug}`);
+          } catch(e){}
+          showPage('storefront', App.currentStoreId);
+        }
+        return;
+      }
+    }
+
     if (newHash.startsWith('#store/')) {
       const slug = newHash.substring(7);
       const found = App.allStores.find(s => String(s.slug) === slug || String(s.id) === slug);
@@ -227,31 +250,34 @@ window.addEventListener('DOMContentLoaded', () => {
   // Replace the initial entry so it has state, then listen for popstate
   history.replaceState({ page: App.currentPage, entityId: getPageEntityId(App.currentPage) }, '');
   window.addEventListener('popstate', (e) => {
-    const isStorefront = document.body.classList.contains('is-storefront-view') || App.currentPage === 'storefront';
+    const isStorefront = document.body.classList.contains('is-storefront-view') || App.currentPage === 'storefront' || document.documentElement.classList.contains('is-storefront-root') || App.isStandaloneStorefront;
     if (isStorefront) {
       // 1. Close product modal if open
       const sfModal = document.getElementById('sf-product-modal') || document.querySelector('.storefront-modal.active');
       if (sfModal && sfModal.style.display !== 'none') {
         sfModal.style.display = 'none';
+        try { history.pushState({ page: 'storefront', entityId: App.currentStoreId, tab: window.currentStorefrontTab || 'home' }, '', window.location.href); } catch(err){}
         return;
       }
       // 2. If viewing a sub-tab (cart, checkout, products, about), navigate back to storefront home tab
       if (window.currentStorefrontTab && window.currentStorefrontTab !== 'home' && App.currentStoreId) {
         switchStorefrontTab('home', App.currentStoreId);
-        try { history.pushState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, ''); } catch(err){}
+        try { history.pushState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, '', window.location.href); } catch(err){}
         return;
       }
-      // 3. Prevent popstate from escaping storefront to main website
-      if (!e.state || (e.state.page !== 'storefront' && e.state.page !== 'store-admin')) {
-        if (App.currentStoreId) {
-          App._skipPush = true;
-          showPage('storefront', App.currentStoreId);
-          if (typeof switchStorefrontTab === 'function') switchStorefrontTab('home', App.currentStoreId);
-          App._skipPush = false;
-          try { history.pushState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, ''); } catch(err){}
-        }
-        return;
+      // 3. On storefront home tab: NEVER escape to main website!
+      // Attempt window.close() to close website window
+      try { window.close(); } catch(err){}
+
+      // Re-lock history on storefront page so user remains on storefront
+      if (App.currentStoreId) {
+        App._skipPush = true;
+        showPage('storefront', App.currentStoreId);
+        if (typeof switchStorefrontTab === 'function') switchStorefrontTab('home', App.currentStoreId);
+        App._skipPush = false;
+        try { history.pushState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, '', window.location.href); } catch(err){}
       }
+      return;
     }
 
     if (e.state && e.state.page) {

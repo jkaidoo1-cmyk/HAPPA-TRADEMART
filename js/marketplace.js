@@ -1245,9 +1245,9 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-price { color: ${primaryColor} !important; font-weight: 800 !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
-      #storefront-page-container .store-search-toolbar { background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 25%, #000) 0%, ${secondaryColor} 100%) !important; border-bottom: 2px solid ${primaryColor} !important; }
-      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 8px !important; font-weight: 700 !important; border: 1.5px solid rgba(255,255,255,0.3) !important; background: rgba(255,255,255,0.15) !important; color: #ffffff !important; }
-      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 8px !important; font-weight: 900 !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
+      #storefront-page-container .store-search-toolbar { background: #f8f9fa !important; border-bottom: 1px solid var(--border) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 8px !important; font-weight: 700 !important; border: 1.5px solid var(--border) !important; background: #ffffff !important; color: var(--text) !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 8px !important; font-weight: 900 !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
     `;
     headerHTML = `
       <div style="position:relative; text-align:center; padding-bottom:12px; background:#fff; border-bottom:1px solid var(--border)">
@@ -1279,8 +1279,8 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-img { background: rgba(255,255,255,0.4) !important; border-radius: 8px !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
-      #storefront-page-container .store-search-toolbar { background: color-mix(in srgb, ${secondaryColor} 25%, #0f172a) !important; backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important; border-bottom: 1px solid rgba(255,255,255,0.12) !important; }
-      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 20px !important; background: rgba(255,255,255,0.12) !important; border: 1px solid rgba(255,255,255,0.2) !important; color: #ffffff !important; backdrop-filter: blur(8px) !important; }
+      #storefront-page-container .store-search-toolbar { background: color-mix(in srgb, ${secondaryColor} 20%, #faf9f6) !important; border-bottom: 1px solid rgba(0,0,0,0.06) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 20px !important; background: #ffffff !important; border: 1px solid rgba(0,0,0,0.1) !important; color: var(--text) !important; box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important; }
       #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 20px !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 40%, transparent) !important; }
     `;
     headerHTML = `
@@ -1348,8 +1348,8 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-price { color: ${primaryColor} !important; font-weight: 800 !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
-      #storefront-page-container .store-search-toolbar { background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 18%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 28%, #1e293b) 100%) !important; border-bottom: 1px solid rgba(255,255,255,0.1) !important; }
-      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 25px !important; background: rgba(255,255,255,0.14) !important; border: 1px solid rgba(255,255,255,0.22) !important; color: #ffffff !important; }
+      #storefront-page-container .store-search-toolbar { background: #ffffff !important; border-bottom: 1px solid var(--border) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 25px !important; background: var(--bg) !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
       #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 25px !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent) !important; }
     `;
     headerHTML = `
@@ -1455,32 +1455,32 @@ async function renderStorefront(id) {
     footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
   }
 
-  // Determine theme-adaptive search & cart toolbar styling
+  // Determine theme-adaptive search & cart toolbar styling (matches store background color seamlessly)
   let toolbarStyle = '';
   let searchInputStyle = '';
   let searchIconColor = 'var(--text-muted)';
 
   if (theme === 'modern') {
-    toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 25%, #0f172a); border-bottom: 1px solid rgba(255, 255, 255, 0.12); display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: rgba(255, 255, 255, 0.12); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none; backdrop-filter: blur(8px);`;
-    searchIconColor = 'rgba(255, 255, 255, 0.7)';
+    toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 20%, #faf9f6); border-bottom: 1px solid rgba(0, 0, 0, 0.06); display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: #ffffff; color: var(--text); border: 1px solid rgba(0, 0, 0, 0.1); width: 100%; padding: 8px 14px 8px 38px; border-radius: 20px; font-size: .82rem; outline: none; box-shadow: 0 2px 6px rgba(0,0,0,0.04);`;
+    searchIconColor = 'var(--text-muted)';
   } else if (theme === 'neumorphic') {
-    toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 12%, #faf9f6); border-bottom: 1px solid rgba(0, 0, 0, 0.08); display: flex; align-items: center; gap: 10px; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.05);`;
-    searchInputStyle = `background: #ffffff; color: var(--text); border: 1px solid rgba(0, 0, 0, 0.1); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.08);`;
+    toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); border-bottom: 1px solid rgba(0, 0, 0, 0.05); display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); color: var(--text); border: none; width: 100%; padding: 8px 14px 8px 38px; border-radius: 14px; font-size: .82rem; outline: none; box-shadow: inset 2px 2px 5px rgba(165,175,190,0.28), inset -2px -2px 5px #ffffff;`;
     searchIconColor = 'var(--text-muted)';
   } else if (theme === 'bold') {
-    toolbarStyle = `padding: 10px 14px; background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 25%, #000) 0%, ${secondaryColor} 100%); border-bottom: 2px solid ${primaryColor}; display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: rgba(255, 255, 255, 0.15); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
-    searchIconColor = 'rgba(255, 255, 255, 0.85)';
+    toolbarStyle = `padding: 10px 14px; background: #f8f9fa; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: #ffffff; color: var(--text); border: 1.5px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 8px; font-size: .82rem; outline: none; font-weight: 700;`;
+    searchIconColor = 'var(--text-muted)';
   } else if (theme === 'minimal') {
-    toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 6%, #ffffff); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: #ffffff; color: var(--text); border: 1px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
+    toolbarStyle = `padding: 10px 14px; background: #ffffff; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: #ffffff; color: var(--text); border: 1px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 6px; font-size: .82rem; outline: none;`;
     searchIconColor = 'var(--text-muted)';
   } else {
     // Default / Classic theme
-    toolbarStyle = `padding: 10px 14px; background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 18%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 28%, #1e293b) 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: rgba(255, 255, 255, 0.14); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.22); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
-    searchIconColor = 'rgba(255, 255, 255, 0.75)';
+    toolbarStyle = `padding: 10px 14px; background: #ffffff; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: var(--bg); color: var(--text); border: 1px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
+    searchIconColor = 'var(--text-muted)';
   }
 
   c.innerHTML = `
