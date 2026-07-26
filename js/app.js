@@ -81,8 +81,28 @@ window.addEventListener('DOMContentLoaded', () => {
   loadSession();
   updateNavForUser(); // apply role-based nav immediately after session load
   initCountdown();
-  calcDaysToSaturday();
-  loadHomeData().then(() => { initAdBanners('home'); initHeroBanners(); });
+  // Handle storefront links in hash e.g. #storefront/elsbee or ?storefront=elsbee on startup
+  const startupHash = window.location.hash || '';
+  const searchParams = new URLSearchParams(window.location.search);
+  const isStoreAdmin = startupHash.startsWith('#store-admin/');
+  const isStorefrontPage = startupHash.startsWith('#storefront/') || startupHash.includes('storefront');
+  const isDirectStorefront = isStorefrontPage || isStoreAdmin || searchParams.has('storefront');
+  
+  const storeSlug = searchParams.get('store') || 
+                    (startupHash.startsWith('#store/') ? startupHash.substring(7) : null) ||
+                    (isStoreAdmin ? startupHash.substring(13) : null) ||
+                    searchParams.get('storefront') ||
+                    (isStorefrontPage ? (startupHash.startsWith('#storefront/') ? startupHash.substring(12) : null) : null);
+
+  if (isDirectStorefront) {
+    document.body.classList.add('is-storefront-view');
+    const splash = document.getElementById('pwa-splash-screen');
+    if (splash) splash.remove();
+    App.currentStoreId = storeSlug;
+    showPage(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug);
+  } else {
+    loadHomeData().then(() => { initAdBanners('home'); initHeroBanners(); });
+  }
 
   initSearch();
   renderNotifBadge();
@@ -98,17 +118,6 @@ window.addEventListener('DOMContentLoaded', () => {
     // Start polling every 60s for new notifications/announcements
     setTimeout(() => startNotifPolling(), 3000);
   }
-  
-  // Handle storefront links in hash e.g. #store/elsbee or ?store=elsbee on startup
-  const startupHash = window.location.hash;
-  const searchParams = new URLSearchParams(window.location.search);
-  const isStoreAdmin = startupHash.startsWith('#store-admin/');
-  const isStorefrontPage = startupHash.startsWith('#storefront/');
-  const storeSlug = searchParams.get('store') || 
-                    (startupHash.startsWith('#store/') ? startupHash.substring(7) : null) ||
-                    (isStoreAdmin ? startupHash.substring(13) : null) ||
-                    searchParams.get('storefront') ||
-                    (isStorefrontPage ? startupHash.substring(12) : null);
   
   if (startupHash === '#register-vendor' || startupHash === '#auth-vendor') {
     showPage('auth');
@@ -151,13 +160,15 @@ window.addEventListener('DOMContentLoaded', () => {
         }
       } else {
         if (isStorefrontPage || searchParams.has('storefront')) {
-          showPage('storefront', null);
+          showPage('storefront', storeSlug);
         } else {
           showPage('home');
         }
       }
-    }).catch(() => showPage('home'));
-  } else {
+    }).catch(() => {
+      if (!isDirectStorefront) showPage('home');
+    });
+  } else if (!isDirectStorefront) {
     showPage('home');
     if (searchParams.has('product')) {
       const productId = searchParams.get('product');

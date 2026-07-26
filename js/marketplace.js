@@ -1442,6 +1442,34 @@ async function renderStorefront(id) {
     footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
   }
 
+  // Determine theme-adaptive search & cart toolbar styling
+  let toolbarStyle = '';
+  let searchInputStyle = '';
+  let searchIconColor = 'var(--text-muted)';
+
+  if (theme === 'modern') {
+    toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 25%, #0f172a); border-bottom: 1px solid rgba(255, 255, 255, 0.12); display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: rgba(255, 255, 255, 0.12); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none; backdrop-filter: blur(8px);`;
+    searchIconColor = 'rgba(255, 255, 255, 0.7)';
+  } else if (theme === 'neumorphic') {
+    toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 12%, #faf9f6); border-bottom: 1px solid rgba(0, 0, 0, 0.08); display: flex; align-items: center; gap: 10px; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.05);`;
+    searchInputStyle = `background: #ffffff; color: var(--text); border: 1px solid rgba(0, 0, 0, 0.1); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.08);`;
+    searchIconColor = 'var(--text-muted)';
+  } else if (theme === 'bold') {
+    toolbarStyle = `padding: 10px 14px; background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 25%, #000) 0%, ${secondaryColor} 100%); border-bottom: 2px solid ${primaryColor}; display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: rgba(255, 255, 255, 0.15); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
+    searchIconColor = 'rgba(255, 255, 255, 0.85)';
+  } else if (theme === 'minimal') {
+    toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 6%, #ffffff); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: #ffffff; color: var(--text); border: 1px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
+    searchIconColor = 'var(--text-muted)';
+  } else {
+    // Default / Classic theme
+    toolbarStyle = `padding: 10px 14px; background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 18%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 28%, #1e293b) 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 10px;`;
+    searchInputStyle = `background: rgba(255, 255, 255, 0.14); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.22); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
+    searchIconColor = 'rgba(255, 255, 255, 0.75)';
+  }
+
   c.innerHTML = `
     <div id="storefront-page-container" style="position:relative">
       ${customStyles}
@@ -1451,12 +1479,12 @@ async function renderStorefront(id) {
       ${headerHTML}
 
       <!-- Search bar & Cart button toolbar directly below banner -->
-      <div style="padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
+      <div class="store-search-toolbar" style="${toolbarStyle}">
         <div style="position: relative; flex: 1; display: flex; align-items: center;">
-          <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; font-size: .85rem; z-index: 2; line-height: 1;"></i>
+          <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: ${searchIconColor}; pointer-events: none; font-size: .85rem; z-index: 2; line-height: 1;"></i>
           <input type="text" placeholder="Search products in this store..." id="store-search-input" 
                  oninput="handleStoreProductSearch('${s.id}', this.value)"
-                 style="width: 100%; padding: 8px 14px 8px 38px; border: 1px solid var(--border); border-radius: 25px; font-size: .82rem; outline: none; background: var(--bg);">
+                 style="${searchInputStyle}">
         </div>
         <button class="btn" onclick="switchStorefrontTab('cart','${s.id}')" style="display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 25px; font-size: .8rem; font-weight: 700; background: ${primaryColor}; color: #fff; border: none; cursor: pointer; position: relative; flex-shrink: 0; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent);" title="View Store Cart">
           <i class="fas fa-shopping-cart"></i>
