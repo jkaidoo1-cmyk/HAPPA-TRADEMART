@@ -1221,8 +1221,6 @@ async function renderStorefront(id) {
   const primaryColor = sf?.primary_color || s.primary_color || '#e85d04';
   const secondaryColor = sf?.secondary_color || s.secondary_color || '#0d0d0d';
   const slogan = sf?.slogan || s.slogan || 'Welcome to our store!';
-  const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
-
   let followed = App.savedStores.includes(id);
 
   const bannerSrc = sf?.banner_url || s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
@@ -1246,8 +1244,8 @@ async function renderStorefront(id) {
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
       #storefront-page-container .store-search-toolbar { background: #f8f9fa !important; border-bottom: 1px solid var(--border) !important; }
-      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 8px !important; font-weight: 700 !important; border: 1.5px solid var(--border) !important; background: #ffffff !important; color: var(--text) !important; }
-      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 8px !important; font-weight: 900 !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 8px !important; font-weight: 700 !important; border: 1.5px solid var(--border) !important; background: linear-gradient(135deg, #ffffff 0%, color-mix(in srgb, ${primaryColor} 15%, #f8f9fa) 100%) !important; color: var(--text) !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 50% !important; font-weight: 900 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
     `;
     headerHTML = `
       <div style="position:relative; text-align:center; padding-bottom:12px; background:#fff; border-bottom:1px solid var(--border)">
@@ -1280,8 +1278,8 @@ async function renderStorefront(id) {
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
       #storefront-page-container .store-search-toolbar { background: color-mix(in srgb, ${secondaryColor} 20%, #faf9f6) !important; border-bottom: 1px solid rgba(0,0,0,0.06) !important; }
-      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 20px !important; background: #ffffff !important; border: 1px solid rgba(0,0,0,0.1) !important; color: var(--text) !important; box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important; }
-      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 20px !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 40%, transparent) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 20px !important; background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, color-mix(in srgb, ${secondaryColor} 18%, #faf9f6) 60%, color-mix(in srgb, ${primaryColor} 12%, #ffffff) 100%) !important; border: 1px solid rgba(0,0,0,0.09) !important; color: var(--text) !important; box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 50% !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 40%, transparent) !important; }
     `;
     headerHTML = `
       <div style="position:relative; overflow:hidden; min-height:190px; display:flex; align-items:center; justify-content:center; padding:25px 10px;">
@@ -1316,8 +1314,8 @@ async function renderStorefront(id) {
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
       #storefront-page-container .store-search-toolbar { background: var(--neu-bg) !important; border-bottom: 1px solid rgba(0,0,0,0.05) !important; }
-      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 14px !important; background: var(--neu-bg) !important; border: none !important; color: var(--text) !important; box-shadow: inset 2px 2px 5px rgba(165,175,190,0.28), inset -2px -2px 5px #ffffff !important; }
-      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 14px !important; font-weight: 800 !important; background: var(--neu-bg) !important; color: ${primaryColor} !important; border: 1px solid rgba(255,255,255,0.9) !important; box-shadow: 2px 2px 5px rgba(165,175,190,0.25), -2px -2px 5px #ffffff !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 14px !important; background: linear-gradient(135deg, color-mix(in srgb, ${secondaryColor} 6%, #faf9f6) 0%, color-mix(in srgb, ${primaryColor} 8%, #ffffff) 100%) !important; border: none !important; color: var(--text) !important; box-shadow: inset 2px 2px 5px rgba(165,175,190,0.28), inset -2px -2px 5px #ffffff !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 50% !important; font-weight: 800 !important; background: var(--neu-bg) !important; color: ${primaryColor} !important; border: 1px solid rgba(255,255,255,0.9) !important; box-shadow: 2px 2px 5px rgba(165,175,190,0.25), -2px -2px 5px #ffffff !important; }
     `;
     headerHTML = `
       <div style="background:color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); padding:12px; display:flex; flex-direction:column; align-items:center; position:relative; border-bottom: none">
@@ -1349,8 +1347,8 @@ async function renderStorefront(id) {
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
       #storefront-page-container .store-search-toolbar { background: #ffffff !important; border-bottom: 1px solid var(--border) !important; }
-      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 25px !important; background: var(--bg) !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
-      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 25px !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 25px !important; background: linear-gradient(135deg, #ffffff 0%, color-mix(in srgb, ${primaryColor} 8%, #ffffff) 100%) !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 50% !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent) !important; }
     `;
     headerHTML = `
       <div style="position:relative;background:#f8f9fa">
@@ -1429,27 +1427,27 @@ async function renderStorefront(id) {
   let footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
 
   if (theme === 'modern') {
-    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 30%, rgba(15, 23, 42, 0.85)); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.15); border-radius: 14px 14px 0 0; margin-top: 20px; padding: 20px 16px 14px; color: #cbd5e1; box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.15);`;
+    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 30%, rgba(15, 23, 42, 0.85)); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px 12px 0 0; margin-top: 10px; padding: 12px 12px 8px; color: #cbd5e1; box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.12);`;
     footerHeadingColor = '#ffffff';
     footerTextColor = '#cbd5e1';
     footerDividerColor = 'rgba(255, 255, 255, 0.12)';
   } else if (theme === 'neumorphic') {
-    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); border-radius: 16px 16px 0 0; margin-top: 20px; padding: 20px 16px 14px; color: var(--text-muted); box-shadow: inset 1px 1px 4px rgba(165,175,190,0.25), inset -1px -1px 4px #ffffff; border-top: 1px solid rgba(255,255,255,0.8);`;
+    footerStyle = `background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); border-radius: 14px 14px 0 0; margin-top: 10px; padding: 12px 12px 8px; color: var(--text-muted); box-shadow: inset 1px 1px 4px rgba(165,175,190,0.25), inset -1px -1px 4px #ffffff; border-top: 1px solid rgba(255,255,255,0.8);`;
     footerHeadingColor = 'var(--text)';
     footerTextColor = 'var(--text-muted)';
     footerDividerColor = 'rgba(0, 0, 0, 0.08)';
   } else if (theme === 'bold') {
-    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 30%, #000) 0%, ${secondaryColor} 100%); color: #e2e8f0; padding: 22px 16px 14px; margin-top: 20px; border-top: 3px solid ${primaryColor}; box-shadow: 0 -4px 18px rgba(0,0,0,0.25);`;
+    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 30%, #000) 0%, ${secondaryColor} 100%); color: #e2e8f0; padding: 12px 12px 8px; margin-top: 10px; border-top: 3px solid ${primaryColor}; box-shadow: 0 -3px 12px rgba(0,0,0,0.2);`;
     footerHeadingColor = '#ffffff';
     footerTextColor = '#e2e8f0';
     footerDividerColor = `color-mix(in srgb, ${primaryColor} 40%, #334155)`;
   } else if (theme === 'minimal') {
-    footerStyle = `background: #ffffff; color: #64748b; padding: 18px 16px 14px; margin-top: 20px; border-top: 1px solid var(--border);`;
+    footerStyle = `background: #ffffff; color: #64748b; padding: 10px 12px 8px; margin-top: 10px; border-top: 1px solid var(--border);`;
     footerHeadingColor = 'var(--text)';
     footerTextColor = '#64748b';
     footerDividerColor = 'var(--border)';
   } else {
-    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 20%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 35%, #030712) 100%); color: #9ca3af; padding: 20px 16px 14px; margin-top: 20px; border-top: 2px solid ${primaryColor}; box-shadow: 0 -3px 15px rgba(0,0,0,0.12);`;
+    footerStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 20%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 35%, #030712) 100%); color: #9ca3af; padding: 12px 12px 8px; margin-top: 10px; border-top: 2px solid ${primaryColor}; box-shadow: 0 -3px 12px rgba(0,0,0,0.1);`;
     footerHeadingColor = '#ffffff';
     footerTextColor = '#9ca3af';
     footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
@@ -1510,40 +1508,40 @@ async function renderStorefront(id) {
 
       <!-- Theme-Adaptive Storefront Footer (About, Contact, Policies, Social) -->
       <footer class="storefront-footer" style="${footerStyle}">
-        <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; font-size:.8rem">
+        <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; font-size:.72rem">
           
           <div>
-            <h4 style="font-size:.85rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:6px; display:flex; align-items:center; gap:6px">
+            <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
               <i class="fas fa-store" style="color:${primaryColor}"></i> About ${escHtml(s.name)}
             </h4>
-            <p style="line-height:1.45; color:${footerTextColor}; margin-bottom:8px">${escHtml(description)}</p>
+            <p style="line-height:1.35; color:${footerTextColor}; margin-bottom:4px">${escHtml(description)}</p>
             ${socialLinksHTML}
           </div>
 
           <div>
-            <h4 style="font-size:.85rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:6px; display:flex; align-items:center; gap:6px">
+            <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
               <i class="fas fa-clock" style="color:${primaryColor}"></i> Hours & Contact
             </h4>
-            <div style="display:grid; gap:6px; color:${footerTextColor}">
-              <div><i class="fas fa-calendar-alt" style="width:18px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
-              <div><i class="fas fa-map-marker-alt" style="width:18px; color:${primaryColor}"></i> ${s.location}</div>
+            <div style="display:grid; gap:4px; color:${footerTextColor}">
+              <div><i class="fas fa-calendar-alt" style="width:16px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
+              <div><i class="fas fa-map-marker-alt" style="width:16px; color:${primaryColor}"></i> ${s.location}</div>
               ${(() => {
                 const vendorObj = (App.allUsers || []).find(u => String(u.id) === String(s.vendor_id)) || {};
                 const storeEmail = s.email || vendorObj.email || '';
                 const storePhone = s.phone || vendorObj.phone || '';
                 let contactHTML = '';
-                if (storeEmail) contactHTML += `<div><i class="fas fa-envelope" style="width:18px; color:${primaryColor}"></i> ${escHtml(storeEmail)}</div>`;
-                if (storePhone) contactHTML += `<div><i class="fas fa-phone" style="width:18px; color:${primaryColor}"></i> ${escHtml(storePhone)}</div>`;
+                if (storeEmail) contactHTML += `<div><i class="fas fa-envelope" style="width:16px; color:${primaryColor}"></i> ${escHtml(storeEmail)}</div>`;
+                if (storePhone) contactHTML += `<div><i class="fas fa-phone" style="width:16px; color:${primaryColor}"></i> ${escHtml(storePhone)}</div>`;
                 return contactHTML;
               })()}
             </div>
           </div>
 
           <div>
-            <h4 style="font-size:.85rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:6px; display:flex; align-items:center; gap:6px">
+            <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
               <i class="fas fa-shield-alt" style="color:${primaryColor}"></i> Store Policies
             </h4>
-            <div style="display:grid; gap:6px; color:${footerTextColor}">
+            <div style="display:grid; gap:4px; color:${footerTextColor}">
               <div><strong style="color:${footerHeadingColor}">Shipping:</strong> ${escHtml(shipping_policy)}</div>
               <div><strong style="color:${footerHeadingColor}">Returns:</strong> ${escHtml(return_policy)}</div>
             </div>
@@ -1551,7 +1549,7 @@ async function renderStorefront(id) {
 
         </div>
 
-        <div style="border-top:1px solid ${footerDividerColor}; margin-top:14px; padding-top:10px; text-align:center; color:${footerTextColor}; font-size:.72rem">
+        <div style="border-top:1px solid ${footerDividerColor}; margin-top:8px; padding-top:6px; text-align:center; color:${footerTextColor}; font-size:.65rem">
           © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
         </div>
       </footer>

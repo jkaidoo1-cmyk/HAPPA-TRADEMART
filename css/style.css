@@ -97,8 +97,15 @@ ul { list-style: none; }
 }
 #page-storefront, #page-store-admin {
   margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 #page-storefront.active, #page-store-admin.active {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+body.is-storefront-view #main-content,
+html.is-storefront-root body #main-content {
+  padding-top: 0 !important;
   margin-top: 0 !important;
 }
 

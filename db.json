@@ -451,6 +451,30 @@
       "updated_at": "2026-07-26T22:59:00.616Z",
       "theme": "modern",
       "slogan": "Best Quality Products Guaranteed"
+    },
+    {
+      "id": "store-u-test-vendor-1785107945790",
+      "name": "Auto Approve Store",
+      "slug": "auto-approve-store-1785107945791",
+      "vendor_id": "u-test-vendor-1785107945790",
+      "status": "active",
+      "storefront_status": "rejected",
+      "created_at": "2026-07-26T23:19:05.898Z",
+      "updated_at": "2026-07-26T23:19:15.111Z",
+      "theme": "modern",
+      "slogan": "Best Quality Products Guaranteed"
+    },
+    {
+      "id": "store-u-test-vendor-1785108293520",
+      "name": "Auto Approve Store",
+      "slug": "auto-approve-store-1785108293522",
+      "vendor_id": "u-test-vendor-1785108293520",
+      "status": "active",
+      "storefront_status": "rejected",
+      "created_at": "2026-07-26T23:24:53.607Z",
+      "updated_at": "2026-07-26T23:25:03.481Z",
+      "theme": "modern",
+      "slogan": "Best Quality Products Guaranteed"
     }
   ],
   "storefronts": [],
