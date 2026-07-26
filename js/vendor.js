@@ -128,15 +128,14 @@ async function renderVendorDashboard() {
       return storeMatch || vendorMatch;
     }) || null;
 
-    // Check store's storefront_status directly as ground truth
+    // Ground truth: store's storefront_status directly on myStore
     const storeStatus = myStore.storefront_status || 'none';
-    const sfStatus = (fetchedSF && fetchedSF.status && fetchedSF.status !== 'none') ? fetchedSF.status : storeStatus;
 
-    if (sfStatus && sfStatus !== 'none') {
-      myStorefront = fetchedSF || { status: storeStatus, store_id: myStore.id, vendor_id: myStore.vendor_id };
-      myStorefront.status = sfStatus;
-    } else {
+    if (storeStatus === 'none') {
       myStorefront = null;
+    } else {
+      myStorefront = fetchedSF || { status: storeStatus, store_id: myStore.id, vendor_id: myStore.vendor_id };
+      myStorefront.status = storeStatus;
     }
     App.myStorefront = myStorefront;
   } else {

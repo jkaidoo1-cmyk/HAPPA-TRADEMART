@@ -137,6 +137,17 @@
       to {
         opacity: 1;
       }
+    body.is-storefront-view #top-nav,
+    body.is-storefront-view #bottom-nav,
+    body.is-storefront-view #page-home,
+    body.is-storefront-view #pwa-splash-screen {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    body.is-storefront-view #page-storefront {
+      display: block !important;
     }
   </style>
 </head>
@@ -177,7 +188,40 @@
         if (sfPage) {
           sfPage.classList.add('active');
           sfPage.style.display = 'block';
-          sfPage.innerHTML = '<div style="text-align:center;padding:120px 20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-3x" style="color:var(--primary);margin-bottom:16px"></i><div style="font-weight:700;font-size:1rem;color:var(--text)">Loading Storefront...</div></div>';
+          const sfContent = document.getElementById('storefront-content');
+          if (sfContent && (!sfContent.children.length || sfContent.innerHTML.includes('fa-spinner'))) {
+            sfContent.innerHTML = `
+              <div class="storefront-skeleton-wrapper" style="width:100%;min-height:100vh;background:#fafafa;padding-bottom:60px">
+                <div style="background:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb">
+                  <div style="display:flex;align-items:center;gap:14px">
+                    <div class="skeleton-box" style="width:48px;height:48px;border-radius:50%"></div>
+                    <div style="display:flex;flex-direction:column;gap:6px">
+                      <div class="skeleton-box" style="width:160px;height:20px;border-radius:4px"></div>
+                      <div class="skeleton-box" style="width:100px;height:14px;border-radius:4px"></div>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:10px">
+                    <div class="skeleton-box" style="width:70px;height:32px;border-radius:20px"></div>
+                    <div class="skeleton-box" style="width:36px;height:36px;border-radius:50%"></div>
+                  </div>
+                </div>
+                <div style="max-width:1200px;margin:20px auto 16px;padding:0 16px">
+                  <div class="skeleton-box" style="width:100%;height:220px;border-radius:16px"></div>
+                </div>
+                <div style="max-width:1200px;margin:0 auto 20px;padding:0 16px;display:flex;gap:10px;overflow-x:hidden">
+                  <div class="skeleton-box" style="width:80px;height:34px;border-radius:20px;flex-shrink:0"></div>
+                  <div class="skeleton-box" style="width:110px;height:34px;border-radius:20px;flex-shrink:0"></div>
+                  <div class="skeleton-box" style="width:95px;height:34px;border-radius:20px;flex-shrink:0"></div>
+                  <div class="skeleton-box" style="width:105px;height:34px;border-radius:20px;flex-shrink:0"></div>
+                </div>
+                <div style="max-width:1200px;margin:0 auto;padding:0 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:20px">
+                  <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
+                  <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
+                  <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e5eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
+                  <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
+                </div>
+              </div>`;
+          }
         }
       });
     } else {
