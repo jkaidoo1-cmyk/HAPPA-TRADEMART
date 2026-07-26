@@ -1462,24 +1462,24 @@ async function renderStorefront(id) {
 
   if (theme === 'modern') {
     toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 20%, #faf9f6); border-bottom: 1px solid rgba(0, 0, 0, 0.06); display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: #ffffff; color: var(--text); border: 1px solid rgba(0, 0, 0, 0.1); width: 100%; padding: 8px 14px 8px 38px; border-radius: 20px; font-size: .82rem; outline: none; box-shadow: 0 2px 6px rgba(0,0,0,0.04);`;
+    searchInputStyle = `background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, color-mix(in srgb, ${secondaryColor} 14%, #ffffff) 60%, color-mix(in srgb, ${primaryColor} 10%, #ffffff) 100%); color: var(--text); border: 1px solid rgba(0, 0, 0, 0.09); width: 100%; padding: 8px 14px 8px 38px; border-radius: 20px; font-size: .82rem; outline: none; box-shadow: 0 2px 6px rgba(0,0,0,0.04);`;
     searchIconColor = 'var(--text-muted)';
   } else if (theme === 'neumorphic') {
     toolbarStyle = `padding: 10px 14px; background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); border-bottom: 1px solid rgba(0, 0, 0, 0.05); display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); color: var(--text); border: none; width: 100%; padding: 8px 14px 8px 38px; border-radius: 14px; font-size: .82rem; outline: none; box-shadow: inset 2px 2px 5px rgba(165,175,190,0.28), inset -2px -2px 5px #ffffff;`;
+    searchInputStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${secondaryColor} 6%, #faf9f6) 0%, color-mix(in srgb, ${primaryColor} 8%, #ffffff) 100%); color: var(--text); border: none; width: 100%; padding: 8px 14px 8px 38px; border-radius: 14px; font-size: .82rem; outline: none; box-shadow: inset 2px 2px 5px rgba(165,175,190,0.28), inset -2px -2px 5px #ffffff;`;
     searchIconColor = 'var(--text-muted)';
   } else if (theme === 'bold') {
     toolbarStyle = `padding: 10px 14px; background: #f8f9fa; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: #ffffff; color: var(--text); border: 1.5px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 8px; font-size: .82rem; outline: none; font-weight: 700;`;
+    searchInputStyle = `background: linear-gradient(135deg, #ffffff 0%, color-mix(in srgb, ${primaryColor} 12%, #ffffff) 100%); color: var(--text); border: 1.5px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 8px; font-size: .82rem; outline: none; font-weight: 700;`;
     searchIconColor = 'var(--text-muted)';
   } else if (theme === 'minimal') {
     toolbarStyle = `padding: 10px 14px; background: #ffffff; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: #ffffff; color: var(--text); border: 1px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 6px; font-size: .82rem; outline: none;`;
+    searchInputStyle = `background: linear-gradient(135deg, #ffffff 0%, color-mix(in srgb, ${primaryColor} 8%, #ffffff) 100%); color: var(--text); border: 1px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 6px; font-size: .82rem; outline: none;`;
     searchIconColor = 'var(--text-muted)';
   } else {
     // Default / Classic theme
     toolbarStyle = `padding: 10px 14px; background: #ffffff; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;`;
-    searchInputStyle = `background: var(--bg); color: var(--text); border: 1px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
+    searchInputStyle = `background: linear-gradient(135deg, #ffffff 0%, color-mix(in srgb, ${primaryColor} 8%, #ffffff) 100%); color: var(--text); border: 1px solid var(--border); width: 100%; padding: 8px 14px 8px 38px; border-radius: 25px; font-size: .82rem; outline: none;`;
     searchIconColor = 'var(--text-muted)';
   }
 
@@ -1499,10 +1499,9 @@ async function renderStorefront(id) {
                  oninput="handleStoreProductSearch('${s.id}', this.value)"
                  style="${searchInputStyle}">
         </div>
-        <button class="btn" onclick="switchStorefrontTab('cart','${s.id}')" style="display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 25px; font-size: .8rem; font-weight: 700; background: ${primaryColor}; color: #fff; border: none; cursor: pointer; position: relative; flex-shrink: 0; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent);" title="View Store Cart">
+        <button class="btn store-cart-btn" onclick="switchStorefrontTab('cart','${s.id}')" style="width: 38px; height: 38px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; cursor: pointer; position: relative; flex-shrink: 0; border-radius: 50%; background: ${primaryColor}; color: #ffffff; border: none; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent);" title="View Store Cart">
           <i class="fas fa-shopping-cart"></i>
-          <span>Cart</span>
-          <span id="store-cart-badge-${s.id}" style="background: #fff; color: ${primaryColor}; border-radius: 10px; padding: 1px 6px; font-size: 0.65rem; font-weight: 900; display: none;">0</span>
+          <span id="store-cart-badge-${s.id}" style="position: absolute; top: -4px; right: -4px; background: #ef4444; color: #ffffff; border-radius: 10px; padding: 1px 5px; font-size: 0.6rem; font-weight: 900; display: none; min-width: 16px; text-align: center; border: 1.5px solid #ffffff;">0</span>
         </button>
       </div>
 
