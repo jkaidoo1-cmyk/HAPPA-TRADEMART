@@ -1082,7 +1082,8 @@ async function renderStorefront(id) {
   }
   if (!c) return;
 
-  if (!App.isBackgroundRefresh) {
+  // Show skeleton loader only if content container is not yet populated with storefront page container
+  if (!App.isBackgroundRefresh && (!c.children.length || c.innerHTML.includes('skeleton') || !c.querySelector('#storefront-page-container'))) {
     c.innerHTML = `
       <div class="storefront-skeleton-wrapper" style="width:100%;min-height:100vh;background:#fafafa;padding-bottom:60px">
         <!-- Header Nav Skeleton -->
@@ -1115,113 +1116,111 @@ async function renderStorefront(id) {
           <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
           <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
           <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
         </div>
       </div>`;
   }
 
-  // Resilient Store & Storefront Lookup: Supports store ID, storefront ID, and URL slug
-  const targetId = String(id || '').trim();
-  let s = (App.allStores || []).find(st => 
-    String(st.id) === targetId || 
-    String(st.slug) === targetId || 
-    String(st.slug) === targetId.toLowerCase()
-  );
-
-  if (!s) {
-    const storesRes = await apiGet('stores', 'limit=500').catch(() => null);
-    if (storesRes?.data && storesRes.data.length) App.allStores = storesRes.data;
-    s = (App.allStores || []).find(st => 
+  try {
+    // Resilient Store & Storefront Lookup: Supports store ID, storefront ID, and URL slug
+    const targetId = String(id || '').trim();
+    let s = (App.allStores || []).find(st => 
       String(st.id) === targetId || 
       String(st.slug) === targetId || 
       String(st.slug) === targetId.toLowerCase()
     );
-  }
 
-  // Fetch storefront records
-  let sf = null;
-  const sfRes = await apiGet('storefronts', 'limit=500').catch(() => null);
-  const allSF = sfRes?.data || [];
-  if (allSF.length) App.allStorefronts = allSF;
-
-  sf = allSF.find(sfRecord => 
-    String(sfRecord.store_id) === targetId || 
-    String(sfRecord.url_slug) === targetId ||
-    String(sfRecord.id) === targetId
-  ) || null;
-
-  if (!s && sf) {
-    s = (App.allStores || []).find(st => String(st.id) === String(sf.store_id));
-  }
-
-  if (!s) { 
-    c.innerHTML = '<div class="empty-state"><i class="fas fa-store-slash"></i><h3>Storefront not found</h3></div>'; 
-    return; 
-  }
-
-  const realStoreId = s.id;
-  App.currentStoreId = realStoreId;
-
-  // Ensure store products are loaded into App.allProducts before rendering
-  const hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(realStoreId));
-  if (!hasStoreProds) {
-    try {
-      const prodRes = await apiGet('products', `search=${encodeURIComponent(realStoreId)}&limit=100`);
-      if (prodRes && prodRes.data && prodRes.data.length) {
-        const fetched = prodRes.data;
-        const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(realStoreId));
-        App.allProducts = [...other, ...fetched];
-      }
-    } catch(e) {}
-  }
-
-  // Enforce storefront visibility: allow owner, admin, or active/approved stores to view
-  const isOwner = App.currentUser && (String(App.currentUser.id) === String(s.vendor_id) || String(App.currentUser.id) === String(s.user_id));
-  const isAdmin = App.currentUser && App.currentUser.role === 'admin';
-  const storefrontStatus = sf?.status || s.storefront_status || 'none';
-  const isStoreActive = s.status === 'active';
-  const isLive = (storefrontStatus === 'active' || storefrontStatus === 'approved') && isStoreActive;
-
-  if (!isLive && !isOwner && !isAdmin) {
-    c.innerHTML = `
-      <div class="empty-state" style="padding: 60px 20px; text-align: center;">
-        <div style="font-size: 3.5rem; margin-bottom: 16px;">🏪</div>
-        <h3 style="font-size: 1.25rem; font-weight: 800;">Storefront Under Construction</h3>
-        <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 6px; max-width: 450px; margin-left: auto; margin-right: auto; line-height: 1.6;">
-          This storefront is currently not active. Once the vendor completes setup and receives admin approval, this page will go live.
-        </p>
-      </div>`;
-    return;
-  }
-
-  const theme = sf?.theme || s.theme || 'classic';
-  const font_family = sf?.font_family || s.font_family || 'Outfit';
-
-  // Dynamically load Google Font on demand if not already loaded (saves massive bandwidth and load time)
-  if (font_family && font_family !== 'Outfit' && font_family !== 'Inter') {
-    const fontId = `storefront-font-${font_family.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-    if (!document.getElementById(fontId)) {
-      const link = document.createElement('link');
-      link.id = fontId;
-      link.rel = 'stylesheet';
-      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font_family)}:wght@400;700;800&display=swap`;
-      document.head.appendChild(link);
+    if (!s) {
+      const storesRes = await apiGet('stores', 'limit=500').catch(() => null);
+      if (storesRes?.data && storesRes.data.length) App.allStores = storesRes.data;
+      s = (App.allStores || []).find(st => 
+        String(st.id) === targetId || 
+        String(st.slug) === targetId || 
+        String(st.slug) === targetId.toLowerCase()
+      );
     }
-  }
 
-  // Update dynamic PWA manifest for storefront branding
-  if (typeof updatePWAManifest === 'function') {
-    updatePWAManifest(sf?.name || s.name, sf?.logo_url || s.logo_url || 'images/icon-192.png', sf?.primary_color || s.primary_color || '#e85d04');
-  }
+    // Fetch storefront records
+    let sf = null;
+    const sfRes = await apiGet('storefronts', 'limit=500').catch(() => null);
+    const allSF = sfRes?.data || [];
+    if (allSF.length) App.allStorefronts = allSF;
 
-  const storeProds = App.allProducts.filter(p => String(p.store_id) === String(id) && p.status !== 'archived');
+    sf = allSF.find(sfRecord => 
+      String(sfRecord.store_id) === targetId || 
+      String(sfRecord.url_slug) === targetId ||
+      String(sfRecord.id) === targetId
+    ) || null;
 
-  const primaryColor = sf?.primary_color || s.primary_color || '#e85d04';
-  const secondaryColor = sf?.secondary_color || s.secondary_color || '#0d0d0d';
-  const slogan = sf?.slogan || s.slogan || 'Welcome to our store!';
-  let followed = App.savedStores.includes(id);
+    if (!s && sf) {
+      s = (App.allStores || []).find(st => String(st.id) === String(sf.store_id));
+    }
+
+    if (!s) { 
+      c.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center"><i class="fas fa-store-slash" style="font-size:3rem;color:var(--text-light);margin-bottom:12px"></i><h3 style="font-size:1.2rem;font-weight:800">Storefront Not Found</h3><p style="color:var(--text-muted);font-size:.85rem;margin-top:4px">The requested storefront URL could not be located or may have been removed.</p></div>'; 
+      return; 
+    }
+
+    const realStoreId = s.id;
+    App.currentStoreId = realStoreId;
+
+    // Ensure store products are loaded into App.allProducts before rendering
+    const hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId));
+    if (!hasStoreProds) {
+      try {
+        const prodRes = await apiGet('products', `search=${encodeURIComponent(realStoreId)}&limit=100`);
+        if (prodRes && prodRes.data && prodRes.data.length) {
+          const fetched = prodRes.data;
+          const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(realStoreId));
+          App.allProducts = [...other, ...fetched];
+        }
+      } catch(e) {}
+    }
+
+    // Enforce storefront visibility: allow owner, admin, or active/approved stores to view
+    const isOwner = App.currentUser && (String(App.currentUser.id) === String(s.vendor_id) || String(App.currentUser.id) === String(s.user_id));
+    const isAdmin = App.currentUser && App.currentUser.role === 'admin';
+    const storefrontStatus = sf?.status || s.storefront_status || 'none';
+    const isStoreActive = s.status === 'active';
+    const isLive = (storefrontStatus === 'active' || storefrontStatus === 'approved') && isStoreActive;
+
+    if (!isLive && !isOwner && !isAdmin) {
+      c.innerHTML = `
+        <div class="empty-state" style="padding: 60px 20px; text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 16px;">🏪</div>
+          <h3 style="font-size: 1.25rem; font-weight: 800;">Storefront Under Construction</h3>
+          <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 6px; max-width: 450px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+            This storefront is currently not active. Once the vendor completes setup and receives admin approval, this page will go live.
+          </p>
+        </div>`;
+      return;
+    }
+
+    const theme = sf?.theme || s.theme || 'classic';
+    const font_family = sf?.font_family || s.font_family || 'Outfit';
+
+    // Dynamically load Google Font on demand if not already loaded (saves massive bandwidth and load time)
+    if (font_family && font_family !== 'Outfit' && font_family !== 'Inter') {
+      const fontId = `storefront-font-${font_family.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      if (!document.getElementById(fontId)) {
+        const link = document.createElement('link');
+        link.id = fontId;
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font_family)}:wght@400;700;800&display=swap`;
+        document.head.appendChild(link);
+      }
+    }
+
+    // Update dynamic PWA manifest for storefront branding
+    if (typeof updatePWAManifest === 'function') {
+      updatePWAManifest(sf?.name || s.name, sf?.logo_url || s.logo_url || 'images/icon-192.png', sf?.primary_color || s.primary_color || '#e85d04');
+    }
+
+    const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && p.status !== 'archived');
+
+    const primaryColor = sf?.primary_color || s.primary_color || '#e85d04';
+    const secondaryColor = sf?.secondary_color || s.secondary_color || '#0d0d0d';
+    const slogan = sf?.slogan || s.slogan || 'Welcome to our store!';
+    let followed = (App.savedStores || []).includes(realStoreId) || (App.savedStores || []).includes(targetId);
 
   const bannerSrc = sf?.banner_url || s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
   const logoSrc = sf?.logo_url || s.logo_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
@@ -1563,6 +1562,20 @@ async function renderStorefront(id) {
     const totalQty = storeCart.reduce((acc, curr) => acc + curr.qty, 0);
     window.updateStorefrontCartBadge(s.id, totalQty);
   }, 100);
+  } catch (err) {
+    console.error('[renderStorefront] Error:', err);
+    c.innerHTML = `
+      <div class="empty-state" style="padding: 60px 20px; text-align: center;">
+        <i class="fas fa-exclamation-triangle" style="font-size: 2.8rem; color: var(--warning); margin-bottom: 12px;"></i>
+        <h3 style="font-size: 1.15rem; font-weight: 800;">Unable to Load Storefront</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; margin-bottom: 16px;">
+          Something went wrong while connecting to the storefront. Please check your connection and try again.
+        </p>
+        <button class="btn btn-primary btn-sm" onclick="renderStorefront('${id}')">
+          <i class="fas fa-redo"></i> Retry Loading
+        </button>
+      </div>`;
+  }
 }
 
 window.toggleStorefrontSearch = function(storeId) {
@@ -2585,14 +2598,47 @@ function getStoreTabContentEl() {
 
 // ── Storefront Helper Functions ──────────────────────────────────────────
 window.switchStorefrontTab = async function(tabName, storeId) {
-  const s = App.allStores.find(st => String(st.id) === String(storeId));
-  if (!s) return;
+  const targetId = String(storeId || '').trim();
+  let s = (App.allStores || []).find(st => 
+    String(st.id) === targetId || 
+    String(st.slug) === targetId || 
+    String(st.slug) === targetId.toLowerCase()
+  );
 
   // Look up storefront record
-  let sf = null;
-  const sfRes = await apiGet('storefronts', 'limit=200');
-  const allSF = sfRes?.data || [];
-  sf = allSF.find(sfRecord => String(sfRecord.store_id) === String(storeId)) || null;
+  let sf = (App.allStorefronts || []).find(sfRecord => 
+    String(sfRecord.store_id) === targetId || 
+    String(sfRecord.url_slug) === targetId || 
+    String(sfRecord.id) === targetId
+  ) || null;
+
+  if (!sf) {
+    const sfRes = await apiGet('storefronts', 'limit=200').catch(() => null);
+    const allSF = sfRes?.data || [];
+    if (allSF.length) App.allStorefronts = allSF;
+    sf = allSF.find(sfRecord => 
+      String(sfRecord.store_id) === targetId || 
+      String(sfRecord.url_slug) === targetId || 
+      String(sfRecord.id) === targetId
+    ) || null;
+  }
+
+  if (!s && sf) {
+    s = (App.allStores || []).find(st => String(st.id) === String(sf.store_id));
+  }
+
+  if (!s) {
+    const storesRes = await apiGet('stores', 'limit=200').catch(() => null);
+    if (storesRes?.data && storesRes.data.length) App.allStores = storesRes.data;
+    s = (App.allStores || []).find(st => 
+      String(st.id) === targetId || 
+      String(st.slug) === targetId || 
+      (sf && String(st.id) === String(sf.store_id))
+    );
+  }
+
+  if (!s) return;
+  const realStoreId = s.id;
 
   const activePageId = App.currentPage === 'storefront' ? 'page-storefront' : 'page-store-detail';
   const activePage = document.getElementById(activePageId);
@@ -2606,19 +2652,19 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   if (!contentEl) return;
 
   // Ensure store's products are preloaded into App.allProducts
-  let hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(storeId));
+  let hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId));
   if (!hasStoreProds) {
     try {
-      const prodRes = await apiGet('products', `search=${encodeURIComponent(storeId)}&limit=100`);
+      const prodRes = await apiGet('products', `search=${encodeURIComponent(realStoreId)}&limit=100`);
       if (prodRes && prodRes.data && prodRes.data.length) {
         const fetched = prodRes.data;
-        const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(storeId));
+        const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(realStoreId));
         App.allProducts = [...other, ...fetched];
       }
     } catch(e) {}
   }
 
-  const storeProds = (App.allProducts || []).filter(p => String(p.store_id) === String(storeId) && p.status === 'active');
+  const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && p.status === 'active');
 
   const isStorefrontPage = App.currentPage === 'storefront';
   const slogan = isStorefrontPage ? (sf?.slogan || s.slogan || 'Welcome to our store!') : (s.slogan || 'Welcome to our store!');
