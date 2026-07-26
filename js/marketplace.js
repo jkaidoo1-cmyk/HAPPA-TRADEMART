@@ -1245,6 +1245,9 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-price { color: ${primaryColor} !important; font-weight: 800 !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
+      #storefront-page-container .store-search-toolbar { background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 25%, #000) 0%, ${secondaryColor} 100%) !important; border-bottom: 2px solid ${primaryColor} !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 8px !important; font-weight: 700 !important; border: 1.5px solid rgba(255,255,255,0.3) !important; background: rgba(255,255,255,0.15) !important; color: #ffffff !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 8px !important; font-weight: 900 !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
     `;
     headerHTML = `
       <div style="position:relative; text-align:center; padding-bottom:12px; background:#fff; border-bottom:1px solid var(--border)">
@@ -1276,6 +1279,9 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-img { background: rgba(255,255,255,0.4) !important; border-radius: 8px !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
+      #storefront-page-container .store-search-toolbar { background: color-mix(in srgb, ${secondaryColor} 25%, #0f172a) !important; backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important; border-bottom: 1px solid rgba(255,255,255,0.12) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 20px !important; background: rgba(255,255,255,0.12) !important; border: 1px solid rgba(255,255,255,0.2) !important; color: #ffffff !important; backdrop-filter: blur(8px) !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 20px !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 40%, transparent) !important; }
     `;
     headerHTML = `
       <div style="position:relative; overflow:hidden; min-height:190px; display:flex; align-items:center; justify-content:center; padding:25px 10px;">
@@ -1309,6 +1315,9 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-img { background: #ffffff !important; border-radius: 12px 12px 0 0 !important; margin: 4px; box-shadow: none !important; border-bottom: 1px solid rgba(0,0,0,0.03) !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
+      #storefront-page-container .store-search-toolbar { background: var(--neu-bg) !important; border-bottom: 1px solid rgba(0,0,0,0.05) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 14px !important; background: var(--neu-bg) !important; border: none !important; color: var(--text) !important; box-shadow: inset 2px 2px 5px rgba(165,175,190,0.28), inset -2px -2px 5px #ffffff !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 14px !important; font-weight: 800 !important; background: var(--neu-bg) !important; color: ${primaryColor} !important; border: 1px solid rgba(255,255,255,0.9) !important; box-shadow: 2px 2px 5px rgba(165,175,190,0.25), -2px -2px 5px #ffffff !important; }
     `;
     headerHTML = `
       <div style="background:color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); padding:12px; display:flex; flex-direction:column; align-items:center; position:relative; border-bottom: none">
@@ -1339,6 +1348,9 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-price { color: ${primaryColor} !important; font-weight: 800 !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
       #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
+      #storefront-page-container .store-search-toolbar { background: linear-gradient(135deg, color-mix(in srgb, ${primaryColor} 18%, #0f172a) 0%, color-mix(in srgb, ${secondaryColor} 28%, #1e293b) 100%) !important; border-bottom: 1px solid rgba(255,255,255,0.1) !important; }
+      #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 25px !important; background: rgba(255,255,255,0.14) !important; border: 1px solid rgba(255,255,255,0.22) !important; color: #ffffff !important; }
+      #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 25px !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent) !important; }
     `;
     headerHTML = `
       <div style="position:relative;background:#f8f9fa">
@@ -1379,6 +1391,7 @@ async function renderStorefront(id) {
       #storefront-page-container .store-name-title { color: ${primaryColor} !important; }
       #storefront-page-container .store-slogan-text { color: ${primaryColor} !important; }
       #storefront-page-container .store-description-text { color: ${primaryColor} !important; }
+      #store-search-input::placeholder { font-family: inherit !important; color: inherit !important; opacity: 0.7 !important; }
     </style>
   `;
 

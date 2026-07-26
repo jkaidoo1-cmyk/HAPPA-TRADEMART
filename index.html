@@ -10,6 +10,18 @@
   <meta name="author" content="HAPPA TRADEMART">
   <title>HAPPA TRADEMART</title>
   <script>
+    // ── Instant Storefront Route Detection (runs before body/CSS parsing to eliminate main site flash) ──
+    (function() {
+      var h = window.location.hash || '';
+      var s = window.location.search || '';
+      var p = window.location.pathname || '';
+      if (h.indexOf('storefront') !== -1 || h.indexOf('store-admin') !== -1 || h.indexOf('store/') !== -1 || 
+          s.indexOf('storefront') !== -1 || s.indexOf('store=') !== -1 || 
+          p.indexOf('/storefront') !== -1 || p.indexOf('/store-admin') !== -1) {
+        document.documentElement.classList.add('is-storefront-root');
+      }
+    })();
+
     // ── One-time self-heal: clear any stale service-worker caches ──
     // Fixes the "blank unstyled page" problem when the old SW serves a
     // cached HTML that no longer references the current assets.
@@ -47,6 +59,22 @@
   <!-- ── iOS Splash / Safe-area ── -->
   <meta name="format-detection" content="telephone=no">
   <style>
+    /* Instant Zero-Latency Storefront Display Rules */
+    html.is-storefront-root body #top-nav,
+    html.is-storefront-root body #bottom-nav,
+    html.is-storefront-root body #page-home,
+    html.is-storefront-root body #pwa-splash-screen,
+    html.is-storefront-root body .flash-sale-banner,
+    html.is-storefront-root body .hero-banner {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    html.is-storefront-root body #page-storefront {
+      display: block !important;
+    }
+
     /* Safe-area insets for notched devices */
     :root {
       --sat: env(safe-area-inset-top);
@@ -776,12 +804,24 @@
     window.addEventListener('beforeinstallprompt', e => {
       e.preventDefault();
       _pwaInstallPrompt = e;
-      // Show install banner after 3s if user is on the home page
-      setTimeout(() => {
-        if (!localStorage.getItem('pwa-dismissed')) {
-          _showPWABanner();
-        }
-      }, 3000);
+
+      const currentHash = window.location.hash || '';
+      const currentSearch = window.location.search || '';
+      const isStorefrontView = document.body.classList.contains('is-storefront-view') || 
+                               currentHash.includes('storefront') || 
+                               currentHash.includes('store-admin') || 
+                               currentHash.includes('store/') || 
+                               currentSearch.includes('storefront') || 
+                               currentSearch.includes('store=');
+
+      // Do NOT suggest PWA installation on standalone storefront pages
+      if (!isStorefrontView && !localStorage.getItem('pwa-dismissed')) {
+        setTimeout(() => {
+          if (!document.body.classList.contains('is-storefront-view')) {
+            _showPWABanner();
+          }
+        }, 3000);
+      }
     });
 
     window.addEventListener('appinstalled', () => {
@@ -793,6 +833,21 @@
     });
 
     function _showPWABanner() {
+      const currentHash = window.location.hash || '';
+      const currentSearch = window.location.search || '';
+      const isStorefrontView = document.body.classList.contains('is-storefront-view') || 
+                               currentHash.includes('storefront') || 
+                               currentHash.includes('store-admin') || 
+                               currentHash.includes('store/') || 
+                               currentSearch.includes('storefront') || 
+                               currentSearch.includes('store=');
+
+      if (isStorefrontView) {
+        const existing = document.getElementById('pwa-install-banner');
+        if (existing) existing.remove();
+        return; // Suppress PWA install banner completely on storefront views
+      }
+
       if (document.getElementById('pwa-install-banner')) return;
       const banner = document.createElement('div');
       banner.id = 'pwa-install-banner';

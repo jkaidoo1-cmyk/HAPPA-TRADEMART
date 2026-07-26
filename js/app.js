@@ -478,6 +478,25 @@ function injectSkeletonLoaders(pageId) {
 }
 
 function updatePWAManifest(name, logoUrl, themeColor) {
+  const currentHash = window.location.hash || '';
+  const currentSearch = window.location.search || '';
+  const isStorefrontView = document.body.classList.contains('is-storefront-view') || 
+                           currentHash.includes('storefront') || 
+                           currentHash.includes('store-admin') || 
+                           currentHash.includes('store/') || 
+                           currentSearch.includes('storefront') || 
+                           currentSearch.includes('store=');
+
+  if (isStorefrontView) {
+    // Completely suppress PWA manifest and remove install prompts on storefront views
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) manifestLink.remove();
+    const pwaBanner = document.getElementById('pwa-install-banner');
+    if (pwaBanner) pwaBanner.remove();
+    if (name) document.title = name;
+    return;
+  }
+
   let link = document.querySelector('link[rel="manifest"]');
   if (!link) {
     link = document.createElement('link');
