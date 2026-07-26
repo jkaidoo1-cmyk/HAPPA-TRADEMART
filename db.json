@@ -487,6 +487,18 @@
       "updated_at": "2026-07-26T23:51:21.010Z",
       "theme": "modern",
       "slogan": "Best Quality Products Guaranteed"
+    },
+    {
+      "id": "store-u-test-vendor-1785110224948",
+      "name": "Auto Approve Store",
+      "slug": "auto-approve-store-1785110224949",
+      "vendor_id": "u-test-vendor-1785110224948",
+      "status": "active",
+      "storefront_status": "rejected",
+      "created_at": "2026-07-26T23:57:04.996Z",
+      "updated_at": "2026-07-26T23:57:12.179Z",
+      "theme": "modern",
+      "slogan": "Best Quality Products Guaranteed"
     }
   ],
   "storefronts": [],

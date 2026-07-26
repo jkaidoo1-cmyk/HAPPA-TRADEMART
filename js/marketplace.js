@@ -1221,8 +1221,9 @@ async function renderStorefront(id) {
     const secondaryColor = sf?.secondary_color || s.secondary_color || '#0d0d0d';
     const slogan = sf?.slogan || s.slogan || 'Welcome to our store!';
     let followed = (App.savedStores || []).includes(realStoreId) || (App.savedStores || []).includes(targetId);
+    const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
 
-  const bannerSrc = sf?.banner_url || s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+    const bannerSrc = sf?.banner_url || s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
   const logoSrc = sf?.logo_url || s.logo_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
   const storeName = sf?.name || s.name;
 
