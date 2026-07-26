@@ -499,10 +499,20 @@ async function doLogin(e) {
   // Find user in DB
   const res = await apiGet('users', `search=${encodeURIComponent(email)}&limit=10`);
   const users = res ? res.data || [] : [];
-  const user = users.find(u =>
+  let user = users.find(u =>
     (u.email?.toLowerCase() === email || u.phone === email) &&
     u.password_hash === pass && u.status !== 'deleted'
   );
+
+  if (!user) {
+    // Fallback: search wide users list if exact search query missed phone/email formatting
+    const wideRes = await apiGet('users', 'limit=500');
+    const wideUsers = wideRes ? wideRes.data || [] : [];
+    user = wideUsers.find(u =>
+      (u.email?.toLowerCase() === email || u.phone === email) &&
+      u.password_hash === pass && u.status !== 'deleted'
+    );
+  }
 
   if (!user) {
     showToast('Invalid email or password. Please try again.', 'error');
@@ -650,19 +660,13 @@ async function doRegister(e) {
 
 
   // Check email uniqueness
-
-  const check = await apiGet('users', `search=${encodeURIComponent(email)}&limit=10`);
-
-  const existing = (check?.data || []).find(u => u.email?.toLowerCase() === email);
+  const check = await apiGet('users', `limit=500`);
+  const existing = (check?.data || []).find(u => u.email?.toLowerCase() === email && u.status !== 'deleted');
 
   if (existing) {
-
     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = `<i class="fas fa-user-plus"></i> Create ${authRole === 'vendor' ? 'Vendor' : authRole === 'rendor' ? 'Rendor' : 'Buyer'} Account`; }
-
     showToast('Email already registered. Please sign in.', 'error');
-
     return;
-
   }
 
 
@@ -960,20 +964,24 @@ async function verifyOTP(userId, expectedOtp) {
 
 
 
-  // Vendors & rendors in pending_approval ΓåÆ show waiting screen instead of dashboard
-
+  // Vendors & rendors in pending_approval -> show waiting screen instead of dashboard
   if ((App.currentUser?.role === 'vendor' || App.currentUser?.role === 'rendor') &&
-
        App.currentUser?.status === 'pending_approval') {
-
     showPendingScreen();
-
     return;
-
   }
 
   showPage('dashboard');
+}
 
+async function skipOTP(userId) {
+  closeModalForce();
+  if ((App.currentUser?.role === 'vendor' || App.currentUser?.role === 'rendor') &&
+       App.currentUser?.status === 'pending_approval') {
+    showPendingScreen();
+    return;
+  }
+  showPage('dashboard');
 }
 
 

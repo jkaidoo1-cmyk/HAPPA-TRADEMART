@@ -864,7 +864,15 @@ async function renderVendorDashboard() {
           
         </div>
       ` : ''}
-    ` : `<div class="empty-state"><i class="fas fa-store-slash"></i><h3>No store assigned</h3></div>`}
+    ` : `
+      <div style="text-align:center;padding:50px 20px;background:#fff;border-radius:16px;border:1px solid var(--border);margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,0.04)">
+        <div style="font-size:3.5rem;margin-bottom:16px;">🏪</div>
+        <h2 style="font-weight:800;font-size:1.35rem;margin-bottom:8px">No Store Found</h2>
+        <p style="font-size:.875rem;color:var(--text-light);line-height:1.7;max-width:520px;margin:0 auto">
+          Your vendor account does not have an active store assigned yet. Once your store registration is approved or created, you can build your standalone storefront here.
+        </p>
+      </div>
+    `}
   </div>
 </div>`;
 
@@ -3425,8 +3433,11 @@ window.handleImageUpload = function(type) {
 };
 
 window.createStorefrontDraft = async function(storeId) {
-  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || App.myStore;
-  if (!store) { showToast('Store not found', 'warning'); return; }
+  const store = (App.allStores || []).find(s => s && String(s.id) === String(storeId)) || App.myStore;
+  if (!store || !store.id) {
+    showToast('No active store found for your account. Please ensure your vendor store is active.', 'warning');
+    return;
+  }
 
   showToast('Initializing storefront draft...', 'info');
   const draftSF = {
@@ -3458,8 +3469,11 @@ window.createStorefrontDraft = async function(storeId) {
 };
 
 window.saveVendorStoreSettings = async function(storeId) {
-  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || App.myStore;
-  if (!store) { showToast('Store not found', 'warning'); return; }
+  const store = (App.allStores || []).find(s => s && String(s.id) === String(storeId)) || App.myStore;
+  if (!store || !store.id) {
+    showToast('No active store found for your account. Please ensure your vendor store is active.', 'warning');
+    return;
+  }
 
   const sfName = (document.getElementById('store-name')?.value || document.getElementById('store-display-name')?.value || store.name || '').trim();
   const sfSlug = (document.getElementById('store-slug')?.value || store.slug || '').trim();
@@ -3530,8 +3544,11 @@ window.saveVendorStoreSettings = async function(storeId) {
 };
 
 window.submitStorefrontRequest = async function(storeId) {
-  const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || App.myStore;
-  if (!store) { showToast('Store not found', 'warning'); return; }
+  const store = (App.allStores || []).find(s => s && String(s.id) === String(storeId)) || App.myStore;
+  if (!store || !store.id) {
+    showToast('No active store found for your account. Please ensure your vendor store is active.', 'warning');
+    return;
+  }
 
   // Save latest form settings before submitting
   await window.saveVendorStoreSettings(storeId);

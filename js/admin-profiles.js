@@ -181,10 +181,16 @@ async function _apDeleteUser(userId) {
   }
 
   showToast('Deleting user account...', 'info');
-  const res = await apiDelete('users', userId).catch(err => {
+  await apiDelete('users', userId).catch(err => {
     console.error('Delete user error:', err);
     return null;
   });
+
+  // Purge user from local memory state
+  if (App.allUsers) {
+    App.allUsers = App.allUsers.filter(u => String(u.id) !== String(userId));
+    try { localStorage.setItem('happa_all_users', JSON.stringify(App.allUsers)); } catch(e){}
+  }
 
   // Signal cross-tab logout to instantly revoke deleted session in any open tab
   try { localStorage.setItem('happa_logout_user_id', userId); } catch(e){}
