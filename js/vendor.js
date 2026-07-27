@@ -1455,8 +1455,8 @@ async function submitAddProduct(e, storeId, vendorId) {
   const store    = App.allStores.find(s => s.id === storeId) || {};
   const tags     = tagsStr ? tagsStr.split(',').map(t=>t.trim()).filter(Boolean) : [];
 
-  if (!name || isNaN(price) || isNaN(stock)) {
-    showToast('Fill in all required fields with valid numbers', 'warning');
+  if (isNaN(price) || isNaN(stock)) {
+    showToast('Fill in price and stock with valid numbers', 'warning');
     resetBtn();
     return;
   }
@@ -2242,6 +2242,7 @@ function switchTab(el, tabId) {
     const matchingBtn = container.querySelector(`.tab-btn[onclick*="${tabId}"]`);
     if (matchingBtn) matchingBtn.classList.add('active');
   }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 
@@ -2332,7 +2333,7 @@ ${_bapHeader('Bulk Add Products', 'up to 10 items at once')}
   <div id="bap-thumb-strip" class="bap-thumb-strip"></div>
 
   <div id="bap-step1-hint" style="font-size:.78rem;color:var(--text-muted);text-align:center;padding:8px 0;display:none">
-    <i class="fas fa-info-circle"></i> Tap a thumbnail ├ù to remove it before continuing
+    <i class="fas fa-info-circle"></i> Tap a thumbnail to remove it before continuing
   </div>
 
 </div>
@@ -2737,13 +2738,13 @@ async function _bapSubmitAll() {
     const name  = (document.getElementById('bap-name-' + i)?.value || '').trim();
     const price = parseFloat(document.getElementById('bap-price-' + i)?.value);
     const stock = document.getElementById('bap-stock-' + i)?.value;
-    if (!name || isNaN(price) || price <= 0 || stock === '' || stock === undefined) {
+    if (isNaN(price) || price <= 0 || stock === '' || stock === undefined) {
       firstError = i;
       break;
     }
   }
   if (firstError !== null) {
-    showToast(`Item #${firstError + 1} is missing required fields (name, price, stock).`, 'warning');
+    showToast(`Item #${firstError + 1} is missing required fields (price, stock).`, 'warning');
     document.getElementById('bap-card-' + firstError)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }

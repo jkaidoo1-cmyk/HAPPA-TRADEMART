@@ -1172,33 +1172,31 @@ async function adminOpenVendorProfile(userId) {
         <div style="margin-bottom:8px;font-size:.8rem;font-weight:700">Ghana Card / Passport:</div>
         ${u.id_image ? `
           <div style="margin-bottom:12px">
-            <img src="${u.id_image}" style="max-height:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:contain" onclick="window.showZoomedImage('${u.id_image}', 'Ghana Card / ID Document')">
+            <img src="${u.id_image}" style="max-height:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:contain" onclick="window.showZoomedImage(this.src, 'Ghana Card / ID Document')">
           </div>
         ` : '<div style="color:var(--text-light);font-size:.78rem;margin-bottom:12px"><i class="fas fa-times-circle" style="color:var(--danger)"></i> ID card missing</div>'}
         
         <div style="margin-bottom:8px;font-size:.8rem;font-weight:700">Proof of Previous Sales (3 images):</div>
         <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-          ${u.proof_sales_1 ? `<img src="${u.proof_sales_1}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage('${u.proof_sales_1}', 'Sales Proof 1')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 1 missing</div>'}
-          ${u.proof_sales_2 ? `<img src="${u.proof_sales_2}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage('${u.proof_sales_2}', 'Sales Proof 2')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 2 missing</div>'}
-          ${u.proof_sales_3 ? `<img src="${u.proof_sales_3}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage('${u.proof_sales_3}', 'Sales Proof 3')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 3 missing</div>'}
+          ${u.proof_sales_1 ? `<img src="${u.proof_sales_1}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage(this.src, 'Sales Proof 1')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 1 missing</div>'}
+          ${u.proof_sales_2 ? `<img src="${u.proof_sales_2}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage(this.src, 'Sales Proof 2')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 2 missing</div>'}
+          ${u.proof_sales_3 ? `<img src="${u.proof_sales_3}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.showZoomedImage(this.src, 'Sales Proof 3')">` : '<div style="font-size:.75rem;color:var(--text-light)">❌ Proof 3 missing</div>'}
         </div>
         
         <div style="margin-bottom:8px;font-size:.8rem;font-weight:700">Proof of Link Sharing (Status screenshot):</div>
         ${u.proof_share ? `
           <div style="margin-bottom:12px">
-            <img src="${u.proof_share}" style="max-height:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:contain" onclick="window.showZoomedImage('${u.proof_share}', 'Link Sharing Proof')">
+            <img src="${u.proof_share}" style="max-height:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:contain" onclick="window.showZoomedImage(this.src, 'Link Sharing Proof')">
           </div>
         ` : '<div style="color:var(--text-light);font-size:.78rem;margin-bottom:12px"><i class="fas fa-times-circle" style="color:var(--danger)"></i> Sharing proof missing</div>'}
         
-        ${(u.id_image && u.proof_sales_1 && u.proof_sales_2 && u.proof_sales_3 && u.proof_share) ? `
-          <div style="display:flex;gap:8px;margin-top:12px">
-            ${!u.id_verified ? `
-              <button class="btn btn-success btn-sm" style="flex:1" onclick="_apGrantIdVerify('${u.id}')"><i class="fas fa-check-circle"></i> Approve & Verify ID</button>
-            ` : `
-              <button class="btn btn-ghost btn-sm" style="color:var(--danger);flex:1" onclick="_apRevokeIdVerify('${u.id}')"><i class="fas fa-times-circle"></i> Revoke Verification</button>
-            `}
-          </div>
-        ` : ''}
+        <div style="display:flex;gap:8px;margin-top:12px">
+          ${!u.id_verified ? `
+            <button class="btn btn-success btn-sm" style="flex:1" onclick="_apGrantIdVerify('${u.id}')"><i class="fas fa-check-circle"></i> Approve & Verify ID</button>
+          ` : `
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);flex:1" onclick="_apRevokeIdVerify('${u.id}')"><i class="fas fa-times-circle"></i> Revoke Verification</button>
+          `}
+        </div>
       </div>
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Edit Account Info</div>

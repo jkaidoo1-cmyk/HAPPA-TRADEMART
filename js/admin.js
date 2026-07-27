@@ -45,6 +45,7 @@ async function renderAdminDashboard() {
   const rejectionRate  = allPkgs.length ? ((rejectedPkgs.length / allPkgs.length) * 100).toFixed(1) : '0.0';
 
   const pendingAll     = pendingVendors.length + pendingRendors.length;
+  const pendingIdVendors = vendors.filter(u => !u.id_verified && (u.id_image || u.proof_sales_1));
   
   // Fetch storefronts separately
   const storefrontsRes = await apiGet('storefronts', 'limit=200');
@@ -202,6 +203,13 @@ async function renderAdminDashboard() {
       <p style="color:#78350f"><strong>${pendingVendors.length} vendor(s)</strong> awaiting approval.
         <a href="#" onclick="switchTab(null,'admin-vendors');refreshAdminVendorsFull()"
            style="color:#b45309;font-weight:700">Approve now →</a></p>
+    </div>` : ''}
+    ${pendingIdVendors.length ? `
+    <div class="verify-banner" style="margin-top:8px;background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c">
+      <i class="fas fa-id-card" style="color:#ea580c"></i>
+      <p style="color:#9a3412"><strong>${pendingIdVendors.length} vendor(s)</strong> submitted verification documents.
+        <a href="#" onclick="showAdminVerificationModal('${pendingIdVendors[0].id}')"
+           style="color:#ea580c;font-weight:700">Review &amp; Approve Docs →</a></p>
     </div>` : ''}
     ${pendingRendors.length ? `
     <div class="verify-banner" style="margin-top:8px;background:linear-gradient(90deg,#ede9fe,#ddd6fe);border-color:#a78bfa">
@@ -1850,11 +1858,16 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
           <span style="font-size:.7rem;padding:2px 7px;border-radius:10px;background:${statusColor}22;color:${statusColor};font-weight:700">${u.status || 'active'}</span>
           ${u.location ? `<span style="font-size:.7rem;color:var(--text-muted)">${u.location}</span>` : ''}
           ${u.is_verified  ? '<span class="status-badge status-paid" style="font-size:.65rem">Phone ✓</span>'  : ''}
-          ${u.id_verified  ? '<span class="status-badge status-paid" style="font-size:.65rem">ID ✓</span>'    : ''}
+          ${u.id_verified  ? '<span class="status-badge status-paid" style="font-size:.65rem">ID ✓</span>'    : ((u.id_image || u.proof_sales_1) ? '<span class="status-badge status-pending" style="font-size:.65rem;background:#fff7ed;color:#ea580c;border:1px solid #fdba74">🪪 ID Submitted</span>' : '')}
           ${u.wallet_balance ? `<span style="font-size:.7rem;color:var(--success)">GHS ${(u.wallet_balance||0).toFixed(0)}</span>` : ''}
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+        ${(u.id_image || u.proof_sales_1) ? `
+          <button class="btn btn-sm" style="background:#ea580c;color:#fff;border:none" onclick="event.stopPropagation();showAdminVerificationModal('${u.id}')">
+            <i class="fas fa-id-card"></i> Review ID Docs
+          </button>
+        ` : ''}
         <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();showSendNotificationModal('${u.id}','${escHtml(u.name).replace(/'/g,"\\'")}')"><i class="fas fa-bell"></i> Notify</button>
         <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();adminOpenVendorProfile('${u.id}')"><i class="fas fa-user"></i> Profile</button>
         <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();adjustUserWallet('${u.id}','${escHtml(u.name).replace(/'/g,"\\'")}',${ u.wallet_balance||0})"><i class="fas fa-wallet"></i> Wallet</button>
