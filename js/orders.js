@@ -329,14 +329,22 @@ async function updateVendorStatus(packageId, newStatus) {
   const btn = (typeof event !== 'undefined') ? event?.target?.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
-  const pkg = await apiFetch('packages/' + packageId);
+  let pkg = await apiFetch('packages/' + packageId);
+  if (pkg && pkg.data && Array.isArray(pkg.data)) pkg = pkg.data[0];
   if (!pkg) { showToast('Package not found', 'error'); if (btn) btn.disabled = false; return; }
 
-  await apiPatch('packages', packageId, { vendor_status: newStatus });
+  const pCode = pkg.package_code || pkg.code || pkg.id;
+
+  const patched = await apiPatch('packages', packageId, { vendor_status: newStatus });
+  if (!patched) {
+    showToast('Failed to update order status. Please try again.', 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Action'; }
+    return;
+  }
 
   const msgs = {
-    received:  `Your order ${pkg.package_code} has been received by the vendor and is being prepared.`,
-    processed: `Your order ${pkg.package_code} is packed and ready for pickup.`
+    received:  `Your order ${pCode} has been received by the vendor and is being prepared.`,
+    processed: `Your order ${pCode} is packed and ready for pickup.`
   };
   if (msgs[newStatus]) addNotification(pkg.buyer_id, 'order',
     newStatus === 'received' ? '✅ Order Received' : '📦 Order Packed', msgs[newStatus]);
@@ -379,7 +387,8 @@ async function confirmRejectOrder(packageId) {
   const reason = (document.getElementById('reject-reason')?.value || '').trim();
   if (!reason) { showToast('Please state a reason for rejection', 'warning'); return; }
 
-  const pkg = await apiFetch('packages/' + packageId);
+  let pkg = await apiFetch('packages/' + packageId);
+  if (pkg && pkg.data && Array.isArray(pkg.data)) pkg = pkg.data[0];
   if (!pkg) { showToast('Package not found', 'error'); return; }
 
   const vs = pkg.vendor_status || 'pending';
@@ -388,15 +397,24 @@ async function confirmRejectOrder(packageId) {
     closeModalForce(); return;
   }
 
-  await apiPatch('packages', packageId, {
+  const pCode = pkg.package_code || pkg.code || pkg.id;
+
+  const patched = await apiPatch('packages', packageId, {
     vendor_status:   'rejected',
     rejected_reason: reason,
     status:          'cancelled'
   });
 
+  if (!patched) {
+    showToast('Failed to reject order. Please try again.', 'error');
+    return;
+  }
+
   // Full refund to buyer
   const refundAmt = (parseFloat(pkg.vendor_amount)||0) + (parseFloat(pkg.delivery_fee)||0);
-  const buyer = await apiFetch('users/' + pkg.buyer_id);
+  let buyer = await apiFetch('users/' + pkg.buyer_id);
+  if (buyer && buyer.data && Array.isArray(buyer.data)) buyer = buyer.data[0];
+
   if (buyer) {
     const newBal = (parseFloat(buyer.wallet_balance)||0) + refundAmt;
     await apiPatch('users', pkg.buyer_id, { wallet_balance: newBal });
@@ -406,10 +424,10 @@ async function confirmRejectOrder(packageId) {
       amount:         refundAmt,
       payment_method: 'wallet',
       status:         'completed',
-      note:           `Refund for rejected order ${pkg.package_code}: ${reason}`
+      note:           `Refund for rejected order ${pCode}: ${reason}`
     });
     addNotification(pkg.buyer_id, 'order', '💰 Order Refunded',
-      `Your order ${pkg.package_code} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`);
+      `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`);
   }
 
   closeModalForce();
@@ -772,7 +790,7 @@ async function refreshVendorOrders(vendorId) {
   listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Refreshing…</div>';
 
   const res  = await apiGet('packages', 'limit=200');
-  const pkgs = (res?.data || []).filter(p => p.vendor_id === vendorId);
+  const pkgs = (res?.data || []).filter(p => String(p.vendor_id) === String(vendorId));
 
   listEl.innerHTML = pkgs.length
     ? pkgs.map(pkg => packageDetailHTML(pkg)).join('')

@@ -168,7 +168,7 @@ function serializeRecord(record) {
 }
 
 const TABLE_COLUMNS = {
-  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'id_image', 'proof_sales_1', 'proof_sales_2', 'proof_sales_3', 'proof_share', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual'],
+  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'avatar', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'id_image', 'proof_sales_1', 'proof_sales_2', 'proof_sales_3', 'proof_share', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual'],
   notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
   stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'created_at', 'updated_at', 'extra'],
   orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
@@ -176,19 +176,25 @@ const TABLE_COLUMNS = {
   services: ['id', 'rendor_id', 'title', 'category', 'description', 'price', 'image_url', 'status', 'created_at', 'updated_at', 'extra'],
   service_orders: ['id', 'service_id', 'rendor_id', 'buyer_id', 'title', 'amount', 'status', 'notes', 'created_at', 'updated_at', 'extra'],
   settings: ['id', 'key', 'value', 'label', 'type', 'updated_at'],
-  reviews: ['id', 'product_id', 'store_id', 'buyer_id', 'rating', 'comment', 'created_at'],
-  products: ['id', 'store_id', 'vendor_id', 'name', 'category', 'price', 'original_price', 'stock_qty', 'images', 'is_flash_sale', 'flash_pct', 'status', 'is_available', 'description', 'location', 'avg_rating', 'review_count', 'total_sold', 'created_at', 'updated_at', 'extra'],
-  packages: ['id', 'code', 'buyer_id', 'vendor_id', 'store_id', 'items', 'status', 'total', 'delivery_fee', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'notes', 'created_at', 'updated_at', 'extra'],
+  reviews: ['id', 'product_id', 'store_id', 'buyer_id', 'customer_id', 'customer_name', 'target_id', 'target_type', 'rating', 'comment', 'approved', 'created_at', 'extra'],
+  products: ['id', 'store_id', 'vendor_id', 'name', 'category', 'price', 'original_price', 'stock_qty', 'images', 'is_flash_sale', 'flash_pct', 'status', 'is_available', 'description', 'location', 'avg_rating', 'review_count', 'total_sold', 'sold_count', 'weight_kg', 'tags', 'commission_pct', 'allow_buyer_note', 'buyer_note_prompt', 'created_at', 'updated_at', 'extra'],
+  packages: ['id', 'code', 'package_code', 'order_id', 'buyer_id', 'vendor_id', 'store_id', 'items', 'status', 'vendor_status', 'admin_status', 'buyer_confirmed', 'has_review', 'rejected_reason', 'vendor_amount', 'commission_amount', 'gross_amount', 'delivery_fee', 'total', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'origin_location', 'dest_location', 'is_intercity', 'tracking_link', 'tracking_number', 'delivery_partner', 'pickup_date', 'delivered_date', 'balance_released', 'notes', 'created_at', 'updated_at', 'extra'],
   delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
-  referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'status', 'created_at'],
-  wallet_transactions: ['id', 'user_id', 'type', 'amount', 'description', 'reference', 'created_at', 'extra'],
-  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'created_at', 'updated_at']
+  referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'reward_amount', 'reward_pct', 'order_id', 'status', 'created_at', 'updated_at', 'extra'],
+  wallet_transactions: ['id', 'user_id', 'type', 'amount', 'balance_before', 'balance_after', 'description', 'reference', 'payment_method', 'status', 'note', 'created_at', 'extra'],
+  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'created_at', 'updated_at', 'extra']
 };
 
 function prepareRecordForDb(table, record) {
   const out = { ...record };
 
   // Inverse aliasing: map frontend names back to DB column names if DB column is missing
+  if ('package_code' in out && !('code' in out)) {
+    out.code = out.package_code;
+  }
+  if ('code' in out && !('package_code' in out)) {
+    out.package_code = out.code;
+  }
   if ('about_us' in out && !('description' in out)) {
     out.description = out.about_us;
   }
