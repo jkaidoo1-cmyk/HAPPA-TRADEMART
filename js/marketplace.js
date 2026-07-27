@@ -973,18 +973,11 @@ async function renderStoreDetail(id) {
             <h1 style="font-size:1.1rem;font-weight:800;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text)">
               ${escHtml(storeName)} ${verifiedBadge}
             </h1>
-            <p style="font-size:.78rem;margin:2px 0 0 0;font-style:italic;color:var(--text-light)">${escHtml(slogan)}</p>
             <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
               ${renderStars(s.avg_rating || 0)}
               <span style="font-size:.75rem;color:var(--text-muted)">${(s.avg_rating || 0).toFixed(1)} (${s.review_count || 0})</span>
               <span style="font-size:.75rem;color:var(--text-muted)"><i class="fas fa-map-marker-alt"></i> ${s.location}</span>
             </div>
-          </div>
-          <div style="padding-top:25px;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
-            <button class="btn btn-sm ${followed ? 'btn-outline' : 'store-theme-btn'}" onclick="toggleFollowStore('${s.id}')" id="follow-store-btn">
-              <i class="fas ${followed ? 'fa-check' : 'fa-plus'}"></i> ${followed ? 'Following' : 'Follow'}
-            </button>
-            <span style="font-size:.65rem;color:var(--text-muted);font-weight:600" id="followers-count">${s.followers || 0} followers</span>
           </div>
         </div>
       </div>
@@ -1257,7 +1250,7 @@ async function renderStorefront(id) {
           <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
         </div>
         <h4 class="store-name-title" style="font-size:1.2rem; font-weight:900; margin:0; text-transform:uppercase">${storeName} ${verifiedBadge}</h4>
-        <div style="font-size:0.7rem; color:var(--text-light); font-weight:700; margin-top:2px"><i class="fas fa-star" style="color:#fbbf24"></i> ${(s.avg_rating || 0).toFixed(1)} (${s.review_count || 0} reviews)</div>
+        <div class="store-location-tag" style="font-size:0.7rem; font-weight:700; margin-top:2px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location}</div>
       </div>
       <div style="background:${secondaryColor}; padding:10px 12px; text-align:center">
         <h5 class="store-slogan-text" style="font-size:0.8rem; font-weight:800; margin:0; text-transform:uppercase">${slogan}</h5>
@@ -1295,6 +1288,7 @@ async function renderStorefront(id) {
           </div>
           <h4 class="store-name-title" style="font-family:'Outfit', 'Inter', sans-serif; font-size:1.15rem; font-weight:800; margin:0; letter-spacing:0.5px">${storeName} ${verifiedBadge}</h4>
           <p class="store-slogan-text" style="font-size:0.75rem; margin:4px 0 0 0; font-weight:500; font-style:italic;">${slogan}</p>
+          <div class="store-location-tag" style="font-size:0.7rem; font-weight:700; margin-top:4px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location}</div>
         </div>
       </div>
     `;
@@ -1333,6 +1327,7 @@ async function renderStorefront(id) {
         <div style="text-align:center; margin-top:6px">
           <h4 class="store-name-title" style="font-size:1.15rem; font-weight:800; margin:0">${storeName} ${verifiedBadge}</h4>
           <p class="store-slogan-text" style="font-size:0.75rem; margin:4px 0 0 0; font-style: italic">${slogan}</p>
+          <div class="store-location-tag" style="font-size:0.75rem; font-weight:700; margin-top:4px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location}</div>
         </div>
       </div>
     `;
@@ -1366,16 +1361,8 @@ async function renderStorefront(id) {
               </h1>
               <p class="store-slogan-text" style="font-size:.85rem;margin:4px 0 0 0;font-style:italic">${escHtml(slogan)}</p>
               <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
-                ${renderStars(s.avg_rating || 0)}
-                <span style="font-size:.8rem;color:var(--text-muted)">${(s.avg_rating || 0).toFixed(1)} (${s.review_count || 0})</span>
-                <span class="store-location-tag" style="font-size:.78rem"><i class="fas fa-map-marker-alt"></i> ${s.location}</span>
+                <span class="store-location-tag" style="font-size:.78rem; font-weight:700; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location}</span>
               </div>
-            </div>
-            <div style="padding-top:35px;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-              <button class="btn btn-sm ${followed ? 'btn-outline' : 'store-theme-btn'}" onclick="toggleFollowStore('${s.id}')" id="follow-store-btn">
-                <i class="fas ${followed ? 'fa-check' : 'fa-plus'}"></i> ${followed ? 'Following' : 'Follow Store'}
-              </button>
-              <span style="font-size:.7rem;color:var(--text-muted);font-weight:600" id="followers-count">${s.followers || 0} followers</span>
             </div>
           </div>
         </div>
@@ -1389,6 +1376,8 @@ async function renderStorefront(id) {
       #storefront-page-container .store-name-title { color: ${primaryColor} !important; }
       #storefront-page-container .store-slogan-text { color: ${primaryColor} !important; }
       #storefront-page-container .store-description-text { color: ${primaryColor} !important; }
+      #storefront-page-container .store-location-tag { color: ${primaryColor} !important; font-weight: 700 !important; }
+      #storefront-page-container .store-location-tag i { color: ${primaryColor} !important; }
       #store-search-input::placeholder { font-family: inherit !important; color: inherit !important; opacity: 0.7 !important; }
     </style>
   `;
@@ -1508,7 +1497,7 @@ async function renderStorefront(id) {
 
       <!-- Theme-Adaptive Storefront Footer (About, Contact, Policies, Social) -->
       <footer class="storefront-footer" style="${footerStyle}">
-        <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns: 1fr 1fr; gap:14px; font-size:.72rem">
+        <div class="sf-footer-grid" style="max-width:1100px; margin:0 auto; font-size:.72rem">
           
           <!-- Left Side: About + Hours & Contact directly under it -->
           <div style="display:flex; flex-direction:column; gap:10px">

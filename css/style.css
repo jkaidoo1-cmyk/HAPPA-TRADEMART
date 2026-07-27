@@ -3037,4 +3037,13 @@ html.is-storefront-root body #main-content {
 .skeleton-row .line2 { width: 85%; height: 12px; }
 .skeleton-row .line3 { width: 30%; height: 10px; }
 
+/* ── Storefront Footer 2-Column Grid Layout (Mobile & Desktop) ── */
+.sf-footer-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 
