@@ -390,7 +390,7 @@ async function placeOrder() {
     const d = calcDelivery(items[0].location, dest, items.reduce((s,i) => s + i.weight_kg * i.qty, 0));
     
     const pkg = await apiPost('packages', {
-      package_code: pCode, order_id: order.id,
+      id: pCode, package_code: pCode, code: pCode, order_id: order.id,
       vendor_id: items[0].vendor_id, store_id: storeId, buyer_id: buyerId,
       items: items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price, buyer_note: i.buyer_note || '' })),
       vendor_amount: vendorAmt, commission_amount: commission, gross_amount: grossAmt, delivery_fee: d.rate,

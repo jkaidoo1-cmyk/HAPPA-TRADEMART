@@ -546,7 +546,14 @@ async function doLogin(e) {
   if (typeof startDashboardSyncPolling === 'function') startDashboardSyncPolling();
   if (typeof startNotifPolling === 'function') startNotifPolling();
   showToast(`Welcome back, ${user.name}! 🎉`, 'success');
-  showPage('dashboard');
+  
+  if (App.postLoginRedirect && App.postLoginRedirect.page) {
+    const target = App.postLoginRedirect;
+    App.postLoginRedirect = null;
+    showPage(target.page, target.entityId);
+  } else {
+    showPage('dashboard');
+  }
   resetBtn();
 }
 

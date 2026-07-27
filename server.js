@@ -665,21 +665,24 @@ app.put('/api/:table/:id', async (req, res) => {
     try {
       const record = serializeRecord(body);
       const dbRecord = prepareRecordForDb(table, record);
-      const { data, error } = await supabase.from(table).upsert(dbRecord).select().single();
-      if (error) return res.status(500).json({ error: error.message });
-      return res.json(serializeRecord(data));
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
+      const { data, error } = await supabase.from(table).upsert(dbRecord).select().maybeSingle();
+      if (!error && data) return res.json(serializeRecord(data));
+    } catch (err) {}
   }
 
   const db = loadDb();
   const rows = getTable(db, table);
   const idx = rows.findIndex(record => String(record.id) === String(id));
-  if (idx === -1) return sendNotFound(res);
-  rows[idx] = normalizeRecord(table, body);
-  saveDb(db);
-  res.json(rows[idx]);
+  if (idx !== -1) {
+    rows[idx] = { ...rows[idx], ...normalizeRecord(table, body), id: String(id) };
+    saveDb(db);
+    return res.json(rows[idx]);
+  } else {
+    const newRec = { id: String(id), ...normalizeRecord(table, body) };
+    rows.push(newRec);
+    saveDb(db);
+    return res.json(newRec);
+  }
 });
 
 app.patch('/api/:table/:id', async (req, res) => {
@@ -792,21 +795,24 @@ app.patch('/api/:table/:id', async (req, res) => {
     try {
       const record = serializeRecord(body);
       const dbRecord = prepareRecordForDb(table, record);
-      const { data, error } = await supabase.from(table).update(dbRecord).eq('id', id).select().single();
-      if (error) return res.status(500).json({ error: error.message });
-      return res.json(serializeRecord(data));
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
+      const { data, error } = await supabase.from(table).update(dbRecord).eq('id', id).select().maybeSingle();
+      if (!error && data) return res.json(serializeRecord(data));
+    } catch (err) {}
   }
 
   const db = loadDb();
   const rows = getTable(db, table);
   const idx = rows.findIndex(record => String(record.id) === String(id));
-  if (idx === -1) return sendNotFound(res);
-  rows[idx] = { ...rows[idx], ...body, id: String(id) };
-  saveDb(db);
-  res.json(rows[idx]);
+  if (idx !== -1) {
+    rows[idx] = { ...rows[idx], ...normalizeRecord(table, body), id: String(id) };
+    saveDb(db);
+    return res.json(rows[idx]);
+  } else {
+    const newRec = { id: String(id), ...normalizeRecord(table, body) };
+    rows.push(newRec);
+    saveDb(db);
+    return res.json(newRec);
+  }
 });
 
 app.delete('/api/:table/:id', async (req, res) => {

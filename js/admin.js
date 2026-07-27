@@ -35,7 +35,15 @@ async function renderAdminDashboard() {
   const pendingVendors = allUsers.filter(u => u.role === 'vendor' && u.status === 'pending_approval');
   const pendingRendors = allUsers.filter(u => u.role === 'rendor' && u.status === 'pending_approval');
   const pendingStores  = allStores.filter(s => s.status === 'pending');
-  const totalRevenue   = allOrders.reduce((s, o) => s + (o.platform_fee || 0), 0);
+
+  const activePkgs     = allPkgs.filter(p => p.vendor_status !== 'rejected' && p.status !== 'cancelled');
+  const rejectedPkgs   = allPkgs.filter(p => p.vendor_status === 'rejected' || p.status === 'cancelled');
+
+  const grossRev       = activePkgs.reduce((s, p) => s + (parseFloat(p.gross_amount || p.vendor_amount || p.total) || 0), 0);
+  const totalRevenue   = activePkgs.reduce((s, p) => s + (parseFloat(p.commission_amount) || 0), 0);
+  const refundedAmt    = rejectedPkgs.reduce((s, p) => s + ((parseFloat(p.gross_amount || p.total) || 0) + (parseFloat(p.delivery_fee) || 0)), 0);
+  const rejectionRate  = allPkgs.length ? ((rejectedPkgs.length / allPkgs.length) * 100).toFixed(1) : '0.0';
+
   const pendingAll     = pendingVendors.length + pendingRendors.length;
   
   // Fetch storefronts separately
@@ -111,13 +119,13 @@ async function renderAdminDashboard() {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-shopping-bag" style="color:var(--success)"></i></div>
-        <div class="stat-value">${allOrders.length}</div>
-        <div class="stat-label">Total Orders</div>
+        <div class="stat-value">${activePkgs.length}</div>
+        <div class="stat-label">Active Orders</div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon" style="background:#ede9fe"><i class="fas fa-coins" style="color:#7c3aed"></i></div>
-        <div class="stat-value">GHS ${totalRevenue.toFixed(0)}</div>
-        <div class="stat-label">Platform Revenue</div>
+        <div class="stat-icon" style="background:${rejectedPkgs.length ? '#fee2e2' : '#f3f4f6'}"><i class="fas fa-ban" style="color:${rejectedPkgs.length ? 'var(--danger)' : '#9ca3af'}"></i></div>
+        <div class="stat-value">${rejectedPkgs.length}</div>
+        <div class="stat-label">Rejected Orders</div>
       </div>
     </div>
 
@@ -133,9 +141,9 @@ async function renderAdminDashboard() {
         <div class="stat-label">Vendors</div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon" style="background:#ffedd5"><i class="fas fa-clock" style="color:#ea580c"></i></div>
-        <div class="stat-value">${pendingStores.length}</div>
-        <div class="stat-label">Pending Stores</div>
+        <div class="stat-icon" style="background:#ede9fe"><i class="fas fa-coins" style="color:#7c3aed"></i></div>
+        <div class="stat-value">GHS ${totalRevenue.toFixed(0)}</div>
+        <div class="stat-label">Platform Revenue</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#dcfce7"><i class="fas fa-boxes" style="color:#16a34a"></i></div>
@@ -440,19 +448,48 @@ async function renderAdminDashboard() {
     <div class="stats-grid" style="margin-bottom:16px">
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-money-bill-wave" style="color:var(--success)"></i></div>
-        <div class="stat-value">GHS ${allOrders.reduce((s,o)=>s+(o.total||0),0).toLocaleString()}</div>
-        <div class="stat-label">Gross Revenue</div>
+        <div class="stat-value">GHS ${grossRev.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+        <div class="stat-label">Net Gross Revenue</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-percentage" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">GHS ${totalRevenue.toFixed(0)}</div>
+        <div class="stat-value">GHS ${totalRevenue.toFixed(2)}</div>
         <div class="stat-label">Platform Fees</div>
+      </div>
+      <div class="stat-card" style="background:${rejectedPkgs.length ? '#fff5f5' : '#f9fafb'};border-color:${rejectedPkgs.length ? '#fca5a5' : '#e5e7eb'}">
+        <div class="stat-icon" style="background:${rejectedPkgs.length ? '#fee2e2' : '#f3f4f6'}"><i class="fas fa-ban" style="color:${rejectedPkgs.length ? 'var(--danger)' : '#9ca3af'}"></i></div>
+        <div class="stat-value">${rejectedPkgs.length} (${rejectionRate}%)</div>
+        <div class="stat-label">Rejected Orders</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#fef3c7"><i class="fas fa-undo" style="color:#d97706"></i></div>
+        <div class="stat-value">GHS ${refundedAmt.toFixed(2)}</div>
+        <div class="stat-label">Refunded to Buyers</div>
       </div>
     </div>
     <div class="card" style="margin-bottom:14px">
       <div class="card-header"><h3>📊 Orders by Location</h3></div>
       <div class="card-body"><div class="chart-container"><canvas id="admin-loc-chart"></canvas></div></div>
     </div>
+    ${rejectedPkgs.length ? `
+    <div class="card" style="margin-bottom:14px;border-color:#fca5a5">
+      <div class="card-header" style="background:#fef2f2">
+        <h3 style="color:#991b1b"><i class="fas fa-exclamation-circle" style="color:var(--danger)"></i> Vendor Rejection Log (${rejectedPkgs.length})</h3>
+      </div>
+      <div class="card-body" style="padding:0">
+        ${rejectedPkgs.slice(0,10).map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:.82rem">
+          <div>
+            <div style="font-weight:700">${escHtml(p.package_code||p.id)}</div>
+            <div style="font-size:.74rem;color:var(--text-muted)">Reason: ${escHtml(p.rejected_reason||'No reason specified')}</div>
+          </div>
+          <div style="text-align:right">
+            <span class="status-badge status-rejected" style="font-size:.68rem">Rejected</span>
+            <div style="font-size:.74rem;color:var(--danger);font-weight:700">Refunded GHS ${((parseFloat(p.gross_amount||p.total)||0)+(parseFloat(p.delivery_fee)||0)).toFixed(2)}</div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
     <div class="card">
       <div class="card-header"><h3>🏆 Top Stores by Revenue</h3></div>
       <div class="card-body" style="padding:0">

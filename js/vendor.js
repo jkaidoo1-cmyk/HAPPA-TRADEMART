@@ -107,7 +107,10 @@ async function renderVendorDashboard() {
   // Fetch orders/packages for vendor
   // Use vendor_id field filter for reliable package fetching
   const pkgRes = await apiGet('packages', `search=${encodeURIComponent(u.id)}&limit=100`);
-  const myPackages = (pkgRes?.data || []).filter(p => p.vendor_id === u.id);
+  const myPackages = (pkgRes?.data || []).filter(p => String(p.vendor_id) === String(u.id));
+
+  const activeVendorPkgs   = myPackages.filter(p => p.vendor_status !== 'rejected' && p.status !== 'cancelled');
+  const rejectedVendorPkgs = myPackages.filter(p => p.vendor_status === 'rejected' || p.status === 'cancelled');
 
   // Fetch storefront (separate entity) for this vendor's store, if any
   let myStorefront = null;
@@ -194,18 +197,18 @@ async function renderVendorDashboard() {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-shopping-bag" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">${myPackages.length}</div>
-        <div class="stat-label">Total Orders</div>
+        <div class="stat-value">${activeVendorPkgs.length}</div>
+        <div class="stat-label">Active Orders</div>
+      </div>
+      <div class="stat-card" style="background:${rejectedVendorPkgs.length ? '#fff5f5' : '#f9fafb'};border-color:${rejectedVendorPkgs.length ? '#fca5a5' : '#e5e7eb'}">
+        <div class="stat-icon" style="background:${rejectedVendorPkgs.length ? '#fee2e2' : '#f3f4f6'}"><i class="fas fa-ban" style="color:${rejectedVendorPkgs.length ? 'var(--danger)' : '#9ca3af'}"></i></div>
+        <div class="stat-value">${rejectedVendorPkgs.length}</div>
+        <div class="stat-label">Rejected Orders</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-wallet" style="color:var(--success)"></i></div>
         <div class="stat-value">GHS ${parseFloat(u.wallet_balance||0).toFixed(0)}</div>
         <div class="stat-label">Wallet Balance</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background:#ede9fe"><i class="fas fa-star" style="color:#7c3aed"></i></div>
-        <div class="stat-value">${(myStore?.avg_rating||0).toFixed(1)}</div>
-        <div class="stat-label">Store Rating</div>
       </div>
     </div>
 
@@ -283,13 +286,18 @@ async function renderVendorDashboard() {
     <div class="stats-grid" style="margin-bottom:16px">
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-coins" style="color:var(--success)"></i></div>
-        <div class="stat-value">GHS ${myPackages.filter(p=>p.balance_released).reduce((s,p)=>s+(p.vendor_amount||0),0).toFixed(0)}</div>
+        <div class="stat-value">GHS ${activeVendorPkgs.filter(p=>p.balance_released).reduce((s,p)=>s+(parseFloat(p.vendor_amount)||0),0).toFixed(2)}</div>
         <div class="stat-label">Total Earned</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#fef3c7"><i class="fas fa-hourglass-half" style="color:#d97706"></i></div>
-        <div class="stat-value">GHS ${myPackages.filter(p=>!p.balance_released).reduce((s,p)=>s+(p.vendor_amount||0),0).toFixed(0)}</div>
+        <div class="stat-value">GHS ${activeVendorPkgs.filter(p=>!p.balance_released).reduce((s,p)=>s+(parseFloat(p.vendor_amount)||0),0).toFixed(2)}</div>
         <div class="stat-label">Pending Release</div>
+      </div>
+      <div class="stat-card" style="background:${rejectedVendorPkgs.length ? '#fff5f5' : '#f9fafb'};border-color:${rejectedVendorPkgs.length ? '#fca5a5' : '#e5e7eb'}">
+        <div class="stat-icon" style="background:${rejectedVendorPkgs.length ? '#fee2e2' : '#f3f4f6'}"><i class="fas fa-undo" style="color:${rejectedVendorPkgs.length ? 'var(--danger)' : '#9ca3af'}"></i></div>
+        <div class="stat-value">GHS ${rejectedVendorPkgs.reduce((s,p)=>s+((parseFloat(p.gross_amount||p.total)||0)+(parseFloat(p.delivery_fee)||0)),0).toFixed(2)}</div>
+        <div class="stat-label">Refunded (${rejectedVendorPkgs.length} Rejected)</div>
       </div>
     </div>
 

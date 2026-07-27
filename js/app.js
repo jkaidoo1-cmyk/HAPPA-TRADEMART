@@ -176,7 +176,17 @@ window.addEventListener('DOMContentLoaded', () => {
       if (!isDirectStorefront) showPage('home');
     });
   } else if (!isDirectStorefront) {
-    showPage('home');
+    const startupHash = window.location.hash || '';
+    const hasHistoryState = history.state && history.state.page;
+
+    if (startupHash && startupHash !== '#') {
+      resolveRouteFromHash(startupHash);
+    } else if (hasHistoryState) {
+      showPage(history.state.page, history.state.entityId);
+    } else {
+      showPage('home');
+    }
+
     if (searchParams.has('product')) {
       const productId = searchParams.get('product');
       setTimeout(() => {
@@ -184,6 +194,69 @@ window.addEventListener('DOMContentLoaded', () => {
       }, 500);
     }
   }
+
+// ── Hash Route Resolver ─────────────────────────────────
+function resolveRouteFromHash(hashStr) {
+  if (!hashStr || hashStr === '#' || hashStr === '#home') {
+    showPage('home');
+    return true;
+  }
+  const cleanHash = hashStr.startsWith('#') ? hashStr.substring(1) : hashStr;
+  const parts = cleanHash.split('/');
+  const route = parts[0];
+  const param = parts[1] || null;
+
+  const validPages = [
+    'home', 'marketplace', 'stores', 'cart', 'checkout', 'auth', 'settings',
+    'buyer-dashboard', 'vendor-dashboard', 'vendor-my-store', 'vendor-orders',
+    'rendor-dashboard', 'admin-dashboard', 'notifications', 'delivery', 'privacy'
+  ];
+
+  if (route === 'register-vendor' || route === 'auth-vendor') {
+    showPage('auth');
+    if (typeof switchRole === 'function') switchRole('vendor');
+    return true;
+  }
+  if (route === 'store' && param) {
+    const found = (App.allStores || []).find(s => String(s.slug) === param || String(s.id) === param);
+    if (found) showPage('store-detail', found.id);
+    else showPage('stores');
+    return true;
+  }
+  if (route === 'storefront' && param) {
+    const sf = (App.allStorefronts || []).find(item => String(item.url_slug) === param || String(item.id) === param || String(item.store_id) === param);
+    const found = sf ? (App.allStores || []).find(s => String(s.id) === String(sf.store_id)) : (App.allStores || []).find(s => String(s.slug) === param || String(s.id) === param);
+    showPage('storefront', found ? found.id : param);
+    return true;
+  }
+  if (route === 'store-admin' && param) {
+    const sf = (App.allStorefronts || []).find(item => item.url_slug === param || item.id === param || item.store_id === param);
+    const found = sf ? (App.allStores || []).find(s => String(s.id) === String(sf.store_id)) : (App.allStores || []).find(s => s.slug === param || s.id === param);
+    if (found) showPage('store-admin', found.id);
+    else showPage('admin-dashboard');
+    return true;
+  }
+  if (route === 'product' && param) {
+    if (typeof openProduct === 'function') openProduct(param);
+    else showPage('product', param);
+    return true;
+  }
+  if (route === 'rendor-profile' && param) {
+    showPage('rendor-profile', param);
+    return true;
+  }
+  if (route === 'profile' || route === 'dashboard') {
+    showPage('dashboard');
+    return true;
+  }
+
+  if (validPages.includes(route)) {
+    showPage(route, param);
+    return true;
+  }
+
+  return false;
+}
 
   // Listen to hash changes dynamically
   window.addEventListener('hashchange', () => {
@@ -205,45 +278,8 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    if (newHash.startsWith('#store/')) {
-      const slug = newHash.substring(7);
-      const found = App.allStores.find(s => String(s.slug) === slug || String(s.id) === slug);
-      if (found) {
-        showPage('store-detail', found.id);
-      }
-    } else if (newHash.startsWith('#storefront/')) {
-      const slug = newHash.substring(12);
-      let found = null;
-      const sf = (App.allStorefronts || []).find(item => String(item.url_slug) === slug || String(item.id) === slug || String(item.store_id) === slug);
-      if (sf) {
-        found = App.allStores.find(s => String(s.id) === String(sf.store_id));
-      }
-      if (!found) {
-        found = App.allStores.find(s => String(s.slug) === slug || String(s.id) === slug);
-      }
-      if (found) {
-        showPage('storefront', found.id);
-      } else {
-        showPage('storefront', null);
-      }
-    } else if (newHash.startsWith('#store-admin/')) {
-      const slug = newHash.substring(13);
-      let found = null;
-      const sf = (App.allStorefronts || []).find(item => item.url_slug === slug || item.id === slug || item.store_id === slug);
-      if (sf) {
-        found = App.allStores.find(s => String(s.id) === String(sf.store_id));
-      }
-      if (!found) {
-        found = App.allStores.find(s => s.slug === slug || s.id === slug);
-      }
-      if (found) {
-        showPage('store-admin', found.id);
-      }
-    } else if (newHash === '#register-vendor' || newHash === '#auth-vendor') {
-      showPage('auth');
-      if (typeof switchRole === 'function') {
-        switchRole('vendor');
-      }
+    if (newHash && newHash !== '#') {
+      resolveRouteFromHash(newHash);
     }
   });
 
@@ -720,7 +756,12 @@ function showPage(pageId, entityId = null) {
   // Skip when we're already handling a popstate (browser-back) event.
   if (!App._skipPush) {
     try {
-      history.pushState({ page: pageId, entityId: entityId || getPageEntityId(pageId) }, '');
+      const targetEntity = entityId || getPageEntityId(pageId);
+      let hash = '#' + pageId;
+      if (targetEntity && ['store-detail', 'storefront', 'store-admin', 'product', 'rendor-profile'].includes(pageId)) {
+        hash += '/' + targetEntity;
+      }
+      history.pushState({ page: pageId, entityId: targetEntity }, '', hash);
     } catch(e) { console.warn('history.pushState failed:', e); }
   }
 
@@ -1394,12 +1435,17 @@ function localTablesApi(table, opts = {}) {
 
   if (method === 'PUT' || method === 'PATCH') {
     if (!id) return null;
+    let found = false;
     const updatedData = tableData.map(item => {
       if (String(item.id) !== String(id)) return item;
+      found = true;
       return { ...item, ...body, id: String(id) };
     });
+    if (!found) {
+      updatedData.push({ id: String(id), ...body });
+    }
     saveLocalTable(tableName, updatedData);
-    return updatedData.find(item => String(item.id) === String(id)) || null;
+    return updatedData.find(item => String(item.id) === String(id)) || { id: String(id), ...body };
   }
 
   if (method === 'DELETE') {

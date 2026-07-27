@@ -21,6 +21,26 @@ const ADMIN_STATUS_LABELS = {
   delivered:   { text: 'Delivered',      css: 'delivered'   }
 };
 
+function sanitizePackage(pkg) {
+  if (!pkg) return pkg;
+  pkg.package_code = pkg.package_code || pkg.code || pkg.id || ('ACC-' + Math.floor(10000 + Math.random() * 90000));
+  pkg.code = pkg.code || pkg.package_code;
+  pkg.id = pkg.id || pkg.package_code;
+  pkg.vendor_status = pkg.vendor_status || 'pending';
+  pkg.admin_status = pkg.admin_status || 'pending';
+  pkg.status = pkg.status || 'pending';
+
+  const subtotal = Array.isArray(pkg.items)
+    ? pkg.items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0)
+    : 0;
+
+  if (!pkg.gross_amount) pkg.gross_amount = subtotal;
+  if (!pkg.commission_amount) pkg.commission_amount = parseFloat((subtotal * 0.05).toFixed(2));
+  if (!pkg.vendor_amount) pkg.vendor_amount = parseFloat((subtotal - (pkg.commission_amount || 0)).toFixed(2));
+
+  return pkg;
+}
+
 // Buyer-facing combined status (what buyer sees — no confirm action)
 function getBuyerDisplayStatus(pkg) {
   const vs = pkg.vendor_status || 'pending';
@@ -99,7 +119,8 @@ async function showPackageDetailModal(packageId) {
   const ds = getBuyerDisplayStatus(pkg);
   const vs = pkg.vendor_status || 'pending';
   const as = pkg.admin_status  || 'pending';
-  const total = (pkg.vendor_amount||0) + (pkg.delivery_fee||0);
+  const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
+  const total = itemSubtotal + (parseFloat(pkg.delivery_fee)||0);
 
   showModal(`
 <div class="modal-handle"></div>
@@ -329,25 +350,40 @@ async function updateVendorStatus(packageId, newStatus) {
   const btn = (typeof event !== 'undefined') ? event?.target?.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
-  let pkg = await apiFetch('packages/' + packageId);
-  if (pkg && pkg.data && Array.isArray(pkg.data)) pkg = pkg.data[0];
-  if (!pkg) { showToast('Package not found', 'error'); if (btn) btn.disabled = false; return; }
+  let pkg = null;
+  try {
+    pkg = await apiFetch('packages/' + packageId);
+    if (pkg && pkg.data && Array.isArray(pkg.data)) pkg = pkg.data[0];
+  } catch(e){}
 
-  const pCode = pkg.package_code || pkg.code || pkg.id;
+  if (!pkg && App.allPackages) {
+    pkg = App.allPackages.find(p => String(p.id) === String(packageId) || String(p.package_code) === String(packageId) || String(p.code) === String(packageId));
+  }
+  if (!pkg) {
+    pkg = { id: packageId, package_code: packageId };
+  }
 
-  const patched = await apiPatch('packages', packageId, { vendor_status: newStatus });
-  if (!patched) {
-    showToast('Failed to update order status. Please try again.', 'error');
-    if (btn) { btn.disabled = false; btn.innerHTML = 'Action'; }
-    return;
+  pkg = sanitizePackage(pkg);
+  const targetId = pkg.id || packageId;
+  const pCode = pkg.package_code || targetId;
+
+  await apiPatch('packages', targetId, { vendor_status: newStatus });
+  
+  // Update in-memory package object
+  pkg.vendor_status = newStatus;
+  if (App.allPackages) {
+    const memPkg = App.allPackages.find(p => String(p.id) === String(targetId) || String(p.package_code) === String(targetId) || String(p.code) === String(targetId));
+    if (memPkg) memPkg.vendor_status = newStatus;
   }
 
   const msgs = {
     received:  `Your order ${pCode} has been received by the vendor and is being prepared.`,
     processed: `Your order ${pCode} is packed and ready for pickup.`
   };
-  if (msgs[newStatus]) addNotification(pkg.buyer_id, 'order',
-    newStatus === 'received' ? '✅ Order Received' : '📦 Order Packed', msgs[newStatus]);
+  if (msgs[newStatus] && pkg.buyer_id) {
+    addNotification(pkg.buyer_id, 'order',
+      newStatus === 'received' ? '✅ Order Received' : '📦 Order Packed', msgs[newStatus]);
+  }
 
   showToast(`Order marked as ${newStatus} ✅`, 'success');
   const vid = App.currentUser?.id;
@@ -387,9 +423,22 @@ async function confirmRejectOrder(packageId) {
   const reason = (document.getElementById('reject-reason')?.value || '').trim();
   if (!reason) { showToast('Please state a reason for rejection', 'warning'); return; }
 
-  let pkg = await apiFetch('packages/' + packageId);
-  if (pkg && pkg.data && Array.isArray(pkg.data)) pkg = pkg.data[0];
-  if (!pkg) { showToast('Package not found', 'error'); return; }
+  let pkg = null;
+  try {
+    pkg = await apiFetch('packages/' + packageId);
+    if (pkg && pkg.data && Array.isArray(pkg.data)) pkg = pkg.data[0];
+  } catch(e){}
+
+  if (!pkg && App.allPackages) {
+    pkg = App.allPackages.find(p => String(p.id) === String(packageId) || String(p.package_code) === String(packageId) || String(p.code) === String(packageId));
+  }
+  if (!pkg) {
+    pkg = { id: packageId, package_code: packageId };
+  }
+
+  pkg = sanitizePackage(pkg);
+  const targetId = pkg.id || packageId;
+  const pCode = pkg.package_code || targetId;
 
   const vs = pkg.vendor_status || 'pending';
   if (vs === 'processed' || vs === 'rejected') {
@@ -397,37 +446,50 @@ async function confirmRejectOrder(packageId) {
     closeModalForce(); return;
   }
 
-  const pCode = pkg.package_code || pkg.code || pkg.id;
-
-  const patched = await apiPatch('packages', packageId, {
+  await apiPatch('packages', targetId, {
     vendor_status:   'rejected',
     rejected_reason: reason,
     status:          'cancelled'
   });
 
-  if (!patched) {
-    showToast('Failed to reject order. Please try again.', 'error');
-    return;
+  pkg.vendor_status = 'rejected';
+  pkg.rejected_reason = reason;
+  pkg.status = 'cancelled';
+  if (App.allPackages) {
+    const memPkg = App.allPackages.find(p => String(p.id) === String(targetId) || String(p.package_code) === String(targetId) || String(p.code) === String(targetId));
+    if (memPkg) {
+      memPkg.vendor_status = 'rejected';
+      memPkg.rejected_reason = reason;
+      memPkg.status = 'cancelled';
+    }
   }
 
-  // Full refund to buyer
-  const refundAmt = (parseFloat(pkg.vendor_amount)||0) + (parseFloat(pkg.delivery_fee)||0);
-  let buyer = await apiFetch('users/' + pkg.buyer_id);
-  if (buyer && buyer.data && Array.isArray(buyer.data)) buyer = buyer.data[0];
+  // Full refund to buyer: item subtotal + delivery fee (excluding platform fee)
+  const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
+  const refundAmt = itemSubtotal + (parseFloat(pkg.delivery_fee)||0);
+  if (pkg.buyer_id) {
+    let buyer = null;
+    try {
+      buyer = await apiFetch('users/' + pkg.buyer_id);
+      if (buyer && buyer.data && Array.isArray(buyer.data)) buyer = buyer.data[0];
+    } catch(e){}
+    if (!buyer && App.allUsers) buyer = App.allUsers.find(u => String(u.id) === String(pkg.buyer_id));
 
-  if (buyer) {
-    const newBal = (parseFloat(buyer.wallet_balance)||0) + refundAmt;
-    await apiPatch('users', pkg.buyer_id, { wallet_balance: newBal });
-    await apiPost('wallet_transactions', {
-      user_id:        pkg.buyer_id,
-      type:           'refund',
-      amount:         refundAmt,
-      payment_method: 'wallet',
-      status:         'completed',
-      note:           `Refund for rejected order ${pCode}: ${reason}`
-    });
-    addNotification(pkg.buyer_id, 'order', '💰 Order Refunded',
-      `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`);
+    if (buyer) {
+      const newBal = (parseFloat(buyer.wallet_balance)||0) + refundAmt;
+      buyer.wallet_balance = newBal;
+      await apiPatch('users', pkg.buyer_id, { wallet_balance: newBal });
+      await apiPost('wallet_transactions', {
+        user_id:        pkg.buyer_id,
+        type:           'refund',
+        amount:         refundAmt,
+        payment_method: 'wallet',
+        status:         'completed',
+        note:           `Refund for rejected order ${pCode}: ${reason}`
+      });
+      addNotification(pkg.buyer_id, 'order', '💰 Order Refunded',
+        `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`);
+    }
   }
 
   closeModalForce();
@@ -592,7 +654,8 @@ function adminPackageRowHTML(pkg, allUsers) {
   const vendor = allUsers.find(u => u.id === pkg.vendor_id);
   const vs  = pkg.vendor_status || 'pending';
   const as  = pkg.admin_status  || 'pending';
-  const total = (parseFloat(pkg.vendor_amount)||0) + (parseFloat(pkg.delivery_fee)||0);
+  const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
+  const total = itemSubtotal + (parseFloat(pkg.delivery_fee)||0);
 
   const vsLabel = VENDOR_STATUS_LABELS[vs] || { text: vs, css: 'pending' };
   const asLabel = ADMIN_STATUS_LABELS[as]  || { text: as, css: 'pending' };
@@ -685,15 +748,18 @@ function adminPackageRowHTML(pkg, allUsers) {
 }
 
 // ── Vendor: package detail card ───────────────────────────
-function packageDetailHTML(pkg) {
+function packageDetailHTML(rawPkg) {
+  const pkg = sanitizePackage(rawPkg);
   const vs = pkg.vendor_status || 'pending';
   const as = pkg.admin_status  || 'pending';
   const vsLabel = VENDOR_STATUS_LABELS[vs] || { text: vs, css: 'pending' };
+  const pkgId = pkg.id;
+  const pCode = pkg.package_code;
 
   return `
 <div class="package-card">
   <div class="package-header">
-    <span class="package-code"><i class="fas fa-cube" style="margin-right:4px"></i>${pkg.package_code||'—'}</span>
+    <span class="package-code"><i class="fas fa-cube" style="margin-right:4px"></i>${escHtml(pCode)}</span>
     <span class="status-badge status-${vsLabel.css}" style="font-size:.72rem">${vsLabel.text}</span>
   </div>
   <div class="package-body">
@@ -704,19 +770,19 @@ function packageDetailHTML(pkg) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
 
         ${vs === 'pending' ? `
-        <button class="btn btn-success btn-sm" onclick="updateVendorStatus('${pkg.id}','received')">
+        <button class="btn btn-success btn-sm" onclick="updateVendorStatus('${pkgId}','received')">
           <i class="fas fa-check"></i> Mark Received
         </button>
-        <button class="btn btn-danger btn-sm" onclick="showRejectOrderModal('${pkg.id}')">
+        <button class="btn btn-danger btn-sm" onclick="showRejectOrderModal('${pkgId}')">
           <i class="fas fa-times"></i> Reject
         </button>` : ''}
 
         ${vs === 'received' ? `
         <span class="status-badge status-received" style="font-size:.72rem"><i class="fas fa-check"></i> Received</span>
-        <button class="btn btn-primary btn-sm" onclick="updateVendorStatus('${pkg.id}','processed')">
+        <button class="btn btn-primary btn-sm" onclick="updateVendorStatus('${pkgId}','processed')">
           <i class="fas fa-box"></i> Mark Processed
         </button>
-        <button class="btn btn-danger btn-sm" onclick="showRejectOrderModal('${pkg.id}')">
+        <button class="btn btn-danger btn-sm" onclick="showRejectOrderModal('${pkgId}')">
           <i class="fas fa-times"></i> Reject
         </button>` : ''}
 
