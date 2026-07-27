@@ -30,7 +30,7 @@ const PRECACHE_ASSETS = [
   './js/admin.js',
   './js/admin-profiles.js',
   './js/admin-settings.js',
-  './js/local_autofill.js',
+
   './js/utils.js',
   './js/search.js',
   './js/notifications.js',

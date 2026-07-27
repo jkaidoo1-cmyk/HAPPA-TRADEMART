@@ -184,7 +184,7 @@ async function renderVendorDashboard() {
 <div class="tab-content active" id="vendor-overview">
   <div class="dashboard-wrap">
     ${!u.is_verified ? `<div class="verify-banner"><i class="fas fa-exclamation-triangle"></i><p>Please verify your phone number to unlock all features</p></div>` : ''}
-    ${!u.id_verified ? `<div class="verify-banner" style="background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c"><i class="fas fa-id-card" style="color:#ea580c"></i><p>Upload your ID to complete vendor verification</p></div>` : ''}
+    ${!u.id_verified ? `<div class="verify-banner" style="background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c;cursor:pointer" onclick="switchTab(document.querySelector('#vendor-tabs .tab-btn:nth-child(5)'),'vendor-verify')"><i class="fas fa-id-card" style="color:#ea580c"></i><p>Upload your ID to complete vendor verification</p></div>` : ''}
 
     <div class="stats-grid">
       <div class="stat-card">
@@ -1025,12 +1025,9 @@ function showAddProductModal(storeId, vendorId) {
       <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">JPG, PNG or WEBP · Max 5MB each</div>
     </div>
     <div class="form-group">
-      <label class="form-label">Product Name *</label>
+      <label class="form-label">Product Name</label>
       <div style="display:flex;gap:8px">
-        <input class="form-control" id="new-p-name" placeholder="e.g. Nike Air Max 90" required style="flex:1" oninput="_localAutoFill('new-p')">
-        <button type="button" onclick="_localAutoFill('new-p', true)" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;padding:0 14px;cursor:pointer;font-size:.8rem;font-weight:700">
-          <i class="fas fa-wand-magic-sparkles"></i> Autofill
-        </button>
+        <input class="form-control" id="new-p-name" placeholder="e.g. Nike Air Max 90" style="flex:1">
       </div>
     </div>
     <div class="form-group">
@@ -1092,11 +1089,7 @@ function showAddProductModal(storeId, vendorId) {
         </optgroup>
       </select>
     </div>
-    <div class="form-group">
-      <label class="form-label">Tags (comma separated)</label>
-      <input class="form-control" id="new-p-tags" placeholder="e.g. shoes, nike, white, sneakers">
-      <div class="form-hint">These help buyers find your product</div>
-    </div>
+
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <input type="checkbox" id="new-p-flash">
       <label for="new-p-flash" style="font-size:.875rem;font-weight:600">⚡ Flash Sale Item</label>
@@ -1176,10 +1169,6 @@ async function _onProductImgPick(input, prefix, idx) {
     if (thumb)       { thumb.src = base64; thumb.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
     if (hid)         hid.value = base64;
-    
-    if (idx === 0) {
-      _aiAutoFill(prefix, base64);
-    }
   } catch (err) {
     showToast('Failed to process image', 'error');
     console.error(err);
@@ -1545,10 +1534,7 @@ function showEditProductModal(productId) {
   <div class="form-group">
     <label class="form-label">Product Name</label>
     <div style="display:flex;gap:8px">
-      <input class="form-control" id="edit-p-name" value="${escHtml(p.name)}" oninput="_localAutoFill('edit-p')" style="flex:1">
-      <button type="button" onclick="_localAutoFill('edit-p', true)" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;padding:0 14px;cursor:pointer;font-size:.8rem;font-weight:700">
-        <i class="fas fa-wand-magic-sparkles"></i> Autofill
-      </button>
+      <input class="form-control" id="edit-p-name" value="${escHtml(p.name)}" style="flex:1">
     </div>
   </div>
   <div class="form-group">

@@ -1078,37 +1078,29 @@ async function renderStorefront(id) {
   // Show skeleton loader only if content container is not yet populated with storefront page container
   if (!App.isBackgroundRefresh && (!c.children.length || c.innerHTML.includes('skeleton') || !c.querySelector('#storefront-page-container'))) {
     c.innerHTML = `
-      <div class="storefront-skeleton-wrapper" style="width:100%;min-height:100vh;background:#fafafa;padding-bottom:60px">
-        <!-- Header Nav Skeleton -->
-        <div style="background:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb">
-          <div style="display:flex;align-items:center;gap:14px">
-            <div class="skeleton-box" style="width:48px;height:48px;border-radius:50%"></div>
-            <div style="display:flex;flex-direction:column;gap:6px">
-              <div class="skeleton-box" style="width:160px;height:20px;border-radius:4px"></div>
-              <div class="skeleton-box" style="width:100px;height:14px;border-radius:4px"></div>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px">
-            <div class="skeleton-box" style="width:70px;height:32px;border-radius:20px"></div>
-            <div class="skeleton-box" style="width:36px;height:36px;border-radius:50%"></div>
-          </div>
+      <div id="storefront-page-container" style="position:relative; width:100%; min-height:100vh; background:#fafafa; padding-bottom:60px;">
+        <!-- Header/Banner Skeleton -->
+        <div style="width:100%; height:180px; position:relative; overflow:hidden;" class="skeleton-box"></div>
+        <div style="padding:16px; margin-top:-50px; position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; text-align:center;">
+           <div class="skeleton-box" style="width:80px; height:80px; border-radius:50%; border:4px solid #fff; margin-bottom:10px;"></div>
+           <div class="skeleton-box" style="width:180px; height:24px; border-radius:4px; margin-bottom:8px;"></div>
+           <div class="skeleton-box" style="width:120px; height:14px; border-radius:4px;"></div>
         </div>
-        <!-- Hero Banner Skeleton -->
-        <div style="max-width:1200px;margin:20px auto 16px;padding:0 16px">
-          <div class="skeleton-box" style="width:100%;height:220px;border-radius:16px"></div>
+        
+        <!-- Search Toolbar Skeleton -->
+        <div style="padding:10px 14px; background:#ffffff; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;">
+           <div class="skeleton-box" style="height:38px; border-radius:25px; flex:1;"></div>
+           <div class="skeleton-box" style="height:38px; width:38px; border-radius:50%;"></div>
         </div>
-        <!-- Filter Tabs Skeleton -->
-        <div style="max-width:1200px;margin:0 auto 20px;padding:0 16px;display:flex;gap:10px;overflow-x:hidden">
-          <div class="skeleton-box" style="width:80px;height:34px;border-radius:20px;flex-shrink:0"></div>
-          <div class="skeleton-box" style="width:110px;height:34px;border-radius:20px;flex-shrink:0"></div>
-          <div class="skeleton-box" style="width:95px;height:34px;border-radius:20px;flex-shrink:0"></div>
-          <div class="skeleton-box" style="width:105px;height:34px;border-radius:20px;flex-shrink:0"></div>
-        </div>
+
         <!-- Product Grid Skeleton -->
-        <div style="max-width:1200px;margin:0 auto;padding:0 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:20px">
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px"><div class="skeleton-box image" style="height:170px;border-radius:10px;width:100%"></div><div class="skeleton-box line1" style="height:16px;width:85%;margin-top:4px"></div><div class="skeleton-box line2" style="height:14px;width:55%"></div></div>
+        <div style="padding:16px;">
+          <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px;">
+            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
+            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
+            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
+            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
+          </div>
         </div>
       </div>`;
   }
@@ -1235,7 +1227,6 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-name { color: var(--text) !important; font-weight: 700 !important; font-size: 0.85rem !important; }
       #storefront-page-container .product-card .product-price { color: ${primaryColor} !important; font-weight: 800 !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
-      #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
       #storefront-page-container .store-search-toolbar { background: #f8f9fa !important; border-bottom: 1px solid var(--border) !important; }
       #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 8px !important; font-weight: 700 !important; border: 1.5px solid var(--border) !important; background: linear-gradient(135deg, #ffffff 0%, color-mix(in srgb, ${primaryColor} 15%, #f8f9fa) 100%) !important; color: var(--text) !important; }
       #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 50% !important; font-weight: 900 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
@@ -1269,7 +1260,6 @@ async function renderStorefront(id) {
       #storefront-page-container .product-card .product-price { color: ${primaryColor} !important; font-weight: 800 !important; }
       #storefront-page-container .product-card .product-img { background: rgba(255,255,255,0.4) !important; border-radius: 8px !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
-      #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
       #storefront-page-container .store-search-toolbar { background: color-mix(in srgb, ${secondaryColor} 20%, #faf9f6) !important; border-bottom: 1px solid rgba(0,0,0,0.06) !important; }
       #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 20px !important; background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, color-mix(in srgb, ${secondaryColor} 18%, #faf9f6) 60%, color-mix(in srgb, ${primaryColor} 12%, #ffffff) 100%) !important; border: 1px solid rgba(0,0,0,0.09) !important; color: var(--text) !important; box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important; }
       #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 50% !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 40%, transparent) !important; }
@@ -1340,7 +1330,6 @@ async function renderStorefront(id) {
       #storefront-page-container .store-tab-btn.active { border-bottom-color: ${primaryColor}; color: ${primaryColor}; }
       #storefront-page-container .product-card .product-price { color: ${primaryColor} !important; font-weight: 800 !important; }
       #storefront-page-container .product-rating .fa-star { color: ${primaryColor} !important; }
-      #storefront-page-container .flash-badge { background: ${primaryColor} !important; }
       #storefront-page-container .store-search-toolbar { background: #ffffff !important; border-bottom: 1px solid var(--border) !important; }
       #storefront-page-container #store-search-input { font-family: inherit !important; border-radius: 25px !important; background: linear-gradient(135deg, #ffffff 0%, color-mix(in srgb, ${primaryColor} 8%, #ffffff) 100%) !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
       #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 50% !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent) !important; }
@@ -1378,6 +1367,7 @@ async function renderStorefront(id) {
       #storefront-page-container .store-description-text { color: ${primaryColor} !important; }
       #storefront-page-container .store-location-tag { color: ${primaryColor} !important; font-weight: 700 !important; }
       #storefront-page-container .store-location-tag i { color: ${primaryColor} !important; }
+      #storefront-page-container .flash-badge { display: none !important; }
       #store-search-input::placeholder { font-family: inherit !important; color: inherit !important; opacity: 0.7 !important; }
     </style>
   `;
@@ -2658,7 +2648,8 @@ window.switchStorefrontTab = async function(tabName, storeId) {
     } catch(e) {}
   }
 
-  const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && p.status === 'active');
+  const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && p.status === 'active')
+    .map(p => (p.is_flash_sale && p.original_price > p.price) ? { ...p, price: p.original_price, original_price: null, is_flash_sale: false } : p);
 
   const isStorefrontPage = App.currentPage === 'storefront';
   const slogan = isStorefrontPage ? (sf?.slogan || s.slogan || 'Welcome to our store!') : (s.slogan || 'Welcome to our store!');
@@ -2671,7 +2662,6 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   const youtube_url = isStorefrontPage ? (sf?.youtube_url || s.youtube_url) : s.youtube_url;
 
   if (tabName === 'home') {
-    const featured = storeProds.filter(p => p.is_flash_sale).slice(0, 4);
     const recent = [...storeProds].sort((a,b) => b.id.localeCompare(a.id)).slice(0, 4);
     const popular = [...storeProds].sort((a,b) => (b.views || 0) - (a.views || 0)).slice(0, 4);
 
@@ -2694,7 +2684,6 @@ window.switchStorefrontTab = async function(tabName, storeId) {
         <button class="btn btn-sm btn-light" onclick="document.getElementById('all-store-products-${s.id}')?.scrollIntoView({behavior:'smooth'})" style="margin-top:10px;font-weight:700">Shop Now</button>
       </div>
 
-      ${renderSection('⚡ Flash Deals', featured)}
       ${renderSection('🔥 Popular Products', popular)}
       <div id="all-store-products-${s.id}">
         ${renderSection('🛍️ All Products', storeProds)}
@@ -2804,7 +2793,8 @@ window.handleStoreProductSearch = function(storeId, query) {
   if (!contentEl) return;
 
   const needle = query.trim().toLowerCase();
-  const storeProds = App.allProducts.filter(p => p.store_id === storeId && p.status === 'active');
+  const storeProds = App.allProducts.filter(p => p.store_id === storeId && p.status === 'active')
+    .map(p => (p.is_flash_sale && p.original_price > p.price) ? { ...p, price: p.original_price, original_price: null, is_flash_sale: false } : p);
   const filtered = storeProds.filter(p => p.name.toLowerCase().includes(needle) || (p.description && p.description.toLowerCase().includes(needle)));
 
   if (!filtered.length) {
@@ -2851,8 +2841,11 @@ window.submitStorefrontReview = async function(form, storeId) {
    ============================================================ */
 
 window.openStorefrontProductModal = async function(productId) {
-  const p = App.allProducts.find(prod => String(prod.id) === String(productId));
+  let p = App.allProducts.find(prod => String(prod.id) === String(productId));
   if (!p) return;
+  if (p.is_flash_sale && p.original_price > p.price) {
+    p = { ...p, price: p.original_price, original_price: null, is_flash_sale: false };
+  }
 
   // Create overlay modal if not exists
   let modal = document.getElementById('storefront-product-modal');
@@ -2913,8 +2906,11 @@ window.updateStorefrontModalQty = function(delta) {
 window.addStorefrontCartItem = function(storeId, productId) {
   const qtyEl = document.getElementById('store-modal-qty');
   const qty = qtyEl ? parseInt(qtyEl.textContent) : 1;
-  const p = App.allProducts.find(prod => String(prod.id) === String(productId));
+  let p = App.allProducts.find(prod => String(prod.id) === String(productId));
   if (!p) return;
+  if (p.is_flash_sale && p.original_price > p.price) {
+    p = { ...p, price: p.original_price, original_price: null, is_flash_sale: false };
+  }
 
   const key = 'happa_store_cart_' + storeId;
   let storeCart = JSON.parse(localStorage.getItem(key) || '[]');
