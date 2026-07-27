@@ -187,7 +187,7 @@ async function renderVendorDashboard() {
 <div class="tab-content active" id="vendor-overview">
   <div class="dashboard-wrap">
     ${!u.is_verified ? `<div class="verify-banner"><i class="fas fa-exclamation-triangle"></i><p>Please verify your phone number to unlock all features</p></div>` : ''}
-    ${!u.id_verified ? `<div class="verify-banner" style="background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c;cursor:pointer" onclick="switchTab(document.querySelector('#vendor-tabs .tab-btn:nth-child(5)'),'vendor-verify')"><i class="fas fa-id-card" style="color:#ea580c"></i><p>Upload your ID to complete vendor verification</p></div>` : ''}
+    ${!u.id_verified ? `<div class="verify-banner" style="background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c;cursor:pointer" onclick="switchTab('vendor-verify')"><i class="fas fa-id-card" style="color:#ea580c"></i><p>Upload your ID to complete vendor verification</p></div>` : ''}
 
     <div class="stats-grid">
       <div class="stat-card">
