@@ -648,7 +648,7 @@ function showPage(pageId, entityId = null) {
 
   // Reset PWA manifest when leaving store detail, storefront or store-admin page
   if (pageId !== 'store-detail' && pageId !== 'storefront' && pageId !== 'store-admin') {
-    updatePWAManifest('HAPPA TRADEMART', 'images/icon-192.png', '#e85d04');
+    updatePWAManifest('HAPPAMART', 'images/icon-192.png', '#e85d04');
   }
 
   // map dashboard route
@@ -2009,7 +2009,7 @@ function _pcSlideshowHTML(images, altText) {
   }
   const slidesHTML = imgs.map((src, i) =>
     `<div class="pc-slide${i === 0 ? ' active' : ''}">
-      <img src="${src}" alt="${altText} ${i+1}" loading="lazy" onerror="this.src='https://via.placeholder.com/300x300?text=No+Image'">
+      <img src="${src}" alt="${altText} ${i+1}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/300x300?text=No+Image'">
     </div>`
   ).join('');
   const dotsHTML = imgs.map((_, i) =>
@@ -2092,8 +2092,8 @@ function storeCardHTML(s, compact = false) {
     return `
 <div class="store-card store-card-compact" onclick="openStore('${s.id}')">
   <div class="store-banner-wrap">
-    <img class="store-banner" src="${banner}" alt="${escHtml(s.name)}" loading="lazy" onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
-    <img class="store-logo store-logo-compact" src="${logo}" alt="${escHtml(s.name)}" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+    <img class="store-banner" src="${banner}" alt="${escHtml(s.name)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
+    <img class="store-logo store-logo-compact" src="${logo}" alt="${escHtml(s.name)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
   </div>
   <div class="store-info">
     <div class="store-name">${escHtml(s.name)}</div>

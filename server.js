@@ -49,13 +49,46 @@ if (hasSupabaseUrl && hasSupabaseKey) {
   }
 }
 
+const zlib = require('zlib');
+
 app.use(express.json({ limit: '50mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Service-Worker-Allowed', '/');
+
   if (req.method === 'OPTIONS') return res.sendStatus(204);
+
+  // Set HTTP caching headers for read-only GET API endpoints
+  if (req.method === 'GET' && req.path.startsWith('/api/')) {
+    const table = req.path.substring(5).split('/')[0];
+    if (['products', 'stores', 'storefronts', 'categories', 'settings'].includes(table)) {
+      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    }
+  }
+
+  // Built-in HTTP Gzip/Deflate compression middleware for responses > 512 bytes
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+  if (acceptEncoding.includes('gzip')) {
+    const rawSend = res.send;
+    res.send = function (body) {
+      if (res.headersSent || !body || (typeof body !== 'string' && !Buffer.isBuffer(body))) {
+        return rawSend.call(this, body);
+      }
+      const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
+      if (buf.length < 512) {
+        return rawSend.call(this, body);
+      }
+      res.setHeader('Content-Encoding', 'gzip');
+      res.removeHeader('Content-Length');
+      zlib.gzip(buf, (err, compressed) => {
+        if (err) return rawSend.call(this, body);
+        rawSend.call(this, compressed);
+      });
+    };
+  }
+
   next();
 });
 

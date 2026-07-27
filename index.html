@@ -45,8 +45,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="HAPPA">
-  <meta name="application-name" content="HAPPA TRADEMART">
+  <meta name="apple-mobile-web-app-title" content="HAPPAMART">
+  <meta name="application-name" content="HAPPAMART">
   <meta name="msapplication-TileColor" content="#0d0d0d">
   <meta name="msapplication-TileImage" content="images/icon-192.png">
 
@@ -90,14 +90,19 @@
     }
   </style>
 
+  <!-- Preload critical core fonts & brand logo for zero-latency initial paint -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" href="images/photo_2026-05-30_17-40-49-Photoroom.png" as="image">
+
   <!-- Google Fonts (Optimized: Core Fonts only; Custom store fonts are loaded dynamically on-demand) -->
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
     rel="stylesheet">
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Chart.js (Deferred) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 
   <link rel="stylesheet" href="css/style.css">
   <style>
