@@ -30,11 +30,15 @@ function sanitizePackage(pkg) {
   pkg.admin_status = pkg.admin_status || 'pending';
   pkg.status = pkg.status || 'pending';
 
-  const subtotal = Array.isArray(pkg.items)
-    ? pkg.items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0)
-    : 0;
+  let subtotal = 0;
+  if (Array.isArray(pkg.items) && pkg.items.length > 0) {
+    subtotal = pkg.items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+  }
+  if (!subtotal) {
+    subtotal = parseFloat(pkg.gross_amount) || parseFloat(pkg.total) || parseFloat(pkg.vendor_amount) || 0;
+  }
 
-  if (!pkg.gross_amount) pkg.gross_amount = subtotal;
+  pkg.gross_amount = subtotal;
   if (!pkg.commission_amount) pkg.commission_amount = parseFloat((subtotal * 0.05).toFixed(2));
   if (!pkg.vendor_amount) pkg.vendor_amount = parseFloat((subtotal - (pkg.commission_amount || 0)).toFixed(2));
 
@@ -464,9 +468,10 @@ async function confirmRejectOrder(packageId) {
     }
   }
 
-  // Full refund to buyer: item subtotal + delivery fee (excluding platform fee)
-  const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
-  const refundAmt = itemSubtotal + (parseFloat(pkg.delivery_fee)||0);
+  // Full refund to buyer: money paid for product + delivery (excluding platform fee which website retains in platform revenue)
+  const productCost = parseFloat(pkg.gross_amount) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
+  const deliveryFee = parseFloat(pkg.delivery_fee) || 0;
+  const refundAmt = productCost + deliveryFee;
   if (pkg.buyer_id) {
     let buyer = null;
     try {

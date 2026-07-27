@@ -141,13 +141,7 @@ async function _apDeleteUser(userId) {
       for (const r of storeReviews) { await apiDelete('reviews', r.id).catch(() => {}); }
       for (const p of storeProducts) { await apiDelete('products', p.id).catch(() => {}); }
 
-      const pkgRes = await apiGet('packages', 'limit=500').catch(() => null);
-      const storePkgs = (pkgRes?.data || []).filter(pkg => String(pkg.store_id) === String(userStore.id));
-      for (const pkg of storePkgs) { await apiDelete('packages', pkg.id).catch(() => {}); }
-
-      const ordRes = await apiGet('orders', 'limit=500').catch(() => null);
-      const storeOrders = (ordRes?.data || []).filter(o => String(o.store_id) === String(userStore.id));
-      for (const o of storeOrders) { await apiDelete('orders', o.id).catch(() => {}); }
+      // Note: Historical packages and orders are PRESERVED so website analytics, platform revenue, and sales history remain intact after account deletion.
 
       const adsRes = await apiGet('ad_campaigns', 'limit=500').catch(() => null);
       const storeAds = (adsRes?.data || []).filter(ad => String(ad.store_id) === String(userStore.id));
@@ -156,10 +150,7 @@ async function _apDeleteUser(userId) {
       await apiDelete('stores', userStore.id).catch(() => {});
     }
 
-    // 2. Delete wallet transactions
-    const txRes = await apiGet('wallet_transactions', 'limit=500').catch(() => null);
-    const userTx = (txRes?.data || []).filter(t => String(t.user_id) === String(userId));
-    for (const t of userTx) { await apiDelete('wallet_transactions', t.id).catch(() => {}); }
+    // Note: Wallet transactions are PRESERVED for financial audit and analytics history.
 
     // 3. Delete services (Rendors)
     const svcRes = await apiGet('services', 'limit=500').catch(() => null);
