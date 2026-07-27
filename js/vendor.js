@@ -2484,7 +2484,7 @@ function _bapRenderStep2() {
   </div>
   <!-- Form fields -->
   <div class="bap-draft-form">
-    <input class="form-control" id="bap-name-${i}" placeholder="Product name *" value="${escHtml(d.name)}" oninput="_bapHandleNameInput(${i},this.value)">
+    <input class="form-control" id="bap-name-${i}" placeholder="Product name (optional)" value="${escHtml(d.name)}" oninput="_bapHandleNameInput(${i},this.value)">
     <textarea class="form-control" id="bap-desc-${i}" rows="2" placeholder="Description (optional)" oninput="_bapHandleDescInput(${i},this.value)">${escHtml(d.desc)}</textarea>
     <div class="bap-row2">
       <input class="form-control" id="bap-price-${i}" type="number" min="1" step="0.01" placeholder="Price (GHS) *" value="${d.price}" oninput="_bapSyncDraft(${i},'price',this.value)">
