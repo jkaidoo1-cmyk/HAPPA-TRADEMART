@@ -2360,7 +2360,7 @@ async function _bapOnFilePick(input) {
     }
 
     const idx = _bap.drafts.length;
-    _bap.drafts.push({ b64: '', name: '', desc: '', price: '', orig: '', stock: '', weight: '0.5', cat: 'Other', tags: '', flash: false, allowNote: false, notePrompt: '' });
+    _bap.drafts.push({ b64: '', name: '', desc: '', price: '', orig: '', stock: '', weight: '0.5', cat: 'Other', flash: false, allowNote: false, notePrompt: '' });
 
     try {
       const base64 = await compressImage(file, 1200, 0.8);
@@ -2475,13 +2475,6 @@ function _bapRenderStep2() {
   </div>
   <!-- Form fields -->
   <div class="bap-draft-form">
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px">
-      <button type="button" onclick="_bapAiFill(${i})"
-              style="display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;border:none;border-radius:7px;padding:6px 12px;cursor:pointer;font-size:.75rem;font-weight:700;white-space:nowrap">
-        <i class="fas fa-magic"></i> ✨ AI Fill
-      </button>
-      <span id="bap-ai-status-${i}" style="font-size:.7rem;color:var(--text-muted)"></span>
-    </div>
     <input class="form-control" id="bap-name-${i}" placeholder="Product name *" value="${escHtml(d.name)}" oninput="_bapHandleNameInput(${i},this.value)">
     <textarea class="form-control" id="bap-desc-${i}" rows="2" placeholder="Description (optional)" oninput="_bapHandleDescInput(${i},this.value)">${escHtml(d.desc)}</textarea>
     <div class="bap-row2">
@@ -2495,8 +2488,7 @@ function _bapRenderStep2() {
     <select class="form-control form-select" id="bap-cat-${i}" onchange="_bapHandleCategoryChange(${i},this.value)">
       ${PRODUCT_CATS.map(c => `<option value="${c}" ${c === d.cat ? 'selected' : ''}>${c}</option>`).join('')}
     </select>
-    <input class="form-control" id="bap-tags-${i}" placeholder="Tags (comma separated)" value="${escHtml(d.tags)}" oninput="_bapSyncDraft(${i},'tags',this.value)">
-    <label style="display:flex;align-items:center;gap:7px;font-size:.8rem;font-weight:600;cursor:pointer">
+    <label style="display:flex;align-items:center;gap:7px;font-size:.8rem;font-weight:600;cursor:pointer;margin-top:6px;">
       <input type="checkbox" id="bap-flash-${i}" ${d.flash ? 'checked' : ''} onchange="_bapSyncDraft(${i},'flash',this.checked)">
       ⚡ Flash Sale
     </label>
@@ -2580,39 +2572,7 @@ function _bapHandleDescInput(idx, desc) {
 }
 
 
-// ── Per-card AI Fill (manual trigger from step-2 card) ───────
-async function _bapAiFill(idx) {
-  const draft    = _bap.drafts[idx];
-  if (!draft) return;
-  if (!draft.b64) { showToast('No image for this card', 'warning'); return; }
-  if (typeof autoGenerateProductInfo !== 'function') { showToast('AI module not loaded', 'error'); return; }
 
-  const nameEl     = document.getElementById('bap-name-' + idx);
-  const descEl     = document.getElementById('bap-desc-' + idx);
-  const statusEl   = document.getElementById('bap-ai-status-' + idx);
-
-  if (statusEl) statusEl.textContent = '⏳ Generating...';
-
-  try {
-    const result = await autoGenerateProductInfo(draft.b64);
-    if (result.name) {
-      draft.name = result.name;
-      if (nameEl) nameEl.value = result.name;
-    }
-    if (result.description) {
-      draft.desc = result.description;
-      if (descEl) descEl.value = result.description;
-    }
-    if (statusEl) statusEl.textContent = '✅ Done!';
-    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-    showToast(`Card ${idx + 1} filled by AI ✨`, 'success');
-  } catch (err) {
-    console.error('[_bapAiFill]', err);
-    if (statusEl) statusEl.textContent = '❌ AI failed';
-    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 4000);
-    showToast('AI failed — fill manually', 'warning');
-  }
-}
 
 // ── Remove a card from step 2 ────────────────────────────────
 function _bapRemoveCard(idx) {
@@ -2799,12 +2759,10 @@ async function _bapSubmitAll() {
     const stock  = parseInt(document.getElementById('bap-stock-'  + i)?.value)   || 0;
     const weight = parseFloat(document.getElementById('bap-weight-' + i)?.value) || 0.5;
     const cat    = document.getElementById('bap-cat-'   + i)?.value || 'Other';
-    const tagsRaw= document.getElementById('bap-tags-'  + i)?.value || '';
     const flash        = document.getElementById('bap-flash-' + i)?.checked || false;
     const allowBuyerNote  = document.getElementById('bap-allow-note-' + i)?.checked || false;
     const buyerNotePrompt = (document.getElementById('bap-note-prompt-' + i)?.value || '').trim() || 'Add a note (e.g. color, size)';
     const images = _bapCollectCardImages(i);
-    const tags   = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
 
     // Show uploading state on card
     const statusDiv = document.getElementById('bap-status-' + i);
@@ -2820,7 +2778,7 @@ async function _bapSubmitAll() {
       location: store.location || App.currentUser?.location || '',
       is_flash_sale: flash, flash_sale_end: '',
       status: stock > 0 ? 'active' : 'sold_out',
-      tags, commission_pct: commission, weight_kg: weight,
+      tags: [], commission_pct: commission, weight_kg: weight,
       allow_buyer_note: allowBuyerNote,
       buyer_note_prompt: allowBuyerNote ? buyerNotePrompt : ''
     });

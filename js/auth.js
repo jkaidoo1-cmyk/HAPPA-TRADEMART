@@ -543,6 +543,8 @@ async function doLogin(e) {
 
   App.currentUser = user;
   saveSessions();
+  if (typeof startDashboardSyncPolling === 'function') startDashboardSyncPolling();
+  if (typeof startNotifPolling === 'function') startNotifPolling();
   showToast(`Welcome back, ${user.name}! 🎉`, 'success');
   showPage('dashboard');
   resetBtn();
@@ -872,6 +874,8 @@ async function doRegister(e) {
 
   App.currentUser = created;
   saveSessions();
+  if (typeof startDashboardSyncPolling === 'function') startDashboardSyncPolling();
+  if (typeof startNotifPolling === 'function') startNotifPolling();
 
   if (authRole === 'vendor' && initialStatus === 'active') {
     await window.autoCreateStoreForVendor(created);

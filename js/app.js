@@ -121,8 +121,9 @@ window.addEventListener('DOMContentLoaded', () => {
   // Fetch server-side notifications (e.g. announcements) shortly after load
   if (App.currentUser) {
     setTimeout(() => fetchServerNotifications().then(renderNotifBadge), 1500);
-    // Start polling every 60s for new notifications/announcements
+    // Start polling for notifications and dashboard sync
     setTimeout(() => startNotifPolling(), 3000);
+    setTimeout(() => startDashboardSyncPolling(), 4000);
   }
   
   if (startupHash === '#register-vendor' || startupHash === '#auth-vendor') {
@@ -345,18 +346,63 @@ async function verifySessionUser() {
     
     const foundUser = userList.find(u => String(u.id) === uid);
 
-    // ONLY log out if the API explicitly returns a user record with status 'deleted' or 'suspended'
-    if (foundUser && (foundUser.status === 'deleted' || foundUser.status === 'suspended')) {
-      console.warn(`[Session Revoked] Account "${uid}" status is ${foundUser.status}. Logging out.`);
-      if (typeof stopNotifPolling === 'function') stopNotifPolling();
-      logout(true);
-      showToast(`Your account has been ${foundUser.status}.`, 'warning');
-      try { localStorage.setItem('happa_logout_user_id', uid); } catch(e){}
-      return false;
+    if (foundUser) {
+      if (foundUser.status === 'deleted' || foundUser.status === 'suspended') {
+        console.warn(`[Session Revoked] Account "${uid}" status is ${foundUser.status}. Logging out.`);
+        if (typeof stopNotifPolling === 'function') stopNotifPolling();
+        if (typeof stopDashboardSyncPolling === 'function') stopDashboardSyncPolling();
+        logout(true);
+        showToast(`Your account has been ${foundUser.status}.`, 'warning');
+        try { localStorage.setItem('happa_logout_user_id', uid); } catch(e){}
+        return false;
+      }
+
+      const prevStatus = App.currentUser.status;
+      const prevRole   = App.currentUser.role;
+
+      // Sync fresh user fields (e.g. status, role, is_verified, id_verified, wallet_balance)
+      Object.assign(App.currentUser, foundUser);
+      saveSessions();
+
+      // Update admin user list cache if current user is admin
+      if (App.currentUser.role === 'admin') {
+        App.allUsers = userList.filter(u => u.role !== 'admin');
+      }
+
+      if (prevStatus !== foundUser.status || prevRole !== foundUser.role) {
+        updateNavForUser();
+        App.loadedPages = {};
+        if (typeof runPageInit === 'function') {
+          runPageInit(App.currentPage);
+        }
+      }
     }
     return true;
   } catch(e) {
     return true;
+  }
+}
+
+// ── Dashboard Sync Polling ────────────────────────────────
+let _dashboardSyncTimer = null;
+function startDashboardSyncPolling() {
+  stopDashboardSyncPolling();
+  if (!App.currentUser) return;
+  _dashboardSyncTimer = setInterval(async () => {
+    if (!App.currentUser) { stopDashboardSyncPolling(); return; }
+    const syncPages = ['admin-dashboard', 'vendor-dashboard', 'vendor-orders', 'buyer-dashboard'];
+    if (syncPages.includes(App.currentPage)) {
+      apiCache.clear();
+      App.isBackgroundRefresh = true;
+      await runPageInit(App.currentPage);
+    }
+  }, 15000); // 15s interval for smooth background sync
+}
+
+function stopDashboardSyncPolling() {
+  if (_dashboardSyncTimer) {
+    clearInterval(_dashboardSyncTimer);
+    _dashboardSyncTimer = null;
   }
 }
 
@@ -367,9 +413,15 @@ setInterval(() => {
   }
 }, 5000);
 
-document.addEventListener('visibilitychange', () => {
+document.addEventListener('visibilitychange', async () => {
   if (!document.hidden && App.currentUser && App.currentUser.id) {
-    verifySessionUser();
+    apiCache.clear();
+    await verifySessionUser();
+    const syncPages = ['admin-dashboard', 'vendor-dashboard', 'vendor-orders', 'buyer-dashboard', 'notifications'];
+    if (syncPages.includes(App.currentPage)) {
+      App.isBackgroundRefresh = true;
+      await runPageInit(App.currentPage);
+    }
   }
 });
 
@@ -408,6 +460,7 @@ function logout(skipConfirm = false) {
     localStorage.removeItem('happa_wishlist');
   } catch(e){}
   if (typeof stopNotifPolling === 'function') stopNotifPolling();
+  if (typeof stopDashboardSyncPolling === 'function') stopDashboardSyncPolling();
   if (typeof renderNotifBadge === 'function') renderNotifBadge();
   const notifContent = document.getElementById('notifications-content');
   if (notifContent) {
@@ -1411,20 +1464,30 @@ async function apiGet(table, params = '') {
   }
   return cachedPromise;
 }
-async function apiPost(table, data) {
+function invalidateAppState(table = '') {
   apiCache.clear();
+  // Clear page load cache for dynamic dashboard views so navigation forces fresh renders
+  delete App.loadedPages['admin-dashboard'];
+  delete App.loadedPages['vendor-dashboard'];
+  delete App.loadedPages['vendor-orders'];
+  delete App.loadedPages['buyer-dashboard'];
+  delete App.loadedPages['notifications'];
+}
+
+async function apiPost(table, data) {
+  invalidateAppState(table);
   return apiFetch(table, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
 }
 async function apiPut(table, id, data) {
-  apiCache.clear();
+  invalidateAppState(table);
   return apiFetch(table + '/' + id, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
 }
 async function apiPatch(table, id, data) {
-  apiCache.clear();
+  invalidateAppState(table);
   return apiFetch(table + '/' + id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
 }
 async function apiDelete(table, id) {
-  apiCache.clear();
+  invalidateAppState(table);
   return apiFetch(table + '/' + id, { method: 'DELETE' });
 }
 
