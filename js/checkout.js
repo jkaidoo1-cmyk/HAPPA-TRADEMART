@@ -274,8 +274,13 @@ function updateDeliveryFee() {
   updateCheckoutTotalsUI();
 }
 
+let _placingOrder = false;
 async function placeOrder() {
+  if (_placingOrder) return;
+  _placingOrder = true;
+
   const btn = document.getElementById('place-order-btn');
+  if (btn) btn.disabled = true;
   const setBtn = window.OptimisticUI?.button(btn, '<i class="fas fa-lock"></i> Place Order');
   if (setBtn) setBtn('saving');
 
@@ -343,6 +348,8 @@ async function placeOrder() {
     if (setBtn) setBtn('failed');
     setTimeout(() => { if (setBtn) setBtn('idle'); }, 2000);
     showToast('Order failed - cart restored.', 'error', 5000);
+    _placingOrder = false;
+    if (btn) btn.disabled = false;
     return;
   }
   

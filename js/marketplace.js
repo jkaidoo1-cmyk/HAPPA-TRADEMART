@@ -3131,7 +3131,14 @@ window.renderStorefrontCheckout = function(storeId) {
   `;
 };
 
+let _placingStorefrontOrder = false;
 window.placeStorefrontOrder = async function(storeId, totalAmount) {
+  if (_placingStorefrontOrder) return;
+  _placingStorefrontOrder = true;
+
+  const orderBtn = event?.target?.closest('button');
+  if (orderBtn) orderBtn.disabled = true;
+
   const name = document.getElementById('sf-ch-name')?.value.trim();
   const phone = document.getElementById('sf-ch-phone')?.value.trim();
   const address = document.getElementById('sf-ch-address')?.value.trim();
@@ -3139,6 +3146,8 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
 
   if (!name || !phone || !address) {
     showToast('Please fill in all delivery details', 'warning');
+    _placingStorefrontOrder = false;
+    if (orderBtn) orderBtn.disabled = false;
     return;
   }
 
@@ -3146,10 +3155,14 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
   if (payment === 'wallet') {
     if (!user.id) {
       showToast('Please sign in to pay with wallet', 'warning');
+      _placingStorefrontOrder = false;
+      if (orderBtn) orderBtn.disabled = false;
       return;
     }
     if ((user.wallet_balance || 0) < totalAmount) {
       showToast('Insufficient wallet balance!', 'danger');
+      _placingStorefrontOrder = false;
+      if (orderBtn) orderBtn.disabled = false;
       return;
     }
     user.wallet_balance = (user.wallet_balance || 0) - totalAmount;
@@ -3158,10 +3171,12 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
   } else if (payment === 'momo') {
     // Simulate Momo Authorization Prompt
     const num = prompt('Enter your Mobile Money phone number:', phone);
-    if (!num) return;
+    if (!num) { _placingStorefrontOrder = false; if (orderBtn) orderBtn.disabled = false; return; }
     const pin = prompt('Enter MoMo PIN to authorize GHS ' + totalAmount + ' payment:');
     if (!pin) {
       showToast('Payment cancelled', 'info');
+      _placingStorefrontOrder = false;
+      if (orderBtn) orderBtn.disabled = false;
       return;
     }
     showToast('Processing MoMo Payment...', 'info');

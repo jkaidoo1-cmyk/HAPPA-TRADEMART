@@ -350,7 +350,11 @@ function filterBuyerOrders(filter, el) {
 }
 
 // ── Vendor: order status update ───────────────────────────
+const _vendorStatusInFlight = new Set();
 async function updateVendorStatus(packageId, newStatus) {
+  if (_vendorStatusInFlight.has(packageId)) return;
+  _vendorStatusInFlight.add(packageId);
+
   const btn = (typeof event !== 'undefined') ? event?.target?.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
@@ -371,6 +375,15 @@ async function updateVendorStatus(packageId, newStatus) {
   const targetId = pkg.id || packageId;
   const pCode = pkg.package_code || targetId;
 
+  const currentVs = pkg.vendor_status || 'pending';
+  const validTransitions = { pending: ['received'], received: ['processed'] };
+  if (!(validTransitions[currentVs] || []).includes(newStatus)) {
+    showToast(`Cannot change status from "${currentVs}" to "${newStatus}"`, 'warning');
+    _vendorStatusInFlight.delete(packageId);
+    if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.originalHtml || 'Action'; }
+    return;
+  }
+
   await apiPatch('packages', targetId, { vendor_status: newStatus });
   
   // Update in-memory package object
@@ -390,6 +403,7 @@ async function updateVendorStatus(packageId, newStatus) {
   }
 
   showToast(`Order marked as ${newStatus} ✅`, 'success');
+  _vendorStatusInFlight.delete(packageId);
   const vid = App.currentUser?.id;
   if (vid && document.getElementById('vendor-orders-list')) {
     await refreshVendorOrders(vid);
@@ -423,9 +437,16 @@ function showRejectOrderModal(packageId) {
 </div>`);
 }
 
+let _rejectingOrder = false;
 async function confirmRejectOrder(packageId) {
+  if (_rejectingOrder) return;
+  _rejectingOrder = true;
+
+  const rejectBtn = document.querySelector('.modal-body .btn-danger');
+  if (rejectBtn) rejectBtn.disabled = true;
+
   const reason = (document.getElementById('reject-reason')?.value || '').trim();
-  if (!reason) { showToast('Please state a reason for rejection', 'warning'); return; }
+  if (!reason) { showToast('Please state a reason for rejection', 'warning'); _rejectingOrder = false; if (rejectBtn) rejectBtn.disabled = false; return; }
 
   let pkg = null;
   try {
@@ -447,6 +468,7 @@ async function confirmRejectOrder(packageId) {
   const vs = pkg.vendor_status || 'pending';
   if (vs === 'processed' || vs === 'rejected') {
     showToast('Cannot reject an order that is already processed or rejected.', 'warning');
+    _rejectingOrder = false;
     closeModalForce(); return;
   }
 
@@ -497,6 +519,7 @@ async function confirmRejectOrder(packageId) {
     }
   }
 
+  _rejectingOrder = false;
   closeModalForce();
   showToast(`Order rejected. Buyer refunded GHS ${refundAmt.toFixed(2)}.`, 'warning');
   const vid = App.currentUser?.id;
@@ -510,26 +533,38 @@ async function confirmRejectOrder(packageId) {
 // ── Admin: update package delivery status ─────────────────
 // Admin can mark On Delivery any time (override), and Delivered after On Delivery.
 // Marking Delivered auto-releases vendor earnings.
+const _adminStatusInFlight = new Set();
 async function updateAdminStatus(packageId, newStatus) {
+  if (_adminStatusInFlight.has(packageId)) return;
+  _adminStatusInFlight.add(packageId);
+
   const btn = (typeof event !== 'undefined') ? event?.target?.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
   const pkg = await apiFetch('packages/' + packageId);
   if (!pkg) {
     showToast('Package not found', 'error');
+    _adminStatusInFlight.delete(packageId);
     if (btn) btn.disabled = false;
     return;
   }
 
-  // Validate transition
   const as = pkg.admin_status || 'pending';
   if (newStatus === 'delivered' && as !== 'on_delivery') {
     showToast('Mark the package "On Delivery" first.', 'warning');
+    _adminStatusInFlight.delete(packageId);
     if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.label || 'Action'; }
     return;
   }
   if (newStatus === 'on_delivery' && as === 'delivered') {
     showToast('Package is already delivered.', 'info');
+    _adminStatusInFlight.delete(packageId);
+    if (btn) btn.disabled = false;
+    return;
+  }
+  if (as === newStatus) {
+    showToast(`Package is already "${newStatus}".`, 'info');
+    _adminStatusInFlight.delete(packageId);
     if (btn) btn.disabled = false;
     return;
   }

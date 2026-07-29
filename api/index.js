@@ -45,8 +45,53 @@ const JSONB_COLS = new Set([
   'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra'
 ]);
 
-function serializeRecord(record) {
+// Package lifecycle fields live in jsonb `extra` on slim Supabase schemas
+const PACKAGE_META_FIELDS = [
+  'package_code', 'order_id', 'vendor_status', 'admin_status', 'buyer_confirmed',
+  'has_review', 'rejected_reason', 'vendor_amount', 'commission_amount', 'gross_amount',
+  'origin_location', 'dest_location', 'is_intercity', 'tracking_link', 'tracking_number',
+  'delivery_partner', 'pickup_date', 'delivered_date', 'balance_released', 'refunded',
+  'buyer_name', 'buyer_phone', 'payment_status', 'total_amount', 'items_count', 'delivery_status'
+];
+
+function parseExtraObject(value) {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) return { ...value };
+  return {};
+}
+
+function packPackageMeta(record, existingExtra) {
+  const extra = { ...parseExtraObject(existingExtra), ...parseExtraObject(record.extra) };
+  for (const key of PACKAGE_META_FIELDS) {
+    if (key in record && record[key] !== undefined) extra[key] = record[key];
+  }
+  return extra;
+}
+
+function unpackPackageMeta(record) {
+  if (!record) return record;
   const out = { ...record };
+  const extra = parseExtraObject(out.extra);
+  for (const [key, value] of Object.entries(extra)) {
+    if (out[key] === undefined || out[key] === null || out[key] === '') out[key] = value;
+  }
+  if (!out.package_code && out.code) out.package_code = out.code;
+  if (!out.code && out.package_code) out.code = out.package_code;
+  if (out.total == null && out.total_amount != null) out.total = out.total_amount;
+  if (out.gross_amount == null && out.total != null) out.gross_amount = out.total;
+  return out;
+}
+
+function serializeRecord(record) {
+  let out = { ...record };
 
   // Parse JSONB columns stored as strings
   for (const col of JSONB_COLS) {
@@ -54,6 +99,8 @@ function serializeRecord(record) {
       try { out[col] = JSON.parse(out[col]); } catch {}
     }
   }
+
+  out = unpackPackageMeta(out);
 
   // ── Field aliasing: DB name → frontend expected name ──────────
   // Products: total_sold → sold_count (frontend uses sold_count everywhere)
@@ -102,10 +149,16 @@ const TABLE_COLUMNS = {
   storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'name', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'business_hours', 'shipping_policy', 'return_policy', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'created_at', 'updated_at']
 };
 
-function prepareRecordForDb(table, record) {
+function prepareRecordForDb(table, record, existingRecord) {
   const out = { ...record };
 
   // Inverse aliasing: map frontend names back to DB column names if DB column is missing
+  if ('package_code' in out && !('code' in out)) {
+    out.code = out.package_code;
+  }
+  if ('code' in out && !('package_code' in out)) {
+    out.package_code = out.code;
+  }
   if ('about_us' in out && !('description' in out)) {
     out.description = out.about_us;
   }
@@ -117,6 +170,14 @@ function prepareRecordForDb(table, record) {
   }
   if ('shipping_policy' in out && !('return_policy' in out)) {
     out.return_policy = out.shipping_policy;
+  }
+  if (table === 'packages') {
+    if (out.total == null && out.total_amount != null) out.total = out.total_amount;
+    if (out.total == null && out.gross_amount != null) {
+      out.total = (parseFloat(out.gross_amount) || 0) + (parseFloat(out.delivery_fee) || 0);
+    }
+    // Persist order-management fields inside jsonb `extra` (slim Supabase schema)
+    out.extra = packPackageMeta(out, existingRecord?.extra);
   }
 
   // Filter columns to only include valid DB columns for Supabase
