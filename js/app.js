@@ -43,6 +43,7 @@ const App = {
   flashSaleEnd: null,
   loadedPages: {},
   isBackgroundRefresh: false,
+  activeTab: {},
 };
 
 // ── Initialize ────────────────────────────────────────────
@@ -1165,10 +1166,12 @@ async function renderVendorOrdersPage() {
   if (!App.currentUser) { showPage('auth'); return; }
 
   const u = App.currentUser;
-  el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading orders…</div>';
+  if (!App.isBackgroundRefresh) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading orders…</div>';
+  }
 
-  const pkgRes     = await apiGet('packages', `search=${encodeURIComponent(u.id)}&limit=100`);
-  const myPackages = (pkgRes?.data || []).filter(p => p.vendor_id === u.id);
+  const pkgRes     = await apiGet('packages', `vendor_id=${encodeURIComponent(u.id)}&limit=200`);
+  const myPackages = (pkgRes?.data || []).filter(p => String(p.vendor_id) === String(u.id));
 
   el.innerHTML = `
 <div style="padding:12px 16px 8px">
@@ -2892,14 +2895,14 @@ async function calculateUserReferralBalance(userId) {
     let totalEarned = 0;
     
     for (const refUser of referredUsers) {
-      // Find completed orders for this referred user
+      // Find completed or paid orders for this referred user
       const userOrders = allOrders.filter(o => 
-        String(o.user_id) === String(refUser.id) && 
-        o.status === 'completed'
+        (String(o.buyer_id) === String(refUser.id) || String(o.user_id) === String(refUser.id)) && 
+        ['completed', 'paid', 'delivered'].includes(o.status)
       );
       
       for (const order of userOrders) {
-        const amt = parseFloat(order.total_amount) || 0;
+        const amt = parseFloat(order.total || order.subtotal || order.total_amount) || 0;
         const pct = getPct(amt);
         totalEarned += amt * (pct / 100);
       }

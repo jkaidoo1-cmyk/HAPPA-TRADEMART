@@ -143,16 +143,19 @@ self.addEventListener('sync', event => {
 // ── Push notifications (future-ready) ────────────────────────
 self.addEventListener('push', event => {
   if (!event.data) return;
-  const data = event.data.json().catch(() => ({ title: 'HAPPA', body: 'You have a new notification' }));
+  let payload = { title: 'HAPPA TRADEMART', body: 'You have a new notification' };
+  try {
+    payload = event.data.json();
+  } catch (e) {
+    try { payload.body = event.data.text() || payload.body; } catch(err) {}
+  }
   event.waitUntil(
-    data.then(d =>
-      self.registration.showNotification(d.title || 'HAPPA TRADEMART', {
-        body:  d.body  || '',
-        icon:  '/images/icon-192.png',
-        badge: '/images/icon-192.png',
-        data:  { url: d.url || '/' }
-      })
-    )
+    self.registration.showNotification(payload.title || 'HAPPA TRADEMART', {
+      body:  payload.body  || '',
+      icon:  './images/icon-192.png',
+      badge: './images/icon-192.png',
+      data:  { url: payload.url || './' }
+    })
   );
 });
 

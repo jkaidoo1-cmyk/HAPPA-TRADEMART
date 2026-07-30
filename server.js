@@ -177,7 +177,7 @@ const TABLE_COLUMNS = {
   service_orders: ['id', 'service_id', 'rendor_id', 'buyer_id', 'title', 'amount', 'status', 'notes', 'created_at', 'updated_at', 'extra'],
   settings: ['id', 'key', 'value', 'label', 'type', 'updated_at'],
   reviews: ['id', 'product_id', 'store_id', 'buyer_id', 'customer_id', 'customer_name', 'target_id', 'target_type', 'rating', 'comment', 'approved', 'created_at', 'extra'],
-  products: ['id', 'store_id', 'vendor_id', 'name', 'category', 'price', 'original_price', 'stock_qty', 'images', 'is_flash_sale', 'flash_pct', 'status', 'is_available', 'description', 'location', 'avg_rating', 'review_count', 'total_sold', 'sold_count', 'weight_kg', 'tags', 'commission_pct', 'allow_buyer_note', 'buyer_note_prompt', 'created_at', 'updated_at', 'extra'],
+  products: ['id', 'store_id', 'vendor_id', 'name', 'category', 'price', 'original_price', 'stock_qty', 'images', 'is_flash_sale', 'flash_pct', 'status', 'is_available', 'description', 'location', 'avg_rating', 'review_count', 'total_sold', 'weight_kg', 'tags', 'commission_pct', 'allow_buyer_note', 'buyer_note_prompt', 'created_at', 'updated_at', 'extra'],
   packages: ['id', 'code', 'package_code', 'order_id', 'buyer_id', 'vendor_id', 'store_id', 'items', 'status', 'vendor_status', 'admin_status', 'buyer_confirmed', 'has_review', 'rejected_reason', 'vendor_amount', 'commission_amount', 'gross_amount', 'delivery_fee', 'total', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'origin_location', 'dest_location', 'is_intercity', 'tracking_link', 'tracking_number', 'delivery_partner', 'pickup_date', 'delivered_date', 'balance_released', 'notes', 'created_at', 'updated_at', 'extra'],
   delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
   referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'reward_amount', 'reward_pct', 'order_id', 'status', 'created_at', 'updated_at', 'extra'],
@@ -435,19 +435,16 @@ app.get('/api/:table/:id', async (req, res) => {
 
   if (supabase) {
     try {
-      const { data, error } = await supabase.from(table).select('*').eq('id', id).single();
-      if (error || !data) return sendNotFound(res);
-      return res.json(serializeRecord(data));
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
+      const { data, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+      if (!error && data) return res.json(serializeRecord(data));
+    } catch (err) {}
   }
 
   const db = loadDb();
   const rows = getTable(db, table);
   const item = rows.find(record => String(record.id) === String(id));
   if (!item) return sendNotFound(res);
-  res.json(item);
+  res.json(serializeRecord(item));
 });
 
 app.post('/api/:table', async (req, res) => {

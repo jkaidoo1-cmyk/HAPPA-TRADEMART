@@ -23,22 +23,24 @@ async function renderBuyerDashboard() {
   // Saved stores
   const savedStoresList = App.allStores.filter(s => App.savedStores.includes(s.id));
 
+  const activeTabId = (App.activeTab && App.activeTab['buyer-dashboard']) || 'buyer-overview';
+
   c.innerHTML = `
 <div class="tab-nav" id="buyer-tabs" style="display:flex;overflow-x:auto;white-space:nowrap;gap:8px;padding-bottom:8px">
-  <div class="tab-btn active" id="nav-buyer-overview" onclick="switchTab(this,'buyer-overview')">Overview</div>
-  <div class="tab-btn" id="nav-buyer-wishlist" onclick="switchTab(this,'buyer-wishlist');renderBuyerWishlist()">Wishlist</div>
-  <div class="tab-btn" id="nav-buyer-addresses" onclick="switchTab(this,'buyer-addresses');renderBuyerAddresses()">Addresses</div>
-  <div class="tab-btn" id="nav-buyer-reviews" onclick="switchTab(this,'buyer-reviews');renderBuyerReviews()">My Reviews</div>
+  <div class="tab-btn ${activeTabId === 'buyer-overview' ? 'active' : ''}" id="nav-buyer-overview" onclick="switchTab(this,'buyer-overview')">Overview</div>
+  <div class="tab-btn ${activeTabId === 'buyer-wishlist' ? 'active' : ''}" id="nav-buyer-wishlist" onclick="switchTab(this,'buyer-wishlist');renderBuyerWishlist()">Wishlist</div>
+  <div class="tab-btn ${activeTabId === 'buyer-addresses' ? 'active' : ''}" id="nav-buyer-addresses" onclick="switchTab(this,'buyer-addresses');renderBuyerAddresses()">Addresses</div>
+  <div class="tab-btn ${activeTabId === 'buyer-reviews' ? 'active' : ''}" id="nav-buyer-reviews" onclick="switchTab(this,'buyer-reviews');renderBuyerReviews()">My Reviews</div>
   <div class="tab-btn" id="nav-buyer-settings" onclick="showPage('settings')">Settings</div>
   
   <!-- Hidden tabs for programmatic switching -->
-  <div class="tab-btn" id="nav-buyer-orders" style="display:none" onclick="switchTab(this,'buyer-orders')">Orders</div>
-  <div class="tab-btn" id="nav-buyer-referral" style="display:none" onclick="switchTab(this,'buyer-referral')">Referrals</div>
-  <div class="tab-btn" id="nav-buyer-saved" style="display:none" onclick="switchTab(this,'buyer-saved')">Saved Stores</div>
+  <div class="tab-btn ${activeTabId === 'buyer-orders' ? 'active' : ''}" id="nav-buyer-orders" style="display:none" onclick="switchTab(this,'buyer-orders')">Orders</div>
+  <div class="tab-btn ${activeTabId === 'buyer-referral' ? 'active' : ''}" id="nav-buyer-referral" style="display:none" onclick="switchTab(this,'buyer-referral')">Referrals</div>
+  <div class="tab-btn ${activeTabId === 'buyer-saved' ? 'active' : ''}" id="nav-buyer-saved" style="display:none" onclick="switchTab(this,'buyer-saved')">Saved Stores</div>
 </div>
 
 <!-- ── Overview ── -->
-<div class="tab-content active" id="buyer-overview">
+<div class="tab-content ${activeTabId === 'buyer-overview' ? 'active' : ''}" id="buyer-overview">
   <div class="dashboard-wrap">
     <!-- Profile Header -->
     <div style="display:flex;align-items:center;gap:14px;background:#fff;padding:16px;border-radius:var(--radius-md);border:1px solid var(--border);margin-bottom:16px;box-shadow:var(--shadow-sm)">

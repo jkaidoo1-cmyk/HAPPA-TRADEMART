@@ -75,6 +75,8 @@ async function renderRendorDashboard() {
     ? `Active — expires ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`
     : 'No active subscription';
 
+  const activeTabId = (App.activeTab && App.activeTab['rendor-dashboard']) || 'rendor-overview';
+
   c.innerHTML = `
 <!-- ── Profile banner ── -->
 <div class="rendor-profile-banner">
@@ -110,16 +112,16 @@ async function renderRendorDashboard() {
 
 <!-- ── Tabs ── -->
 <div class="tab-nav" id="rendor-tabs">
-  <div class="tab-btn active" onclick="switchTab(this,'rendor-overview')">Overview</div>
-  <div class="tab-btn" onclick="switchTab(this,'rendor-posts');loadRendorPosts()">My Posts</div>
-  <div class="tab-btn" onclick="switchTab(this,'rendor-contact')">Contact Info</div>
-  <div class="tab-btn" onclick="switchTab(this,'rendor-subscription');renderRendorSubscription()">Subscription</div>
-  <div class="tab-btn" onclick="switchTab(this,'rendor-wallet');renderRendorWallet()">Wallet</div>
-  <div class="tab-btn" onclick="switchTab(this,'rendor-verify');renderRendorVerify()">Verify</div>
+  <div class="tab-btn ${activeTabId === 'rendor-overview' ? 'active' : ''}" onclick="switchTab(this,'rendor-overview')">Overview</div>
+  <div class="tab-btn ${activeTabId === 'rendor-posts' ? 'active' : ''}" onclick="switchTab(this,'rendor-posts');loadRendorPosts()">My Posts</div>
+  <div class="tab-btn ${activeTabId === 'rendor-contact' ? 'active' : ''}" onclick="switchTab(this,'rendor-contact')">Contact Info</div>
+  <div class="tab-btn ${activeTabId === 'rendor-subscription' ? 'active' : ''}" onclick="switchTab(this,'rendor-subscription');renderRendorSubscription()">Subscription</div>
+  <div class="tab-btn ${activeTabId === 'rendor-wallet' ? 'active' : ''}" onclick="switchTab(this,'rendor-wallet');renderRendorWallet()">Wallet</div>
+  <div class="tab-btn ${activeTabId === 'rendor-verify' ? 'active' : ''}" onclick="switchTab(this,'rendor-verify');renderRendorVerify()">Verify</div>
 </div>
 
 <!-- ══ OVERVIEW ══ -->
-<div class="tab-content active" id="rendor-overview">
+<div class="tab-content ${activeTabId === 'rendor-overview' ? 'active' : ''}" id="rendor-overview">
   <div class="dashboard-wrap">
 
     ${!u.id_verified ? `

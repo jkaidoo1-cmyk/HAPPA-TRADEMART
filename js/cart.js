@@ -28,7 +28,7 @@ function addToCart(product, qty = 1, buyerNote = '') {
       image: product.images?.[0] || '', qty,
       stock_qty: product.stock_qty,
       store_id: product.store_id, store_name: store.name,
-      vendor_id: product.vendor_id, location: product.location,
+      vendor_id: product.vendor_id, location: product.location || store.location || 'Accra',
       weight_kg: product.weight_kg || 0.5,
       commission_pct: getCommission(product.price),
       buyer_note: buyerNote || '',
@@ -85,11 +85,12 @@ function clearCart() {
   showToast('Cart cleared', 'info');
 }
 
-function getCartTotals() {
+function getCartTotals(overrideDest) {
   const subtotal = App.cart.reduce((s, i) => s + i.price * i.qty, 0);
   const commissionTotal = App.cart.reduce((s, i) => s + (i.price * i.qty * (i.commission_pct || 8) / 100), 0);
   const platformFee = subtotal * PLATFORM_FEE_PCT / 100;
-  const userLoc = App.currentUser?.location || '';
+  const destSelect = typeof document !== 'undefined' ? document.getElementById('checkout-dest')?.value : '';
+  const targetLoc = overrideDest || destSelect || App.currentUser?.location || 'Accra';
 
   // Group by store to calculate delivery
   const stores = {};
@@ -100,7 +101,7 @@ function getCartTotals() {
 
   let deliveryFee = 0;
   Object.values(stores).forEach(sg => {
-    const d = calcDelivery(sg.location, userLoc || sg.location,
+    const d = calcDelivery(sg.location, targetLoc || sg.location,
       sg.items.reduce((s, i) => s + i.weight_kg * i.qty, 0));
     deliveryFee += d.rate;
   });
@@ -213,7 +214,6 @@ function proceedToCheckout() {
   if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
     return;
   }
-  if (!App.currentUser) { showPage('auth'); return; }
   if (!App.cart.length) { showToast('Your cart is empty', 'warning'); return; }
   showPage('checkout');
 }

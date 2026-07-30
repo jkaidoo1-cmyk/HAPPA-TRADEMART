@@ -53,26 +53,28 @@ async function renderAdminDashboard() {
   const pendingStorefronts = allStorefronts.filter(s => s.status === 'pending_approval');
   App.allStorefronts = allStorefronts;
 
+  const activeTabId = (App.activeTab && App.activeTab['admin-dashboard']) || 'admin-overview';
+
   c.innerHTML = `
 <div class="tab-nav" id="admin-tabs">
-  <div class="tab-btn active" onclick="switchTab(this,'admin-overview')">Overview</div>
+  <div class="tab-btn ${activeTabId === 'admin-overview' ? 'active' : ''}" onclick="switchTab(this,'admin-overview')">Overview</div>
 
-  <div class="tab-btn" onclick="switchTab(this,'admin-rendors');loadAdminRendors()">
+  <div class="tab-btn ${activeTabId === 'admin-rendors' ? 'active' : ''}" onclick="switchTab(this,'admin-rendors');loadAdminRendors()">
     Rendors ${pendingRendors.length ? `<span style="background:#7c3aed;color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:3px">${pendingRendors.length}</span>` : ''}
   </div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-storefronts');renderAdminStorefronts()">
+  <div class="tab-btn ${activeTabId === 'admin-storefronts' ? 'active' : ''}" onclick="switchTab(this,'admin-storefronts');renderAdminStorefronts()">
     Custom Storefronts ${pendingStorefronts.length ? `<span style="background:#ea580c;color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:3px">${pendingStorefronts.length}</span>` : ''}
   </div>
 
-  <div class="tab-btn" onclick="switchTab(this,'admin-orders');refreshAdminOrdersList()">Orders</div>
+  <div class="tab-btn ${activeTabId === 'admin-orders' ? 'active' : ''}" onclick="switchTab(this,'admin-orders');refreshAdminOrdersList()">Orders</div>
 
-  <div class="tab-btn" onclick="switchTab(this,'admin-ads');loadAdminAds()">🎯 Ads</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-referrals');loadAdminReferrals()">🔗 Referrals</div>
-  <div class="tab-btn" onclick="switchTab(this,'admin-settings');loadAdminSettings()">Settings</div>
+  <div class="tab-btn ${activeTabId === 'admin-ads' ? 'active' : ''}" onclick="switchTab(this,'admin-ads');loadAdminAds()">🎯 Ads</div>
+  <div class="tab-btn ${activeTabId === 'admin-referrals' ? 'active' : ''}" onclick="switchTab(this,'admin-referrals');loadAdminReferrals()">🔗 Referrals</div>
+  <div class="tab-btn ${activeTabId === 'admin-settings' ? 'active' : ''}" onclick="switchTab(this,'admin-settings');loadAdminSettings()">Settings</div>
 </div>
 
 <!-- ── Referrals Board ── -->
-<div class="tab-content" id="admin-referrals">
+<div class="tab-content ${activeTabId === 'admin-referrals' ? 'active' : ''}" id="admin-referrals">
   <div class="dashboard-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div>
@@ -87,7 +89,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Ads Manager ── -->
-<div class="tab-content" id="admin-ads">
+<div class="tab-content ${activeTabId === 'admin-ads' ? 'active' : ''}" id="admin-ads">
   <div class="dashboard-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div>
@@ -105,7 +107,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Overview ── -->
-<div class="tab-content active" id="admin-overview">
+<div class="tab-content ${activeTabId === 'admin-overview' ? 'active' : ''}" id="admin-overview">
   <div class="dashboard-wrap">
     <div class="stats-grid">
       <div class="stat-card">
@@ -766,8 +768,22 @@ async function renderAdminDashboard() {
 </div>`;
 
   setTimeout(() => {
-    renderAdminRevenueChart(allOrders);
-    renderAdminLocationChart(allOrders);
+    if (activeTabId === 'admin-overview') {
+      renderAdminRevenueChart(allOrders);
+      renderAdminLocationChart(allOrders);
+    } else if (activeTabId === 'admin-orders' && typeof refreshAdminOrdersList === 'function') {
+      refreshAdminOrdersList();
+    } else if (activeTabId === 'admin-rendors' && typeof loadAdminRendors === 'function') {
+      loadAdminRendors();
+    } else if (activeTabId === 'admin-storefronts' && typeof renderAdminStorefronts === 'function') {
+      renderAdminStorefronts();
+    } else if (activeTabId === 'admin-ads' && typeof loadAdminAds === 'function') {
+      loadAdminAds();
+    } else if (activeTabId === 'admin-referrals' && typeof loadAdminReferrals === 'function') {
+      loadAdminReferrals();
+    } else if (activeTabId === 'admin-settings' && typeof loadAdminSettings === 'function') {
+      loadAdminSettings();
+    }
   }, 200);
 }
 
@@ -1744,7 +1760,7 @@ async function sendAnnouncement() {
         message:    text,
         is_read:    false,
         action_url: '',
-        created_at: Date.now()
+        created_at: new Date().toISOString()
       })
     ));
   }

@@ -30,8 +30,13 @@ function sanitizePackage(pkg) {
   pkg.admin_status = pkg.admin_status || 'pending';
   pkg.status = pkg.status || 'pending';
 
+  if (typeof pkg.items === 'string') {
+    try { pkg.items = JSON.parse(pkg.items); } catch(e) { pkg.items = []; }
+  }
+  if (!Array.isArray(pkg.items)) pkg.items = [];
+
   let subtotal = 0;
-  if (Array.isArray(pkg.items) && pkg.items.length > 0) {
+  if (pkg.items.length > 0) {
     subtotal = pkg.items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
   }
   if (!subtotal) {
@@ -59,7 +64,8 @@ function getBuyerDisplayStatus(pkg) {
 }
 
 // ── Buyer: package card (used in dashboard) ───────────────
-function buyerPackageCard(pkg) {
+function buyerPackageCard(rawPkg) {
+  const pkg = sanitizePackage(rawPkg);
   const ds = getBuyerDisplayStatus(pkg);
   const vs = pkg.vendor_status || 'pending';
   const as = pkg.admin_status  || 'pending';
@@ -75,8 +81,8 @@ function buyerPackageCard(pkg) {
       <div class="tracking-step ${vs !== 'pending' && vs !== 'rejected' ? 'done' : vs === 'rejected' ? 'fail' : 'active'}">
         <div class="tracking-dot"></div><div class="tracking-label">Vendor</div>
       </div>
-      <div class="tracking-line ${as !== 'pending' && vs !== 'rejected' ? 'done' : ''}"></div>
-      <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : as !== 'pending' && vs !== 'rejected' ? 'active' : ''}">
+      <div class="tracking-line ${vs === 'processed' || as !== 'pending' ? 'done' : ''}"></div>
+      <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : vs === 'processed' ? 'active' : ''}">
         <div class="tracking-dot"></div><div class="tracking-label">In Transit</div>
       </div>
       <div class="tracking-line ${as === 'delivered' ? 'done' : ''}"></div>
@@ -147,10 +153,10 @@ async function showPackageDetailModal(packageId) {
       <div class="tracking-dot"></div>
       <div class="tracking-label">Vendor<br><span style="font-weight:400">${VENDOR_STATUS_LABELS[vs]?.text || vs}</span></div>
     </div>
-    <div class="tracking-line ${as !== 'pending' && vs !== 'rejected' ? 'done' : ''}"></div>
-    <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : as !== 'pending' && vs !== 'rejected' ? 'active' : ''}">
+    <div class="tracking-line ${vs === 'processed' || as !== 'pending' ? 'done' : ''}"></div>
+    <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : vs === 'processed' ? 'active' : ''}">
       <div class="tracking-dot"></div>
-      <div class="tracking-label">In Transit<br><span style="font-weight:400">${as === 'on_delivery' ? 'On the way' : as === 'delivered' ? 'Arrived' : 'Waiting'}</span></div>
+      <div class="tracking-label">In Transit<br><span style="font-weight:400">${as === 'on_delivery' ? 'On the way' : as === 'delivered' ? 'Arrived' : vs === 'processed' ? 'Ready for pickup' : 'Waiting'}</span></div>
     </div>
     <div class="tracking-line ${as === 'delivered' ? 'done' : ''}"></div>
     <div class="tracking-step ${as === 'delivered' ? 'done' : ''}">
@@ -516,6 +522,45 @@ async function confirmRejectOrder(packageId) {
       });
       addNotification(pkg.buyer_id, 'order', '💰 Order Refunded',
         `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`);
+    } else {
+      // Guest customer refund tracking record
+      await apiPost('wallet_transactions', {
+        user_id:        pkg.buyer_id,
+        type:           'refund',
+        amount:         refundAmt,
+        payment_method: 'guest_refund',
+        status:         'completed',
+        note:           `Guest Refund (${pkg.buyer_name || 'Guest'} - ${pkg.buyer_phone || 'N/A'}): Order ${pCode} rejected. Reason: ${reason}`
+      });
+    }
+  }
+
+  // Restore product stock & update status back to active
+  if (Array.isArray(pkg.items)) {
+    for (const item of pkg.items) {
+      if (!item.id) continue;
+      let prod = App.allProducts?.find(p => String(p.id) === String(item.id));
+      if (!prod) {
+        try { prod = await apiFetch('products/' + item.id); } catch(e){}
+      }
+      if (prod) {
+        const currentStock = parseInt(prod.stock_qty) || 0;
+        const currentSold  = parseInt(prod.total_sold || prod.sold_count) || 0;
+        const restoredQty  = currentStock + (parseInt(item.qty) || 1);
+        const restoredSold = Math.max(0, currentSold - (parseInt(item.qty) || 1));
+        await apiPatch('products', item.id, {
+          stock_qty: restoredQty,
+          total_sold: restoredSold,
+          sold_count: restoredSold,
+          status: 'active',
+          is_available: true
+        });
+        prod.stock_qty = restoredQty;
+        prod.total_sold = restoredSold;
+        prod.sold_count = restoredSold;
+        prod.status = 'active';
+        prod.is_available = true;
+      }
     }
   }
 
@@ -541,13 +586,18 @@ async function updateAdminStatus(packageId, newStatus) {
   const btn = (typeof event !== 'undefined') ? event?.target?.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
-  const pkg = await apiFetch('packages/' + packageId);
-  if (!pkg) {
+  let rawPkg = await apiFetch('packages/' + packageId);
+  if (rawPkg && rawPkg.data && Array.isArray(rawPkg.data)) rawPkg = rawPkg.data[0];
+  if (!rawPkg && App.allPackages) {
+    rawPkg = App.allPackages.find(p => String(p.id) === String(packageId) || String(p.package_code) === String(packageId) || String(p.code) === String(packageId));
+  }
+  if (!rawPkg) {
     showToast('Package not found', 'error');
     _adminStatusInFlight.delete(packageId);
     if (btn) btn.disabled = false;
     return;
   }
+  const pkg = sanitizePackage(rawPkg);
 
   const as = pkg.admin_status || 'pending';
   if (newStatus === 'delivered' && as !== 'on_delivery') {
@@ -558,6 +608,12 @@ async function updateAdminStatus(packageId, newStatus) {
   }
   if (newStatus === 'on_delivery' && as === 'delivered') {
     showToast('Package is already delivered.', 'info');
+    _adminStatusInFlight.delete(packageId);
+    if (btn) btn.disabled = false;
+    return;
+  }
+  if (newStatus === 'delivered' && pkg.balance_released) {
+    showToast('Package is already delivered and earnings released.', 'info');
     _adminStatusInFlight.delete(packageId);
     if (btn) btn.disabled = false;
     return;
@@ -666,6 +722,7 @@ async function updateAdminStatus(packageId, newStatus) {
     addNotification(pkg.buyer_id, 'order', notifs[newStatus][0], notifs[newStatus][1]);
 
   showToast(`Package marked as "${newStatus}" ✅`, 'success');
+  _adminStatusInFlight.delete(packageId);
   await refreshAdminOrdersList();
 }
 
@@ -689,7 +746,8 @@ async function refreshAdminOrdersList() {
 }
 
 // ── Admin: package row card ───────────────────────────────
-function adminPackageRowHTML(pkg, allUsers) {
+function adminPackageRowHTML(rawPkg, allUsers) {
+  const pkg = sanitizePackage(rawPkg);
   const buyer  = allUsers.find(u => u.id === pkg.buyer_id);
   const vendor = allUsers.find(u => u.id === pkg.vendor_id);
   const vs  = pkg.vendor_status || 'pending';
@@ -712,7 +770,7 @@ function adminPackageRowHTML(pkg, allUsers) {
       <div>
         <div style="font-weight:800;font-size:.92rem">📦 ${escHtml(pkg.package_code||'—')}</div>
         <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">
-          Buyer: <strong>${buyer ? escHtml(buyer.name) : 'Unknown'}</strong>
+          Buyer: <strong>${buyer ? escHtml(buyer.name) : (pkg.buyer_name ? escHtml(pkg.buyer_name) : 'Guest')}</strong>
           &nbsp;·&nbsp; Vendor: <strong>${vendor ? escHtml(vendor.name) : 'Unknown'}</strong>
         </div>
         <div style="font-size:.72rem;color:var(--text-muted)">${escHtml(pkg.origin_location||'?')} → ${escHtml(pkg.dest_location||'?')}</div>
@@ -895,8 +953,9 @@ async function refreshVendorOrders(vendorId) {
 
   listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Refreshing…</div>';
 
-  const res  = await apiGet('packages', 'limit=200');
-  const pkgs = (res?.data || []).filter(p => String(p.vendor_id) === String(vendorId));
+  const res  = await apiGet('packages', 'vendor_id=' + encodeURIComponent(vendorId));
+  const rawPkgs = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+  const pkgs = rawPkgs.filter(p => String(p.vendor_id) === String(vendorId));
 
   listEl.innerHTML = pkgs.length
     ? pkgs.map(pkg => packageDetailHTML(pkg)).join('')

@@ -191,6 +191,44 @@
       "id": "use-1785091020196-808",
       "created_at": "2026-07-26T18:37:00.196Z",
       "updated_at": "2026-07-26T18:37:00.196Z"
+    },
+    {
+      "name": "Test Buyer User",
+      "email": "testbuyer_1785356881610@example.com",
+      "phone": "0241285019",
+      "role": "buyer",
+      "location": "Accra",
+      "is_verified": false,
+      "id_verified": false,
+      "referral_code": "REF1785356881610",
+      "referred_by": "",
+      "referral_earnings": 0,
+      "referral_count": 0,
+      "wallet_balance": 0,
+      "status": "active",
+      "password_hash": "pass123456",
+      "registered_at": "2026-07-29T20:28:01.610Z",
+      "id": "use-1785356881672-582",
+      "created_at": "2026-07-29T20:28:01.672Z",
+      "updated_at": "2026-07-29T20:28:01.673Z"
+    },
+    {
+      "name": "Test Vendor User",
+      "email": "testvendor_1785356881610@example.com",
+      "phone": "0557521249",
+      "role": "vendor",
+      "location": "Kumasi",
+      "is_verified": false,
+      "id_verified": false,
+      "referral_code": "VREF1785356881610",
+      "preferred_store_name": "Test Vendor Boutique",
+      "preferred_store_cat": "Fashion & Clothing",
+      "status": "pending_approval",
+      "password_hash": "pass123456",
+      "registered_at": "2026-07-29T20:28:03.482Z",
+      "id": "use-1785356883486-352",
+      "created_at": "2026-07-29T20:28:03.487Z",
+      "updated_at": "2026-07-29T20:28:03.487Z"
     }
   ],
   "stores": [
@@ -571,12 +609,311 @@
       "updated_at": "2026-07-27T00:31:29.868Z",
       "theme": "modern",
       "slogan": "Best Quality Products Guaranteed"
+    },
+    {
+      "id": "store-u-test-vendor-1785368083269",
+      "name": "Auto Approve Store",
+      "slug": "auto-approve-store-1785368083270",
+      "vendor_id": "u-test-vendor-1785368083269",
+      "status": "active",
+      "storefront_status": "rejected",
+      "created_at": "2026-07-29T23:34:43.307Z",
+      "updated_at": "2026-07-29T23:34:43.338Z",
+      "theme": "modern",
+      "slogan": "Best Quality Products Guaranteed"
     }
   ],
   "storefronts": [],
-  "products": [],
-  "orders": [],
-  "packages": [],
+  "products": [
+    {
+      "id": "prod-test-1785367433109",
+      "store_id": "store-1785367433109",
+      "vendor_id": "u-test-vendor-1785367433109",
+      "name": "Test Product Order Flow",
+      "price": 100,
+      "stock_qty": 8,
+      "sold_count": 2,
+      "total_sold": 2,
+      "status": "active",
+      "is_available": true,
+      "location": "Accra",
+      "created_at": "2026-07-29T23:23:53.224Z",
+      "updated_at": "2026-07-29T23:23:54.413Z"
+    },
+    {
+      "id": "prod-test-1785367519464",
+      "store_id": "store-1785367519464",
+      "vendor_id": "u-test-vendor-1785367519464",
+      "name": "Test Product Order Flow",
+      "price": 100,
+      "stock_qty": 8,
+      "sold_count": 2,
+      "total_sold": 2,
+      "status": "active",
+      "is_available": true,
+      "location": "Accra",
+      "created_at": "2026-07-29T23:25:19.557Z",
+      "updated_at": "2026-07-29T23:25:20.754Z"
+    },
+    {
+      "id": "prod-test-1785367749025",
+      "store_id": "store-1785367749025",
+      "vendor_id": "u-test-vendor-1785367749025",
+      "name": "Test Product Order Flow",
+      "price": 100,
+      "stock_qty": 8,
+      "sold_count": 2,
+      "total_sold": 2,
+      "status": "active",
+      "is_available": true,
+      "location": "Accra",
+      "created_at": "2026-07-29T23:29:09.131Z",
+      "updated_at": "2026-07-29T23:29:10.955Z"
+    },
+    {
+      "id": "prod-test-1785367833355",
+      "store_id": "store-1785367833355",
+      "vendor_id": "u-test-vendor-1785367833355",
+      "name": "Test Product Order Flow",
+      "price": 100,
+      "stock_qty": 8,
+      "sold_count": 2,
+      "total_sold": 2,
+      "status": "active",
+      "is_available": true,
+      "location": "Accra",
+      "created_at": "2026-07-29T23:30:33.388Z",
+      "updated_at": "2026-07-29T23:30:34.678Z"
+    }
+  ],
+  "orders": [
+    {
+      "id": "ord-test-1785367433736",
+      "buyer_id": "guest_1785367433737",
+      "buyer_name": "Ama Serwaa",
+      "buyer_phone": "0241234567",
+      "buyer_email": "ama@example.com",
+      "items": [
+        {
+          "id": "prod-test-1785367433109",
+          "name": "Test Product Order Flow",
+          "price": 100,
+          "qty": 2,
+          "store_id": "store-1785367433109"
+        }
+      ],
+      "subtotal": 200,
+      "platform_fee": 4,
+      "delivery_fee": 15,
+      "total": 219,
+      "payment_method": "mobile_money",
+      "status": "paid",
+      "created_at": "2026-07-29T23:23:53.737Z",
+      "updated_at": "2026-07-29T23:23:53.737Z"
+    },
+    {
+      "id": "ord-test-1785367520147",
+      "buyer_id": "guest_1785367520147",
+      "buyer_name": "Ama Serwaa",
+      "buyer_phone": "0241234567",
+      "buyer_email": "ama@example.com",
+      "items": [
+        {
+          "id": "prod-test-1785367519464",
+          "name": "Test Product Order Flow",
+          "price": 100,
+          "qty": 2,
+          "store_id": "store-1785367519464"
+        }
+      ],
+      "subtotal": 200,
+      "platform_fee": 4,
+      "delivery_fee": 15,
+      "total": 219,
+      "payment_method": "mobile_money",
+      "status": "paid",
+      "created_at": "2026-07-29T23:25:20.150Z",
+      "updated_at": "2026-07-29T23:25:20.150Z"
+    },
+    {
+      "id": "ord-test-1785367750426",
+      "buyer_id": "guest_1785367750426",
+      "buyer_name": "Ama Serwaa",
+      "buyer_phone": "0241234567",
+      "buyer_email": "ama@example.com",
+      "items": [
+        {
+          "id": "prod-test-1785367749025",
+          "name": "Test Product Order Flow",
+          "price": 100,
+          "qty": 2,
+          "store_id": "store-1785367749025"
+        }
+      ],
+      "subtotal": 200,
+      "platform_fee": 4,
+      "delivery_fee": 15,
+      "total": 219,
+      "payment_method": "mobile_money",
+      "status": "paid",
+      "created_at": "2026-07-29T23:29:10.428Z",
+      "updated_at": "2026-07-29T23:29:10.428Z"
+    },
+    {
+      "id": "ord-test-1785367833882",
+      "buyer_id": "guest_1785367833882",
+      "buyer_name": "Ama Serwaa",
+      "buyer_phone": "0241234567",
+      "buyer_email": "ama@example.com",
+      "items": [
+        {
+          "id": "prod-test-1785367833355",
+          "name": "Test Product Order Flow",
+          "price": 100,
+          "qty": 2,
+          "store_id": "store-1785367833355"
+        }
+      ],
+      "subtotal": 200,
+      "platform_fee": 4,
+      "delivery_fee": 15,
+      "total": 219,
+      "payment_method": "mobile_money",
+      "status": "paid",
+      "created_at": "2026-07-29T23:30:33.887Z",
+      "updated_at": "2026-07-29T23:30:33.887Z"
+    }
+  ],
+  "packages": [
+    {
+      "id": "ACC-60891",
+      "package_code": "ACC-60891",
+      "code": "ACC-60891",
+      "order_id": "ord-test-1785367433736",
+      "vendor_id": "u-test-vendor-1785367433109",
+      "store_id": "store-1785367433109",
+      "buyer_id": "guest_1785367433737",
+      "buyer_name": "Ama Serwaa",
+      "buyer_phone": "0241234567",
+      "buyer_email": "ama@example.com",
+      "delivery_address": "East Legon, House #45",
+      "delivery_name": "Ama Serwaa",
+      "delivery_phone": "0241234567",
+      "items": [
+        {
+          "id": "prod-test-1785367433109",
+          "name": "Test Product Order Flow",
+          "qty": 2,
+          "price": 100
+        }
+      ],
+      "gross_amount": 200,
+      "commission_amount": 10,
+      "vendor_amount": 190,
+      "delivery_fee": 15,
+      "status": "pending",
+      "vendor_status": "pending",
+      "admin_status": "pending",
+      "created_at": "2026-07-29T23:23:54.140Z",
+      "updated_at": "2026-07-29T23:23:54.140Z"
+    },
+    {
+      "id": "ACC-73523",
+      "package_code": "ACC-73523",
+      "code": "ACC-73523",
+      "order_id": "ord-test-1785367520147",
+      "vendor_id": "u-test-vendor-1785367519464",
+      "store_id": "store-1785367519464",
+      "buyer_id": "guest_1785367520147",
+      "buyer_name": "Ama Serwaa",
+      "buyer_phone": "0241234567",
+      "buyer_email": "ama@example.com",
+      "delivery_address": "East Legon, House #45",
+      "delivery_name": "Ama Serwaa",
+      "delivery_phone": "0241234567",
+      "items": [
+        {
+          "id": "prod-test-1785367519464",
+          "name": "Test Product Order Flow",
+          "qty": 2,
+          "price": 100
+        }
+      ],
+      "gross_amount": 200,
+      "commission_amount": 10,
+      "vendor_amount": 190,
+      "delivery_fee": 15,
+      "status": "pending",
+      "vendor_status": "pending",
+      "admin_status": "pending",
+      "created_at": "2026-07-29T23:25:20.388Z",
+      "updated_at": "2026-07-29T23:25:20.388Z"
+    },
+    {
+      "id": "ACC-71888",
+      "package_code": "ACC-71888",
+      "code": "ACC-71888",
+      "order_id": "ord-test-1785367750426",
+      "vendor_id": "u-test-vendor-1785367749025",
+      "store_id": "store-1785367749025",
+      "buyer_id": "guest_1785367750426",
+      "buyer_name": "Ama Serwaa",
+      "buyer_phone": "0241234567",
+      "buyer_email": "ama@example.com",
+      "delivery_address": "East Legon, House #45",
+      "delivery_name": "Ama Serwaa",
+      "delivery_phone": "0241234567",
+      "items": [
+        {
+          "id": "prod-test-1785367749025",
+          "name": "Test Product Order Flow",
+          "qty": 2,
+          "price": 100
+        }
+      ],
+      "gross_amount": 200,
+      "commission_amount": 10,
+      "vendor_amount": 190,
+      "delivery_fee": 15,
+      "status": "pending",
+      "vendor_status": "pending",
+      "admin_status": "pending",
+      "created_at": "2026-07-29T23:29:10.673Z",
+      "updated_at": "2026-07-29T23:29:10.673Z"
+    },
+    {
+      "id": "ACC-22668",
+      "package_code": "ACC-22668",
+      "code": "ACC-22668",
+      "order_id": "ord-test-1785367833882",
+      "vendor_id": "u-test-vendor-1785367833355",
+      "store_id": "store-1785367833355",
+      "buyer_id": "guest_1785367833882",
+      "buyer_name": "Ama Serwaa",
+      "buyer_phone": "0241234567",
+      "buyer_email": "ama@example.com",
+      "delivery_address": "East Legon, House #45",
+      "delivery_name": "Ama Serwaa",
+      "delivery_phone": "0241234567",
+      "items": [
+        {
+          "id": "prod-test-1785367833355",
+          "name": "Test Product Order Flow",
+          "qty": 2,
+          "price": 100
+        }
+      ],
+      "gross_amount": 200,
+      "commission_amount": 10,
+      "vendor_amount": 190,
+      "delivery_fee": 15,
+      "status": "pending",
+      "vendor_status": "pending",
+      "admin_status": "pending",
+      "created_at": "2026-07-29T23:30:34.286Z",
+      "updated_at": "2026-07-29T23:30:34.286Z"
+    }
+  ],
   "services": [
     {
       "id": "svc-1",

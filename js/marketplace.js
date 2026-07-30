@@ -6,6 +6,19 @@
 
 
 
+function toStorefrontProduct(p) {
+  if (!p) return p;
+  const regularPrice = (p.original_price && parseFloat(p.original_price) > 0) ? parseFloat(p.original_price) : parseFloat(p.price);
+  return {
+    ...p,
+    price: regularPrice,
+    original_price: null,
+    is_flash_sale: false,
+    is_flash_sale_flag: false
+  };
+}
+window.toStorefrontProduct = toStorefrontProduct;
+
 let currentMarketFilter = 'all';
 
 
@@ -442,9 +455,14 @@ async function renderProductDetail(id) {
 
 
 
-  const p = App.allProducts.find(p => String(p.id) === String(id)) || await apiGet(`products/${id}`);
+  let p = App.allProducts.find(p => String(p.id) === String(id)) || await apiGet(`products/${id}`);
 
   if (!p || (p.error && !p.id)) { c.innerHTML = '<div class="empty-state"><i class="fas fa-box-open"></i><h3>Product not found</h3></div>'; return; }
+
+  const isStorefrontView = App.isStandaloneStorefront || App.currentPage === 'storefront' || document.body.classList.contains('is-storefront-view');
+  if (isStorefrontView) {
+    p = toStorefrontProduct(p);
+  }
 
 
 
@@ -500,7 +518,7 @@ async function renderProductDetail(id) {
 
 <div style="position:relative;background:#f3f4f6">
 
-  ${p.is_flash_sale ? '<span class="flash-badge" style="top:12px;left:12px">FLASH</span>' : ''}
+  ${(p.is_flash_sale && !isStorefrontView) ? '<span class="flash-badge" style="top:12px;left:12px">FLASH</span>' : ''}
 
   ${discount > 0 ? `<span style="position:absolute;top:12px;right:12px;background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:var(--radius-full)">${discount}% OFF</span>` : ''}
 
@@ -857,9 +875,8 @@ async function buyNow(productId) {
   if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
     return;
   }
-  if (!App.currentUser) { showPage('auth'); return; }
 
-  const p = App.allProducts.find(p => p.id === productId) || await apiGet(`products/${productId}`);
+  const p = App.allProducts?.find(p => String(p.id) === String(productId)) || await apiFetch(`products/${productId}`);
 
   if (!p) return;
 
@@ -869,7 +886,6 @@ async function buyNow(productId) {
   if (addToCart(p, qty, note)) {
     showPage('checkout');
   }
-
 }
 
 
@@ -1367,7 +1383,9 @@ async function renderStorefront(id) {
       #storefront-page-container .store-description-text { color: ${primaryColor} !important; }
       #storefront-page-container .store-location-tag { color: ${primaryColor} !important; font-weight: 700 !important; }
       #storefront-page-container .store-location-tag i { color: ${primaryColor} !important; }
-      #storefront-page-container .flash-badge { display: none !important; }
+      #storefront-page-container .flash-badge,
+      body.is-storefront-view .flash-badge,
+      .is-storefront-root .flash-badge { display: none !important; }
       #store-search-input::placeholder { font-family: inherit !important; color: inherit !important; opacity: 0.7 !important; }
     </style>
   `;
@@ -1617,11 +1635,17 @@ window.updateStorefrontCartBadge = function(storeId, totalQty) {
 
 function adminProductCardHTML(p) {
 
+  const isStorefrontView = App.isStandaloneStorefront || App.currentPage === 'storefront' || document.body.classList.contains('is-storefront-view');
+
+  if (isStorefrontView) {
+    p = toStorefrontProduct(p);
+  }
+
   const avail    = p.is_available !== false;
 
   const isSoldOut= p.stock_qty === 0;
 
-  const flash    = p.is_flash_sale ? '<span class="flash-badge">FLASH</span>' : '';
+  const flash    = (p.is_flash_sale && !isStorefrontView) ? '<span class="flash-badge">FLASH</span>' : '';
 
   const soldOut  = isSoldOut ? '<div class="sold-out-overlay">SOLD OUT</div>' : '';
 
@@ -2649,7 +2673,7 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   }
 
   const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && p.status === 'active')
-    .map(p => (p.is_flash_sale && p.original_price > p.price) ? { ...p, price: p.original_price, original_price: null, is_flash_sale: false } : p);
+    .map(toStorefrontProduct);
 
   const isStorefrontPage = App.currentPage === 'storefront';
   const slogan = isStorefrontPage ? (sf?.slogan || s.slogan || 'Welcome to our store!') : (s.slogan || 'Welcome to our store!');
@@ -2794,7 +2818,7 @@ window.handleStoreProductSearch = function(storeId, query) {
 
   const needle = query.trim().toLowerCase();
   const storeProds = App.allProducts.filter(p => p.store_id === storeId && p.status === 'active')
-    .map(p => (p.is_flash_sale && p.original_price > p.price) ? { ...p, price: p.original_price, original_price: null, is_flash_sale: false } : p);
+    .map(toStorefrontProduct);
   const filtered = storeProds.filter(p => p.name.toLowerCase().includes(needle) || (p.description && p.description.toLowerCase().includes(needle)));
 
   if (!filtered.length) {
@@ -2843,9 +2867,7 @@ window.submitStorefrontReview = async function(form, storeId) {
 window.openStorefrontProductModal = async function(productId) {
   let p = App.allProducts.find(prod => String(prod.id) === String(productId));
   if (!p) return;
-  if (p.is_flash_sale && p.original_price > p.price) {
-    p = { ...p, price: p.original_price, original_price: null, is_flash_sale: false };
-  }
+  p = toStorefrontProduct(p);
 
   // Create overlay modal if not exists
   let modal = document.getElementById('storefront-product-modal');
@@ -2908,9 +2930,7 @@ window.addStorefrontCartItem = function(storeId, productId) {
   const qty = qtyEl ? parseInt(qtyEl.textContent) : 1;
   let p = App.allProducts.find(prod => String(prod.id) === String(productId));
   if (!p) return;
-  if (p.is_flash_sale && p.original_price > p.price) {
-    p = { ...p, price: p.original_price, original_price: null, is_flash_sale: false };
-  }
+  p = toStorefrontProduct(p);
 
   const key = 'happa_store_cart_' + storeId;
   let storeCart = JSON.parse(localStorage.getItem(key) || '[]');

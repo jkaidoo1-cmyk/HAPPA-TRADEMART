@@ -1,18 +1,74 @@
-/* ============================================================
-   HAPPA TRADEMART — Notifications Module
-   ============================================================ */
+async function addNotification(userId, type, title, message, actionUrl = '') {
+  if (!userId) return;
+  const targetId = String(userId);
+
+  // Check if target user is deleted or no longer exists
+  try {
+    const usersRes = await apiGet('users', 'limit=500').catch(() => null);
+    const userList = usersRes?.data || (Array.isArray(usersRes) ? usersRes : []);
+    const targetUser = userList.find(u => String(u.id) === targetId);
+
+    if (targetUser && targetUser.status === 'deleted') {
+      console.warn(`[Notification Suppressed] User ${targetId} is deleted.`);
+      return;
+    }
+  } catch(e) {}
+
+  // Smart deduplication guard: title AND message AND target user_id within last 5 seconds
+  const nowMs = Date.now();
+  const isDup = (App.notifications || []).some(n => {
+    if (!n) return false;
+    const sameUser = String(n.user_id) === targetId;
+    const sameTitle = String(n.title) === String(title);
+    const sameMsg = String(n.message) === String(message);
+    const notifTime = new Date(n.created_at || 0).getTime();
+    return sameUser && sameTitle && sameMsg && Math.abs(nowMs - notifTime) < 5000;
+  });
+
+  if (isDup) {
+    console.log(`[Notification Deduplicated] Suppressed identical notification "${title}" for user ${targetId}`);
+    return;
+  }
+
+  const notif = {
+    id: 'n' + Date.now() + Math.random().toString(36).substr(2, 5),
+    user_id: targetId,
+    type: type || 'system',
+    title: title || '',
+    message: message || '',
+    is_read: false,
+    action_url: actionUrl || '',
+    created_at: new Date().toISOString()
+  };
+
+  // Only update local notifications list and badge if target userId matches current user
+  if (App.currentUser && String(App.currentUser.id) === targetId) {
+    App.notifications.unshift(notif);
+    if (App.notifications.length > 100) App.notifications.pop();
+    saveNotifs();
+    renderNotifBadge();
+  }
+
+  // Upload to server DB
+  try {
+    await apiPost('notifications', notif);
+  } catch (err) {
+    console.warn('Failed to upload notification to server:', err);
+  }
+}
+window.addNotification = addNotification;
 
 function renderNotifBadge() {
   const badge = document.getElementById('notif-badge');
   if (!badge) return;
-  const uid = App.currentUser?.id;
+  const uid = App.currentUser?.id ? String(App.currentUser.id) : null;
   if (!uid) {
     badge.textContent = '0';
     badge.classList.add('hidden');
     return;
   }
   // Count unread only for current user
-  const unread = App.notifications.filter(n => !n.is_read && String(n.user_id) === String(uid)).length;
+  const unread = App.notifications.filter(n => !n.is_read && (String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global')).length;
   if (unread > 0) {
     badge.textContent = unread > 99 ? '99+' : unread;
     badge.classList.remove('hidden');
@@ -23,7 +79,6 @@ function renderNotifBadge() {
 }
 
 // ── Fetch server-side notifications and merge into App.notifications ──
-// This is the key function that pulls announcement notifications from the DB
 async function fetchServerNotifications() {
   if (!App.currentUser || !App.currentUser.id) {
     App.notifications = [];
@@ -38,19 +93,24 @@ async function fetchServerNotifications() {
 
   const uid = String(App.currentUser.id);
   try {
-    // Fetch notifications for this user — try two pages to catch announcements
-    const [res1, res2] = await Promise.all([
-      apiGet('notifications', `limit=200&page=1`),
-      apiGet('notifications', `limit=200&page=2`)
-    ]);
-    const all = [...(res1?.data || []), ...(res2?.data || [])];
-    // Deduplicate by id, then filter to this user
+    const res = await apiGet('notifications', `limit=200`);
+    const all = res?.data || (Array.isArray(res) ? res : []);
+    
+    // Filter to current user OR global announcements
+    const serverNotifs = all.filter(n => {
+      const nUid = String(n.user_id || '');
+      return nUid === uid || nUid === 'all' || nUid === 'global';
+    });
+
     const seen = new Set();
-    const unique = all.filter(n => { if (seen.has(n.id)) return false; seen.add(n.id); return true; });
-    const serverNotifs = unique.filter(n => String(n.user_id) === String(uid));
+    const unique = serverNotifs.filter(n => {
+      if (seen.has(n.id)) return false;
+      seen.add(n.id);
+      return true;
+    });
 
     // Synchronize App.notifications for current user
-    App.notifications = serverNotifs
+    App.notifications = unique
       .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
       .slice(0, 200);
 
@@ -88,7 +148,7 @@ function _buildNotifListHTML(notifs) {
   return notifs.map(n => notifItemHTML(n)).join('');
 }
 
-// ── Render notifications page — fetches from API so announcements appear ──
+// ── Render notifications page ──
 async function renderNotifications() {
   const c = document.getElementById('notifications-content');
   if (!c) return;
@@ -105,13 +165,13 @@ async function renderNotifications() {
   // Show loading spinner while fetching
   c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
 
-  // Pull from server (announcements live here)
+  // Pull from server
   await fetchServerNotifications();
 
-  const uid = App.currentUser.id;
+  const uid = String(App.currentUser.id);
   const userNotifs = App.notifications
-    .filter(n => n.user_id === uid)
-    .sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    .filter(n => String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global')
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
   c.innerHTML = _buildNotifListHTML(userNotifs);
 }
@@ -121,7 +181,7 @@ function renderNotificationsLocal() {
   const c = document.getElementById('notifications-content');
   if (!c) return;
 
-  const uid = App.currentUser?.id;
+  const uid = App.currentUser?.id ? String(App.currentUser.id) : null;
   if (!uid) {
     c.innerHTML = `
       <div class="empty-state" style="padding:60px 20px">
@@ -130,8 +190,8 @@ function renderNotificationsLocal() {
       </div>`;
     return;
   }
-  let userNotifs = App.notifications.filter(n => n.user_id === uid);
-  userNotifs = userNotifs.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  let userNotifs = App.notifications.filter(n => String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global');
+  userNotifs = userNotifs.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
   c.innerHTML = _buildNotifListHTML(userNotifs);
 }
@@ -191,7 +251,6 @@ function openNotificationPopup(notifId) {
   </div>
 </div>`, true); // center modal
 
-    // Style override to let glassy modal card render properly without default white background or scrollbars
     const modalCenter = document.querySelector('.modal-center');
     if (modalCenter) {
       modalCenter.style.background = 'transparent';
@@ -238,37 +297,33 @@ function notifItemHTML(n) {
 async function markNotifRead(notifId) {
   const n = App.notifications.find(n => n.id === notifId);
   if (n) {
-    // Snapshot for rollback
     const wasRead = n.is_read;
 
     // Optimistic: mark as read immediately
     n.is_read = true;
     saveNotifs();
 
-    // Find the DOM element and animate
     const el = document.querySelector(`.notif-item[onclick*="${notifId}"]`)
       || document.querySelector(`[data-notif-id="${notifId}"]`);
     if (el) {
       el.classList.remove('unread');
-      // Remove the unread dot
       const dot = el.querySelector('.notif-unread-dot');
       if (dot) dot.remove();
-      OptimisticUI.pulse(el);
+      if (window.OptimisticUI) OptimisticUI.pulse(el);
     }
     renderNotifBadge();
 
-    // Patch server in background (silent fail)
-    if (notifId && notifId.length > 10 && !notifId.startsWith('n')) {
+    // Patch server in background
+    if (notifId) {
       try {
         await apiPatch('notifications', notifId, { is_read: true });
       } catch (e) {
-        // Rollback
         n.is_read = wasRead;
         saveNotifs();
         renderNotifBadge();
         if (el) {
           el.classList.add('unread');
-          OptimisticUI.shake(el);
+          if (window.OptimisticUI) OptimisticUI.shake(el);
         }
       }
     }
@@ -277,20 +332,20 @@ async function markNotifRead(notifId) {
 }
 
 async function markAllRead() {
-  const uid = App.currentUser?.id;
+  const uid = App.currentUser?.id ? String(App.currentUser.id) : null;
   App.notifications.forEach(n => {
-    if (!uid || n.user_id === uid) n.is_read = true;
+    if (!uid || String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global') n.is_read = true;
   });
   saveNotifs();
   renderNotifBadge();
   renderNotificationsLocal();
   showToast('All notifications marked as read', 'info');
 
-  // Patch all unread server records
-  if (App.currentUser) {
+  if (uid) {
     try {
       const res = await apiGet('notifications', `limit=200`);
-      const unread = (res?.data || []).filter(n => n.user_id === uid && !n.is_read);
+      const all = res?.data || (Array.isArray(res) ? res : []);
+      const unread = all.filter(n => (String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global') && !n.is_read);
       await Promise.all(unread.map(n => apiPatch('notifications', n.id, { is_read: true })));
     } catch(e) { /* silent */ }
   }
@@ -299,9 +354,9 @@ async function markAllRead() {
 async function clearAllNotifications() {
   if (!confirm('Clear all notifications? This cannot be undone.')) return;
 
-  const uid = App.currentUser?.id;
+  const uid = App.currentUser?.id ? String(App.currentUser.id) : null;
   if (uid) {
-    App.notifications = App.notifications.filter(n => n.user_id && n.user_id !== uid);
+    App.notifications = App.notifications.filter(n => n.user_id && String(n.user_id) !== uid && n.user_id !== 'all' && n.user_id !== 'global');
   } else {
     App.notifications = [];
   }
@@ -310,11 +365,11 @@ async function clearAllNotifications() {
   renderNotificationsLocal();
   showToast('Notifications cleared', 'info');
 
-  // Delete from server
   if (uid) {
     try {
       const res = await apiGet('notifications', `limit=200`);
-      const mine = (res?.data || []).filter(n => n.user_id === uid);
+      const all = res?.data || (Array.isArray(res) ? res : []);
+      const mine = all.filter(n => String(n.user_id) === uid);
       await Promise.all(mine.map(n => apiDelete('notifications', n.id)));
     } catch(e) { /* silent */ }
   }

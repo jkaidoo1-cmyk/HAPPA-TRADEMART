@@ -54,6 +54,11 @@ const PACKAGE_META_FIELDS = [
   'buyer_name', 'buyer_phone', 'payment_status', 'total_amount', 'items_count', 'delivery_status'
 ];
 
+const ORDER_META_FIELDS = [
+  'buyer_name', 'buyer_phone', 'buyer_email', 'items', 'referral_code', 'discount',
+  'coupon_code', 'payment_ref', 'ship_date', 'buyer_location'
+];
+
 function parseExtraObject(value) {
   if (!value) return {};
   if (typeof value === 'string') {
@@ -71,6 +76,14 @@ function parseExtraObject(value) {
 function packPackageMeta(record, existingExtra) {
   const extra = { ...parseExtraObject(existingExtra), ...parseExtraObject(record.extra) };
   for (const key of PACKAGE_META_FIELDS) {
+    if (key in record && record[key] !== undefined) extra[key] = record[key];
+  }
+  return extra;
+}
+
+function packOrderMeta(record, existingExtra) {
+  const extra = { ...parseExtraObject(existingExtra), ...parseExtraObject(record.extra) };
+  for (const key of ORDER_META_FIELDS) {
     if (key in record && record[key] !== undefined) extra[key] = record[key];
   }
   return extra;
@@ -141,7 +154,7 @@ const TABLE_COLUMNS = {
   service_orders: ['id', 'service_id', 'rendor_id', 'buyer_id', 'title', 'amount', 'status', 'notes', 'created_at', 'updated_at', 'extra'],
   settings: ['id', 'key', 'value', 'label', 'type', 'updated_at'],
   reviews: ['id', 'product_id', 'store_id', 'buyer_id', 'rating', 'comment', 'created_at'],
-  products: ['id', 'store_id', 'vendor_id', 'name', 'category', 'price', 'original_price', 'stock_qty', 'images', 'is_flash_sale', 'flash_pct', 'status', 'is_available', 'description', 'location', 'avg_rating', 'review_count', 'total_sold', 'created_at', 'updated_at', 'extra'],
+  products: ['id', 'store_id', 'vendor_id', 'name', 'category', 'price', 'original_price', 'stock_qty', 'images', 'is_flash_sale', 'flash_pct', 'status', 'is_available', 'description', 'location', 'avg_rating', 'review_count', 'total_sold', 'created_at', 'updated_at', 'weight_kg', 'allow_buyer_note', 'buyer_note_prompt', 'tags', 'commission_pct', 'campus', 'flash_sale_end', 'extra'],
   packages: ['id', 'code', 'buyer_id', 'vendor_id', 'store_id', 'items', 'status', 'total', 'delivery_fee', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'notes', 'created_at', 'updated_at', 'extra'],
   delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
   referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'status', 'created_at'],
@@ -178,6 +191,9 @@ function prepareRecordForDb(table, record, existingRecord) {
     }
     // Persist order-management fields inside jsonb `extra` (slim Supabase schema)
     out.extra = packPackageMeta(out, existingRecord?.extra);
+  }
+  if (table === 'orders') {
+    out.extra = packOrderMeta(out, existingRecord?.extra);
   }
 
   // Filter columns to only include valid DB columns for Supabase
@@ -755,5 +771,22 @@ app.delete('/api/:table/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+function getRecordCandidatesForTable(table, record) {
+  const primary = prepareRecordForDb(table, record);
+  const slim = { ...primary };
+  delete slim.weight_kg;
+  delete slim.allow_buyer_note;
+  delete slim.buyer_note_prompt;
+  delete slim.campus;
+  delete slim.tags;
+  delete slim.commission_pct;
+  delete slim.flash_sale_end;
+  return [primary, slim];
+}
+
+app.getRecordCandidatesForTable = getRecordCandidatesForTable;
+app.prepareRecordForDb = prepareRecordForDb;
+app.serializeRecord = serializeRecord;
 
 module.exports = app;

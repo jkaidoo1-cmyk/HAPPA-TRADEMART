@@ -227,7 +227,7 @@ async function applyCoupon() {
     let coupons = [];
     if (couponRow && couponRow.value) coupons = JSON.parse(couponRow.value);
     
-    const validCoupon = coupons.find(c => c.code === code);
+    const validCoupon = coupons.find(c => String(c.code).trim().toUpperCase() === code);
     if (!validCoupon) {
       if (msg) msg.innerHTML = '<span style="color:var(--danger)">Invalid or expired coupon code</span>';
       App.appliedCoupon = null;
@@ -286,7 +286,7 @@ async function placeOrder() {
 
   const dest     = document.getElementById('checkout-dest')?.value || 'Accra';
   const address  = document.getElementById('checkout-address')?.value || '';
-  const totals   = getCartTotals();
+  const totals   = getCartTotals(dest);
   const sat      = getNextSaturday();
 
   let buyerId = App.currentUser ? App.currentUser.id : 'guest_' + Date.now();
@@ -296,8 +296,42 @@ async function placeOrder() {
 
   if (!buyerName || !buyerPhone || !buyerEmail) {
     showToast('Please fill in all guest details', 'warning');
+    _placingOrder = false;
+    if (btn) btn.disabled = false;
     if (setBtn) setBtn('idle');
     return;
+  }
+
+  // Pre-flight stock availability check: ensure products loaded
+  if (!App.allProducts || App.allProducts.length === 0) {
+    try {
+      const prodsRes = await apiGet('products', 'limit=300');
+      App.allProducts = prodsRes?.data || prodsRes || [];
+    } catch(e){}
+  }
+
+  for (const item of App.cart) {
+    let prod = App.allProducts?.find(p => String(p.id) === String(item.id));
+    if (!prod) {
+      try { prod = await apiFetch('products/' + item.id); } catch(e){}
+    }
+    if (prod) {
+      const stockQty = parseInt(prod.stock_qty) || 0;
+      if (stockQty <= 0 || prod.status === 'sold_out') {
+        showToast(`"${item.name}" is currently out of stock. Please remove it from cart.`, 'error', 4000);
+        _placingOrder = false;
+        if (btn) btn.disabled = false;
+        if (setBtn) setBtn('idle');
+        return;
+      }
+      if (item.qty > stockQty) {
+        showToast(`Only ${stockQty} unit(s) available for "${item.name}".`, 'warning', 4000);
+        _placingOrder = false;
+        if (btn) btn.disabled = false;
+        if (setBtn) setBtn('idle');
+        return;
+      }
+    }
   }
 
   const orderData = {
@@ -316,43 +350,29 @@ async function placeOrder() {
     buyer_location: dest
   };
 
-  const optimisticOrder = {
-    id: 'tmp_' + Date.now(),
-    ...orderData,
-    created_at: new Date().toISOString(),
-    _isOptimistic: true
-  };
   const savedCart = JSON.parse(JSON.stringify(App.cart));
   const savedReferral = App.appliedReferral;
   const usedReferralDiscount = App.appliedCoupon?.is_referral ? totals.discount : 0;
   const savedCoupon = App.appliedCoupon;
 
+  // Perform API post to create order first
+  const order = await apiPost('orders', orderData);
+  if (!order) {
+    if (setBtn) setBtn('failed');
+    setTimeout(() => { if (setBtn) setBtn('idle'); }, 2000);
+    showToast('Order failed. Please try again.', 'error', 5000);
+    _placingOrder = false;
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  // Clear cart after order is confirmed created
   App.cart = [];
   App.appliedReferral = null;
   App.appliedCoupon = null;
   saveCart();
   if (typeof updateCartBadge === 'function') updateCartBadge();
 
-  showPage('order-confirmed');
-  renderOrderConfirmation(optimisticOrder, []);
-  showToast('Order placed successfully! 🎉', 'success', 2000);
-  if (setBtn) setBtn('saved');
-
-  // Background api post
-  const order = await apiPost('orders', orderData);
-  if (!order) {
-    App.cart = savedCart;
-    App.appliedReferral = savedReferral;
-    saveCart();
-    if (typeof updateCartBadge === 'function') updateCartBadge();
-    if (setBtn) setBtn('failed');
-    setTimeout(() => { if (setBtn) setBtn('idle'); }, 2000);
-    showToast('Order failed - cart restored.', 'error', 5000);
-    _placingOrder = false;
-    if (btn) btn.disabled = false;
-    return;
-  }
-  
   if (usedReferralDiscount > 0 && App.currentUser) {
     const newUsed = (parseFloat(App.currentUser.referral_commission_used) || 0) + usedReferralDiscount;
     App.currentUser.referral_commission_used = newUsed;
@@ -368,7 +388,7 @@ async function placeOrder() {
         let coupons = JSON.parse(couponRow.value);
         let updated = false;
         coupons = coupons.map(c => {
-          if (c.code === savedCoupon.code) {
+          if (String(c.code).trim().toUpperCase() === String(savedCoupon.code).trim().toUpperCase()) {
             c.used_by = c.used_by || [];
             if (!c.used_by.includes(App.currentUser.id)) {
               c.used_by.push(App.currentUser.id);
@@ -386,19 +406,23 @@ async function placeOrder() {
     }
   }
 
-  // Create packages
+  // Create packages with complete buyer and delivery metadata
   const storeGroups = groupByVendor(savedCart);
   const packages = [];
   for (const [storeId, items] of Object.entries(storeGroups)) {
-    const pCode = generatePackageCode(items[0].location);
+    const itemLoc = items[0].location || 'Accra';
+    const pCode = generatePackageCode(itemLoc);
     const grossAmt  = items.reduce((s,i) => s + i.price * i.qty, 0);
     const commission = items.reduce((s,i) => s + i.price * i.qty * (i.commission_pct||8)/100, 0);
     const vendorAmt  = grossAmt - commission;
-    const d = calcDelivery(items[0].location, dest, items.reduce((s,i) => s + i.weight_kg * i.qty, 0));
+    const d = calcDelivery(itemLoc, dest, items.reduce((s,i) => s + i.weight_kg * i.qty, 0));
     
     const pkg = await apiPost('packages', {
       id: pCode, package_code: pCode, code: pCode, order_id: order.id,
       vendor_id: items[0].vendor_id, store_id: storeId, buyer_id: buyerId,
+      buyer_name: buyerName, buyer_phone: buyerPhone, buyer_email: buyerEmail,
+      delivery_address: address, delivery_name: buyerName, delivery_phone: buyerPhone,
+      delivery_location: dest, notes: address,
       items: items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price, buyer_note: i.buyer_note || '' })),
       vendor_amount: vendorAmt, commission_amount: commission, gross_amount: grossAmt, delivery_fee: d.rate,
       status: 'pending',
@@ -410,24 +434,49 @@ async function placeOrder() {
       tracking_link: '', tracking_number: '',
       delivery_partner: 'Express delivery', pickup_date: sat.toISOString(),
       delivered_date: '', balance_released: false,
-      origin_location: items[0].location, dest_location: dest,
-      is_intercity: items[0].location !== dest
+      origin_location: itemLoc, dest_location: dest,
+      is_intercity: itemLoc !== dest
     });
     if (pkg) packages.push(pkg);
 
     // Notify vendor
     addNotification(items[0].vendor_id, 'order', '🛒 New Order!', `Package ${pCode}: ${items.length} item(s) ordered`, '');
 
-    // Deduct stock
+    // Deduct stock & update product status
     for (const item of items) {
-      const prod = App.allProducts.find(p => p.id === item.id);
+      let prod = App.allProducts?.find(p => String(p.id) === String(item.id));
+      if (!prod) {
+        try { prod = await apiFetch('products/' + item.id); } catch(e){}
+      }
+      const currentStock = prod ? (parseInt(prod.stock_qty) || 0) : (parseInt(item.stock_qty) || 10);
+      const currentSold  = prod ? (parseInt(prod.total_sold || prod.sold_count) || 0) : 0;
+      const newQty = Math.max(0, currentStock - item.qty);
+      const isSoldOut = newQty === 0;
+      const newStatus = isSoldOut ? 'sold_out' : (prod?.status === 'sold_out' ? 'active' : (prod?.status || 'active'));
+      const newSold = currentSold + item.qty;
+
+      await apiPatch('products', item.id, {
+        stock_qty: newQty,
+        total_sold: newSold,
+        sold_count: newSold,
+        status: newStatus,
+        is_available: !isSoldOut
+      });
       if (prod) {
-        const newQty = Math.max(0, (prod.stock_qty||0) - item.qty);
-        await apiPatch('products', item.id, { stock_qty: newQty, total_sold: (prod.total_sold || prod.sold_count || 0) + item.qty });
         prod.stock_qty = newQty;
+        prod.total_sold = newSold;
+        prod.sold_count = newSold;
+        prod.status = newStatus;
+        prod.is_available = !isSoldOut;
       }
     }
   }
+
+  showPage('order-confirmed');
+  renderOrderConfirmation(order, packages);
+  showToast('Order placed successfully! 🎉', 'success', 2000);
+  if (setBtn) setBtn('saved');
+  _placingOrder = false;
 
   // Trigger simulated order confirmation notification (Email, SMS, WhatsApp)
   simulateOrderNotifications(orderData);

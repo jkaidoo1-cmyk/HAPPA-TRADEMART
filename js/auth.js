@@ -1327,53 +1327,5 @@ function generateRefCode(name) {
 
 
 
-async function addNotification(userId, type, title, message, actionUrl = '') {
-  if (!userId) return;
-  const targetId = String(userId);
 
-  // Check if target user is deleted or no longer exists
-  try {
-    const usersRes = await apiGet('users', 'limit=500').catch(() => null);
-    const userList = usersRes?.data || [];
-    const targetUser = userList.find(u => String(u.id) === targetId);
-
-    if (targetUser && targetUser.status === 'deleted') {
-      console.warn(`[Notification Suppressed] User ${targetId} is deleted. Notification suppressed.`);
-      return;
-    }
-  } catch(e) {}
-
-  // Deduplication guard: do not add duplicate notification if identical title & user_id already exists in local memory
-  if (App.currentUser && String(App.currentUser.id) === targetId) {
-    const isDup = (App.notifications || []).some(n => n && String(n.title) === String(title) && String(n.user_id) === targetId);
-    if (isDup) {
-      console.log(`[Notification Deduplicated] Suppressed duplicate notification "${title}" for user ${targetId}`);
-      return;
-    }
-  }
-
-  const notif = {
-    id: 'n' + Date.now() + Math.random().toString(36).substr(2, 5),
-    user_id: targetId,
-    type,
-    title,
-    message,
-    is_read: false,
-    action_url: actionUrl,
-    created_at: new Date().toISOString()
-  };
-
-  // Only update local notifications list and badge if target userId matches current user
-  if (App.currentUser && String(App.currentUser.id) === targetId) {
-    App.notifications.unshift(notif);
-    if (App.notifications.length > 50) App.notifications.pop();
-    saveNotifs();
-    renderNotifBadge();
-  }
-
-  // Asynchronously upload to database
-  apiPost('notifications', notif).catch(err => {
-    console.warn('Failed to upload notification to server:', err);
-  });
-}
 

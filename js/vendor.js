@@ -106,8 +106,8 @@ async function renderVendorDashboard() {
 
   // Fetch orders/packages for vendor
   // Use vendor_id field filter for reliable package fetching
-  const pkgRes = await apiGet('packages', `search=${encodeURIComponent(u.id)}&limit=100`);
-  const myPackages = (pkgRes?.data || []).filter(p => String(p.vendor_id) === String(u.id));
+  const pkgRes = await apiGet('packages', `vendor_id=${encodeURIComponent(u.id)}`);
+  const myPackages = (pkgRes?.data || (Array.isArray(pkgRes) ? pkgRes : [])).filter(p => String(p.vendor_id) === String(u.id));
 
   const activeVendorPkgs   = myPackages.filter(p => p.vendor_status !== 'rejected' && p.status !== 'cancelled');
   const rejectedVendorPkgs = myPackages.filter(p => p.vendor_status === 'rejected' || p.status === 'cancelled');
@@ -173,18 +173,20 @@ async function renderVendorDashboard() {
   const growthPrice  = myStorefront?.plan_prices?.growth || defaultGrowthPrice;
   const proPrice     = myStorefront?.plan_prices?.pro || defaultProPrice;
 
+  const activeTabId = (App.activeTab && App.activeTab['vendor-dashboard']) || 'vendor-overview';
+
   c.innerHTML = `
 <div class="tab-nav" id="vendor-tabs">
-  <div class="tab-btn active" onclick="switchTab(this,'vendor-overview')">Overview</div>
-  <div class="tab-btn" onclick="switchTab(this,'vendor-earnings')">Earnings</div>
-  <div class="tab-btn" onclick="switchTab(this,'vendor-wallet');renderWalletHistory('vendor-txn-list')">Wallet</div>
-  <div class="tab-btn" onclick="switchTab(this,'vendor-referral')">Referrals</div>
-  <div class="tab-btn" onclick="switchTab(this,'vendor-verify')">Verify</div>
-  <div class="tab-btn" onclick="switchTab(this,'vendor-storefront')">Storefront</div>
+  <div class="tab-btn ${activeTabId === 'vendor-overview' ? 'active' : ''}" onclick="switchTab(this,'vendor-overview')">Overview</div>
+  <div class="tab-btn ${activeTabId === 'vendor-earnings' ? 'active' : ''}" onclick="switchTab(this,'vendor-earnings')">Earnings</div>
+  <div class="tab-btn ${activeTabId === 'vendor-wallet' ? 'active' : ''}" onclick="switchTab(this,'vendor-wallet');renderWalletHistory('vendor-txn-list')">Wallet</div>
+  <div class="tab-btn ${activeTabId === 'vendor-referral' ? 'active' : ''}" onclick="switchTab(this,'vendor-referral')">Referrals</div>
+  <div class="tab-btn ${activeTabId === 'vendor-verify' ? 'active' : ''}" onclick="switchTab(this,'vendor-verify')">Verify</div>
+  <div class="tab-btn ${activeTabId === 'vendor-storefront' ? 'active' : ''}" onclick="switchTab(this,'vendor-storefront')">Storefront</div>
 </div>
 
 <!-- ── Overview Tab ── -->
-<div class="tab-content active" id="vendor-overview">
+<div class="tab-content ${activeTabId === 'vendor-overview' ? 'active' : ''}" id="vendor-overview">
   <div class="dashboard-wrap">
     ${!u.is_verified ? `<div class="verify-banner"><i class="fas fa-exclamation-triangle"></i><p>Please verify your phone number to unlock all features</p></div>` : ''}
     ${!u.id_verified ? `<div class="verify-banner" style="background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c;cursor:pointer" onclick="switchTab('vendor-verify')"><i class="fas fa-id-card" style="color:#ea580c"></i><p>Upload your ID to complete vendor verification</p></div>` : ''}
@@ -2227,6 +2229,11 @@ function switchTab(el, tabId) {
   }
   const target = document.getElementById(tabId);
   if (!target) return;
+
+  if (window.App) {
+    if (!App.activeTab) App.activeTab = {};
+    if (App.currentPage) App.activeTab[App.currentPage] = tabId;
+  }
 
   const container = target.closest('#vendor-dashboard-content, #buyer-dashboard-content, #admin-dashboard-content, #rendor-dashboard-content, .page') || document.getElementById('main-content');
   if (container) {
