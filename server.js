@@ -170,7 +170,7 @@ function serializeRecord(record) {
 const TABLE_COLUMNS = {
   users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'avatar', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'id_image', 'proof_sales_1', 'proof_sales_2', 'proof_sales_3', 'proof_share', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual'],
   notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
-  stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'created_at', 'updated_at', 'extra'],
+  stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'plan_prices', 'created_at', 'updated_at', 'extra'],
   orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
   ad_campaigns: ['id', 'vendor_id', 'store_id', 'title', 'image_url', 'link', 'placement', 'budget', 'spent', 'impressions', 'clicks', 'status', 'start_date', 'end_date', 'created_at', 'updated_at', 'extra'],
   services: ['id', 'rendor_id', 'title', 'category', 'description', 'price', 'image_url', 'status', 'created_at', 'updated_at', 'extra'],
@@ -182,7 +182,7 @@ const TABLE_COLUMNS = {
   delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
   referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'reward_amount', 'reward_pct', 'order_id', 'status', 'created_at', 'updated_at', 'extra'],
   wallet_transactions: ['id', 'user_id', 'type', 'amount', 'balance_before', 'balance_after', 'description', 'reference', 'payment_method', 'status', 'note', 'created_at', 'extra'],
-  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'created_at', 'updated_at', 'extra']
+  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'plan_prices', 'created_at', 'updated_at', 'extra']
 };
 
 function prepareRecordForDb(table, record) {
@@ -328,34 +328,41 @@ app.get('/api/:table', async (req, res) => {
       storeMap.set(key, { ...existing, ...s });
     });
     const stores = Array.from(storeMap.values());
+    const localSFs = getTable(db, 'storefronts') || [];
+    const sfMap = new Map();
+    localSFs.forEach(sf => { if (sf) sfMap.set(String(sf.store_id || sf.id), sf); });
 
-    let rows = stores.map(st => ({
-      id: st.id,
-      store_id: st.id,
-      vendor_id: st.vendor_id,
-      status: st.storefront_status || 'none',
-      url_slug: st.slug || '',
-      theme: st.theme || 'classic',
-      font_family: st.font_family || 'Outfit',
-      slogan: st.slogan || '',
-      about_us: st.description || st.about_us || '',
-      logo_url: st.logo_url || '',
-      banner_url: st.banner_url || '',
-      primary_color: st.primary_color || '#e85d04',
-      secondary_color: st.secondary_color || '#faf9f6',
-      tertiary_color: st.tertiary_color || '#e85d04',
-      business_hours: st.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
-      shipping_policy: st.shipping_policy || '',
-      return_policy: st.return_policy || '',
-      facebook_url: st.facebook || st.facebook_url || '',
-      instagram_url: st.instagram || st.instagram_url || '',
-      youtube_url: st.youtube_url || '',
-      meta_description: st.meta_description || '',
-      subscription_plan: st.subscription_plan || 'starter',
-      subscription_status: st.subscription_status || 'active',
-      created_at: st.created_at,
-      updated_at: st.updated_at
-    }));
+    let rows = stores.map(st => {
+      const extraSf = sfMap.get(String(st.id)) || {};
+      return {
+        id: st.id,
+        store_id: st.id,
+        vendor_id: st.vendor_id,
+        status: extraSf.status || st.storefront_status || 'none',
+        url_slug: extraSf.url_slug || st.slug || '',
+        theme: extraSf.theme || st.theme || 'classic',
+        font_family: extraSf.font_family || st.font_family || 'Outfit',
+        slogan: extraSf.slogan || st.slogan || '',
+        about_us: extraSf.about_us || st.description || st.about_us || '',
+        logo_url: extraSf.logo_url || st.logo_url || '',
+        banner_url: extraSf.banner_url || st.banner_url || '',
+        primary_color: extraSf.primary_color || st.primary_color || '#e85d04',
+        secondary_color: extraSf.secondary_color || st.secondary_color || '#faf9f6',
+        tertiary_color: extraSf.tertiary_color || st.tertiary_color || '#e85d04',
+        business_hours: extraSf.business_hours || st.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
+        shipping_policy: extraSf.shipping_policy || st.shipping_policy || '',
+        return_policy: extraSf.return_policy || st.return_policy || '',
+        facebook_url: extraSf.facebook_url || st.facebook || st.facebook_url || '',
+        instagram_url: extraSf.instagram_url || st.instagram || st.instagram_url || '',
+        youtube_url: extraSf.youtube_url || st.youtube_url || '',
+        meta_description: extraSf.meta_description || st.meta_description || '',
+        subscription_plan: extraSf.subscription_plan || st.subscription_plan || 'starter',
+        subscription_status: extraSf.subscription_status || st.subscription_status || 'active',
+        plan_prices: extraSf.plan_prices || st.plan_prices || null,
+        created_at: st.created_at,
+        updated_at: st.updated_at
+      };
+    });
 
     const params = parseQueryParams(req.query);
     const filtered = applyFilters(rows, params);
@@ -427,6 +434,7 @@ app.get('/api/:table/:id', async (req, res) => {
       meta_description: st.meta_description || '',
       subscription_plan: st.subscription_plan || 'starter',
       subscription_status: st.subscription_status || 'active',
+      plan_prices: st.plan_prices || null,
       created_at: st.created_at,
       updated_at: st.updated_at
     };
@@ -483,6 +491,7 @@ app.post('/api/:table', async (req, res) => {
       instagram: body.instagram_url || '',
       subscription_plan: body.subscription_plan || st.subscription_plan || 'starter',
       subscription_status: body.subscription_status || st.subscription_status || 'active',
+      plan_prices: body.plan_prices || st.plan_prices || null,
       updated_at: new Date().toISOString()
     };
 
@@ -526,6 +535,7 @@ app.post('/api/:table', async (req, res) => {
       meta_description: body.meta_description || '',
       subscription_plan: storeUpdates.subscription_plan,
       subscription_status: storeUpdates.subscription_status,
+      plan_prices: storeUpdates.plan_prices,
       created_at: st.created_at || new Date().toISOString(),
       updated_at: storeUpdates.updated_at
     };
@@ -609,6 +619,7 @@ app.put('/api/:table/:id', async (req, res) => {
     if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
     if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
     if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+    if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
     storeUpdates.updated_at = new Date().toISOString();
 
     if (supabase) {
@@ -652,6 +663,7 @@ app.put('/api/:table/:id', async (req, res) => {
       meta_description: body.meta_description || '',
       subscription_plan: updatedSt.subscription_plan || 'starter',
       subscription_status: updatedSt.subscription_status || 'active',
+      plan_prices: updatedSt.plan_prices || body.plan_prices || null,
       created_at: updatedSt.created_at,
       updated_at: updatedSt.updated_at
     };
@@ -739,6 +751,7 @@ app.patch('/api/:table/:id', async (req, res) => {
     if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
     if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
     if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+    if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
     storeUpdates.updated_at = new Date().toISOString();
 
     if (supabase) {
@@ -782,6 +795,7 @@ app.patch('/api/:table/:id', async (req, res) => {
       meta_description: body.meta_description || '',
       subscription_plan: updatedSt.subscription_plan || 'starter',
       subscription_status: updatedSt.subscription_status || 'active',
+      plan_prices: updatedSt.plan_prices || body.plan_prices || null,
       created_at: updatedSt.created_at,
       updated_at: updatedSt.updated_at
     };

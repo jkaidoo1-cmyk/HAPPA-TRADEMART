@@ -119,13 +119,24 @@
       align-items: center;
       justify-content: center;
       z-index: 999999;
-      transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.5s;
+      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
     }
     .splash-logo-container {
-      animation: splashPulse 2.2s infinite ease-in-out;
+      animation: splashPopIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards, splashPulse 2.2s infinite 0.6s ease-in-out;
       display: flex;
       justify-content: center;
       align-items: center;
+      transform-origin: center center;
+    }
+    @keyframes splashPopIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.5);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
     }
     @keyframes splashPulse {
       0%, 100% {
@@ -146,8 +157,8 @@
       margin-top: 15px;
       opacity: 0;
       transform: translateY(20px);
-      animation: splashSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      animation-delay: 0.2s;
+      animation: splashSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation-delay: 0s;
       text-align: center;
     }
     .splash-brand-text span {
@@ -161,8 +172,8 @@
       text-transform: uppercase;
       opacity: 0;
       transform: translateY(15px);
-      animation: splashSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      animation-delay: 0.4s;
+      animation: splashSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation-delay: 0.05s;
       margin-top: 4px;
       text-align: center;
     }
@@ -210,10 +221,21 @@
     </div>
   </div>
   <script>
-    // Immediately bypass splash screen animation & suppress main home page flash on direct storefront URLs
+    // Standalone PWA Link Guard: Storefront URLs should open in standard web browser, not inside PWA app shell
+    const isPWAStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                            window.navigator.standalone === true || 
+                            document.referrer.includes('android-app://');
     const currentHash = window.location.hash || '';
     const currentSearch = window.location.search || '';
-    if (currentHash.includes('storefront') || currentHash.includes('store-admin') || currentHash.includes('store/') || currentSearch.includes('storefront') || currentSearch.includes('store=')) {
+    const currentPath = window.location.pathname || '';
+    const isStorefrontUrl = currentHash.includes('storefront') || currentSearch.includes('storefront') || currentPath.includes('storefront') || currentHash.includes('store/') || currentSearch.includes('store=');
+
+    if (isPWAStandalone && isStorefrontUrl && !currentHash.includes('store-admin')) {
+      const extUrl = window.location.href;
+      window.open(extUrl, '_system') || window.open(extUrl, '_blank');
+    }
+
+    if (isStorefrontUrl || currentHash.includes('store-admin')) {
       document.body.classList.add('is-storefront-view');
       const splash = document.getElementById('pwa-splash-screen');
       if (splash) splash.remove();

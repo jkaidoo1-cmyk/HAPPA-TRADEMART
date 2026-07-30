@@ -3212,3 +3212,323 @@ async function loadAdminReferrals() {
     container.innerHTML = '<div style="color:var(--danger);padding:20px">Error loading referrals.</div>';
   }
 }
+
+/* ============================================================
+   ADMIN AD CAMPAIGN MANAGEMENT SYSTEM
+   ============================================================ */
+
+async function loadAdminAds() {
+  const container = document.getElementById('admin-ads-list');
+  if (!container) return;
+
+  if (!App.isBackgroundRefresh && (!container.children.length || !container.innerHTML.trim())) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading ad campaigns…</div>';
+  }
+
+  try {
+    const [cRes, sRes, pRes] = await Promise.all([
+      apiGet('ad_campaigns', 'limit=200'),
+      apiGet('stores', 'limit=200'),
+      apiGet('products', 'limit=500')
+    ]);
+
+    const campaigns = cRes?.data || [];
+    const stores = sRes?.data || [];
+    const products = pRes?.data || [];
+
+    App.allStores = stores;
+    App.allProducts = products;
+    if (window.AdEngine) {
+      AdEngine.stores = stores;
+      AdEngine.products = products;
+    }
+
+    if (!campaigns.length) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding:40px 0">
+          <i class="fas fa-ad" style="font-size:2.5rem;color:var(--text-muted);margin-bottom:12px"></i>
+          <h3>No Ad Campaigns Created</h3>
+          <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:16px">Create sponsored ad campaigns to feature store products across Home, Shop, and Stores hero sliders.</p>
+          <button class="btn btn-primary btn-sm" onclick="showAddAdCampaignModal()">
+            <i class="fas fa-plus"></i> Create First Campaign
+          </button>
+        </div>`;
+      return;
+    }
+
+    const html = campaigns.map(c => {
+      const storeIds = Array.isArray(c.store_ids) ? c.store_ids : [];
+      let budgets = c.store_budgets || {};
+      if (typeof budgets === 'string') {
+        try { budgets = JSON.parse(budgets); } catch(e) { budgets = {}; }
+      }
+      const pages = Array.isArray(c.pages) ? c.pages : [];
+      const isActive = c.status === 'active';
+
+      const d = new Date();
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const spentKey = `happa_ads_${c.id}_${todayStr}`;
+      let spentObj = {};
+      try {
+        const raw = localStorage.getItem(spentKey);
+        spentObj = raw ? JSON.parse(raw) : {};
+      } catch(e){}
+
+      const eligibleProds = products.filter(p => p.status !== 'archived' && storeIds.includes(p.store_id));
+
+      const storeRowsHTML = storeIds.map(sid => {
+        const st = stores.find(s => String(s.id) === String(sid)) || {};
+        const stName = st.name || sid;
+        const budgetMins = Number(budgets[sid]) || 30;
+        const spentMins = Number(spentObj[sid]) || 0;
+        const pct = Math.min(100, Math.round((spentMins / budgetMins) * 100));
+
+        return `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-top:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:.8rem" class="truncate"><i class="fas fa-store" style="color:var(--primary);margin-right:4px"></i> ${escHtml(stName)}</div>
+              <div style="font-size:.72rem;color:var(--text-muted)">Budget: ${budgetMins} mins/day · Used: ${spentMins.toFixed(1)} mins today (${pct}%)</div>
+              <div style="width:100%;height:4px;background:#e5e7eb;border-radius:2px;margin-top:4px;overflow:hidden">
+                <div style="width:${pct}%;height:100%;background:${pct >= 100 ? 'var(--danger)' : 'var(--success)'}"></div>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="card" style="margin-bottom:14px;border:1px solid var(--border)">
+          <div class="card-body" style="padding:14px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+              <div>
+                <h4 style="font-weight:800;font-size:.95rem;margin:0;display:flex;align-items:center;gap:8px">
+                  🎯 ${escHtml(c.name || 'Ad Campaign')}
+                  <span class="status-badge ${isActive ? 'status-active' : 'status-suspended'}" style="font-size:.7rem;padding:2px 8px">
+                    ${isActive ? '● Active' : '○ Paused'}
+                  </span>
+                </h4>
+                <div style="font-size:.76rem;color:var(--text-muted);margin-top:4px;display:flex;gap:12px;flex-wrap:wrap">
+                  <span>⏱️ ${c.interval_value || 3}s per slide</span>
+                  <span>📦 ${eligibleProds.length} active products</span>
+                  <span>🏪 ${storeIds.length} stores participating</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn btn-sm ${isActive ? 'btn-outline' : 'btn-primary'}" onclick="toggleAdCampaignStatus('${c.id}', '${c.status}')">
+                  <i class="fas fa-${isActive ? 'pause' : 'play'}"></i> ${isActive ? 'Pause' : 'Activate'}
+                </button>
+                <button class="btn btn-sm btn-outline" onclick="showAddAdCampaignModal('${c.id}')">
+                  <i class="fas fa-edit"></i> Edit
+                </button>
+                <button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="deleteAdCampaign('${c.id}')">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <div style="font-size:.78rem;color:var(--text-light);margin-bottom:8px">
+              <strong>Placements:</strong>
+              ${pages.map(p => `<span style="background:var(--primary-light);color:var(--primary);padding:2px 6px;border-radius:4px;font-size:.7rem;font-weight:700;margin-right:4px">${p.toUpperCase()}</span>`).join('') || '<span style="color:var(--text-muted)">None</span>'}
+            </div>
+
+            <div style="margin-top:10px">
+              <div style="font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:4px">Participating Stores &amp; Daily Budgets:</div>
+              ${storeRowsHTML || '<div style="font-size:.75rem;color:var(--text-muted)">No stores selected</div>'}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = html;
+  } catch (err) {
+    console.error('Error loading admin ad campaigns:', err);
+    container.innerHTML = '<div style="color:var(--danger);padding:20px;text-align:center">Failed to load ad campaigns.</div>';
+  }
+}
+
+window.showAddAdCampaignModal = async function(campaignId = null) {
+  const cRes = campaignId ? await apiGet('ad_campaigns/' + campaignId).catch(() => null) : null;
+  const c = cRes?.data || cRes || {};
+
+  const storesRes = await apiGet('stores', 'limit=200');
+  const allStores = storesRes?.data || [];
+  App.allStores = allStores;
+
+  const isEdit = !!campaignId;
+  const title = c.name || '';
+  const intervalVal = c.interval_value || 3;
+  const pages = Array.isArray(c.pages) ? c.pages : ['home', 'shop', 'stores'];
+  const storeIds = Array.isArray(c.store_ids) ? c.store_ids : allStores.map(s => s.id);
+  let budgets = c.store_budgets || {};
+  if (typeof budgets === 'string') {
+    try { budgets = JSON.parse(budgets); } catch(e) { budgets = {}; }
+  }
+  const showStoreName = c.show_store_name !== false;
+
+  const modalHtml = `
+    <div class="modal active" id="modal-ad-campaign" style="z-index:999999;display:flex;align-items:center;justify-content:center;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5)">
+      <div class="modal-content" style="max-width:620px;width:92%;max-height:90vh;overflow-y:auto;padding:24px;border-radius:16px;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,0.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px">
+          <h3 style="font-size:1.1rem;font-weight:800;margin:0;color:var(--text)"><i class="fas fa-ad" style="color:var(--primary)"></i> ${isEdit ? 'Edit Ad Campaign' : 'Create New Ad Campaign'}</h3>
+          <button class="modal-close" onclick="closeModal('modal-ad-campaign')" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text-muted)">✕</button>
+        </div>
+
+        <form onsubmit="saveAdCampaign(event, '${campaignId || ''}')">
+          <div class="form-group">
+            <label class="form-label">Campaign Name *</label>
+            <input class="form-control" id="ad-camp-name" value="${escHtml(title)}" placeholder="e.g. Featured Stores &amp; Flash Sales" required>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Slide Interval (seconds) *</label>
+              <input class="form-control" type="number" id="ad-camp-interval" min="2" max="30" value="${intervalVal}" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Show Store Name Badge</label>
+              <select class="form-control form-select" id="ad-camp-storename">
+                <option value="true" ${showStoreName ? 'selected' : ''}>Yes — Display Store Badge</option>
+                <option value="false" ${!showStoreName ? 'selected' : ''}>No — Hide Store Badge</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Target Page Placements *</label>
+            <div style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer">
+                <input type="checkbox" id="ad-page-home" ${pages.includes('home') ? 'checked' : ''}> 🏠 Home Page
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer">
+                <input type="checkbox" id="ad-page-shop" ${pages.includes('shop') ? 'checked' : ''}> 🛍️ Shop / Marketplace
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer">
+                <input type="checkbox" id="ad-page-stores" ${pages.includes('stores') ? 'checked' : ''}> 🏪 Stores Page
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Participating Stores &amp; Daily Budgets (minutes/day)</label>
+            <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:8px">Select which stores participate in this campaign's rotation and set their daily ad time budget.</p>
+            
+            <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+              ${allStores.map(s => {
+                const checked = storeIds.includes(s.id);
+                const budgetMins = Number(budgets[s.id]) || 30;
+                return `
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 8px;border-bottom:1px solid #f3f4f6">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:.83rem;cursor:pointer;flex:1;min-width:0">
+                      <input type="checkbox" class="ad-store-chk" data-store-id="${s.id}" ${checked ? 'checked' : ''}>
+                      <span class="truncate" style="font-weight:600">${escHtml(s.name)}</span>
+                    </label>
+                    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+                      <span style="font-size:.72rem;color:var(--text-muted)">Daily Budget:</span>
+                      <input type="number" class="form-control ad-store-budget" data-store-id="${s.id}" min="5" max="1440" value="${budgetMins}" style="width:75px;padding:2px 6px;font-size:.78rem">
+                      <span style="font-size:.72rem;color:var(--text-muted)">mins</span>
+                    </div>
+                  </div>`;
+              }).join('')}
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('modal-ad-campaign')">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="save-ad-camp-btn">
+              <i class="fas fa-check"></i> ${isEdit ? 'Update Campaign' : 'Create Campaign'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+
+  const old = document.getElementById('modal-ad-campaign');
+  if (old) old.remove();
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.saveAdCampaign = async function(e, campaignId) {
+  e.preventDefault();
+
+  const name = document.getElementById('ad-camp-name')?.value.trim();
+  const intervalVal = parseInt(document.getElementById('ad-camp-interval')?.value || '3', 10);
+  const showStoreName = document.getElementById('ad-camp-storename')?.value === 'true';
+
+  if (!name) { showToast('Please enter a campaign name', 'warning'); return; }
+
+  const pages = [];
+  if (document.getElementById('ad-page-home')?.checked) pages.push('home');
+  if (document.getElementById('ad-page-shop')?.checked) pages.push('shop');
+  if (document.getElementById('ad-page-stores')?.checked) pages.push('stores');
+
+  if (!pages.length) { showToast('Please select at least one target page placement', 'warning'); return; }
+
+  const selectedStoreIds = [];
+  const storeBudgets = {};
+
+  document.querySelectorAll('.ad-store-chk').forEach(chk => {
+    if (chk.checked) {
+      const sid = chk.dataset.storeId;
+      selectedStoreIds.push(sid);
+      const budgetInput = document.querySelector(`.ad-store-budget[data-store-id="${sid}"]`);
+      storeBudgets[sid] = parseInt(budgetInput?.value || '30', 10);
+    }
+  });
+
+  if (!selectedStoreIds.length) { showToast('Please select at least one participating store', 'warning'); return; }
+
+  const btn = document.getElementById('save-ad-camp-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; }
+
+  const payload = {
+    name,
+    status: 'active',
+    pages,
+    store_ids: selectedStoreIds,
+    store_budgets: JSON.stringify(storeBudgets),
+    interval_value: intervalVal,
+    interval_unit: 'seconds',
+    show_store_name: showStoreName,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    if (campaignId) {
+      await apiPatch('ad_campaigns', campaignId, payload);
+      showToast('Ad campaign updated successfully! ✅', 'success');
+    } else {
+      payload.id = 'adc-' + Date.now();
+      payload.start_date = Date.now();
+      payload.end_date = Date.now() + (365 * 86400000);
+      payload.created_at = new Date().toISOString();
+      await apiPost('ad_campaigns', payload);
+      showToast('New ad campaign created successfully! 🎉', 'success');
+    }
+
+    closeModal('modal-ad-campaign');
+    if (typeof refreshAdBanners === 'function') await refreshAdBanners();
+    await loadAdminAds();
+  } catch (err) {
+    console.error('Save ad campaign error:', err);
+    showToast('Failed to save ad campaign', 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Save Campaign'; }
+  }
+};
+
+window.toggleAdCampaignStatus = async function(campaignId, currentStatus) {
+  const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+  showToast(`Updating campaign status to ${newStatus}…`, 'info');
+  await apiPatch('ad_campaigns', campaignId, { status: newStatus }).catch(() => {});
+  if (typeof refreshAdBanners === 'function') await refreshAdBanners();
+  showToast(`Campaign status set to ${newStatus} ✅`, 'success');
+  await loadAdminAds();
+};
+
+window.deleteAdCampaign = async function(campaignId) {
+  if (!confirm('Are you sure you want to delete this ad campaign?')) return;
+  showToast('Deleting ad campaign…', 'info');
+  await apiDelete('ad_campaigns', campaignId).catch(() => {});
+  if (typeof refreshAdBanners === 'function') await refreshAdBanners();
+  showToast('Ad campaign deleted! 🗑️', 'success');
+  await loadAdminAds();
+};
+

@@ -137,8 +137,10 @@ async function renderVendorDashboard() {
     if (storeStatus === 'none') {
       myStorefront = null;
     } else {
-      myStorefront = fetchedSF || { status: storeStatus, store_id: myStore.id, vendor_id: myStore.vendor_id };
-      myStorefront.status = storeStatus;
+      myStorefront = fetchedSF ? Object.assign({}, fetchedSF, { status: storeStatus }) : { status: storeStatus, store_id: myStore.id, vendor_id: myStore.vendor_id };
+    }
+    if (myStorefront && typeof myStorefront.plan_prices === 'string') {
+      try { myStorefront.plan_prices = JSON.parse(myStorefront.plan_prices); } catch(e){}
     }
     App.myStorefront = myStorefront;
   } else {
@@ -169,9 +171,9 @@ async function renderVendorDashboard() {
   const defaultGrowthPrice  = parseInt(await getSetting('storefront_price_growth', '100')) || 100;
   const defaultProPrice     = parseInt(await getSetting('storefront_price_pro', '200')) || 200;
 
-  const starterPrice = myStorefront?.plan_prices?.starter || defaultStarterPrice;
-  const growthPrice  = myStorefront?.plan_prices?.growth || defaultGrowthPrice;
-  const proPrice     = myStorefront?.plan_prices?.pro || defaultProPrice;
+  const starterPrice = parseFloat(myStorefront?.plan_prices?.starter || myStore?.plan_prices?.starter || defaultStarterPrice);
+  const growthPrice  = parseFloat(myStorefront?.plan_prices?.growth  || myStore?.plan_prices?.growth  || defaultGrowthPrice);
+  const proPrice     = parseFloat(myStorefront?.plan_prices?.pro     || myStore?.plan_prices?.pro     || defaultProPrice);
 
   const activeTabId = (App.activeTab && App.activeTab['vendor-dashboard']) || 'vendor-overview';
 
@@ -518,15 +520,48 @@ async function renderVendorDashboard() {
 
       <!-- State 1: No Storefront Created Yet (storefront_status is 'none' or not set) -->
       ${(!myStorefront || !myStorefront.status || myStorefront.status === 'none') ? `
-        <div style="text-align:center;padding:50px 20px;background:#fff;border-radius:16px;border:1px solid var(--border);margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,0.04)">
-          <div style="font-size:3.5rem;margin-bottom:16px;">🎨</div>
-          <h2 style="font-weight:800;font-size:1.35rem;margin-bottom:8px">Build Your Standalone Storefront</h2>
-          <p style="font-size:.875rem;color:var(--text-light);margin-bottom:24px;line-height:1.7;max-width:520px;margin-left:auto;margin-right:auto">
-            Create a unique branded website for your store with custom colors, slogan, policies, and a dedicated shareable URL link.
+        <div style="padding:32px 24px;background:#fff;border-radius:18px;border:1px solid var(--border);margin-bottom:20px;box-shadow:0 4px 16px rgba(0,0,0,0.04)">
+          <div style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#fff4ef,#ffe8d6);color:var(--primary);font-size:2rem;margin:0 auto 16px">🎨</div>
+          <h2 style="font-weight:900;font-size:1.4rem;text-align:center;margin-bottom:8px">Build Your Own Standalone Storefront Website</h2>
+          <p style="font-size:.9rem;color:var(--text-light);text-align:center;margin-bottom:20px;line-height:1.7;max-width:640px;margin-left:auto;margin-right:auto">
+            A <strong>Storefront</strong> is your dedicated, custom-branded web application (e.g. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;color:var(--primary);font-weight:700">happamart.com/#storefront/your-shop</code>). 
+            Unlike standard marketplace listings, your storefront gives you full brand identity with custom UI themes, custom brand colors, slogan, logo, business hours, shipping policies, and a direct link to share with your customers.
           </p>
-          <button class="btn btn-primary" onclick="window.createStorefrontDraft('${myStore.id}')" style="padding:12px 24px;font-weight:700">
-            <i class="fas fa-plus-circle"></i> Create Storefront
-          </button>
+
+          <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fed7aa;border-radius:12px;padding:12px 16px;text-align:center;margin-bottom:24px;max-width:560px;margin-left:auto;margin-right:auto">
+            <div style="font-size:.85rem;font-weight:800;color:#c2410c"><i class="fas fa-tag"></i> Subscriptions as low as <strong>GH₵ 30 / month</strong></div>
+            <div style="font-size:.78rem;color:#9a3412;margin-top:2px">Custom admin pricing, flexible durations, and high product upload allowances!</div>
+          </div>
+
+          <h3 style="font-size:.95rem;font-weight:800;text-align:center;margin-bottom:14px">🌟 Why Get a Standalone Storefront?</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:28px">
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:left">
+              <div style="font-size:1.2rem;margin-bottom:6px">🚀</div>
+              <div style="font-weight:700;font-size:.85rem;margin-bottom:4px">Dedicated Shareable Link</div>
+              <div style="font-size:.76rem;color:var(--text-muted);line-height:1.5">Put your store link directly in your Instagram, WhatsApp, TikTok, &amp; Facebook bio for direct ordering.</div>
+            </div>
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:left">
+              <div style="font-size:1.2rem;margin-bottom:6px">🎨</div>
+              <div style="font-weight:700;font-size:.85rem;margin-bottom:4px">Custom UI Theme &amp; Colors</div>
+              <div style="font-size:.76rem;color:var(--text-muted);line-height:1.5">Choose custom brand primary/secondary colors, typography, header banner, logo, and slogan.</div>
+            </div>
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:left">
+              <div style="font-size:1.2rem;margin-bottom:6px">📦</div>
+              <div style="font-weight:700;font-size:.85rem;margin-bottom:4px">High Product Limits</div>
+              <div style="font-size:.76rem;color:var(--text-muted);line-height:1.5">Upload 50, 100, or Unlimited products to showcase your complete inventory.</div>
+            </div>
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:left">
+              <div style="font-size:1.2rem;margin-bottom:6px">📢</div>
+              <div style="font-weight:700;font-size:.85rem;margin-bottom:4px">External &amp; On-Site Promotions</div>
+              <div style="font-size:.76rem;color:var(--text-muted);line-height:1.5">Pro members get automated daily item sharing outside the site &amp; across social media for maximum customer reach!</div>
+            </div>
+          </div>
+
+          <div style="text-align:center">
+            <button class="btn btn-primary" onclick="window.createStorefrontDraft('${myStore.id}')" style="padding:14px 28px;font-weight:800;font-size:.95rem;border-radius:30px;box-shadow:0 4px 14px rgba(232,93,4,0.3)">
+              <i class="fas fa-magic"></i> Start Building Your Storefront
+            </button>
+          </div>
         </div>
       ` : ''}
 
@@ -568,38 +603,61 @@ async function renderVendorDashboard() {
 
         <!-- ── Status Banner: Approved, Pending Payment ── -->
         ${myStorefront.status === 'approved_pending_payment' ? `
-          <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px 18px;margin-bottom:16px">
-            <div style="font-weight:800;font-size:.95rem;color:#166534;margin-bottom:8px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Storefront Layout Approved!</div>
-            <div style="font-size:.82rem;color:#14532d;line-height:1.5;margin-bottom:16px">
-              Your storefront layout has been approved by admin. Select a subscription plan below to activate your live URL.
+          <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:18px;margin-bottom:16px">
+            <div style="font-weight:800;font-size:1.05rem;color:#166534;margin-bottom:6px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Storefront Layout Approved!</div>
+            <div style="font-size:.84rem;color:#14532d;line-height:1.5;margin-bottom:18px">
+              Your storefront layout has been approved by admin. Select a subscription plan below to choose your duration and activate your live URL.
             </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:800px">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;max-width:900px">
               <!-- Starter Plan -->
-              <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
-                <div style="font-size:1.6rem;margin-bottom:6px">🌱</div>
-                <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Starter</div>
-                <div style="font-size:1.5rem;font-weight:900;color:var(--text);margin-bottom:2px">GH₵ ${starterPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'starter', ${starterPrice})">
-                  Pay & Activate
+              <div style="border:1px solid var(--border);border-radius:14px;padding:20px 16px;text-align:center;background:#fff;display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="font-size:1.6rem;margin-bottom:6px">🌱</div>
+                  <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Starter Plan</div>
+                  <div style="font-size:1.4rem;font-weight:900;color:var(--text);margin-bottom:8px">GH₵ ${starterPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                  <div style="font-size:.78rem;color:var(--text-light);line-height:1.6;margin-bottom:12px;text-align:left">
+                    <div>✓ 📦 <strong>50 Product Uploads Max</strong></div>
+                    <div>✓ 🎨 Custom branding &amp; logo</div>
+                    <div>✓ 📱 Shareable website link</div>
+                  </div>
+                </div>
+                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:12px;font-size:.8rem" onclick="window.showVendorStorefrontSubscriptionModal('${myStore.id}', 'starter', ${starterPrice})">
+                  Select Duration &amp; Pay
                 </button>
               </div>
+
               <!-- Growth Plan -->
-              <div style="border:2px solid var(--primary);border-radius:14px;padding:22px 18px;text-align:center;background:#fff;position:relative">
+              <div style="border:2px solid var(--primary);border-radius:14px;padding:20px 16px;text-align:center;background:#fff;position:relative;display:flex;flex-direction:column;justify-content:space-between">
                 <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px">RECOMMENDED</div>
-                <div style="font-size:1.6rem;margin-bottom:6px">🚀</div>
-                <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Growth</div>
-                <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:2px">GH₵ ${growthPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                <button class="btn btn-primary btn-sm" style="width:100%;margin-top:16px;font-size:.8rem" onclick="window.activateStorefrontPlan('${myStore.id}', 'growth', ${growthPrice})">
-                  Pay & Activate
+                <div>
+                  <div style="font-size:1.6rem;margin-bottom:6px">🚀</div>
+                  <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Growth Plan</div>
+                  <div style="font-size:1.4rem;font-weight:900;color:var(--primary);margin-bottom:8px">GH₵ ${growthPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                  <div style="font-size:.78rem;color:var(--text-light);line-height:1.6;margin-bottom:12px;text-align:left">
+                    <div>✓ 📦 <strong>100 Product Uploads Max</strong></div>
+                    <div>✓ 🎨 Full custom UI theme &amp; slogan</div>
+                    <div>✓ 📈 Sales analytics &amp; priority search</div>
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-sm" style="width:100%;margin-top:12px;font-size:.8rem" onclick="window.showVendorStorefrontSubscriptionModal('${myStore.id}', 'growth', ${growthPrice})">
+                  Select Duration &amp; Pay
                 </button>
               </div>
+
               <!-- Pro Plan -->
-              <div style="border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;background:#fff">
-                <div style="font-size:1.6rem;margin-bottom:6px">💎</div>
-                <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Pro</div>
-                <div style="font-size:1.5rem;font-weight:900;color:#7c3aed;margin-bottom:2px">GH₵ ${proPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:16px;font-size:.8rem;border-color:#7c3aed;color:#7c3aed" onclick="window.activateStorefrontPlan('${myStore.id}', 'pro', ${proPrice})">
-                  Pay & Activate
+              <div style="border:2px solid #7c3aed;border-radius:14px;padding:20px 16px;text-align:center;background:#fff;display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="font-size:1.6rem;margin-bottom:6px">💎</div>
+                  <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Pro Plan (Unlimited)</div>
+                  <div style="font-size:1.4rem;font-weight:900;color:#7c3aed;margin-bottom:8px">GH₵ ${proPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                  <div style="font-size:.78rem;color:var(--text-light);line-height:1.6;margin-bottom:12px;text-align:left">
+                    <div>✓ 🚀 <strong>UNLIMITED Product Uploads</strong></div>
+                    <div>✓ 📢 <strong>Daily Automated Item Sharing Outside the Site &amp; Across Social Media</strong> for more customers!</div>
+                    <div>✓ 🌟 VIP Priority Support &amp; Verified Badge</div>
+                  </div>
+                </div>
+                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:12px;font-size:.8rem;border-color:#7c3aed;color:#7c3aed;background:#f5f3ff" onclick="window.showVendorStorefrontSubscriptionModal('${myStore.id}', 'pro', ${proPrice})">
+                  Select Duration &amp; Pay
                 </button>
               </div>
             </div>
@@ -2840,15 +2898,77 @@ async function _bapSubmitAll() {
 
 
 
-window.activateStorefrontPlan = async function(storeId, planKey, price) {
+window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthlyPrice) {
+  const planNames = { starter: '🌱 Starter Plan', growth: '🚀 Growth Plan', pro: '💎 Pro Plan (Unlimited)' };
+  const uploadLimits = { 
+    starter: '50 Product Uploads Max', 
+    growth: '100 Product Uploads Max', 
+    pro: 'UNLIMITED Products + Daily Automated Promotion Outside the Site & Across Social Media' 
+  };
+  const name = planNames[planKey] || planKey;
+  const limitText = uploadLimits[planKey] || '';
+
+  const modalHtml = `
+    <div class="modal active" id="modal-sf-sub-pay" style="z-index:999999;display:flex;align-items:center;justify-content:center;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5)">
+      <div class="modal-content" style="max-width:500px;width:92%;padding:24px;border-radius:16px;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,0.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px">
+          <h3 style="font-size:1.1rem;font-weight:800;margin:0;color:var(--text)"><i class="fas fa-shopping-bag" style="color:var(--primary)"></i> Activate ${escHtml(name)}</h3>
+          <button class="modal-close" onclick="closeModal('modal-sf-sub-pay')" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text-muted)">✕</button>
+        </div>
+
+        <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+          <div style="font-weight:700;font-size:.9rem;color:var(--text);margin-bottom:4px">${escHtml(name)}</div>
+          <div style="font-size:.82rem;color:var(--text-muted)">Monthly Rate: <strong>GH₵ ${monthlyPrice.toFixed(2)} / month</strong></div>
+          <div style="font-size:.78rem;color:var(--success);font-weight:700;margin-top:4px"><i class="fas fa-check-circle"></i> Perks: ${escHtml(limitText)}</div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label" style="font-weight:700;font-size:.85rem">Select Subscription Duration (Months)</label>
+          <select class="form-control form-select" id="sf-sub-months-sel" onchange="
+            const m = parseInt(this.value);
+            const total = m * ${monthlyPrice};
+            document.getElementById('sf-sub-total-display').textContent = 'GH₵ ' + total.toFixed(2);
+          ">
+            <option value="1">1 Month — GH₵ ${(monthlyPrice * 1).toFixed(2)}</option>
+            <option value="3">3 Months — GH₵ ${(monthlyPrice * 3).toFixed(2)}</option>
+            <option value="6">6 Months — GH₵ ${(monthlyPrice * 6).toFixed(2)}</option>
+            <option value="12">12 Months (1 Year) — GH₵ ${(monthlyPrice * 12).toFixed(2)}</option>
+          </select>
+        </div>
+
+        <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;text-align:center;margin-bottom:20px">
+          <div style="font-size:.78rem;color:#9a3412">Total Amount to Pay</div>
+          <div style="font-size:1.8rem;font-weight:900;color:#c2410c" id="sf-sub-total-display">GH₵ ${monthlyPrice.toFixed(2)}</div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="closeModal('modal-sf-sub-pay')">Cancel</button>
+          <button class="btn btn-primary" onclick="
+            const months = parseInt(document.getElementById('sf-sub-months-sel').value || '1');
+            closeModal('modal-sf-sub-pay');
+            window.activateStorefrontPlan('${storeId}', '${planKey}', ${monthlyPrice}, months);
+          ">
+            <i class="fas fa-lock"></i> Pay &amp; Activate Now
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+  const old = document.getElementById('modal-sf-sub-pay');
+  if (old) old.remove();
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, months = 1) {
   if (!App.myStorefront || App.myStorefront.status !== 'approved_pending_payment') return;
   
+  const totalCost = monthlyPrice * months;
   const userBal = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
   
   // Check wallet balance
-  if (userBal < price) {
-    const topUpNeeded = price - userBal;
-    if (confirm(`Your wallet balance is GH₵ ${userBal.toFixed(2)}. Add GH₵ ${topUpNeeded.toFixed(2)} to top up and activate now?`)) {
+  if (userBal < totalCost) {
+    const topUpNeeded = totalCost - userBal;
+    if (confirm(`Your wallet balance is GH₵ ${userBal.toFixed(2)}. Add GH₵ ${topUpNeeded.toFixed(2)} to top up and activate for ${months} month(s) now?`)) {
       const newBal = userBal + topUpNeeded + 50;
       if (App.currentUser) App.currentUser.wallet_balance = newBal;
       App.walletBalance = newBal;
@@ -2857,12 +2977,12 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
       if (typeof updateWalletUI === 'function') updateWalletUI();
       showToast('Wallet topped up successfully! Completing plan payment...', 'success');
     } else {
-      showToast(`Insufficient balance. You need GH₵ ${price} to activate this plan.`, 'error');
+      showToast(`Insufficient balance. You need GH₵ ${totalCost.toFixed(2)} to activate this plan for ${months} month(s).`, 'error');
       return;
     }
   }
   
-  if (!confirm(`Pay GH₵ ${price} to activate the ${planKey.toUpperCase()} plan?`)) return;
+  if (!confirm(`Pay GH₵ ${totalCost.toFixed(2)} to activate ${months} month(s) of the ${planKey.toUpperCase()} plan?`)) return;
   
   showToast('Processing payment & activating storefront...', 'info');
   
@@ -2870,12 +2990,12 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
   await apiPost('wallet_transactions', {
     user_id: App.currentUser.id,
     type: 'payment',
-    amount: price,
-    description: `Storefront Subscription: ${planKey.toUpperCase()} Plan`,
+    amount: totalCost,
+    description: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s))`,
     status: 'completed'
   }).catch(() => {});
   
-  const finalBal = Math.max(0, (parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? price) - price));
+  const finalBal = Math.max(0, (parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? totalCost) - totalCost));
   if (App.currentUser) App.currentUser.wallet_balance = finalBal;
   App.walletBalance = finalBal;
   await apiPatch('users', App.currentUser?.id, { wallet_balance: finalBal }).catch(() => {});
@@ -2892,7 +3012,7 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
   const storeIdx = App.allStores ? App.allStores.findIndex(s => String(s.id) === String(storeId)) : -1;
   const now = new Date();
   const newEnd = new Date(now);
-  newEnd.setMonth(newEnd.getMonth() + 1);
+  newEnd.setMonth(newEnd.getMonth() + months);
   
   if (storeIdx !== -1) {
     App.allStores[storeIdx].subscription_plan = planKey;
@@ -2919,11 +3039,11 @@ window.activateStorefrontPlan = async function(storeId, planKey, price) {
 
   if (typeof addNotification === 'function' && App.currentUser?.id) {
     addNotification(App.currentUser.id, 'system', '🚀 Storefront Activated & Live!',
-      `Your storefront is active! Share your URL: ${liveUrl}`,
+      `Your storefront is active! Subscribed for ${months} month(s) on the ${planKey.toUpperCase()} plan. Live URL: ${liveUrl}`,
       `#storefront/${sfSlug}`);
   }
 
-  showToast('Storefront activated successfully! 🎉', 'success');
+  showToast(`Storefront activated for ${months} month(s)! 🎉`, 'success');
   renderVendorDashboard();
 };
 

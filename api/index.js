@@ -351,6 +351,7 @@ app.get('/api/:table', async (req, res) => {
         meta_description: st.meta_description || '',
         subscription_plan: st.subscription_plan || 'starter',
         subscription_status: st.subscription_status || 'active',
+        plan_prices: st.plan_prices || null,
         created_at: st.created_at,
         updated_at: st.updated_at
       }));
