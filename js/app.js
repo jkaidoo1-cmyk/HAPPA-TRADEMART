@@ -46,6 +46,70 @@ const App = {
   activeTab: {},
 };
 
+/**
+ * Progressive One-by-One Item Renderer
+ * Loads and displays items ONE BY ONE with staggered micro-delays for an ultra-responsive UX.
+ */
+function renderItemsProgressively(containerEl, items, cardHtmlFn, options = {}) {
+  if (!containerEl) return;
+
+  if (!items || !items.length) {
+    containerEl.innerHTML = '';
+    return;
+  }
+
+  if (containerEl._progressiveTimer) {
+    clearTimeout(containerEl._progressiveTimer);
+    containerEl._progressiveTimer = null;
+  }
+
+  const delayMs = options.delayMs || 25; // 25ms micro-delay between each single item
+
+  // 1. Render first item immediately so top left starts instantly
+  const firstItem = items[0];
+  const firstRaw = cardHtmlFn(firstItem, 0);
+  const firstHtml = (firstRaw && typeof firstRaw === 'string')
+    ? firstRaw.replace(/^<([a-z0-9]+)/i, '<$1 class="progressive-card" style="animation-delay: 0s;"')
+    : firstRaw;
+  containerEl.innerHTML = firstHtml || '';
+
+  // 2. Stream remaining items ONE BY ONE
+  if (items.length > 1) {
+    let currentIndex = 1;
+
+    const renderNextItem = () => {
+      if (!document.body.contains(containerEl)) return;
+      if (currentIndex >= items.length) {
+        containerEl._progressiveTimer = null;
+        return;
+      }
+
+      const item = items[currentIndex];
+      const staggerDelay = ((currentIndex % 8) * 0.02).toFixed(3);
+      const rawHtml = cardHtmlFn(item, currentIndex);
+      const itemHtml = (rawHtml && typeof rawHtml === 'string')
+        ? rawHtml.replace(/^<([a-z0-9]+)/i, `<$1 class="progressive-card" style="animation-delay: ${staggerDelay}s;"`)
+        : rawHtml;
+
+      containerEl.insertAdjacentHTML('beforeend', itemHtml || '');
+      currentIndex++;
+
+      if (currentIndex < items.length) {
+        containerEl._progressiveTimer = setTimeout(() => {
+          requestAnimationFrame(renderNextItem);
+        }, delayMs);
+      } else {
+        containerEl._progressiveTimer = null;
+      }
+    };
+
+    containerEl._progressiveTimer = setTimeout(() => {
+      requestAnimationFrame(renderNextItem);
+    }, delayMs);
+  }
+}
+window.renderItemsProgressively = renderItemsProgressively;
+
 // ── Initialize ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   // Bump this version string whenever seed data changes to force a re-seed

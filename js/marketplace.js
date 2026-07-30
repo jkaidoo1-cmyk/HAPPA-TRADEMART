@@ -155,8 +155,7 @@ async function renderMarketplace() {
 
   if (empty) empty.classList.add('hidden');
 
-  grid.innerHTML = items.map(p => productCardHTML(p)).join('');
-
+  renderItemsProgressively(grid, items, p => productCardHTML(p), { initialBatch: 6, batchSize: 6 });
 }
 
 
@@ -435,8 +434,7 @@ async function renderStores() {
 
   if (empty) empty.classList.add('hidden');
 
-  grid.innerHTML = stores.map(s => storeCardHTML(s)).join('');
-
+  renderItemsProgressively(grid, stores, s => storeCardHTML(s), { initialBatch: 6, batchSize: 6 });
 }
 
 

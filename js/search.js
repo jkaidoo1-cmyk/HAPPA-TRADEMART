@@ -197,14 +197,12 @@ async function performSearch(query) {
 
 ${stores.length ? `
 <h4 style="font-weight:700;font-size:.9rem;margin-bottom:8px">🏪 Stores</h4>
-${stores.map(s => storeCardHTML(s)).join('')}
+<div id="search-stores-container"></div>
 <div style="margin-bottom:16px"></div>` : ''}
 
 ${products.length ? `
 <h4 style="font-weight:700;font-size:.9rem;margin-bottom:8px">🛍 Products</h4>
-<div class="product-grid" style="padding:0">
-  ${products.map(p => productCardHTML(p)).join('')}
-</div>` : ''}
+<div class="product-grid" id="search-products-container" style="padding:0"></div>` : ''}
 
 ${!products.length && !stores.length ? `
 <div class="empty-state" style="padding:50px 20px">
@@ -213,6 +211,16 @@ ${!products.length && !stores.length ? `
   <p>Try different keywords or browse our marketplace</p>
   <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="showPage('marketplace')">Browse All</button>
 </div>` : ''}`;
+
+  if (stores.length) {
+    const sEl = document.getElementById('search-stores-container');
+    if (sEl) renderItemsProgressively(sEl, stores, s => storeCardHTML(s), { initialBatch: 4, batchSize: 4 });
+  }
+
+  if (products.length) {
+    const pEl = document.getElementById('search-products-container');
+    if (pEl) renderItemsProgressively(pEl, products, p => productCardHTML(p), { initialBatch: 6, batchSize: 6 });
+  }
 }
 
 // Highlight search term in text
