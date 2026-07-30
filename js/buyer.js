@@ -82,7 +82,7 @@ async function renderBuyerDashboard() {
     ${!u.is_verified ? `
     <div class="verify-banner">
       <i class="fas fa-exclamation-circle"></i>
-      <p>Verify your phone to get order updates via SMS. <a href="#" onclick="resendOTP()" style="color:var(--primary);font-weight:700">Verify now →</a></p>
+      <p>Verify your phone to get order updates via SMS. <a href="javascript:void(0)" onclick="resendOTP()" style="color:var(--primary);font-weight:700">Verify now →</a></p>
     </div>` : ''}
 
     <!-- Recent Orders -->

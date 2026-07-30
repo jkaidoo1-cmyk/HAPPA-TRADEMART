@@ -126,7 +126,7 @@ function renderAuthForm() {
 
   <div style="text-align:center;margin-top:16px;font-size:.85rem;color:var(--text-muted)">
 
-    <a href="#" onclick="showForgotPw()" style="color:var(--primary)">Forgot Password?</a>
+    <a href="javascript:void(0)" onclick="showForgotPw()" style="color:var(--primary)">Forgot Password?</a>
 
   </div>
 
@@ -398,7 +398,7 @@ ${authRole === 'rendor' ? `
 
     <label for="reg-terms" style="font-size:.8rem;color:var(--text-light)">
 
-      I agree to the <a href="#" onclick="showPage('privacy')" style="color:var(--primary)">Privacy Policy</a> and Terms of Service
+      I agree to the <a href="javascript:void(0)" onclick="showPage('privacy')" style="color:var(--primary)">Privacy Policy</a> and Terms of Service
 
     </label>
 
@@ -947,7 +947,7 @@ function showOTPModal(user) {
 
   <div style="text-align:center;margin-top:12px">
 
-    <a href="#" onclick="skipOTP('${user.id}')" style="font-size:.8rem;color:var(--text-muted)">Skip for now</a>
+    <a href="javascript:void(0)" onclick="skipOTP('${user.id}')" style="font-size:.8rem;color:var(--text-muted)">Skip for now</a>
 
   </div>
 

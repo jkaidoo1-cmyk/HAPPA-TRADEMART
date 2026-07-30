@@ -199,13 +199,17 @@ window.addEventListener('DOMContentLoaded', () => {
 // ── Hash Route Resolver ─────────────────────────────────
 function resolveRouteFromHash(hashStr) {
   if (!hashStr || hashStr === '#' || hashStr === '#home') {
-    showPage('home');
+    if (App.currentPage !== 'home') showPage('home');
     return true;
   }
   const cleanHash = hashStr.startsWith('#') ? hashStr.substring(1) : hashStr;
   const parts = cleanHash.split('/');
   const route = parts[0];
   const param = parts[1] || null;
+
+  if (route === App.currentPage && String(param || '') === String(getPageEntityId(route) || '')) {
+    return true;
+  }
 
   const validPages = [
     'home', 'marketplace', 'stores', 'cart', 'checkout', 'auth', 'settings',
@@ -261,6 +265,7 @@ function resolveRouteFromHash(hashStr) {
 
   // Listen to hash changes dynamically
   window.addEventListener('hashchange', () => {
+    if (App._isProgrammaticNav) return;
     const isStorefront = document.body.classList.contains('is-storefront-view') || document.documentElement.classList.contains('is-storefront-root') || App.isStandaloneStorefront;
     const newHash = window.location.hash;
 
@@ -760,6 +765,13 @@ function showPage(pageId, entityId = null) {
     else { pageId = 'buyer-dashboard'; }
   }
 
+  const targetEntity = entityId || getPageEntityId(pageId);
+  const currentEntity = getPageEntityId(App.currentPage);
+  const targetEl = document.getElementById('page-' + pageId);
+  if (App.currentPage === pageId && String(targetEntity || '') === String(currentEntity || '') && targetEl && targetEl.classList.contains('active') && targetEl.style.display !== 'none') {
+    return;
+  }
+
   App.prevPage = App.currentPage;
   App.currentPage = pageId;
 
@@ -767,12 +779,13 @@ function showPage(pageId, entityId = null) {
   // Skip when we're already handling a popstate (browser-back) event.
   if (!App._skipPush) {
     try {
-      const targetEntity = entityId || getPageEntityId(pageId);
       let hash = '#' + pageId;
       if (targetEntity && ['store-detail', 'storefront', 'store-admin', 'product', 'rendor-profile'].includes(pageId)) {
         hash += '/' + targetEntity;
       }
+      App._isProgrammaticNav = true;
       history.pushState({ page: pageId, entityId: targetEntity }, '', hash);
+      setTimeout(() => { App._isProgrammaticNav = false; }, 100);
     } catch(e) { console.warn('history.pushState failed:', e); }
   }
 

@@ -805,7 +805,7 @@ function renderProductDelivery(p) {
 
   const ul = App.currentUser?.location || '';
 
-  if (!ul) return `<p style="font-size:.85rem;color:var(--text-muted)"><a href="#" onclick="showPage('auth')" style="color:var(--primary)">Sign in</a> to see delivery rates to your location</p>`;
+  if (!ul) return `<p style="font-size:.85rem;color:var(--text-muted)"><a href="javascript:void(0)" onclick="showPage('auth')" style="color:var(--primary)">Sign in</a> to see delivery rates to your location</p>`;
 
   const d = calcDelivery(p.location, ul, p.weight_kg || 0.5);
 

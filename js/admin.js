@@ -203,21 +203,21 @@ async function renderAdminDashboard() {
     <div class="verify-banner" style="margin-top:8px;background:linear-gradient(90deg,#fef3c7,#fde68a);border-color:#f59e0b">
       <i class="fas fa-user-clock" style="color:#b45309"></i>
       <p style="color:#78350f"><strong>${pendingVendors.length} vendor(s)</strong> awaiting approval.
-        <a href="#" onclick="switchTab(null,'admin-vendors');refreshAdminVendorsFull()"
+        <a href="javascript:void(0)" onclick="switchTab(null,'admin-vendors');refreshAdminVendorsFull()"
            style="color:#b45309;font-weight:700">Approve now →</a></p>
     </div>` : ''}
     ${pendingIdVendors.length ? `
     <div class="verify-banner" style="margin-top:8px;background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c">
       <i class="fas fa-id-card" style="color:#ea580c"></i>
       <p style="color:#9a3412"><strong>${pendingIdVendors.length} vendor(s)</strong> submitted verification documents.
-        <a href="#" onclick="showAdminVerificationModal('${pendingIdVendors[0].id}')"
+        <a href="javascript:void(0)" onclick="showAdminVerificationModal('${pendingIdVendors[0].id}')"
            style="color:#ea580c;font-weight:700">Review &amp; Approve Docs →</a></p>
     </div>` : ''}
     ${pendingRendors.length ? `
     <div class="verify-banner" style="margin-top:8px;background:linear-gradient(90deg,#ede9fe,#ddd6fe);border-color:#a78bfa">
       <i class="fas fa-briefcase" style="color:#7c3aed"></i>
       <p style="color:#4c1d95"><strong>${pendingRendors.length} rendor(s)</strong> awaiting approval.
-        <a href="#" onclick="switchTab(null,'admin-rendors');loadAdminRendors()"
+        <a href="javascript:void(0)" onclick="switchTab(null,'admin-rendors');loadAdminRendors()"
            style="color:#7c3aed;font-weight:700">Approve now →</a></p>
     </div>` : ''}
 
