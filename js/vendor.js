@@ -2249,7 +2249,9 @@ function switchTab(el, tabId) {
     const matchingBtn = container.querySelector(`.tab-btn[onclick*="${tabId}"]`);
     if (matchingBtn) matchingBtn.classList.add('active');
   }
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (el && !App.isBackgroundRefresh) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
 

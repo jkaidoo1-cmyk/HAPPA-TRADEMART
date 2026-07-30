@@ -729,9 +729,14 @@ async function updateAdminStatus(packageId, newStatus) {
 // ── Admin: re-fetch and re-render just the orders list ────
 async function refreshAdminOrdersList() {
   const listEl = document.getElementById('admin-orders-list');
-  if (!listEl) { renderAdminDashboard(); return; }
+  if (!listEl) { 
+    if (!App.isBackgroundRefresh) renderAdminDashboard(); 
+    return; 
+  }
 
-  listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Refreshing…</div>';
+  if (!App.isBackgroundRefresh && (!listEl.children.length || !listEl.innerHTML.trim())) {
+    listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Refreshing…</div>';
+  }
 
   const [pkgsRes, usersRes] = await Promise.all([
     apiGet('packages', 'limit=200'),

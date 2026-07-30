@@ -431,9 +431,19 @@ function startDashboardSyncPolling() {
     if (syncPages.includes(App.currentPage)) {
       apiCache.clear();
       App.isBackgroundRefresh = true;
-      await runPageInit(App.currentPage);
+      try {
+        if (App.currentPage === 'admin-dashboard') {
+          const activeTab = (App.activeTab && App.activeTab['admin-dashboard']) || 'admin-overview';
+          if (activeTab === 'admin-orders' && typeof refreshAdminOrdersList === 'function') {
+            await refreshAdminOrdersList();
+          }
+        } else if (App.currentPage === 'vendor-orders') {
+          await renderVendorOrdersPage();
+        }
+      } catch(e){}
+      App.isBackgroundRefresh = false;
     }
-  }, 15000); // 15s interval for smooth background sync
+  }, 15000);
 }
 
 function stopDashboardSyncPolling() {
@@ -796,7 +806,9 @@ function showPage(pageId, entityId = null) {
     if (topNavEl) topNavEl.style.display = 'none';
     if (bNavEl) bNavEl.style.display = 'none';
     if (mainContent) {
-      mainContent.scrollTop = 0;
+      if (!App.isBackgroundRefresh && App.prevPage !== pageId) {
+        mainContent.scrollTop = 0;
+      }
       mainContent.style.height = '100vh';
       mainContent.style.paddingBottom = '0';
     }
@@ -805,7 +817,9 @@ function showPage(pageId, entityId = null) {
     if (topNavEl) topNavEl.style.display = '';
     if (bNavEl) bNavEl.style.display = '';
     if (mainContent) {
-      mainContent.scrollTop = 0;
+      if (!App.isBackgroundRefresh && App.prevPage !== pageId) {
+        mainContent.scrollTop = 0;
+      }
       mainContent.style.height = '';
       mainContent.style.paddingBottom = '';
     }
