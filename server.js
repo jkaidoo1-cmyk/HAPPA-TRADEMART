@@ -51,6 +51,31 @@ if (hasSupabaseUrl && hasSupabaseKey) {
 
 const zlib = require('zlib');
 
+// In-Memory API Cache System for Zero-Latency Performance
+const apiMemoryCache = new Map();
+const CACHE_TTL_MS = 5000; // 5-second RAM cache TTL
+
+function getCachedApiResponse(key) {
+  const cached = apiMemoryCache.get(key);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.data;
+  }
+  return null;
+}
+
+function setCachedApiResponse(key, data) {
+  apiMemoryCache.set(key, { data, timestamp: Date.now() });
+}
+
+function invalidateApiCache(table) {
+  if (!table) { apiMemoryCache.clear(); return; }
+  for (const key of apiMemoryCache.keys()) {
+    if (key.startsWith(table + ':') || key.startsWith('storefronts:') || key.startsWith('stores:')) {
+      apiMemoryCache.delete(key);
+    }
+  }
+}
+
 app.use(express.json({ limit: '50mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -59,6 +84,12 @@ app.use((req, res, next) => {
   res.setHeader('Service-Worker-Allowed', '/');
 
   if (req.method === 'OPTIONS') return res.sendStatus(204);
+
+  // Invalidate in-memory cache on any data modification request
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.path.startsWith('/api/')) {
+    const table = req.path.substring(5).split('/')[0];
+    invalidateApiCache(table);
+  }
 
   // Set HTTP caching headers for read-only GET API endpoints
   if (req.method === 'GET' && req.path.startsWith('/api/')) {
@@ -309,6 +340,11 @@ app.get('/api', (req, res) => {
 
 app.get('/api/:table', async (req, res) => {
   const table = req.params.table;
+  const cacheKey = `${table}:${JSON.stringify(req.query)}`;
+  const cachedResponse = getCachedApiResponse(cacheKey);
+  if (cachedResponse) {
+    return res.json(cachedResponse);
+  }
 
   if (table === 'storefronts') {
     let supaStores = [];
@@ -366,7 +402,9 @@ app.get('/api/:table', async (req, res) => {
 
     const params = parseQueryParams(req.query);
     const filtered = applyFilters(rows, params);
-    return res.json({ data: filtered });
+    const resultObj = { data: filtered };
+    setCachedApiResponse(cacheKey, resultObj);
+    return res.json(resultObj);
   }
   
   let supaRows = [];
@@ -388,7 +426,9 @@ app.get('/api/:table', async (req, res) => {
   const rows = Array.from(rowMap.values());
   const params = parseQueryParams(req.query);
   const filtered = applyFilters(rows, params);
-  return res.json({ data: filtered });
+  const resultObj = { data: filtered };
+  setCachedApiResponse(cacheKey, resultObj);
+  return res.json(resultObj);
 });
 
 app.get('/api/:table/:id', async (req, res) => {

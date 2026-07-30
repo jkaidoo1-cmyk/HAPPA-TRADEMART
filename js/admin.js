@@ -2976,6 +2976,8 @@ window.approveStorefrontWithModal = async function(sfId) {
     }
   }
 
+  const modalEl = document.getElementById('modal-sf-review');
+  if (modalEl) modalEl.remove();
   closeModal('modal-sf-review');
   showToast('Storefront approved! Waiting for vendor payment. 🎉', 'success');
   renderAdminStorefronts();
@@ -3011,6 +3013,8 @@ window.rejectStorefrontWithModal = async function(sfId) {
       '#vendor-dashboard');
   }
 
+  const modalEl = document.getElementById('modal-sf-review');
+  if (modalEl) modalEl.remove();
   closeModal('modal-sf-review');
   showToast('Storefront request rejected.', 'error');
   renderAdminStorefronts();

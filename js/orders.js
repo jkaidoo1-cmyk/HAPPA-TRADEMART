@@ -586,11 +586,18 @@ async function updateAdminStatus(packageId, newStatus) {
   const btn = (typeof event !== 'undefined') ? event?.target?.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
-  let rawPkg = await apiFetch('packages/' + packageId);
-  if (rawPkg && rawPkg.data && Array.isArray(rawPkg.data)) rawPkg = rawPkg.data[0];
-  if (!rawPkg && App.allPackages) {
-    rawPkg = App.allPackages.find(p => String(p.id) === String(packageId) || String(p.package_code) === String(packageId) || String(p.code) === String(packageId));
+  let rawPkg = null;
+  try {
+    rawPkg = await apiFetch('packages/' + packageId);
+    if (rawPkg && rawPkg.data && Array.isArray(rawPkg.data)) rawPkg = rawPkg.data[0];
+  } catch(e){}
+
+  if (!rawPkg || !rawPkg.id) {
+    const pkgsRes = await apiGet('packages', 'limit=200').catch(() => null);
+    const allPkgs = pkgsRes?.data || App.allPackages || [];
+    rawPkg = allPkgs.find(p => String(p.id) === String(packageId) || String(p.package_code) === String(packageId) || String(p.code) === String(packageId) || String(p.order_id) === String(packageId));
   }
+
   if (!rawPkg) {
     showToast('Package not found', 'error');
     _adminStatusInFlight.delete(packageId);
@@ -598,14 +605,9 @@ async function updateAdminStatus(packageId, newStatus) {
     return;
   }
   const pkg = sanitizePackage(rawPkg);
+  const targetId = pkg.id;
 
   const as = pkg.admin_status || 'pending';
-  if (newStatus === 'delivered' && as !== 'on_delivery') {
-    showToast('Mark the package "On Delivery" first.', 'warning');
-    _adminStatusInFlight.delete(packageId);
-    if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.label || 'Action'; }
-    return;
-  }
   if (newStatus === 'on_delivery' && as === 'delivered') {
     showToast('Package is already delivered.', 'info');
     _adminStatusInFlight.delete(packageId);
@@ -627,11 +629,15 @@ async function updateAdminStatus(packageId, newStatus) {
 
   const statusMap = { on_delivery: 'in_transit', delivered: 'delivered' };
 
-  await apiPatch('packages', packageId, {
+  await apiPatch('packages', targetId, {
     admin_status: newStatus,
     status:       statusMap[newStatus] || pkg.status,
     ...(newStatus === 'delivered' ? { delivered_date: new Date().toISOString(), balance_released: true } : {})
   });
+
+  if (pkg.order_id) {
+    await apiPatch('orders', pkg.order_id, { status: statusMap[newStatus] || 'delivered' }).catch(() => {});
+  }
 
   // Auto-release vendor earnings on delivery
   // vendor_amount already has commission deducted at checkout (it's what vendor earns, not order total)
@@ -830,20 +836,15 @@ function adminPackageRowHTML(rawPkg, allUsers) {
       ` : as === 'delivered' ? `
         <span style="font-size:.78rem;color:var(--success)"><i class="fas fa-check-double"></i> Delivered &amp; earnings released</span>
       ` : `
-        ${canMarkOnDelivery ? `
+        ${as === 'pending' ? `
         <button class="btn btn-primary btn-sm" data-label="Mark On Delivery"
                 onclick="updateAdminStatus('${pkg.id}','on_delivery')">
           <i class="fas fa-truck"></i> Mark On Delivery
         </button>` : ''}
-        ${canMarkDelivered ? `
         <button class="btn btn-success btn-sm" data-label="Mark Delivered"
                 onclick="updateAdminStatus('${pkg.id}','delivered')">
           <i class="fas fa-check-circle"></i> Mark Delivered
-        </button>` : ''}
-        ${!canMarkOnDelivery && !canMarkDelivered && vs !== 'rejected' && as !== 'delivered' ? `
-        <span style="font-size:.78rem;color:var(--text-muted)">
-          <i class="fas fa-hourglass-half"></i> Waiting for vendor to process
-        </span>` : ''}
+        </button>
       `}
     </div>
   </div>

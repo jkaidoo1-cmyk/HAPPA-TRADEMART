@@ -119,6 +119,20 @@ window.addEventListener('DOMContentLoaded', () => {
     window.loadAIConfig().catch(err => console.warn('[AI] preload failed:', err.message));
   }
 
+  // Cross-Tab Session & Wallet Balance Synchronization
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'happa_user') {
+      try {
+        const newUser = e.newValue ? JSON.parse(e.newValue) : null;
+        App.currentUser = newUser;
+        updateNavForUser();
+        if (typeof renderVendorDashboard === 'function' && App.currentPage === 'vendor-dashboard') {
+          renderVendorDashboard();
+        }
+      } catch(err) {}
+    }
+  });
+
   // Fetch server-side notifications (e.g. announcements) shortly after load
   if (App.currentUser) {
     setTimeout(() => fetchServerNotifications().then(renderNotifBadge), 1500);
@@ -431,6 +445,7 @@ function startDashboardSyncPolling() {
   stopDashboardSyncPolling();
   if (!App.currentUser) return;
   _dashboardSyncTimer = setInterval(async () => {
+    if (document.hidden) return; // Pause polling when tab is inactive to save battery and network bandwidth
     if (!App.currentUser) { stopDashboardSyncPolling(); return; }
     const syncPages = ['admin-dashboard', 'vendor-dashboard', 'vendor-orders', 'buyer-dashboard'];
     if (syncPages.includes(App.currentPage)) {
@@ -2344,11 +2359,23 @@ function showModal(html, center = false) {
   </div>`;
 }
 function closeModal(e) {
-  if (e && e.target !== e.currentTarget) return;
-  document.getElementById('modal-container').innerHTML = '';
+  if (typeof e === 'string') {
+    const targetEl = document.getElementById(e);
+    if (targetEl) targetEl.remove();
+  }
+  if (e && e.target && e.currentTarget && e.target !== e.currentTarget) return;
+  const container = document.getElementById('modal-container');
+  if (container) container.innerHTML = '';
+  document.querySelectorAll('#modal-sf-review').forEach(m => m.remove());
 }
-function closeModalForce() {
-  document.getElementById('modal-container').innerHTML = '';
+function closeModalForce(id) {
+  if (id && typeof id === 'string') {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+  const container = document.getElementById('modal-container');
+  if (container) container.innerHTML = '';
+  document.querySelectorAll('#modal-sf-review').forEach(m => m.remove());
 }
 
 // ── Admin Profile Panel (full-screen slide-in) ────────────
