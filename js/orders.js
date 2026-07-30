@@ -661,6 +661,42 @@ async function updateAdminStatus(packageId, newStatus) {
         `GHS ${earnAmt.toFixed(2)} from order ${pkg.package_code} has been released to your wallet.`);
     }
 
+    // Update store total_sales and total_orders stats
+    if (pkg.store_id) {
+      try {
+        let storeObj = await apiFetch('stores/' + pkg.store_id);
+        if (storeObj && storeObj.data) storeObj = Array.isArray(storeObj.data) ? storeObj.data[0] : storeObj.data;
+        if (storeObj) {
+          const earnAmt = parseFloat(pkg.vendor_amount) || parseFloat(pkg.total) || 0;
+          const oldSales = parseFloat(storeObj.total_sales) || 0;
+          const oldOrders = parseInt(storeObj.total_orders) || 0;
+          await apiPatch('stores', pkg.store_id, {
+            total_sales: oldSales + earnAmt,
+            total_orders: oldOrders + 1
+          }).catch(() => {});
+        }
+      } catch(e){}
+    }
+
+    // Update product total_sold counts
+    if (Array.isArray(pkg.items)) {
+      for (const item of pkg.items) {
+        const pId = item.id || item.product_id;
+        if (pId) {
+          try {
+            let pObj = await apiFetch('products/' + pId);
+            if (pObj && pObj.data) pObj = Array.isArray(pObj.data) ? pObj.data[0] : pObj.data;
+            if (pObj) {
+              const oldSold = parseInt(pObj.total_sold || pObj.sold_count) || 0;
+              await apiPatch('products', pId, {
+                total_sold: oldSold + (parseInt(item.qty) || 1)
+              }).catch(() => {});
+            }
+          } catch(e){}
+        }
+      }
+    }
+
     // Process referral reward if any
     try {
       const refRes = await apiGet('referrals', `referred_id=${pkg.buyer_id}&status=active&limit=10`);

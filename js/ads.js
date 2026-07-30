@@ -132,6 +132,15 @@ async function refreshAdBanners() {
 /*  Campaign / product cache                                    */
 /* ──────────────────────────────────────────────────────────── */
 
+function _parseDateMs(val, defaultVal) {
+  if (!val) return defaultVal;
+  if (typeof val === 'number') return val;
+  const num = Number(val);
+  if (!isNaN(num) && num > 0) return num;
+  const parsed = Date.parse(val);
+  return !isNaN(parsed) ? parsed : defaultVal;
+}
+
 async function _ensureCampaigns() {
   const now = Date.now();
   if (now - AdEngine.lastFetch < AdEngine.CACHE_MS && AdEngine.campaigns.length) return;
@@ -139,18 +148,23 @@ async function _ensureCampaigns() {
     const res   = await apiGet('ad_campaigns', 'limit=100');
     const nowMs = Date.now();
     AdEngine.campaigns = (res?.data || [])
-      .filter(c => {
-        if (c.status !== 'active') return false;
-        const start = c.start_date ? Number(c.start_date) : 0;
-        const end   = c.end_date   ? Number(c.end_date)   : Infinity;
-        return nowMs >= start && nowMs <= end;
-      })
       .map(c => {
-        // store_budgets is saved as a JSON string in the text DB field
         if (typeof c.store_budgets === 'string') {
           try { c.store_budgets = JSON.parse(c.store_budgets); } catch (_) { c.store_budgets = {}; }
         }
+        if (typeof c.pages === 'string') {
+          try { c.pages = JSON.parse(c.pages); } catch (_) { c.pages = c.pages.split(',').map(s=>s.trim()); }
+        }
+        if (typeof c.store_ids === 'string') {
+          try { c.store_ids = JSON.parse(c.store_ids); } catch (_) { c.store_ids = c.store_ids.split(',').map(s=>s.trim()); }
+        }
         return c;
+      })
+      .filter(c => {
+        if (c.status !== 'active') return false;
+        const start = _parseDateMs(c.start_date, 0);
+        const end   = _parseDateMs(c.end_date, Infinity);
+        return nowMs >= start && nowMs <= end;
       });
 
     const settingsRes = await apiGet('settings', 'key=hero_banners');
@@ -169,14 +183,15 @@ function _ensureProducts() {
 }
 
 function _pickCampaignForPage(pageKey) {
-  return AdEngine.campaigns.find(c =>
-    Array.isArray(c.pages) && c.pages.includes(pageKey)
-  ) || null;
+  return AdEngine.campaigns.find(c => {
+    const pages = Array.isArray(c.pages) ? c.pages : [];
+    return pages.includes(pageKey) || pages.includes('home');
+  }) || (AdEngine.campaigns.length ? AdEngine.campaigns[0] : null);
 }
 
 function _slideDuration(campaign) {
-  const v = Number(campaign.interval_value) || 0;
-  if (v && campaign.interval_unit === 'seconds') return Math.max(2000, v * 1000);
+  const v = Number(campaign?.interval_value) || 0;
+  if (v && campaign?.interval_unit === 'seconds') return Math.max(2000, v * 1000);
   return AdEngine.DEFAULT_SLIDE_MS;
 }
 
@@ -184,37 +199,21 @@ function _slideDuration(campaign) {
 /*  Slot state                                                  */
 /* ──────────────────────────────────────────────────────────── */
 
-/*
- * SlotState shape:
- * {
- *   campaign,
- *   slideMs,
- *   showStoreName,
- *
- *   // One entry per store in the campaign (order = admin's selection order).
- *   // Never mutated — used to rebuild activeRing on midnight reset.
- *   allStoreEntries: [
- *     { sid, products: Product[], cursor: number },
- *     ...
- *   ],
- *
- *   // Active subset (same objects, just filtered).
- *   // Stores are removed from here when budget is exhausted.
- *   activeRing: [same StoreEntry refs],
- *
- *   ringIndex: number,   // which store in activeRing shows NEXT
- *
- *   // The StoreEntry that is CURRENTLY on screen (so we can charge it
- *   // when the slide finishes — avoids all index-arithmetic bugs).
- *   currentEntry: StoreEntry | null,
- *
- *   budgets: { sid: minutesPerDay },
- *   spent:   { sid: minutesSpentToday },
- *   spentKey: string,
- * }
- */
 function _buildSlotState(campaign, pageKey) {
-  const storeIds = campaign && Array.isArray(campaign.store_ids) ? campaign.store_ids : [];
+  let storeIds = [];
+  if (campaign) {
+    if (Array.isArray(campaign.store_ids)) {
+      storeIds = campaign.store_ids;
+    } else if (typeof campaign.store_ids === 'string') {
+      try { storeIds = JSON.parse(campaign.store_ids); } catch(_) { storeIds = campaign.store_ids.split(',').map(s=>s.trim()); }
+    }
+  }
+
+  // Fallback: If campaign has no explicit store_ids, load stores from App.allStores
+  if (!storeIds.length && AdEngine.stores.length) {
+    storeIds = AdEngine.stores.map(s => s.id);
+  }
+
   const budgets   = campaign ? (campaign.store_budgets || {}) : {};
   const { key: spentKey, spent } = campaign ? _loadSpent(campaign.id) : { key: '', spent: {} };
 

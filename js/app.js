@@ -1109,6 +1109,18 @@ async function renderVendorMyStorePage() {
   const prodRes    = await apiGet('products', `search=${myStore.id}&limit=100`);
   const products   = (prodRes?.data || []).filter(p => p.store_id === myStore.id && p.status !== 'archived');
 
+  // Compute total sales and orders from vendor's delivered packages as reliable fallback
+  const vendorId = App.currentUser?.id;
+  const pkgRes = vendorId ? await apiGet('packages', `vendor_id=${encodeURIComponent(vendorId)}`).catch(() => null) : null;
+  const vendorPkgs = (pkgRes?.data || (Array.isArray(pkgRes) ? pkgRes : [])).filter(p => String(p.vendor_id) === String(vendorId));
+  const deliveredPkgs = vendorPkgs.filter(p => p.admin_status === 'delivered' || p.status === 'delivered' || p.balance_released);
+
+  const calcSales = deliveredPkgs.reduce((sum, p) => sum + (parseFloat(p.vendor_amount || p.total) || 0), 0);
+  const calcOrders = deliveredPkgs.length;
+
+  const displaySales = Math.max(parseFloat(freshStore.total_sales || 0), calcSales);
+  const displayOrders = Math.max(parseInt(freshStore.total_orders || 0), calcOrders);
+
   const stars  = renderStars(freshStore.avg_rating || 0);
 
   el.innerHTML = `
@@ -1148,11 +1160,11 @@ async function renderVendorMyStorePage() {
         <div style="font-size:.7rem;color:var(--text-muted)">Products</div>
       </div>
       <div class="stat-card" style="text-align:center">
-        <div style="font-size:1.1rem;font-weight:800;color:var(--success)">GHS ${(freshStore.total_sales||0).toLocaleString()}</div>
+        <div style="font-size:1.1rem;font-weight:800;color:var(--success)">GHS ${displaySales.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}</div>
         <div style="font-size:.7rem;color:var(--text-muted)">Total Sales</div>
       </div>
       <div class="stat-card" style="text-align:center">
-        <div style="font-size:1.1rem;font-weight:800;color:var(--secondary)">${freshStore.total_orders||0}</div>
+        <div style="font-size:1.1rem;font-weight:800;color:var(--secondary)">${displayOrders}</div>
         <div style="font-size:.7rem;color:var(--text-muted)">Orders</div>
       </div>
     </div>

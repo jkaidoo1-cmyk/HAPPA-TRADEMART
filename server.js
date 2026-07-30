@@ -156,7 +156,7 @@ function normalizeRecord(table, record) {
 }
 
 const JSONB_COLS = new Set([
-  'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra'
+  'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra', 'pages', 'store_ids', 'store_budgets', 'plan_prices'
 ]);
 
 function serializeRecord(record) {
