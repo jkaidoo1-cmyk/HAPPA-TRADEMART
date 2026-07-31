@@ -229,7 +229,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Vendors (merged vendors + stores) ── -->
-<div class="tab-content" id="admin-vendors">
+<div class="tab-content ${activeTabId === 'admin-vendors' ? 'active' : ''}" id="admin-vendors">
   <div class="dashboard-wrap">
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -263,7 +263,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Rendors Tab ── -->
-<div class="tab-content" id="admin-rendors">
+<div class="tab-content ${activeTabId === 'admin-rendors' ? 'active' : ''}" id="admin-rendors">
   <div class="dashboard-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div style="font-size:.78rem;color:var(--text-muted);background:#ede9fe;padding:7px 10px;border-radius:var(--radius-sm);flex:1;min-width:200px">
@@ -277,7 +277,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Storefronts Tab ── -->
-<div class="tab-content" id="admin-storefronts">
+<div class="tab-content ${activeTabId === 'admin-storefronts' ? 'active' : ''}" id="admin-storefronts">
   <div class="dashboard-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div>
@@ -292,7 +292,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Users Management ── -->
-<div class="tab-content" id="admin-users">
+<div class="tab-content ${activeTabId === 'admin-users' ? 'active' : ''}" id="admin-users">
   <div class="dashboard-wrap">
     <div style="margin-bottom:12px">
       <input class="form-control" id="admin-user-search"
@@ -306,7 +306,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Orders ── -->
-<div class="tab-content" id="admin-orders">
+<div class="tab-content ${activeTabId === 'admin-orders' ? 'active' : ''}" id="admin-orders">
   <div class="dashboard-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <h3 style="font-weight:700;margin:0">All Order Packages (${allPkgs.length})</h3>
@@ -323,7 +323,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Add Vendor (+ auto-create store) ── -->
-<div class="tab-content" id="admin-create-store">
+<div class="tab-content ${activeTabId === 'admin-create-store' ? 'active' : ''}" id="admin-create-store">
   <div class="dashboard-wrap">
     <div style="background:linear-gradient(90deg,#dbeafe,#ede9fe);border:1.5px solid #93c5fd;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:14px;font-size:.82rem;color:#1e3a8a">
       <i class="fas fa-info-circle"></i> <strong>Every vendor = one store.</strong> Creating a vendor here automatically creates their store. The vendor logs in with the credentials you set.
@@ -453,7 +453,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Analytics ── -->
-<div class="tab-content" id="admin-analytics">
+<div class="tab-content ${activeTabId === 'admin-analytics' ? 'active' : ''}" id="admin-analytics">
   <div class="dashboard-wrap">
     <div class="stats-grid" style="margin-bottom:16px">
       <div class="stat-card">
@@ -518,7 +518,7 @@ async function renderAdminDashboard() {
 </div>
 
 <!-- ── Wallet / Transactions ── -->
-<div class="tab-content" id="admin-wallet">
+<div class="tab-content ${activeTabId === 'admin-wallet' ? 'active' : ''}" id="admin-wallet">
   <div class="dashboard-wrap">
     <h3 style="font-weight:700;margin-bottom:14px">💸 Wallet Transactions</h3>
     <div id="admin-txn-wrap">
@@ -531,7 +531,7 @@ async function renderAdminDashboard() {
 
 <!-- ── Settings ── -->
 <!-- ── Platform Settings ── -->
-<div class="tab-content" id="admin-settings">
+<div class="tab-content ${activeTabId === 'admin-settings' ? 'active' : ''}" id="admin-settings">
   <div class="dashboard-wrap">
     <h3 style="font-weight:700;margin-bottom:4px">⚙️ Platform Settings</h3>
     <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:16px">Changes take effect immediately after saving.</p>
@@ -769,7 +769,7 @@ async function renderAdminDashboard() {
 
   setTimeout(() => {
     if (activeTabId === 'admin-overview') {
-      renderAdminRevenueChart(allOrders);
+      renderAdminRevenueChart(allPkgs);
       renderAdminLocationChart(allOrders);
     } else if (activeTabId === 'admin-orders' && typeof refreshAdminOrdersList === 'function') {
       refreshAdminOrdersList();
@@ -2274,7 +2274,7 @@ function exitPreviewMode() {
 }
 
 // ── Charts ────────────────────────────────────────────────
-function renderAdminRevenueChart(orders = []) {
+function renderAdminRevenueChart(packages = []) {
   const canvas = document.getElementById('admin-revenue-chart');
   if (!canvas) return;
 
@@ -2283,15 +2283,20 @@ function renderAdminRevenueChart(orders = []) {
   const weeks = ['W1', 'W2', 'W3', 'W4', 'W5'];
   const data = [0, 0, 0, 0, 0];
 
-  orders.forEach(o => {
-    if (!o.created_at) return;
-    const orderDate = new Date(o.created_at);
-    const diffMs = now - orderDate;
+  packages.forEach(p => {
+    // Exclude cancelled or rejected packages
+    if (p.vendor_status === 'rejected' || p.status === 'cancelled') return;
+
+    const dateStr = p.created_at || p.updated_at;
+    if (!dateStr) return;
+    const pkgDate = new Date(dateStr);
+    const diffMs = now - pkgDate;
     if (diffMs < 0 || diffMs > 5 * oneWeekMs) return;
 
     const bucketIndex = 4 - Math.floor(diffMs / oneWeekMs);
     if (bucketIndex >= 0 && bucketIndex < 5) {
-      data[bucketIndex] += parseFloat(o.platform_fee || 0);
+      const comm = parseFloat(p.commission_amount || p.platform_fee || 0);
+      data[bucketIndex] += comm;
     }
   });
 
@@ -2300,7 +2305,7 @@ function renderAdminRevenueChart(orders = []) {
   if (window._adminRevChart) window._adminRevChart.destroy();
   window._adminRevChart = new Chart(canvas, {
     type: 'line',
-    data: { labels: weeks, datasets: [{ label: 'Platform Fee (GHS)', data: roundedData, fill: true,
+    data: { labels: weeks, datasets: [{ label: 'Platform Revenue (GHS)', data: roundedData, fill: true,
       backgroundColor: 'rgba(232,93,4,0.1)', borderColor: 'var(--primary)', tension: 0.4, pointRadius: 4 }] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
