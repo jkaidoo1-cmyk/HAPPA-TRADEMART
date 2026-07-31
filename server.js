@@ -258,7 +258,7 @@ const TABLE_COLUMNS = {
   notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
   stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'plan_prices', 'created_at', 'updated_at', 'extra'],
   orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
-  ad_campaigns: ['id', 'vendor_id', 'store_id', 'title', 'name', 'image_url', 'link', 'placement', 'budget', 'spent', 'impressions', 'clicks', 'status', 'start_date', 'end_date', 'store_ids', 'store_budgets', 'pages', 'interval_value', 'interval_unit', 'duration_days', 'show_store_name', 'created_by', 'created_at', 'updated_at', 'extra'],
+  ad_campaigns: ['id', 'vendor_id', 'store_id', 'title', 'image_url', 'link', 'placement', 'budget', 'spent', 'impressions', 'clicks', 'status', 'start_date', 'end_date', 'created_at', 'updated_at', 'extra'],
   services: ['id', 'rendor_id', 'title', 'category', 'description', 'price', 'image_url', 'status', 'created_at', 'updated_at', 'extra'],
   service_orders: ['id', 'service_id', 'rendor_id', 'buyer_id', 'title', 'amount', 'status', 'notes', 'created_at', 'updated_at', 'extra'],
   settings: ['id', 'key', 'value', 'label', 'type', 'updated_at'],
@@ -292,6 +292,25 @@ function prepareRecordForDb(table, record) {
   }
   if ('shipping_policy' in out && !('return_policy' in out)) {
     out.return_policy = out.shipping_policy;
+  }
+
+  // Ad campaigns: pack new fields into extra JSONB; set safe defaults for legacy NOT NULL columns
+  if (table === 'ad_campaigns') {
+    const AD_EXTRA = ['name', 'pages', 'store_ids', 'store_budgets', 'interval_value', 'interval_unit', 'duration_days', 'show_store_name', 'created_by'];
+    let adExtra = {};
+    try { adExtra = typeof out.extra === 'string' ? JSON.parse(out.extra) : (out.extra || {}); } catch(e) {}
+    for (const k of AD_EXTRA) { if (k in out && out[k] !== undefined) adExtra[k] = out[k]; }
+    out.extra = adExtra;
+    if (out.name && !out.title) out.title = out.name;
+    if (!out.budget)      out.budget      = 0;
+    if (!out.spent)       out.spent       = 0;
+    if (!out.impressions) out.impressions = 0;
+    if (!out.clicks)      out.clicks      = 0;
+    if (!out.vendor_id)   out.vendor_id   = null;
+    if (!out.store_id)    out.store_id    = null;
+    if (!out.image_url)   out.image_url   = '';
+    if (!out.link)        out.link        = '';
+    if (!out.placement)   out.placement   = Array.isArray(adExtra.pages) ? adExtra.pages.join(',') : 'home';
   }
 
   // Filter columns to only include valid DB columns for Supabase

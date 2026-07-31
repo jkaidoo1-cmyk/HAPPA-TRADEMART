@@ -226,8 +226,8 @@ function prepareRecordForDb(table, record, existingRecord) {
     if (!out.spent)       out.spent       = 0;
     if (!out.impressions) out.impressions = 0;
     if (!out.clicks)      out.clicks      = 0;
-    if (!out.vendor_id)   out.vendor_id   = out.created_by || 'admin';
-    if (!out.store_id)    out.store_id    = '';
+    if (!out.vendor_id)   out.vendor_id   = null;
+    if (!out.store_id)    out.store_id    = null;
     if (!out.image_url)   out.image_url   = '';
     if (!out.link)        out.link        = '';
     if (!out.placement)   out.placement   = Array.isArray(adExtra.pages) ? adExtra.pages.join(',') : 'home';
