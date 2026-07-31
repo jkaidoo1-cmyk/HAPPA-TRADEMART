@@ -2,6 +2,9 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 
 // Load environment variables from .env if present
 const dotenvPath = path.join(__dirname, '.env');
@@ -22,6 +25,49 @@ if (fs.existsSync(dotenvPath)) {
 const PORT = process.env.PORT || 9000;
 const DB_FILE = path.join(__dirname, 'db.json');
 const app = express();
+
+// Session Token Memory Store (30 Days TTL as requested)
+const activeSessions = new Map(); // token -> { userId, role, expiresAt }
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function createSessionToken(userId, role) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + THIRTY_DAYS_MS;
+  activeSessions.set(token, { userId: String(userId), role, expiresAt });
+  return token;
+}
+
+function getSessionUser(req) {
+  const authHeader = req.headers['authorization'] || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7).trim();
+  if (!token) return null;
+  const session = activeSessions.get(token);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    activeSessions.delete(token);
+    return null;
+  }
+  return session;
+}
+
+function requireAuth(req, res, next) {
+  const session = getSessionUser(req);
+  if (!session) {
+    return res.status(401).json({ error: 'Unauthorized. Invalid or expired session token.' });
+  }
+  req.userSession = session;
+  next();
+}
+
+// Rate Limiter for Login Endpoint (5 attempts / 15 mins)
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // Initialize Supabase if credentials are provided and not placeholders
 let supabase = null;
@@ -77,8 +123,17 @@ function invalidateApiCache(table) {
 }
 
 app.use(express.json({ limit: '50mb' }));
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:9000,http://127.0.0.1:9000,http://localhost:3000')
+  .split(',').map(s => s.trim());
+
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0]);
+  }
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Service-Worker-Allowed', '/');
@@ -321,21 +376,114 @@ function getTable(db, table) {
 function sendNotFound(res) {
   res.status(404).json({ error: 'Record not found' });
 }
-
-
-function serializeRecord(record) {
-  if (!record) return record;
-  const out = { ...record };
-  for (const col of JSONB_COLS) {
-    if (col in out && typeof out[col] === 'string') {
-      try { out[col] = JSON.parse(out[col]); } catch {}
-    }
-  }
-  return out;
-}
+// NOTE: serializeRecord is defined above (line ~162) — do not redefine here.
 
 app.get('/api', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', backend: supabase ? 'supabase' : 'local' });
+});
+
+// ── Auth Endpoints ──────────────────────────────────────────
+app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  const cleanEmail = String(email).trim().toLowerCase();
+  let supaUsers = [];
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('users').select('*');
+      if (!error && data) supaUsers = data.map(serializeRecord);
+    } catch (err) {}
+  }
+  const db = loadDb();
+  const localUsers = getTable(db, 'users').map(serializeRecord);
+  const userMap = new Map();
+  supaUsers.forEach(u => userMap.set(String(u.id), u));
+  localUsers.forEach(u => {
+    const key = String(u.id);
+    const existing = userMap.get(key) || {};
+    userMap.set(key, { ...existing, ...u });
+  });
+  const users = Array.from(userMap.values());
+
+  const user = users.find(u =>
+    (u.email?.toLowerCase() === cleanEmail || u.phone === cleanEmail) &&
+    u.status !== 'deleted'
+  );
+
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid email or password.' });
+  }
+
+  let isValidPassword = false;
+  const dbHash = user.password_hash || '';
+
+  // Handle both hashed passwords and legacy plaintext migration
+  if (dbHash.startsWith('$2a$') || dbHash.startsWith('$2b$')) {
+    isValidPassword = await bcrypt.compare(password, dbHash);
+  } else {
+    // Plaintext fallback check
+    if (dbHash === password) {
+      isValidPassword = true;
+      // Auto-migrate plaintext password to bcrypt hash
+      try {
+        const newHash = await bcrypt.hash(password, 10);
+        user.password_hash = newHash;
+        
+        // Update Local DB
+        const db = loadDb();
+        const uIdx = db.users.findIndex(u => String(u.id) === String(user.id));
+        if (uIdx !== -1) {
+          db.users[uIdx].password_hash = newHash;
+          saveDb(db);
+        }
+        
+        // Update Supabase if active
+        if (supabase) {
+          await supabase.from('users').update({ password_hash: newHash }).eq('id', user.id).catch(() => {});
+        }
+        console.log(`[Auth Migration] Auto-migrated password for user "${user.id}" to bcrypt hash.`);
+      } catch (err) {
+        console.warn('[Auth Migration Error]', err.message);
+      }
+    }
+  }
+
+  if (!isValidPassword) {
+    return res.status(401).json({ error: 'Invalid email or password.' });
+  }
+
+  if (user.status === 'suspended') {
+    return res.status(403).json({ error: 'Your account has been suspended. Contact support.' });
+  }
+
+  // Generate 30-Day Session Token
+  const token = createSessionToken(user.id, user.role);
+
+  // Return clean user object (omit password_hash)
+  const userSafe = { ...user };
+  delete userSafe.password_hash;
+
+  return res.json({ token, user: userSafe });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const authHeader = req.headers['authorization'] || '';
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    activeSessions.delete(token);
+  }
+  return res.json({ success: true });
+});
+
+app.get('/api/auth/verify', (req, res) => {
+  const session = getSessionUser(req);
+  if (!session) {
+    return res.status(401).json({ valid: false });
+  }
+  return res.json({ valid: true, userId: session.userId, role: session.role });
 });
 
 app.get('/api/:table', async (req, res) => {
@@ -586,6 +734,13 @@ app.post('/api/:table', async (req, res) => {
   if (!body.created_at) body.created_at = new Date().toISOString();
   body.updated_at = new Date().toISOString();
 
+  // If creating a user with a password, hash it with bcrypt server-side
+  if (table === 'users' && body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
+    try {
+      body.password_hash = await bcrypt.hash(body.password_hash, 10);
+    } catch(e) {}
+  }
+
   const db = loadDb();
   const rows = getTable(db, table);
   const record = normalizeRecord(table, body);
@@ -738,6 +893,13 @@ app.patch('/api/:table/:id', async (req, res) => {
   const table = req.params.table;
   const id = req.params.id;
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
+
+  // Hash password if being updated
+  if (table === 'users' && body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
+    try {
+      body.password_hash = await bcrypt.hash(body.password_hash, 10);
+    } catch(e) {}
+  }
 
   if (table === 'storefronts') {
     const cleanId = String(id).replace(/^sft-/, '');

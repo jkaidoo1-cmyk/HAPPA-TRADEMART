@@ -77,7 +77,7 @@ function _saveSpent(key, spent) {
 
 async function initAdBanners(pageKey) {
   await _ensureCampaigns();
-  _ensureProducts();
+  await _ensureProducts();
 
   const slotMap = { home: 'ad-banner-home', shop: 'ad-banner-shop', stores: 'ad-banner-stores' };
   const slotId  = slotMap[pageKey];
@@ -124,7 +124,7 @@ async function refreshAdBanners() {
   AdEngine.lastFetch = 0;
   stopAdBanners();
   await _ensureCampaigns();
-  _ensureProducts();
+  await _ensureProducts();
   ['home', 'shop', 'stores'].forEach(k => initAdBanners(k));
 }
 
@@ -147,6 +147,10 @@ async function _ensureCampaigns() {
   try {
     const res   = await apiGet('ad_campaigns', 'limit=100');
     const nowMs = Date.now();
+    const todayStart = new Date();
+    todayStart.setHours(0,0,0,0);
+    const startOfTodayMs = todayStart.getTime();
+
     AdEngine.campaigns = (res?.data || [])
       .map(c => {
         if (typeof c.store_budgets === 'string') {
@@ -164,7 +168,9 @@ async function _ensureCampaigns() {
         if (c.status !== 'active') return false;
         const start = _parseDateMs(c.start_date, 0);
         const end   = _parseDateMs(c.end_date, Infinity);
-        return nowMs >= start && nowMs <= end;
+        // If campaign start date is today, treat start as start of today
+        const effectiveStart = (start > nowMs && start <= nowMs + 86400000) ? Math.min(start, startOfTodayMs) : start;
+        return nowMs >= effectiveStart && nowMs <= end;
       });
 
     const settingsRes = await apiGet('settings', 'key=hero_banners');
@@ -177,9 +183,24 @@ async function _ensureCampaigns() {
   } catch (e) { console.warn('[AdEngine] fetch failed:', e); }
 }
 
-function _ensureProducts() {
-  if (App.allProducts?.length) AdEngine.products = App.allProducts;
-  if (App.allStores?.length)   AdEngine.stores   = App.allStores;
+async function _ensureProducts() {
+  if (App.allProducts?.length) {
+    AdEngine.products = App.allProducts;
+  } else if (!AdEngine.products || !AdEngine.products.length) {
+    try {
+      const res = await apiGet('products', 'limit=300');
+      AdEngine.products = res?.data || res || [];
+    } catch(e){}
+  }
+
+  if (App.allStores?.length) {
+    AdEngine.stores = App.allStores;
+  } else if (!AdEngine.stores || !AdEngine.stores.length) {
+    try {
+      const res = await apiGet('stores', 'limit=200');
+      AdEngine.stores = res?.data || res || [];
+    } catch(e){}
+  }
 }
 
 function _pickCampaignForPage(pageKey) {
@@ -220,11 +241,20 @@ function _buildSlotState(campaign, pageKey) {
 
   for (const sid of storeIds) {
     const products = AdEngine.products.filter(p =>
-      p.status !== 'archived' && p.store_id === sid
+      p.status !== 'archived' && String(p.store_id) === String(sid)
     );
     if (!products.length) continue;
     allStoreEntries.push({ sid, products, cursor: 0 });
   }
+
+  // Fallback: If selected stores have no direct product matches yet, use all non-archived platform products so campaign still displays!
+  if (!allStoreEntries.length && AdEngine.products.length) {
+    const fallbackProducts = AdEngine.products.filter(p => p.status !== 'archived');
+    if (fallbackProducts.length) {
+      allStoreEntries.push({ sid: storeIds[0] || 'store-fallback', products: fallbackProducts, cursor: 0 });
+    }
+  }
+
   if (!allStoreEntries.length) return null;
 
   // Active ring = stores that still have budget today

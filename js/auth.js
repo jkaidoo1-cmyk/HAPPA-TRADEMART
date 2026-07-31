@@ -496,29 +496,21 @@ async function doLogin(e) {
     return;
   }
 
-  // Find user in DB
-  const res = await apiGet('users', `search=${encodeURIComponent(email)}&limit=10`);
-  const users = res ? res.data || [] : [];
-  let user = users.find(u =>
-    (u.email?.toLowerCase() === email || u.phone === email) &&
-    u.password_hash === pass && u.status !== 'deleted'
-  );
+  // Call secure authentication endpoint
+  const authRes = await apiFetch('auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pass })
+  });
 
-  if (!user) {
-    // Fallback: search wide users list if exact search query missed phone/email formatting
-    const wideRes = await apiGet('users', 'limit=500');
-    const wideUsers = wideRes ? wideRes.data || [] : [];
-    user = wideUsers.find(u =>
-      (u.email?.toLowerCase() === email || u.phone === email) &&
-      u.password_hash === pass && u.status !== 'deleted'
-    );
-  }
-
-  if (!user) {
-    showToast('Invalid email or password. Please try again.', 'error');
+  if (!authRes || authRes.error || !authRes.user || !authRes.token) {
+    showToast(authRes?.error || 'Invalid email or password. Please try again.', 'error');
     resetBtn();
     return;
   }
+
+  const user = authRes.user;
+  setAuthToken(authRes.token);
 
   if (user.status === 'suspended') {
     showToast('Your account has been suspended. Contact support.', 'error');

@@ -671,22 +671,9 @@ async function updateAdminStatus(packageId, newStatus) {
         `GHS ${earnAmt.toFixed(2)} from order ${pkg.package_code} has been released to your wallet.`);
     }
 
-    // Update store total_sales and total_orders stats
-    if (pkg.store_id) {
-      try {
-        let storeObj = await apiFetch('stores/' + pkg.store_id);
-        if (storeObj && storeObj.data) storeObj = Array.isArray(storeObj.data) ? storeObj.data[0] : storeObj.data;
-        if (storeObj) {
-          const earnAmt = parseFloat(pkg.vendor_amount) || parseFloat(pkg.total) || 0;
-          const oldSales = parseFloat(storeObj.total_sales) || 0;
-          const oldOrders = parseInt(storeObj.total_orders) || 0;
-          await apiPatch('stores', pkg.store_id, {
-            total_sales: oldSales + earnAmt,
-            total_orders: oldOrders + 1
-          }).catch(() => {});
-        }
-      } catch(e){}
-    }
+    // NOTE: store total_sales + total_orders are already incremented at checkout (checkout.js).
+    // Do NOT increment again here — that would double-count every sale.
+
 
     // Update product total_sold counts
     if (Array.isArray(pkg.items)) {

@@ -579,6 +579,13 @@ function saveNotifs() {
 }
 function logout(skipConfirm = false) {
   if (!skipConfirm && typeof confirm === 'function' && !confirm('Sign out of HAPPA TRADEMART?')) return;
+  
+  // Call server logout endpoint asynchronously
+  try {
+    apiFetch('auth/logout', { method: 'POST' }).catch(() => {});
+  } catch(e){}
+
+  setAuthToken(null);
   App.currentUser = null;
   App.notifications = [];
   App.loadedPages = {};
@@ -1600,22 +1607,37 @@ const apiCache = {
   }
 };
 
+function getAuthToken() {
+  return localStorage.getItem('happa_auth_token') || '';
+}
+
+function setAuthToken(token) {
+  if (token) {
+    localStorage.setItem('happa_auth_token', token);
+  } else {
+    localStorage.removeItem('happa_auth_token');
+  }
+}
+
 async function apiFetch(table, opts = {}) {
   if (API === 'tables/') {
     return localTablesApi(table, opts);
   }
 
+  const token = getAuthToken();
+  const headers = { ...(opts.headers || {}) };
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const url = API + table;
   try {
-    const resp = await fetch(url, opts);
+    const resp = await fetch(url, { ...opts, headers });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     if (resp.status === 204) return null;
     return await resp.json();
   } catch(e) {
     console.warn('API Error:', table, e);
-    // If configured to use local API shim, fall back to local tables.
-    // Otherwise, return null to surface the error to the caller (backend now
-    // handles its own local DB fallback for Supabase failures).
     if (API === 'tables/') {
       return localTablesApi(table, opts);
     }
@@ -1633,7 +1655,6 @@ async function apiGet(table, params = '') {
 }
 function invalidateAppState(table = '') {
   apiCache.clear();
-  // Clear page load cache for dynamic dashboard views so navigation forces fresh renders
   delete App.loadedPages['admin-dashboard'];
   delete App.loadedPages['vendor-dashboard'];
   delete App.loadedPages['vendor-orders'];

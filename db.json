@@ -5,7 +5,7 @@
       "name": "Admin User",
       "email": "admin@happatrademart.com",
       "phone": "0000000000",
-      "password_hash": "admin123",
+      "password_hash": "$2b$10$5qIhYRmxxqY/UudjuMN85uNS.pu/GtK0BNm4pO7ZUqiU2oEqXHFuC",
       "role": "admin",
       "status": "active",
       "location": "Accra",
