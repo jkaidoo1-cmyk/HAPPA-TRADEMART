@@ -1309,14 +1309,10 @@
         "stores"
       ],
       "store_ids": [
-        "store-1",
-        "store-2",
-        "store-3"
+        "store-ms37wf5qixmv"
       ],
       "store_budgets": {
-        "store-1": 60,
-        "store-2": 45,
-        "store-3": 30
+        "store-ms37wf5qixmv": 60
       },
       "interval_value": 3,
       "interval_unit": "seconds",
@@ -1335,10 +1331,9 @@
         "stores"
       ],
       "store_ids": [
-        "store-1",
-        "store-2"
+        "store-ms37wf5qixmv"
       ],
-      "store_budgets": "{\"store-1\":45,\"store-2\":30}",
+      "store_budgets": "{\"store-ms37wf5qixmv\":45}",
       "interval_value": 4,
       "interval_unit": "seconds",
       "show_store_name": true,

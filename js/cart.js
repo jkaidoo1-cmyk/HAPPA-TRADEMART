@@ -59,21 +59,37 @@ function addToCart(product, qty = 1, buyerNote = '') {
   return true;
 }
 
-function removeFromCart(productId) {
+function removeFromCart(productId, targetEl) {
+  if (targetEl && window.OptimisticUI) {
+    const itemCard = targetEl.closest('.cart-item');
+    if (itemCard) itemCard.style.opacity = '0.3';
+  }
   App.cart = App.cart.filter(i => i.id !== productId);
   saveCart();
   renderCart();
+  const cartIcon = document.querySelector('.nav-icon[onclick*="cart"], .nav-icon i.fa-shopping-cart, .nav-icon i.fa-shopping-bag');
+  if (cartIcon && window.OptimisticUI) {
+    OptimisticUI.pulse(cartIcon.closest('.nav-icon') || cartIcon);
+  }
 }
 
-function updateCartQty(productId, delta) {
+function updateCartQty(productId, delta, btnEl) {
   const item = App.cart.find(i => i.id === productId);
   if (!item) return;
   const newQty = item.qty + delta;
-  if (newQty <= 0) { removeFromCart(productId); return; }
-  if (newQty > item.stock_qty) { showToast('Not enough stock', 'warning'); return; }
+  if (newQty <= 0) { removeFromCart(productId, btnEl); return; }
+  if (newQty > item.stock_qty) {
+    if (btnEl && window.OptimisticUI) OptimisticUI.shake(btnEl);
+    showToast('Not enough stock', 'warning');
+    return;
+  }
   item.qty = newQty;
   saveCart();
   renderCart();
+  const cartIcon = document.querySelector('.nav-icon[onclick*="cart"], .nav-icon i.fa-shopping-cart, .nav-icon i.fa-shopping-bag');
+  if (cartIcon && window.OptimisticUI) {
+    OptimisticUI.pulse(cartIcon.closest('.nav-icon') || cartIcon);
+  }
 }
 
 function clearCart() {
@@ -163,14 +179,14 @@ ${Object.values(storeGroups).map(sg => `
       ${item.buyer_note ? `<div style="font-size:.72rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:3px 7px;margin:3px 0;display:flex;align-items:flex-start;gap:4px"><i class="fas fa-comment-dots" style="margin-top:1px;flex-shrink:0"></i><span>${escHtml(item.buyer_note)}</span></div>` : ''}
       <div class="cart-item-price">GHS ${item.price}</div>
       <div class="qty-control">
-        <button class="qty-btn" onclick="updateCartQty('${item.id}',-1)"><i class="fas fa-minus"></i></button>
+        <button class="qty-btn" onclick="updateCartQty('${item.id}',-1,this)"><i class="fas fa-minus"></i></button>
         <span class="qty-value">${item.qty}</span>
-        <button class="qty-btn" onclick="updateCartQty('${item.id}',1)"><i class="fas fa-plus"></i></button>
+        <button class="qty-btn" onclick="updateCartQty('${item.id}',1,this)"><i class="fas fa-plus"></i></button>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
       <span style="font-weight:700;color:var(--primary)">GHS ${(item.price*item.qty).toFixed(2)}</span>
-      <button onclick="removeFromCart('${item.id}')" style="color:var(--danger);font-size:.8rem"><i class="fas fa-trash"></i></button>
+      <button onclick="removeFromCart('${item.id}',this)" style="color:var(--danger);font-size:.8rem"><i class="fas fa-trash"></i></button>
     </div>
   </div>`).join('')}
 </div>`).join('')}

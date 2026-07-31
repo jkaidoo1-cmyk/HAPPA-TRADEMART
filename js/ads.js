@@ -259,10 +259,26 @@ function _buildSlotState(campaign, pageKey) {
 
   // Active ring = stores that still have budget today
   const activeRing = allStoreEntries.filter(e => {
+    // If budget is not set or sid is fallback, allow default 30 mins
     const budget = Number(budgets[e.sid]) || 30;
-    return (spent[e.sid] || 0) < budget;
+    const currentSpent = spent[e.sid] || 0;
+    return currentSpent < budget;
   });
-  if (!activeRing.length) return null;
+  if (!activeRing.length) {
+    // If all spent, reset spent for this slot in memory so fallback or campaign continues to display
+    return {
+      campaign,
+      slideMs:       campaign ? _slideDuration(campaign) : AdEngine.DEFAULT_SLIDE_MS,
+      showStoreName: campaign ? campaign.show_store_name !== false : false,
+      allStoreEntries,
+      activeRing:    allStoreEntries,
+      ringIndex:     0,
+      currentEntry:  null,
+      budgets,
+      spent:         {},
+      spentKey,
+    };
+  }
 
   return {
     campaign,
