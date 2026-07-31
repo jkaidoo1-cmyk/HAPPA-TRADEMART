@@ -45,6 +45,13 @@ const JSONB_COLS = new Set([
   'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra'
 ]);
 
+// Ad campaign fields that live in the extra JSONB column (Supabase table has legacy schema)
+const AD_CAMPAIGN_EXTRA_FIELDS = [
+  'name', 'pages', 'store_ids', 'store_budgets',
+  'interval_value', 'interval_unit', 'duration_days',
+  'show_store_name', 'created_by'
+];
+
 // Package lifecycle fields live in jsonb `extra` on slim Supabase schemas
 const PACKAGE_META_FIELDS = [
   'package_code', 'order_id', 'vendor_status', 'admin_status', 'buyer_confirmed',
@@ -140,6 +147,17 @@ function serializeRecord(record) {
   if ('review_count' in out && !('views' in out)) {
     out.views = (out.review_count || 0) * 10;
   }
+  // Ad campaigns: title → name fallback (legacy Supabase column is 'title')
+  if ('title' in out && !out.name) {
+    out.name = out.title;
+  }
+  // Ad campaigns: ensure store_ids and pages are arrays (may come back as JSON strings from extra)
+  if ('store_ids' in out && typeof out.store_ids === 'string') {
+    try { out.store_ids = JSON.parse(out.store_ids); } catch { out.store_ids = []; }
+  }
+  if ('pages' in out && typeof out.pages === 'string') {
+    try { out.pages = JSON.parse(out.pages); } catch { out.pages = []; }
+  }
 
   return out;
 }
@@ -149,7 +167,7 @@ const TABLE_COLUMNS = {
   notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
   stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'created_at', 'updated_at', 'extra'],
   orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
-  ad_campaigns: ['id', 'name', 'status', 'pages', 'store_ids', 'store_budgets', 'interval_value', 'interval_unit', 'duration_days', 'start_date', 'end_date', 'show_store_name', 'created_by', 'created_at', 'updated_at', 'extra'],
+  ad_campaigns: ['id', 'vendor_id', 'store_id', 'title', 'status', 'start_date', 'end_date', 'created_at', 'updated_at', 'extra'],
   services: ['id', 'rendor_id', 'title', 'category', 'description', 'price', 'image_url', 'status', 'created_at', 'updated_at', 'extra'],
   service_orders: ['id', 'service_id', 'rendor_id', 'buyer_id', 'title', 'amount', 'status', 'notes', 'created_at', 'updated_at', 'extra'],
   settings: ['id', 'key', 'value', 'label', 'type', 'updated_at'],
@@ -194,6 +212,15 @@ function prepareRecordForDb(table, record, existingRecord) {
   }
   if (table === 'orders') {
     out.extra = packOrderMeta(out, existingRecord?.extra);
+  }
+  if (table === 'ad_campaigns') {
+    const adExtra = { ...parseExtraObject(existingRecord?.extra), ...parseExtraObject(out.extra) };
+    for (const key of AD_CAMPAIGN_EXTRA_FIELDS) {
+      if (key in out && out[key] !== undefined) adExtra[key] = out[key];
+    }
+    out.extra = adExtra;
+    // Map 'name' -> 'title' for the legacy column so filtering still works
+    if (out.name && !out.title) out.title = out.name;
   }
 
   // Filter columns to only include valid DB columns for Supabase
