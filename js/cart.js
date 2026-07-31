@@ -190,7 +190,8 @@ ${Object.values(storeGroups).map(sg => `
 <div class="checkout-summary" style="margin:12px 16px">
   <div class="summary-row"><span>Subtotal</span><span>GHS ${totals.subtotal.toFixed(2)}</span></div>
   <div class="summary-row"><span>Platform Fee (${PLATFORM_FEE_PCT}%)</span><span>GHS ${totals.platformFee.toFixed(2)}</span></div>
-  <div class="summary-row"><span>Estimated Delivery</span><span>GHS ${totals.deliveryFee.toFixed(2)}</span></div>
+  <!-- Estimated Delivery row hashed out temporarily for mean time:
+  <div class="summary-row"><span>Estimated Delivery</span><span>GHS ${totals.deliveryFee.toFixed(2)}</span></div> -->
   ${totals.discount > 0 ? `<div class="summary-row" style="color:var(--success)"><span>Discount</span><span>- GHS ${totals.discount.toFixed(2)}</span></div>` : ''}
   <div class="summary-row total"><span>Total</span><span class="amount">GHS ${totals.total.toFixed(2)}</span></div>
 </div>

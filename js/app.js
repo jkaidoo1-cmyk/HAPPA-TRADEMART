@@ -1173,14 +1173,14 @@ async function renderVendorMyStorePage() {
   const prodRes    = await apiGet('products', `search=${myStore.id}&limit=100`);
   const products   = (prodRes?.data || []).filter(p => p.store_id === myStore.id && p.status !== 'archived');
 
-  // Compute total sales and orders from vendor's delivered packages as reliable fallback
+  // Compute total sales and orders from vendor's active packages as reliable fallback
   const vendorId = App.currentUser?.id;
   const pkgRes = vendorId ? await apiGet('packages', `vendor_id=${encodeURIComponent(vendorId)}`).catch(() => null) : null;
   const vendorPkgs = (pkgRes?.data || (Array.isArray(pkgRes) ? pkgRes : [])).filter(p => String(p.vendor_id) === String(vendorId));
-  const deliveredPkgs = vendorPkgs.filter(p => p.admin_status === 'delivered' || p.status === 'delivered' || p.balance_released);
+  const activePkgs = vendorPkgs.filter(p => p.status !== 'cancelled' && p.vendor_status !== 'rejected');
 
-  const calcSales = deliveredPkgs.reduce((sum, p) => sum + (parseFloat(p.vendor_amount || p.total) || 0), 0);
-  const calcOrders = deliveredPkgs.length;
+  const calcSales = activePkgs.reduce((sum, p) => sum + (parseFloat(p.gross_amount || p.vendor_amount || p.total) || 0), 0);
+  const calcOrders = activePkgs.length;
 
   const displaySales = Math.max(parseFloat(freshStore.total_sales || 0), calcSales);
   const displayOrders = Math.max(parseInt(freshStore.total_orders || 0), calcOrders);
@@ -2530,10 +2530,11 @@ function applyAdvancedFilter() {
   showToast('Filters applied', 'success');
 }
 
-// ── Delivery Rate Calculator ──────────────────────────────
+// ── Delivery Rate Calculator (TEMPORARILY HASHED FOR FREE DELIVERY MEAN TIME) ──
 function calcDelivery(originLoc, destLoc, weightKg = 0.5) {
+  /* 
+  // ORIGINAL DELIVERY RATE CALCULATOR (Hashed out for mean time — to be restored when delivery partner is active):
   if (originLoc === destLoc) return { rate: 15, intercity: false, days: 0 };
-  // Simple zone table
   const zones = {
     'Accra-Kumasi': 35, 'Kumasi-Accra': 35,
     'Accra-Takoradi': 45, 'Takoradi-Accra': 45,
@@ -2546,6 +2547,10 @@ function calcDelivery(originLoc, destLoc, weightKg = 0.5) {
   const base = zones[key] || 55;
   const weightExtra = Math.max(0, (weightKg - 0.5)) * 4;
   return { rate: base + weightExtra, intercity: true, days: 1 };
+  */
+
+  // Return zero delivery fee for mean time
+  return { rate: 0, intercity: false, days: 0, partner: 'Standard Delivery' };
 }
 
 // ── Delivery Page ──────────────────────────────────────────
@@ -2553,84 +2558,22 @@ function renderDeliveryPage() {
   const c = document.getElementById('delivery-content');
   if (!c) return;
   c.innerHTML = `
-<h3 style="font-weight:700;margin-bottom:12px">📦 Shipping Schedule</h3>
+<h3 style="font-weight:700;margin-bottom:12px">📦 Standard Shipping Information</h3>
 <div class="ship-schedule-card" style="margin-bottom:16px">
-  <div style="font-size:2rem">📅</div>
+  <div style="font-size:2rem">🎁</div>
   <div>
-    <div style="font-weight:700">Weekly Saturday Shipping</div>
-    <div style="font-size:.8rem;opacity:.8;margin-top:4px">All orders placed during the week are bundled for shipping every Saturday. Track via SMS once dispatched.</div>
+    <div style="font-weight:700">Free Standard Delivery</div>
+    <div style="font-size:.8rem;opacity:.8;margin-top:4px">We currently offer free delivery on all orders. Select your delivery location at checkout.</div>
   </div>
 </div>
+
+<!-- 
+ORIGINAL DELIVERY PARTNER & RATE TABLES (Hashed out for mean time — to be restored when delivery partner is contracted):
 <h3 style="font-weight:700;margin-bottom:12px">🚚 Delivery Rates by Route</h3>
-<div class="zone-card">
-  <div>
-    <div class="zone-cities">Local (Same City)</div>
-    <div class="zone-days">Next dispatch day</div>
-  </div>
-  <div class="zone-rate">GHS 15</div>
-</div>
-<div class="zone-card">
-  <div>
-    <div class="zone-cities">Accra ↔ Kumasi</div>
-    <div class="zone-days">1–2 days after dispatch</div>
-  </div>
-  <div class="zone-rate">GHS 35+</div>
-</div>
-<div class="zone-card">
-  <div>
-    <div class="zone-cities">Accra ↔ Takoradi</div>
-    <div class="zone-days">1–2 days after dispatch</div>
-  </div>
-  <div class="zone-rate">GHS 45+</div>
-</div>
-<div class="zone-card">
-  <div>
-    <div class="zone-cities">Kumasi ↔ Takoradi</div>
-    <div class="zone-days">1–2 days after dispatch</div>
-  </div>
-  <div class="zone-rate">GHS 40+</div>
-</div>
-<div class="zone-card">
-  <div>
-    <div class="zone-cities">Accra ↔ Tamale / Far North</div>
-    <div class="zone-days">2–3 days after dispatch</div>
-  </div>
-  <div class="zone-rate">GHS 70+</div>
-</div>
-<div class="zone-card">
-  <div>
-    <div class="zone-cities">Accra ↔ Cape Coast / Tema</div>
-    <div class="zone-days">1 day after dispatch</div>
-  </div>
-  <div class="zone-rate">GHS 20–35</div>
-</div>
-<p style="font-size:.8rem;color:var(--text-muted);margin-top:12px">
-  <i class="fas fa-info-circle"></i> Weight surcharge: +GHS 4/kg after first 0.5kg. Same-city items in one order are auto-bundled into a single package.
-</p>
+...
 <h3 style="font-weight:700;margin:20px 0 12px">🤝 Delivery Partners</h3>
-<div style="display:flex;gap:12px;flex-wrap:wrap">
-  <div class="card" style="flex:1;min-width:130px">
-    <div class="card-body" style="text-align:center">
-      <div style="font-size:1.5rem">⚡</div>
-      <div style="font-weight:700;font-size:.875rem">Bolt Send</div>
-      <div style="font-size:.75rem;color:var(--text-muted)">Express local</div>
-    </div>
-  </div>
-  <div class="card" style="flex:1;min-width:130px">
-    <div class="card-body" style="text-align:center">
-      <div style="font-size:1.5rem">📮</div>
-      <div style="font-weight:700;font-size:.875rem">Ghana Post</div>
-      <div style="font-size:.75rem;color:var(--text-muted)">National coverage</div>
-    </div>
-  </div>
-  <div class="card" style="flex:1;min-width:130px">
-    <div class="card-body" style="text-align:center">
-      <div style="font-size:1.5rem">🚚</div>
-      <div style="font-weight:700;font-size:.875rem">DHL Ghana</div>
-      <div style="font-size:.75rem;color:var(--text-muted)">Premium intercity</div>
-    </div>
-  </div>
-</div>`;
+...
+-->`;
 }
 
 // ── Privacy Page ───────────────────────────────────────────

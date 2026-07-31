@@ -183,10 +183,11 @@ function _ensureProducts() {
 }
 
 function _pickCampaignForPage(pageKey) {
+  if (!AdEngine.campaigns || !AdEngine.campaigns.length) return null;
   return AdEngine.campaigns.find(c => {
     const pages = Array.isArray(c.pages) ? c.pages : [];
-    return pages.includes(pageKey) || pages.includes('home');
-  }) || (AdEngine.campaigns.length ? AdEngine.campaigns[0] : null);
+    return pages.includes(pageKey);
+  }) || null;
 }
 
 function _slideDuration(campaign) {
@@ -200,22 +201,19 @@ function _slideDuration(campaign) {
 /* ──────────────────────────────────────────────────────────── */
 
 function _buildSlotState(campaign, pageKey) {
+  if (!campaign) return null;
+
   let storeIds = [];
-  if (campaign) {
-    if (Array.isArray(campaign.store_ids)) {
-      storeIds = campaign.store_ids;
-    } else if (typeof campaign.store_ids === 'string') {
-      try { storeIds = JSON.parse(campaign.store_ids); } catch(_) { storeIds = campaign.store_ids.split(',').map(s=>s.trim()); }
-    }
+  if (Array.isArray(campaign.store_ids)) {
+    storeIds = campaign.store_ids;
+  } else if (typeof campaign.store_ids === 'string') {
+    try { storeIds = JSON.parse(campaign.store_ids); } catch(_) { storeIds = campaign.store_ids.split(',').map(s=>s.trim()); }
   }
 
-  // Fallback: If campaign has no explicit store_ids, load stores from App.allStores
-  if (!storeIds.length && AdEngine.stores.length) {
-    storeIds = AdEngine.stores.map(s => s.id);
-  }
+  if (!storeIds.length) return null;
 
-  const budgets   = campaign ? (campaign.store_budgets || {}) : {};
-  const { key: spentKey, spent } = campaign ? _loadSpent(campaign.id) : { key: '', spent: {} };
+  const budgets   = campaign.store_budgets || {};
+  const { key: spentKey, spent } = _loadSpent(campaign.id);
 
   // Build one entry per store that actually has eligible products
   const allStoreEntries = [];

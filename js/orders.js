@@ -180,34 +180,44 @@ async function showPackageDetailModal(packageId) {
   <div class="card" style="margin-bottom:12px">
     <div class="card-body" style="padding:12px">
       <div style="font-weight:700;font-size:.85rem;margin-bottom:10px">Items in this Package</div>
-      ${(pkg.items||[]).map(i=>`
-      <div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:.84rem">
-        <div style="display:flex;justify-content:space-between">
-          <span>${escHtml(i.name||'')} <span style="color:var(--text-muted)">× ${i.qty}</span></span>
-          <span style="font-weight:600">GHS ${(i.price*i.qty).toFixed(2)}</span>
-        </div>
-        ${i.buyer_note ? `<div style="font-size:.72rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:3px 7px;margin-top:3px;display:flex;align-items:flex-start;gap:4px"><i class="fas fa-comment-dots" style="flex-shrink:0;margin-top:1px"></i><span><strong>Note:</strong> ${escHtml(i.buyer_note)}</span></div>` : ''}
-      </div>`).join('')}
+      ${(pkg.items||[]).map(i=>{
+        const title = i.name && i.name.trim() ? escHtml(i.name) : `Item #${i.id || 'unnamed'}`;
+        const img = i.image || i.img || 'https://via.placeholder.com/50x50?text=Item';
+        return `
+        <div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
+          <img src="${img}" alt="${title}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://via.placeholder.com/50x50?text=Item'">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.84rem;font-weight:700">${title}</div>
+            <div style="font-size:.72rem;color:var(--text-muted)">Qty: ${i.qty || 1} · Unit: GHS ${(parseFloat(i.price)||0).toFixed(2)} ${i.id ? `· ID: ${escHtml(String(i.id))}` : ''}</div>
+            ${i.buyer_note ? `<div style="font-size:.72rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:3px 7px;margin-top:3px;display:flex;align-items:flex-start;gap:4px"><i class="fas fa-comment-dots" style="flex-shrink:0;margin-top:1px"></i><span><strong>Note:</strong> ${escHtml(i.buyer_note)}</span></div>` : ''}
+          </div>
+          <div style="font-weight:700;font-size:.85rem;color:var(--primary);flex-shrink:0">
+            GHS ${((parseFloat(i.price)||0)*(parseInt(i.qty)||1)).toFixed(2)}
+          </div>
+        </div>`;
+      }).join('')}
+      <!-- Delivery Fee hashed out for mean time:
       <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-muted);padding:4px 0">
         <span>Delivery Fee</span><span>GHS ${(pkg.delivery_fee||0).toFixed(2)}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:.9rem;font-weight:700;padding:6px 0;color:var(--primary)">
+      </div> -->
+      <div style="display:flex;justify-content:space-between;font-size:.9rem;font-weight:700;padding:8px 0 0;color:var(--primary)">
         <span>Total Paid</span><span>GHS ${total.toFixed(2)}</span>
       </div>
     </div>
   </div>
 
-  <!-- Delivery Info -->
-  <div class="card" style="margin-bottom:12px">
-    <div class="card-body" style="padding:12px;font-size:.83rem">
-      <div style="font-weight:700;margin-bottom:8px">Delivery Info</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <div><span style="color:var(--text-muted)">From</span><br><strong>${escHtml(pkg.origin_location||'—')}</strong></div>
-        <div><span style="color:var(--text-muted)">To</span><br><strong>${escHtml(pkg.dest_location||'—')}</strong></div>
-        <div><span style="color:var(--text-muted)">Pickup</span><br><strong>${pkg.pickup_date ? formatDate(pkg.pickup_date) : 'Next Saturday'}</strong></div>
-        <div><span style="color:var(--text-muted)">Partner</span><br><strong>${escHtml(pkg.delivery_partner||'HAPPA Logistics')}</strong></div>
+  <!-- Customer Delivery Info -->
+  <div class="card" style="margin-bottom:12px;border:1.5px solid var(--primary-light)">
+    <div class="card-body" style="padding:12px;font-size:.83rem;background:#fff7ed">
+      <div style="font-weight:800;font-size:.85rem;color:var(--primary);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        <i class="fas fa-address-card"></i> Customer Delivery Details
       </div>
-      ${pkg.tracking_link ? `<a href="${pkg.tracking_link}" target="_blank" class="btn btn-outline btn-sm btn-block" style="margin-top:10px"><i class="fas fa-external-link-alt"></i> Track Externally</a>` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><span style="color:var(--text-muted);font-size:.75rem">Customer Name</span><br><strong>${escHtml(pkg.buyer_name || pkg.delivery_name || 'Customer')}</strong></div>
+        <div><span style="color:var(--text-muted);font-size:.75rem">Phone / WhatsApp</span><br><a href="tel:${escHtml(pkg.buyer_phone || pkg.delivery_phone)}" style="color:var(--primary);font-weight:700"><i class="fas fa-phone-alt"></i> ${escHtml(pkg.buyer_phone || pkg.delivery_phone || '—')}</a></div>
+        <div style="grid-column:1/-1"><span style="color:var(--text-muted);font-size:.75rem">Delivery Location</span><br><strong><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> ${escHtml(pkg.delivery_location || pkg.dest_location || '—')}</strong></div>
+        <div style="grid-column:1/-1"><span style="color:var(--text-muted);font-size:.75rem">Address / Landmark</span><br><strong>${escHtml(pkg.delivery_address || pkg.notes || 'No landmark provided')}</strong></div>
+      </div>
     </div>
   </div>
 
@@ -944,10 +954,17 @@ function packageDetailHTML(rawPkg) {
       </div>` : ''}
     </div>
 
-    <!-- Route -->
-    <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:6px">
-      ${escHtml(pkg.origin_location||'?')} → ${escHtml(pkg.dest_location||'?')}
-      ${pkg.is_intercity ? ' (Intercity)' : ' (Local)'}
+    <!-- Customer Delivery Contact Info -->
+    <div style="margin-bottom:10px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:var(--radius-sm);padding:10px 12px">
+      <div style="font-size:.75rem;font-weight:800;color:#1e40af;margin-bottom:6px;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.4px">
+        <i class="fas fa-address-card" style="color:#2563eb"></i> Customer Delivery Details
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem">
+        <div><span style="color:#1e3a8a;opacity:.75">Name:</span><br><strong style="color:#1e3a8a">${escHtml(pkg.buyer_name || pkg.delivery_name || 'Customer')}</strong></div>
+        <div><span style="color:#1e3a8a;opacity:.75">Phone:</span><br><a href="tel:${escHtml(pkg.buyer_phone || pkg.delivery_phone)}" style="color:#2563eb;font-weight:700;text-decoration:underline"><i class="fas fa-phone-alt"></i> ${escHtml(pkg.buyer_phone || pkg.delivery_phone || '—')}</a></div>
+        <div style="grid-column:1/-1"><span style="color:#1e3a8a;opacity:.75">Location:</span><br><strong style="color:#1e3a8a"><i class="fas fa-map-marker-alt" style="color:#e85d04"></i> ${escHtml(pkg.delivery_location || pkg.dest_location || '—')}</strong></div>
+        <div style="grid-column:1/-1"><span style="color:#1e3a8a;opacity:.75">Address / Landmark:</span><br><strong style="color:#1e3a8a">${escHtml(pkg.delivery_address || pkg.notes || 'No landmark provided')}</strong></div>
+      </div>
     </div>
 
     <!-- Order-level buyer notes summary (shown when any item has a note) -->
@@ -963,15 +980,35 @@ function packageDetailHTML(rawPkg) {
       </div>`).join('')}
     </div>` : ''}
 
-    <!-- Items -->
-    ${(pkg.items||[]).map(i=>`
-    <div style="padding:6px 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:.82rem;display:flex;justify-content:space-between">
-        <span>${escHtml(i.name||'')} × ${i.qty}</span>
-        <span>GHS ${((i.price||0)*(i.qty||1)).toFixed(2)}</span>
+    <!-- Items List with Thumbnail, Name/Fallback & Item ID -->
+    <div style="margin-bottom:10px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+      <div style="background:var(--bg);padding:6px 10px;font-size:.72rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)">
+        Ordered Items (${(pkg.items||[]).length})
       </div>
-      ${i.buyer_note ? `<div style="font-size:.72rem;background:#fefce8;border:1px solid #fde047;border-radius:4px;padding:4px 8px;margin-top:3px;display:flex;align-items:flex-start;gap:5px;color:#713f12"><i class="fas fa-comment-dots" style="flex-shrink:0;margin-top:1px;color:#ca8a04"></i><span><strong>Buyer's note:</strong> ${escHtml(i.buyer_note)}</span></div>` : ''}
-    </div>`).join('')}
+      ${(pkg.items||[]).map(i=>{
+        const itemTitle = i.name && i.name.trim() ? escHtml(i.name) : `Item #${i.id || 'unnamed'}`;
+        const itemImg = i.image || i.img || 'https://via.placeholder.com/60x60?text=Item';
+        return `
+        <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:#fff">
+          <img src="${itemImg}" alt="${itemTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://via.placeholder.com/60x60?text=Item'">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.83rem;font-weight:700;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              ${itemTitle}
+            </div>
+            <div style="font-size:.72rem;color:var(--text-muted);display:flex;gap:6px;align-items:center;margin-top:2px;flex-wrap:wrap">
+              <span>Qty: <strong>${i.qty || 1}</strong></span>
+              <span>·</span>
+              <span>Unit: <strong>GHS ${(parseFloat(i.price)||0).toFixed(2)}</strong></span>
+              ${i.id ? `<span>·</span><code style="font-size:.68rem;background:var(--bg);padding:1px 4px;border-radius:3px">ID: ${escHtml(String(i.id))}</code>` : ''}
+            </div>
+            ${i.buyer_note ? `<div style="font-size:.72rem;background:#fefce8;border:1px solid #fde047;border-radius:4px;padding:3px 7px;margin-top:4px;display:flex;align-items:flex-start;gap:4px;color:#713f12"><i class="fas fa-comment-dots" style="flex-shrink:0;margin-top:2px;color:#ca8a04"></i><span><strong>Note:</strong> ${escHtml(i.buyer_note)}</span></div>` : ''}
+          </div>
+          <div style="font-weight:800;font-size:.84rem;color:var(--primary);flex-shrink:0">
+            GHS ${((parseFloat(i.price)||0)*(parseInt(i.qty)||1)).toFixed(2)}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
 
     <div style="display:flex;justify-content:space-between;font-size:.85rem;margin-top:8px;font-weight:700">
       <span>Your Earnings</span>

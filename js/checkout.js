@@ -161,7 +161,8 @@ function renderCheckout() {
   <div class="checkout-summary" style="margin-bottom:14px">
     <div class="summary-row"><span>Subtotal (${App.cart.reduce((s,i)=>s+i.qty,0)} items)</span><span>GHS ${totals.subtotal.toFixed(2)}</span></div>
     <div class="summary-row"><span>Platform Fee (${PLATFORM_FEE_PCT}%)</span><span>GHS ${totals.platformFee.toFixed(2)}</span></div>
-    <div class="summary-row"><span>Delivery Fee</span><span id="checkout-delivery">GHS ${totals.deliveryFee.toFixed(2)}</span></div>
+    <!-- Delivery Fee row hashed out temporarily for mean time:
+    <div class="summary-row"><span>Delivery Fee</span><span id="checkout-delivery">GHS ${totals.deliveryFee.toFixed(2)}</span></div> -->
     <div class="summary-row" id="discount-row" style="display:${totals.discount > 0 ? 'flex' : 'none'}"><span style="color:var(--success)">Discount</span><span id="discount-amt" style="color:var(--success)">- GHS ${(totals.discount || 0).toFixed(2)}</span></div>
     <div class="summary-row total"><span>Total</span><span class="amount" id="checkout-total">GHS ${totals.total.toFixed(2)}</span></div>
   </div>
@@ -441,6 +442,30 @@ async function placeOrder() {
 
     // Notify vendor
     addNotification(items[0].vendor_id, 'order', '🛒 New Order!', `Package ${pCode}: ${items.length} item(s) ordered`, '');
+
+    // Increment store total_sales and total_orders stats immediately upon purchase completion
+    if (storeId) {
+      try {
+        let storeObj = await apiFetch('stores/' + storeId);
+        if (storeObj && storeObj.data) storeObj = Array.isArray(storeObj.data) ? storeObj.data[0] : storeObj.data;
+        if (storeObj) {
+          const oldSales = parseFloat(storeObj.total_sales) || 0;
+          const oldOrders = parseInt(storeObj.total_orders) || 0;
+          const updatedSales = oldSales + grossAmt;
+          const updatedOrders = oldOrders + 1;
+          await apiPatch('stores', storeId, {
+            total_sales: updatedSales,
+            total_orders: updatedOrders
+          }).catch(() => {});
+          
+          const localStore = (App.allStores || []).find(s => String(s.id) === String(storeId));
+          if (localStore) {
+            localStore.total_sales = updatedSales;
+            localStore.total_orders = updatedOrders;
+          }
+        }
+      } catch(e){}
+    }
 
     // Deduct stock & update product status
     for (const item of items) {
