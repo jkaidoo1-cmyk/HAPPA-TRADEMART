@@ -3144,14 +3144,16 @@ window.saveAdCampaign = async function(e, campaignId) {
 
   try {
     if (campaignId) {
-      await apiPatch('ad_campaigns', campaignId, payload);
+      const result = await apiPatch('ad_campaigns', campaignId, payload);
+      if (!result) throw new Error('Update failed — server returned no data');
       showToast('Ad campaign updated successfully! ✅', 'success');
     } else {
       payload.id = 'adc-' + Date.now();
       payload.start_date = Date.now();
       payload.end_date = Date.now() + (365 * 86400000);
       payload.created_at = new Date().toISOString();
-      await apiPost('ad_campaigns', payload);
+      const result = await apiPost('ad_campaigns', payload);
+      if (!result) throw new Error('Create failed — server returned no data');
       showToast('New ad campaign created successfully! 🎉', 'success');
     }
 
@@ -3160,7 +3162,7 @@ window.saveAdCampaign = async function(e, campaignId) {
     await loadAdminAds();
   } catch (err) {
     console.error('Save ad campaign error:', err);
-    showToast('Failed to save ad campaign', 'error');
+    showToast('Failed to save campaign: ' + err.message, 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Save Campaign'; }
   }
 };
