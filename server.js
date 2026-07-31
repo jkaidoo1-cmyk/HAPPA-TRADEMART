@@ -129,10 +129,10 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:9000,h
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (ALLOWED_ORIGINS.includes(origin)) {
+  if (origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0]);
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');

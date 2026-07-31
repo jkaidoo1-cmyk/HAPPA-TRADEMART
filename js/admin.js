@@ -2589,11 +2589,11 @@ function _showAdCampaignModal(campaign, allStores) {
       ${allStores.length ? `
       <div style="display:flex;gap:8px">
         <button type="button" class="btn btn-ghost btn-sm" style="font-size:.72rem;padding:2px 8px"
-                onclick="document.querySelectorAll('input[name=ad-store-check]').forEach(cb=>cb.checked=true)">
+                onclick="document.querySelectorAll('input[name=ad-store-check]').forEach(cb=>{cb.checked=true;_adToggleBudgetRow(cb.value,true);})">
           All
         </button>
         <button type="button" class="btn btn-ghost btn-sm" style="font-size:.72rem;padding:2px 8px;color:var(--text-muted)"
-                onclick="document.querySelectorAll('input[name=ad-store-check]').forEach(cb=>cb.checked=false)">
+                onclick="document.querySelectorAll('input[name=ad-store-check]').forEach(cb=>{cb.checked=false;_adToggleBudgetRow(cb.value,false);})">
           None
         </button>
       </div>` : ''}
