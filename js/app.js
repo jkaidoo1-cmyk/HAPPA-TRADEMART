@@ -1633,14 +1633,25 @@ async function apiFetch(table, opts = {}) {
   const url = API + table;
   try {
     const resp = await fetch(url, { ...opts, headers });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    if (resp.status === 204) return null;
+    if (!resp.ok) {
+      let errDetail = `HTTP ${resp.status}`;
+      try {
+        const errJson = await resp.json();
+        if (errJson && (errJson.error || errJson.message)) {
+          errDetail += `: ${errJson.error || errJson.message}`;
+        }
+      } catch(_) {}
+      throw new Error(errDetail);
+    }
+    if (resp.status === 204) return { success: true };
     return await resp.json();
   } catch(e) {
     console.warn('API Error:', table, e);
-    if (API === 'tables/') {
-      return localTablesApi(table, opts);
-    }
+    window.lastApiError = e.message || String(e);
+    try {
+      const localRes = localTablesApi(table, opts);
+      if (localRes) return localRes;
+    } catch(_) {}
     return null;
   }
 }

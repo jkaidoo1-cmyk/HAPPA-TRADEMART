@@ -1398,6 +1398,25 @@
       "start_date": 1785539736443,
       "end_date": 1817075736443,
       "created_at": "2026-07-31T23:15:36.443Z"
+    },
+    {
+      "name": "Test Campaign",
+      "status": "active",
+      "pages": [
+        "home",
+        "shop",
+        "stores"
+      ],
+      "store_ids": [],
+      "store_budgets": "{}",
+      "interval_value": 3,
+      "interval_unit": "seconds",
+      "show_store_name": true,
+      "updated_at": "2026-07-31T23:44:06.010Z",
+      "id": "adc-1785541445981",
+      "start_date": 1785541445981,
+      "end_date": 1817077445981,
+      "created_at": "2026-07-31T23:44:05.981Z"
     }
   ],
   "settings": [
