@@ -270,7 +270,7 @@ function serializeRecord(record) {
     }
   }
 
-  if (out.extra && typeof out.extra === 'object' && ('balance_before' in out.extra || 'status' in out.extra || 'payment_method' in out.extra)) {
+  if (out.extra && typeof out.extra === 'object') {
     out = unpackWalletTxnMeta(out);
   }
   if (out.description !== undefined && out.note === undefined) {
