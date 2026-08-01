@@ -3008,7 +3008,7 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
   const title = c.name || '';
   const intervalVal = c.interval_value || 3;
   const pages = Array.isArray(c.pages) ? c.pages : ['home', 'shop', 'stores'];
-  const storeIds = Array.isArray(c.store_ids) ? c.store_ids : allStores.map(s => s.id);
+  const storeIds = Array.isArray(c.store_ids) ? c.store_ids.map(String) : allStores.map(s => String(s.id));
   let budgets = c.store_budgets || {};
   if (typeof budgets === 'string') {
     try { budgets = JSON.parse(budgets); } catch(e) { budgets = {}; }
@@ -3063,8 +3063,8 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
             <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:8px">Select which stores participate in this campaign's rotation and set their daily ad time budget.</p>
             
             <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
-              ${allStores.map(s => {
-                const checked = storeIds.includes(s.id);
+              ${allStores.length ? allStores.map(s => {
+                const checked = storeIds.includes(String(s.id));
                 const budgetMins = Number(budgets[s.id]) || 30;
                 return `
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 8px;border-bottom:1px solid #f3f4f6">
@@ -3078,7 +3078,7 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
                       <span style="font-size:.72rem;color:var(--text-muted)">mins</span>
                     </div>
                   </div>`;
-              }).join('')}
+              }).join('') : '<p style="text-align:center;padding:12px;color:var(--text-muted);font-size:.8rem;margin:0">No active stores registered yet. Campaign will default to platform products.</p>'}
             </div>
           </div>
 
@@ -3097,8 +3097,12 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 };
 
-window.saveAdCampaign = async function(e, campaignId) {
-  e.preventDefault();
+window.saveAdCampaign = async function(e, campaignId = null) {
+  if (e && typeof e.preventDefault === 'function') {
+    e.preventDefault();
+  } else if (typeof e === 'string' && !campaignId) {
+    campaignId = e;
+  }
 
   const name = document.getElementById('ad-camp-name')?.value.trim();
   const intervalVal = parseInt(document.getElementById('ad-camp-interval')?.value || '3', 10);
@@ -3125,7 +3129,11 @@ window.saveAdCampaign = async function(e, campaignId) {
     }
   });
 
-  if (!selectedStoreIds.length) { showToast('Please select at least one participating store', 'warning'); return; }
+  const allStoresCount = App.allStores?.length || 0;
+  if (!selectedStoreIds.length && allStoresCount > 0) {
+    showToast('Please select at least one participating store', 'warning');
+    return;
+  }
 
   const btn = document.getElementById('save-ad-camp-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; }
@@ -3143,23 +3151,26 @@ window.saveAdCampaign = async function(e, campaignId) {
   };
 
   try {
+    let result;
     if (campaignId) {
-      const result = await apiPatch('ad_campaigns', campaignId, payload);
-      if (!result) throw new Error('Update failed — server returned no data');
-      showToast('Ad campaign updated successfully! ✅', 'success');
+      result = await apiPatch('ad_campaigns', campaignId, payload);
     } else {
       payload.id = 'adc-' + Date.now();
       payload.start_date = Date.now();
       payload.end_date = Date.now() + (365 * 86400000);
       payload.created_at = new Date().toISOString();
-      const result = await apiPost('ad_campaigns', payload);
-      if (!result) throw new Error('Create failed — server returned no data');
-      showToast('New ad campaign created successfully! 🎉', 'success');
+      result = await apiPost('ad_campaigns', payload);
     }
+
+    if (!result && window.lastApiError) {
+      throw new Error(window.lastApiError);
+    }
+
+    showToast(campaignId ? 'Ad campaign updated successfully! ✅' : 'New ad campaign created successfully! 🎉', 'success');
 
     closeModal('modal-ad-campaign');
     if (typeof refreshAdBanners === 'function') await refreshAdBanners();
-    await loadAdminAds();
+    if (typeof loadAdminAds === 'function') await loadAdminAds();
   } catch (err) {
     console.error('Save ad campaign error:', err);
     showToast('Failed to save campaign: ' + err.message, 'error');
