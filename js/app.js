@@ -1489,6 +1489,23 @@ function seedLocalTable(table) {
         updated_at: new Date().toISOString()
       }
     ];
+  } else if (table === 'ad_campaigns') {
+    data = [
+      {
+        id: 'adc-default-1',
+        name: 'Featured Platform Store Banners',
+        status: 'active',
+        pages: ['home', 'shop', 'stores'],
+        store_ids: [],
+        store_budgets: '{}',
+        interval_value: 3,
+        interval_unit: 'seconds',
+        show_store_name: true,
+        start_date: Date.now() - 86400000,
+        end_date: Date.now() + (365 * 86400000),
+        created_at: new Date().toISOString()
+      }
+    ];
   }
   saveLocalTable(table, data);
   return data;
