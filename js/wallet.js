@@ -600,6 +600,49 @@ function adminTxnRowHTML(t) {
     failed: 'rejected'
   }[t.status] || 'pending';
 
+  let detailsHTML = '';
+  if (t.type === 'withdrawal') {
+    if (t.payment_method === 'mobile_money') {
+      detailsHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:6px;font-size:.78rem">
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+            <span style="color:var(--text-muted)">Network:</span>
+            <strong>📱 ${t.network || 'Mobile Money'}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:var(--text-muted)">MoMo Number:</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <strong>${t.account_number || ''}</strong>
+              <button class="btn btn-outline btn-sm" style="padding:1px 5px;font-size:.65rem;height:auto"
+                      onclick="navigator.clipboard.writeText('${t.account_number || ''}'); showToast('Account number copied!', 'success')">
+                <i class="far fa-copy"></i> Copy
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      detailsHTML = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:6px;font-size:.78rem">
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+            <span style="color:var(--text-muted)">Bank:</span>
+            <strong>🏦 ${t.network || 'Bank Transfer'}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:var(--text-muted)">Account Number:</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <strong>${t.account_number || ''}</strong>
+              <button class="btn btn-outline btn-sm" style="padding:1px 5px;font-size:.65rem;height:auto"
+                      onclick="navigator.clipboard.writeText('${t.account_number || ''}'); showToast('Account number copied!', 'success')">
+                <i class="far fa-copy"></i> Copy
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
   return `
 <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)">
   <div style="flex:1;min-width:0">
@@ -611,45 +654,109 @@ function adminTxnRowHTML(t) {
       👤 ${userName} (${userEmail})
     </div>
     <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">${t.note || ''}</div>
-    <div style="font-size:.7rem;color:var(--text-muted)">${formatDateTime(t.created_at)} · ${t.network||''} ${t.account_number ? '· '+maskAccount(t.account_number) : ''}</div>
+    ${detailsHTML}
+    <div style="font-size:.7rem;color:var(--text-muted);margin-top:4px">${formatDateTime(t.created_at)}</div>
+    
+    ${t.type === 'withdrawal' && t.status === 'pending' ? `
+    <div style="margin-top:8px;display:flex;gap:6px">
+      <button class="btn btn-success btn-sm" style="padding:4px 10px;font-size:.72rem;height:auto"
+              onclick="setWithdrawalStatus('${t.id}', 'completed')">
+        <i class="fas fa-check"></i> Mark Completed
+      </button>
+      <button class="btn btn-danger btn-sm" style="padding:4px 10px;font-size:.72rem;height:auto"
+              onclick="setWithdrawalStatus('${t.id}', 'failed')">
+        <i class="fas fa-times"></i> Mark Rejected
+      </button>
+    </div>
+    ` : ''}
   </div>
   <div style="text-align:right;flex-shrink:0">
     <div style="font-weight:700;color:${color}">${sign} GHS ${(t.amount||0).toFixed(2)}</div>
-    ${t.type === 'withdrawal' && t.status === 'pending' ? `
-    <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end">
-      <button class="btn btn-success btn-sm" style="padding:3px 8px;font-size:.7rem" onclick="approveWithdrawal('${t.id}','${t.user_id}',${t.amount})">
-        <i class="fas fa-check"></i> Approve
-      </button>
-      <button class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:.7rem" onclick="rejectWithdrawal('${t.id}','${t.user_id}',${t.amount},${t.balance_before})">
-        <i class="fas fa-times"></i> Reject
-      </button>
-    </div>` : ''}
   </div>
 </div>`;
 }
 
-async function approveWithdrawal(txnId, userId, amount) {
-  if (!confirm(`Approve withdrawal of GHS ${amount.toFixed ? amount.toFixed(2) : amount}?`)) return;
+async function setWithdrawalStatus(txnId, newStatus) {
+  if (!confirm(`Are you sure you want to change the withdrawal status to ${newStatus.toUpperCase()}?`)) {
+    renderAdminDashboard();
+    return;
+  }
 
-  await apiPatch('wallet_transactions', txnId, {
-    status: 'completed', reviewed_by: App.currentUser?.id || ''
-  });
+  // Fetch the current transaction
+  const txnRes = await apiGet(`wallet_transactions/${txnId}`);
+  const txn = txnRes || null;
+  if (!txn) {
+    showToast('Transaction not found', 'error');
+    renderAdminDashboard();
+    return;
+  }
 
-  addNotification(userId, 'system', '✅ Withdrawal Approved',
-    `Your withdrawal of GHS ${parseFloat(amount).toFixed(2)} has been processed and sent to your account.`);
+  const oldStatus = txn.status || 'pending';
+  if (oldStatus === newStatus) return;
 
-  showToast('Withdrawal approved and marked as completed ✅', 'success');
-  renderAdminDashboard();
-}
+  const userId = txn.user_id;
+  const amount = parseFloat(txn.amount) || 0;
 
-async function rejectWithdrawal(txnId, userId, amount, balanceBefore) {
-  if (!confirm(`Reject this withdrawal? The GHS ${parseFloat(amount).toFixed(2)} will be returned to the vendor's wallet.`)) return;
-
-  // Refund balance
+  // Fetch user to adjust wallet balance if needed
   const userRes = await apiGet(`users/${userId}`);
-  const user    = userRes || null;
-  if (user) {
-    const newBal = (user.wallet_balance || 0) + parseFloat(amount);
+  const user = userRes || null;
+  if (!user) {
+    showToast('Vendor user not found', 'error');
+    renderAdminDashboard();
+    return;
+  }
+
+  let newBal = parseFloat(user.wallet_balance || 0);
+
+  // Transition rules:
+  if (newStatus === 'failed') {
+    // Transitioning to rejected: refund the held amount to vendor's wallet
+    newBal += amount;
+    // Post refund ledger
+    await apiPost('wallet_transactions', {
+      user_id: userId,
+      type: 'refund',
+      amount: amount,
+      balance_before: user.wallet_balance || 0,
+      balance_after: newBal,
+      payment_method: 'platform',
+      payment_ref: 'REFUND' + Date.now(),
+      network: '',
+      account_number: '',
+      status: 'completed',
+      note: `Withdrawal (${txn.payment_ref}) rejected — refunded to wallet`,
+      reviewed_by: App.currentUser?.id || 'admin'
+    });
+
+    addNotification(userId, 'system', '❌ Withdrawal Rejected',
+      `Your withdrawal of GHS ${amount.toFixed(2)} was rejected. The amount has been returned to your wallet.`);
+  } else if (oldStatus === 'failed' && (newStatus === 'pending' || newStatus === 'completed')) {
+    // If it was failed (refunded) and we move it back to pending or completed, we must re-deduct the funds!
+    if (newBal < amount) {
+      showToast(`Cannot change status: Vendor has insufficient balance (GHS ${newBal.toFixed(2)}) to deduct GHS ${amount.toFixed(2)}`, 'error');
+      renderAdminDashboard();
+      return;
+    }
+    newBal -= amount;
+    // Post hold ledger
+    await apiPost('wallet_transactions', {
+      user_id: userId,
+      type: 'withdrawal_hold',
+      amount: amount,
+      balance_before: user.wallet_balance || 0,
+      balance_after: newBal,
+      payment_method: 'platform',
+      payment_ref: 'HOLD' + Date.now(),
+      network: '',
+      account_number: '',
+      status: 'completed',
+      note: `Re-processing withdrawal (${txn.payment_ref}) — balance held`,
+      reviewed_by: App.currentUser?.id || 'admin'
+    });
+  }
+
+  // Update user wallet balance in DB if it changed
+  if (newBal !== parseFloat(user.wallet_balance || 0)) {
     await apiPatch('users', userId, { wallet_balance: newBal });
     if (App.currentUser?.id === userId) {
       App.currentUser.wallet_balance = newBal;
@@ -657,28 +764,28 @@ async function rejectWithdrawal(txnId, userId, amount, balanceBefore) {
     }
   }
 
+  // Update transaction status
   await apiPatch('wallet_transactions', txnId, {
-    status: 'failed', reviewed_by: App.currentUser?.id || '',
-    note: 'Rejected by admin — amount refunded to wallet'
+    status: newStatus,
+    reviewed_by: App.currentUser?.id || 'admin',
+    note: newStatus === 'failed' ? 'Rejected by admin — amount refunded to wallet' : (txn.note || '')
   });
 
-  // Refund transaction record
-  if (user) {
-    await apiPost('wallet_transactions', {
-      user_id: userId, type: 'refund', amount: parseFloat(amount),
-      balance_before: user.wallet_balance || 0,
-      balance_after: (user.wallet_balance || 0) + parseFloat(amount),
-      payment_method: 'platform', payment_ref: 'REFUND' + Date.now(),
-      network: '', account_number: '', status: 'completed',
-      note: 'Withdrawal rejected — refunded to wallet', reviewed_by: App.currentUser?.id || ''
-    });
+  if (newStatus === 'completed') {
+    addNotification(userId, 'system', '✅ Withdrawal Approved',
+      `Your withdrawal of GHS ${amount.toFixed(2)} has been processed and sent to your account.`);
   }
 
-  addNotification(userId, 'system', '❌ Withdrawal Rejected',
-    `Your withdrawal of GHS ${parseFloat(amount).toFixed(2)} was not processed. Amount returned to your wallet.`);
-
-  showToast('Withdrawal rejected. Balance refunded to vendor.', 'warning');
+  showToast(`Withdrawal status updated to ${newStatus.toUpperCase()} successfully!`, 'success');
   renderAdminDashboard();
+}
+
+async function approveWithdrawal(txnId, userId, amount) {
+  await setWithdrawalStatus(txnId, 'completed');
+}
+
+async function rejectWithdrawal(txnId, userId, amount, balanceBefore) {
+  await setWithdrawalStatus(txnId, 'failed');
 }
 
 window.showDepositModal = showDepositModal;
@@ -696,3 +803,4 @@ window.renderAdminTransactions = renderAdminTransactions;
 window.filterAdminTxns = filterAdminTxns;
 window.approveWithdrawal = approveWithdrawal;
 window.rejectWithdrawal = rejectWithdrawal;
+window.setWithdrawalStatus = setWithdrawalStatus;
