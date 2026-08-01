@@ -3167,8 +3167,8 @@ window.saveAdCampaign = async function(e, campaignId = null) {
       result = await apiPatch('ad_campaigns', campaignId, payload);
     } else {
       payload.id = 'adc-' + Date.now();
-      payload.start_date = Date.now();
-      payload.end_date = Date.now() + (365 * 86400000);
+      payload.start_date = new Date().toISOString();
+      payload.end_date = new Date(Date.now() + (365 * 86400000)).toISOString();
       payload.created_at = new Date().toISOString();
       result = await apiPost('ad_campaigns', payload);
     }

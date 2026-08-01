@@ -221,6 +221,13 @@ function prepareRecordForDb(table, record, existingRecord) {
     out.extra = adExtra;
     // Map 'name' -> 'title' for the legacy column so filtering still works
     if (out.name && !out.title) out.title = out.name;
+    // Safely convert start_date/end_date to ISO format if passed as timestamps
+    if (out.start_date && !isNaN(Number(out.start_date))) {
+      out.start_date = new Date(Number(out.start_date)).toISOString();
+    }
+    if (out.end_date && !isNaN(Number(out.end_date))) {
+      out.end_date = new Date(Number(out.end_date)).toISOString();
+    }
     // Provide safe defaults for legacy NOT NULL columns in Supabase schema
     if (!out.budget)      out.budget      = 0;
     if (!out.spent)       out.spent       = 0;

@@ -12,10 +12,17 @@
   ],
   "routes": [
     {
+      "src": "/api",
+      "dest": "/api/index.js",
+      "headers": {
+        "Cache-Control": "no-cache, no-store, must-revalidate"
+      }
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/index.js",
       "headers": {
-        "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
+        "Cache-Control": "no-cache, no-store, must-revalidate"
       }
     },
     {
