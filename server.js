@@ -69,6 +69,13 @@ const loginRateLimiter = rateLimit({
   legacyHeaders: false
 });
 
+function withSupaTimeout(promise, ms = 2500) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase timeout')), ms))
+  ]);
+}
+
 // Initialize Supabase if credentials are provided and not placeholders
 let supabase = null;
 const hasSupabaseUrl = process.env.SUPABASE_URL && !process.env.SUPABASE_URL.includes('your-project');
@@ -76,19 +83,22 @@ const hasSupabaseKey = process.env.SUPABASE_KEY && !process.env.SUPABASE_KEY.inc
 if (hasSupabaseUrl && hasSupabaseKey) {
   try {
     const { createClient } = require('@supabase/supabase-js');
-    supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-    console.log('[Supabase] Initializing client... ⚡');
-    supabase.from('users').select('id').limit(1).then(({ error }) => {
-      if (error) {
-        console.warn('[Supabase] Connection query failed. Falling back to local db.json:', error.message);
+    const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+    console.log('[Supabase] Testing database connection... ⚡');
+    withSupaTimeout(client.from('users').select('id').limit(1), 2000)
+      .then(({ error }) => {
+        if (error) {
+          console.warn('[Supabase] Connection query failed. Falling back to local db.json:', error.message);
+          supabase = null;
+        } else {
+          supabase = client;
+          console.log('[Supabase] Connected to database successfully! ⚡');
+        }
+      })
+      .catch(err => {
+        console.warn('[Supabase] Connection timeout/error. Falling back to local db.json:', err.message);
         supabase = null;
-      } else {
-        console.log('[Supabase] Connected to database successfully! ⚡');
-      }
-    }).catch(err => {
-      console.warn('[Supabase] Connection error. Falling back to local db.json:', err.message);
-      supabase = null;
-    });
+      });
   } catch (e) {
     console.warn('[Supabase] Failed to initialize client, falling back to db.json:', e.message);
     supabase = null;
@@ -770,9 +780,11 @@ app.post('/api/:table', async (req, res) => {
     try {
       const supaRecord = serializeRecord(body);
       const dbRecord = prepareRecordForDb(table, supaRecord);
-      const { data, error } = await supabase.from(table).insert(dbRecord).select().single();
+      const { data, error } = await withSupaTimeout(supabase.from(table).insert(dbRecord).select().single(), 2000);
       if (!error && data) return res.status(201).json(serializeRecord(data));
-    } catch (err) {}
+    } catch (err) {
+      console.warn(`[Supabase] ${table} insert fallback to db.json:`, err.message);
+    }
   }
 
   res.status(201).json(record);
