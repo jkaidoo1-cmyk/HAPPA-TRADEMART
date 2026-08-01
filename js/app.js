@@ -2248,7 +2248,7 @@ function renderLocalProducts() {
 function renderFeaturedStores() {
   const list = document.getElementById('featured-stores-list');
   if (!list) return;
-  const stores = App.allStores.filter(s => s.status === 'active' && s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin')).slice(0, 6);
+  const stores = App.allStores.filter(s => s.status === 'active' && s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin') && shouldShowStoreOnMainWebsite(s)).slice(0, 6);
   list.innerHTML = stores.map(s => storeCardHTML(s, true)).join('');
 }
 

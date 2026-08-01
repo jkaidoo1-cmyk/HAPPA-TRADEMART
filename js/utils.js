@@ -211,3 +211,16 @@ window.shouldShowProductOnMainWebsite = function(product) {
   return true;
 };
 
+window.shouldShowStoreOnMainWebsite = function(store) {
+  if (!store) return true;
+  let extra = store.extra;
+  if (typeof extra === 'string') {
+    try { extra = JSON.parse(extra); } catch(e) { extra = null; }
+  }
+  if (extra && (extra.only_show_on_storefront === true || extra.only_show_on_storefront === 'true')) {
+    return false;
+  }
+  return true;
+};
+
+
