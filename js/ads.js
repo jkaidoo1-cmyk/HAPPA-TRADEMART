@@ -151,7 +151,8 @@ async function _ensureCampaigns() {
     todayStart.setHours(0,0,0,0);
     const startOfTodayMs = todayStart.getTime();
 
-    AdEngine.campaigns = (res?.data || [])
+    const rawCampaigns = Array.isArray(res) ? res : (res?.data || []);
+    AdEngine.campaigns = rawCampaigns
       .map(c => {
         if (typeof c.store_budgets === 'string') {
           try { c.store_budgets = JSON.parse(c.store_budgets); } catch (_) { c.store_budgets = {}; }
@@ -189,7 +190,7 @@ async function _ensureProducts() {
   } else if (!AdEngine.products || !AdEngine.products.length) {
     try {
       const res = await apiGet('products', 'limit=300');
-      AdEngine.products = res?.data || res || [];
+      AdEngine.products = Array.isArray(res) ? res : (res?.data || []);
     } catch(e){}
   }
 
@@ -198,7 +199,7 @@ async function _ensureProducts() {
   } else if (!AdEngine.stores || !AdEngine.stores.length) {
     try {
       const res = await apiGet('stores', 'limit=200');
-      AdEngine.stores = res?.data || res || [];
+      AdEngine.stores = Array.isArray(res) ? res : (res?.data || []);
     } catch(e){}
   }
 }

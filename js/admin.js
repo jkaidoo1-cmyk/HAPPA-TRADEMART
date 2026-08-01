@@ -2883,9 +2883,9 @@ async function loadAdminAds() {
       apiGet('products', 'limit=500')
     ]);
 
-    const campaigns = cRes?.data || [];
-    const stores = sRes?.data || [];
-    const products = pRes?.data || [];
+    const campaigns = Array.isArray(cRes) ? cRes : (cRes?.data || []);
+    const stores = Array.isArray(sRes) ? sRes : (sRes?.data || []);
+    const products = Array.isArray(pRes) ? pRes : (pRes?.data || []);
 
     App.allStores = stores;
     App.allProducts = products;
@@ -3001,7 +3001,7 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
   const c = cRes?.data || cRes || {};
 
   const storesRes = await apiGet('stores', 'limit=200');
-  const allStores = storesRes?.data || [];
+  const allStores = Array.isArray(storesRes) ? storesRes : (storesRes?.data || []);
   App.allStores = allStores;
 
   const isEdit = !!campaignId;
