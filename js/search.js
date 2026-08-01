@@ -84,7 +84,7 @@ async function showSearchSuggestions(q) {
 
   // Search products by name + tags
   const matchedProducts = App.allProducts.filter(p =>
-    p.status !== 'archived' && (
+    p.status !== 'archived' && shouldShowProductOnMainWebsite(p) && (
       p.name?.toLowerCase().includes(ql) ||
       p.tags?.some(t => t.toLowerCase().includes(ql)) ||
       p.category?.toLowerCase().includes(ql)
@@ -167,7 +167,7 @@ async function performSearch(query) {
   }
 
   const products = App.allProducts.filter(p =>
-    p.status !== 'archived' && (
+    p.status !== 'archived' && shouldShowProductOnMainWebsite(p) && (
       p.name?.toLowerCase().includes(q) ||
       p.tags?.some(t => t.toLowerCase().includes(q)) ||
       p.category?.toLowerCase().includes(q) ||

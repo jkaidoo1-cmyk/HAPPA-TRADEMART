@@ -572,6 +572,7 @@ app.get('/api/:table', async (req, res) => {
         subscription_plan: extraSf.subscription_plan || st.subscription_plan || 'starter',
         subscription_status: extraSf.subscription_status || st.subscription_status || 'active',
         plan_prices: extraSf.plan_prices || st.plan_prices || null,
+        only_show_on_storefront: st.extra?.only_show_on_storefront === true || st.extra?.only_show_on_storefront === 'true',
         created_at: st.created_at,
         updated_at: st.updated_at
       };
@@ -652,6 +653,7 @@ app.get('/api/:table/:id', async (req, res) => {
       subscription_plan: st.subscription_plan || 'starter',
       subscription_status: st.subscription_status || 'active',
       plan_prices: st.plan_prices || null,
+      only_show_on_storefront: st.extra?.only_show_on_storefront === true || st.extra?.only_show_on_storefront === 'true',
       created_at: st.created_at,
       updated_at: st.updated_at
     };
@@ -988,6 +990,16 @@ app.patch('/api/:table/:id', async (req, res) => {
     if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
     if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
     if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
+    
+    let extra = {};
+    try {
+      extra = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {});
+    } catch(e) {}
+    if ('only_show_on_storefront' in body) {
+      extra.only_show_on_storefront = body.only_show_on_storefront === true || body.only_show_on_storefront === 'true';
+      storeUpdates.extra = extra;
+    }
+    
     storeUpdates.updated_at = new Date().toISOString();
 
     if (supabase) {
@@ -1032,6 +1044,7 @@ app.patch('/api/:table/:id', async (req, res) => {
       subscription_plan: updatedSt.subscription_plan || 'starter',
       subscription_status: updatedSt.subscription_status || 'active',
       plan_prices: updatedSt.plan_prices || body.plan_prices || null,
+      only_show_on_storefront: updatedSt.extra?.only_show_on_storefront === true || updatedSt.extra?.only_show_on_storefront === 'true',
       created_at: updatedSt.created_at,
       updated_at: updatedSt.updated_at
     };

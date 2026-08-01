@@ -396,6 +396,7 @@ app.get('/api/:table', async (req, res) => {
         subscription_plan: st.subscription_plan || 'starter',
         subscription_status: st.subscription_status || 'active',
         plan_prices: st.plan_prices || null,
+        only_show_on_storefront: st.extra?.only_show_on_storefront === true || st.extra?.only_show_on_storefront === 'true',
         created_at: st.created_at,
         updated_at: st.updated_at
       }));
@@ -499,6 +500,7 @@ app.get('/api/:table/:id', async (req, res) => {
         meta_description: st.meta_description || '',
         subscription_plan: st.subscription_plan || 'starter',
         subscription_status: st.subscription_status || 'active',
+        only_show_on_storefront: st.extra?.only_show_on_storefront === true || st.extra?.only_show_on_storefront === 'true',
         created_at: st.created_at,
         updated_at: st.updated_at
       };
@@ -723,6 +725,16 @@ app.patch('/api/:table/:id', async (req, res) => {
       if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
       if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
       if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+
+      let extra = {};
+      try {
+        extra = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {});
+      } catch(e) {}
+      if ('only_show_on_storefront' in body) {
+        extra.only_show_on_storefront = body.only_show_on_storefront === true || body.only_show_on_storefront === 'true';
+        storeUpdates.extra = extra;
+      }
+
       storeUpdates.updated_at = new Date().toISOString();
 
       if (!supabase) {
@@ -762,6 +774,7 @@ app.patch('/api/:table/:id', async (req, res) => {
         meta_description: body.meta_description || '',
         subscription_plan: updatedSt.subscription_plan || 'starter',
         subscription_status: updatedSt.subscription_status || 'active',
+        only_show_on_storefront: updatedSt.extra?.only_show_on_storefront === true || updatedSt.extra?.only_show_on_storefront === 'true',
         created_at: updatedSt.created_at,
         updated_at: updatedSt.updated_at
       };
@@ -773,18 +786,17 @@ app.patch('/api/:table/:id', async (req, res) => {
       const store = dataStore.getStore();
       const idx = store[table].findIndex(r => String(r.id) === String(id));
       if (idx === -1) {
-        // Upsert: insert the record if not found (handles first-time save)
         store[table].push(record);
       } else {
         store[table][idx] = { ...store[table][idx], ...record };
       }
       dataStore.saveToFile();
-      return res.json(serializeRecord(idx === -1 ? record : store[table][store[table].length - 1]));
+      return res.json(serializeRecord(idx === -1 ? record : store[table][idx]));
     }
     
     const dbRecord = prepareRecordForDb(table, record);
-    // Use upsert so PATCH works even when the record doesn't exist yet (first-time save)
-    const { data, error } = await supabase.from(table).upsert(dbRecord, { onConflict: 'id' }).select().single();
+    // Use update instead of upsert to perform partial updates without wiping other columns
+    const { data, error } = await supabase.from(table).update(dbRecord).eq('id', id).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
   } catch (err) {

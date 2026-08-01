@@ -2218,7 +2218,7 @@ async function loadHomeData() {
 function renderFlashSale() {
   const list = document.getElementById('flash-sale-list');
   if (!list) return;
-  const items = App.allProducts.filter(p => p.is_flash_sale && p.status !== 'archived');
+  const items = App.allProducts.filter(p => p.is_flash_sale && p.status !== 'archived' && shouldShowProductOnMainWebsite(p));
   if (items.length) {
     list.innerHTML = items.map(p => productCardSmall(p)).join('');
   } else {
@@ -2235,7 +2235,7 @@ function renderLocalProducts() {
   const sec  = document.getElementById('local-section');
   if (!list) return;
   const ul = App.currentUser ? App.currentUser.location : null;
-  const items = App.allProducts.filter(p => p.status !== 'archived' && (!ul || p.location === ul)).slice(0, 8);
+  const items = App.allProducts.filter(p => p.status !== 'archived' && (!ul || p.location === ul) && shouldShowProductOnMainWebsite(p)).slice(0, 8);
   if (!items.length && !ul) {
     if (sec) sec.style.display = 'none';
     return;
@@ -2257,7 +2257,7 @@ function renderTrending() {
   const list = document.getElementById('trending-list');
   if (!list) return;
   const items = [...App.allProducts]
-    .filter(p => p.status !== 'archived')
+    .filter(p => p.status !== 'archived' && shouldShowProductOnMainWebsite(p))
     .sort((a,b) => (b.views||0) - (a.views||0))
     .slice(0, 6);
   list.innerHTML = items.map(p => productCardHTML(p)).join('');

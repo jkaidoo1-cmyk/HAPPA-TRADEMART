@@ -81,7 +81,7 @@ async function renderMarketplace() {
 
 
 
-  let items = App.allProducts.filter(p => p.status !== 'archived');
+  let items = App.allProducts.filter(p => p.status !== 'archived' && shouldShowProductOnMainWebsite(p));
 
   const ul  = App.currentUser?.location || '';
 

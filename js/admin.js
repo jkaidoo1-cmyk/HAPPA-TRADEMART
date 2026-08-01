@@ -2403,6 +2403,13 @@ async function renderAdminStorefronts() {
             <div style="font-size:.78rem;color:var(--text-muted);margin-top:4px">
               <div><strong>Slogan:</strong> ${escHtml(sloganText)}</div>
               <div><strong>Link Slug:</strong> <code style="background:var(--bg);padding:2px 4px;border-radius:3px">happamart.com/storefront/${slugText}</code></div>
+              <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+                <strong>Product Visibility:</strong> 
+                <select class="form-control form-select" style="display:inline-block;width:auto;font-size:.74rem;padding:2px 8px;height:auto;margin:0" onchange="toggleStorefrontProductVisibility('${sf.id}', this.value)">
+                  <option value="both" ${sf.only_show_on_storefront ? '' : 'selected'}>Show on Storefront &amp; Website</option>
+                  <option value="storefront_only" ${sf.only_show_on_storefront ? 'selected' : ''}>Only Show on Storefront</option>
+                </select>
+              </div>
               ${sf.admin_feedback ? `<div style="color:var(--danger);margin-top:4px"><strong>Feedback:</strong> ${escHtml(sf.admin_feedback)}</div>` : ''}
             </div>
           </div>
@@ -3305,4 +3312,36 @@ window.runAdsDiagnostic = async function() {
   if (container) container.insertAdjacentHTML('afterbegin', diagHtml);
   else document.getElementById('admin-ads')?.insertAdjacentHTML('afterbegin', diagHtml);
 };
+
+window.toggleStorefrontProductVisibility = async function(sfId, value) {
+  const onlyShowOnStorefront = value === 'storefront_only';
+  showToast('Updating product visibility...', 'info');
+
+  await apiPatch('storefronts', sfId, { only_show_on_storefront: onlyShowOnStorefront }).catch(() => {});
+
+  const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
+  if (sf) {
+    sf.only_show_on_storefront = onlyShowOnStorefront;
+    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+  }
+
+  // Update store cache extra to sync homepage/search/marketplace filters instantly
+  const storeId = sf?.store_id;
+  if (storeId) {
+    const store = (App.allStores || []).find(s => String(s.id) === String(storeId));
+    if (store) {
+      let extra = store.extra || {};
+      if (typeof extra === 'string') {
+        try { extra = JSON.parse(extra); } catch(e) { extra = {}; }
+      }
+      extra.only_show_on_storefront = onlyShowOnStorefront;
+      store.extra = extra;
+      try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
+    }
+  }
+
+  showToast('Product visibility updated successfully! ✅', 'success');
+  renderAdminStorefronts();
+};
+
 

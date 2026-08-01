@@ -195,3 +195,19 @@ function clearProductImage(previewWrapperId, fileInputId, hiddenId) {
   if (input) input.value         = '';
   if (hid)   hid.value           = '';
 }
+
+window.shouldShowProductOnMainWebsite = function(product) {
+  if (!product || !product.store_id) return true;
+  const store = (App.allStores || []).find(s => String(s.id) === String(product.store_id));
+  if (store) {
+    let extra = store.extra;
+    if (typeof extra === 'string') {
+      try { extra = JSON.parse(extra); } catch(e) { extra = null; }
+    }
+    if (extra && (extra.only_show_on_storefront === true || extra.only_show_on_storefront === 'true')) {
+      return false;
+    }
+  }
+  return true;
+};
+
