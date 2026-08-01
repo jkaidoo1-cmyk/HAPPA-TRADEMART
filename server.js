@@ -224,14 +224,60 @@ const JSONB_COLS = new Set([
   'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra', 'pages', 'store_ids', 'store_budgets', 'plan_prices'
 ]);
 
-function serializeRecord(record) {
+const TXN_META_FIELDS = [
+  'balance_before', 'balance_after', 'payment_method', 'status', 'note', 'network', 'account_number', 'reviewed_by'
+];
+
+function parseExtraObject(value) {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) return { ...value };
+  return {};
+}
+
+function packWalletTxnMeta(record, existingExtra) {
+  const extra = { ...parseExtraObject(existingExtra), ...parseExtraObject(record.extra) };
+  for (const key of TXN_META_FIELDS) {
+    if (key in record && record[key] !== undefined) extra[key] = record[key];
+  }
+  return extra;
+}
+
+function unpackWalletTxnMeta(record) {
+  if (!record) return record;
   const out = { ...record };
+  const extra = parseExtraObject(out.extra);
+  for (const [key, value] of Object.entries(extra)) {
+    if (out[key] === undefined || out[key] === null || out[key] === '') out[key] = value;
+  }
+  return out;
+}
+
+function serializeRecord(record) {
+  let out = { ...record };
 
   // Parse JSONB columns stored as strings
   for (const col of JSONB_COLS) {
     if (col in out && typeof out[col] === 'string') {
       try { out[col] = JSON.parse(out[col]); } catch {}
     }
+  }
+
+  if (out.extra && typeof out.extra === 'object' && ('balance_before' in out.extra || 'status' in out.extra || 'payment_method' in out.extra)) {
+    out = unpackWalletTxnMeta(out);
+  }
+  if (out.description !== undefined && out.note === undefined) {
+    out.note = out.description;
+  }
+  if (out.reference !== undefined && out.payment_ref === undefined) {
+    out.payment_ref = out.reference;
   }
 
   // ── Field aliasing: DB name → frontend expected name ──────────
@@ -302,6 +348,12 @@ function prepareRecordForDb(table, record) {
   }
   if ('shipping_policy' in out && !('return_policy' in out)) {
     out.return_policy = out.shipping_policy;
+  }
+
+  if (table === 'wallet_transactions') {
+    if (out.note && !out.description) out.description = out.note;
+    if (out.payment_ref && !out.reference) out.reference = out.payment_ref;
+    out.extra = packWalletTxnMeta(out, out.extra);
   }
 
   // Ad campaigns: pack new fields into extra JSONB; set safe defaults for legacy NOT NULL columns

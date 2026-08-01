@@ -66,6 +66,10 @@ const ORDER_META_FIELDS = [
   'coupon_code', 'payment_ref', 'ship_date', 'buyer_location'
 ];
 
+const TXN_META_FIELDS = [
+  'balance_before', 'balance_after', 'payment_method', 'status', 'note', 'network', 'account_number', 'reviewed_by'
+];
+
 function parseExtraObject(value) {
   if (!value) return {};
   if (typeof value === 'string') {
@@ -96,6 +100,24 @@ function packOrderMeta(record, existingExtra) {
   return extra;
 }
 
+function packWalletTxnMeta(record, existingExtra) {
+  const extra = { ...parseExtraObject(existingExtra), ...parseExtraObject(record.extra) };
+  for (const key of TXN_META_FIELDS) {
+    if (key in record && record[key] !== undefined) extra[key] = record[key];
+  }
+  return extra;
+}
+
+function unpackWalletTxnMeta(record) {
+  if (!record) return record;
+  const out = { ...record };
+  const extra = parseExtraObject(out.extra);
+  for (const [key, value] of Object.entries(extra)) {
+    if (out[key] === undefined || out[key] === null || out[key] === '') out[key] = value;
+  }
+  return out;
+}
+
 function unpackPackageMeta(record) {
   if (!record) return record;
   const out = { ...record };
@@ -121,6 +143,16 @@ function serializeRecord(record) {
   }
 
   out = unpackPackageMeta(out);
+
+  if (out.extra && typeof out.extra === 'object' && ('balance_before' in out.extra || 'status' in out.extra || 'payment_method' in out.extra)) {
+    out = unpackWalletTxnMeta(out);
+  }
+  if (out.description !== undefined && out.note === undefined) {
+    out.note = out.description;
+  }
+  if (out.reference !== undefined && out.payment_ref === undefined) {
+    out.payment_ref = out.reference;
+  }
 
   // ── Field aliasing: DB name → frontend expected name ──────────
   // Products: total_sold → sold_count (frontend uses sold_count everywhere)
@@ -212,6 +244,11 @@ function prepareRecordForDb(table, record, existingRecord) {
   }
   if (table === 'orders') {
     out.extra = packOrderMeta(out, existingRecord?.extra);
+  }
+  if (table === 'wallet_transactions') {
+    if (out.note && !out.description) out.description = out.note;
+    if (out.payment_ref && !out.reference) out.reference = out.payment_ref;
+    out.extra = packWalletTxnMeta(out, existingRecord?.extra);
   }
   if (table === 'ad_campaigns') {
     const adExtra = { ...parseExtraObject(existingRecord?.extra), ...parseExtraObject(out.extra) };

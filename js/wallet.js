@@ -425,6 +425,12 @@ function walletTxnRowHTML(t) {
   const typeLabel = { deposit: 'Deposit', withdrawal: 'Withdrawal', earning: 'Earning',
                       refund: 'Refund', referral_reward: 'Referral Reward' }[t.type] || t.type;
 
+  const statusClass = {
+    pending: 'pending',
+    completed: 'paid',
+    failed: 'rejected'
+  }[t.status] || 'pending';
+
   return `
 <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
   <div style="width:38px;height:38px;border-radius:50%;background:${bgColor};display:flex;align-items:center;justify-content:center;flex-shrink:0">
@@ -437,7 +443,7 @@ function walletTxnRowHTML(t) {
   </div>
   <div style="text-align:right;flex-shrink:0">
     <div style="font-weight:700;color:${color}">${sign} GHS ${(t.amount||0).toFixed(2)}</div>
-    <span class="status-badge status-${t.status}" style="font-size:.62rem">${t.status}</span>
+    <span class="status-badge status-${statusClass}" style="font-size:.62rem">${t.status || 'pending'}</span>
   </div>
 </div>`;
 }
@@ -526,6 +532,14 @@ async function renderAdminTransactions(containerId) {
 
   c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div>';
 
+  // Load all users to resolve names and emails
+  if (!App.allUsers || !App.allUsers.length) {
+    try {
+      const uRes = await apiGet('users', 'limit=500');
+      App.allUsers = uRes?.data || uRes || [];
+    } catch(e) {}
+  }
+
   const res  = await apiGet('wallet_transactions', 'limit=200&sort=created_at');
   const txns = (res?.data || []).sort((a, b) => new Date(b.created_at||0) - new Date(a.created_at||0));
 
@@ -574,12 +588,27 @@ function adminTxnRowHTML(t) {
   const sign      = isCredit ? '+' : '-';
   const typeLabel = { deposit:'Deposit', withdrawal:'Withdrawal', earning:'Earning',
                       refund:'Refund', referral_reward:'Referral Reward' }[t.type] || t.type;
+
+  // Resolve user info from user_id
+  const user = (App.allUsers || []).find(u => String(u.id) === String(t.user_id)) || {};
+  const userName = user.name || 'Unknown User';
+  const userEmail = user.email || t.user_id || 'Unknown Email';
+
+  const statusClass = {
+    pending: 'pending',
+    completed: 'paid',
+    failed: 'rejected'
+  }[t.status] || 'pending';
+
   return `
 <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)">
   <div style="flex:1;min-width:0">
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
       <span style="font-weight:700;font-size:.875rem">${typeLabel}</span>
-      <span class="status-badge status-${t.status}">${t.status}</span>
+      <span class="status-badge status-${statusClass}">${t.status || 'pending'}</span>
+    </div>
+    <div style="font-size:.78rem;font-weight:600;color:var(--text);margin-top:2px">
+      👤 ${userName} (${userEmail})
     </div>
     <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">${t.note || ''}</div>
     <div style="font-size:.7rem;color:var(--text-muted)">${formatDateTime(t.created_at)} · ${t.network||''} ${t.account_number ? '· '+maskAccount(t.account_number) : ''}</div>
@@ -651,3 +680,19 @@ async function rejectWithdrawal(txnId, userId, amount, balanceBefore) {
   showToast('Withdrawal rejected. Balance refunded to vendor.', 'warning');
   renderAdminDashboard();
 }
+
+window.showDepositModal = showDepositModal;
+window.selectDepositMethod = selectDepositMethod;
+window.setDepositAmount = setDepositAmount;
+window.updateDepositPreview = updateDepositPreview;
+window.submitDeposit = submitDeposit;
+window.showWithdrawalModal = showWithdrawalModal;
+window.selectWithdrawMethod = selectWithdrawMethod;
+window.setWithdrawAmount = setWithdrawAmount;
+window.updateWithdrawPreview = updateWithdrawPreview;
+window.submitWithdrawal = submitWithdrawal;
+window.renderWalletHistory = renderWalletHistory;
+window.renderAdminTransactions = renderAdminTransactions;
+window.filterAdminTxns = filterAdminTxns;
+window.approveWithdrawal = approveWithdrawal;
+window.rejectWithdrawal = rejectWithdrawal;
