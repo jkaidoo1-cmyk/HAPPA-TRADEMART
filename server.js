@@ -327,7 +327,7 @@ const TABLE_COLUMNS = {
   storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'plan_prices', 'created_at', 'updated_at', 'extra']
 };
 
-function prepareRecordForDb(table, record) {
+function prepareRecordForDb(table, record, existingRecord) {
   const out = { ...record };
 
   // Inverse aliasing: map frontend names back to DB column names if DB column is missing
@@ -353,7 +353,7 @@ function prepareRecordForDb(table, record) {
   if (table === 'wallet_transactions') {
     if (out.note && !out.description) out.description = out.note;
     if (out.payment_ref && !out.reference) out.reference = out.payment_ref;
-    out.extra = packWalletTxnMeta(out, out.extra);
+    out.extra = packWalletTxnMeta(out, existingRecord?.extra);
   }
 
   // Ad campaigns: pack new fields into extra JSONB; set safe defaults for legacy NOT NULL columns
@@ -1106,10 +1106,23 @@ app.patch('/api/:table/:id', async (req, res) => {
     return res.json(sf);
   }
 
+  let existingRecord = null;
+  if (supabase) {
+    try {
+      const { data } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+      if (data) existingRecord = serializeRecord(data);
+    } catch (e) {}
+  }
+  if (!existingRecord) {
+    const db = loadDb();
+    const rows = getTable(db, table);
+    existingRecord = rows.find(r => String(r.id) === String(id));
+  }
+
   if (supabase) {
     try {
       const record = serializeRecord(body);
-      const dbRecord = prepareRecordForDb(table, record);
+      const dbRecord = prepareRecordForDb(table, record, existingRecord);
       const { data, error } = await supabase.from(table).update(dbRecord).eq('id', id).select().maybeSingle();
       if (!error && data) return res.json(serializeRecord(data));
     } catch (err) {}
@@ -1119,14 +1132,17 @@ app.patch('/api/:table/:id', async (req, res) => {
   const rows = getTable(db, table);
   const idx = rows.findIndex(record => String(record.id) === String(id));
   if (idx !== -1) {
-    rows[idx] = { ...rows[idx], ...normalizeRecord(table, body), id: String(id) };
+    const record = serializeRecord({ ...rows[idx], ...body, id: String(id) });
+    const dbRecord = prepareRecordForDb(table, record, existingRecord);
+    rows[idx] = { ...rows[idx], ...dbRecord, id: String(id) };
     saveDb(db);
-    return res.json(rows[idx]);
+    return res.json(serializeRecord(rows[idx]));
   } else {
-    const newRec = { id: String(id), ...normalizeRecord(table, body) };
-    rows.push(newRec);
+    const record = serializeRecord({ ...body, id: String(id) });
+    const dbRecord = prepareRecordForDb(table, record);
+    rows.push(dbRecord);
     saveDb(db);
-    return res.json(newRec);
+    return res.json(serializeRecord(dbRecord));
   }
 });
 

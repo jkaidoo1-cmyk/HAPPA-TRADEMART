@@ -818,20 +818,32 @@ app.patch('/api/:table/:id', async (req, res) => {
       return res.json(sf);
     }
     
+    let existingRecord = null;
+    if (!supabase) {
+      dataStore.ensureTable(table);
+      const store = dataStore.getStore();
+      existingRecord = store[table].find(r => String(r.id) === String(id));
+    } else {
+      const { data: dbData } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+      if (dbData) existingRecord = serializeRecord(dbData);
+    }
+
     if (!supabase) {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();
       const idx = store[table].findIndex(r => String(r.id) === String(id));
+      const mergedRecord = serializeRecord({ ...existingRecord, ...body, id: id });
+      const dbRecord = prepareRecordForDb(table, mergedRecord, existingRecord);
       if (idx === -1) {
-        store[table].push(record);
+        store[table].push(dbRecord);
       } else {
-        store[table][idx] = { ...store[table][idx], ...record };
+        store[table][idx] = { ...store[table][idx], ...dbRecord };
       }
       dataStore.saveToFile();
-      return res.json(serializeRecord(idx === -1 ? record : store[table][idx]));
+      return res.json(serializeRecord(idx === -1 ? dbRecord : store[table][idx]));
     }
     
-    const dbRecord = prepareRecordForDb(table, record);
+    const dbRecord = prepareRecordForDb(table, record, existingRecord);
     // Use update instead of upsert to perform partial updates without wiping other columns
     const { data, error } = await supabase.from(table).update(dbRecord).eq('id', id).select().single();
     if (error) return res.status(500).json({ error: error.message });
