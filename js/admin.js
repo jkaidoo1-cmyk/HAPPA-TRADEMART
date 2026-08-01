@@ -1380,7 +1380,7 @@ async function loadAdminRendors() {
   el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
 
   const res     = await apiGet('users', 'limit=200');
-  const allRendors = (res?.data || []).filter(u => u.role === 'rendor');
+  const allRendors = (res?.data || []).filter(u => u.role === 'rendor' && u.status !== 'deleted');
   const pending    = allRendors.filter(u => u.status === 'pending_approval');
   const active     = allRendors.filter(u => u.status === 'active');
 
@@ -1798,7 +1798,7 @@ async function refreshAdminUsersList() {
   if (!list) return;
   list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
   const res = await apiGet('users', 'limit=200');
-  const users = (res?.data || []).filter(u => u.role !== 'admin');
+  const users = (res?.data || []).filter(u => u.role !== 'admin' && u.status !== 'deleted');
   App.allUsers = users;
   list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
 }
@@ -1816,7 +1816,7 @@ async function refreshAdminVendorsFull() {
     apiGet('users',  'limit=200'),
     apiGet('stores', 'limit=200')
   ]);
-  const allUsers  = (usersRes?.data || []).filter(u => u.role !== 'admin');
+  const allUsers  = (usersRes?.data || []).filter(u => u.role !== 'admin' && u.status !== 'deleted');
   const allStores = (storesRes?.data || []).filter(s => s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin'));
   App.allStores = allStores;
   App.allUsers = allUsers;
