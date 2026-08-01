@@ -860,6 +860,28 @@ app.delete('/api/:table/:id', async (req, res) => {
     const table = req.params.table;
     const id = req.params.id;
     
+    if (table === 'users') {
+      if (!supabase) {
+        dataStore.ensureTable('users');
+        const store = dataStore.getStore();
+        const user = store.users.find(r => String(r.id) === String(id));
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        user.status = 'deleted';
+        // Deactivate vendor store if exists
+        dataStore.ensureTable('stores');
+        const userStore = store.stores.find(s => String(s.vendor_id) === String(id));
+        if (userStore) userStore.status = 'inactive';
+        dataStore.saveToFile();
+        return res.status(204).send();
+      } else {
+        const { error } = await supabase.from('users').update({ status: 'deleted' }).eq('id', id);
+        if (error) return res.status(500).json({ error: error.message });
+        try { await supabase.from('stores').update({ status: 'inactive' }).eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('products').update({ status: 'inactive' }).eq('vendor_id', id); } catch (e) {}
+        return res.status(204).send();
+      }
+    }
+
     if (!supabase) {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();

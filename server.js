@@ -1152,28 +1152,45 @@ app.delete('/api/:table/:id', async (req, res) => {
   invalidateApiCache(table); // Clear server GET cache so next read excludes deleted record
   if (table === 'storefronts') invalidateApiCache('stores');
 
+  if (table === 'users') {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('users').update({ status: 'deleted' }).eq('id', id);
+        if (error) throw error;
+        try { await supabase.from('stores').update({ status: 'inactive' }).eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('products').update({ status: 'inactive' }).eq('vendor_id', id); } catch (e) {}
+      } catch (err) {
+        console.error(`[Supabase Delete Exception] table=${table} id=${id}:`, err.message);
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    const db = loadDb();
+    const rows = getTable(db, 'users');
+    const idx = rows.findIndex(r => String(r.id) === String(id));
+    if (idx !== -1) {
+      rows[idx].status = 'deleted';
+      saveDb(db);
+    }
+    const stores = getTable(db, 'stores');
+    const sIdx = stores.findIndex(s => String(s.vendor_id) === String(id));
+    if (sIdx !== -1) {
+      stores[sIdx].status = 'inactive';
+      saveDb(db);
+    }
+    return res.status(204).send();
+  }
+
   if (supabase) {
     try {
-      if (table === 'users') {
-        try { await supabase.from('notifications').delete().eq('user_id', id); } catch (e) {}
-        try { await supabase.from('stores').delete().eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('referrals').delete().eq('referrer_id', id); } catch (e) {}
-        try { await supabase.from('referrals').delete().eq('referred_id', id); } catch (e) {}
-        try { await supabase.from('wallet_transactions').delete().eq('user_id', id); } catch (e) {}
-      }
-      try { await supabase.from(table).delete().eq('id', id); } catch (e) {}
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      if (error) throw error;
     } catch (err) {
       console.error(`[Supabase Delete Exception] table=${table} id=${id}:`, err.message);
+      return res.status(500).json({ error: err.message });
     }
   }
 
   const db = loadDb();
-  if (table === 'users') {
-    if (db.notifications) db.notifications = db.notifications.filter(n => String(n.user_id) !== String(id));
-    if (db.stores) db.stores = db.stores.filter(s => String(s.vendor_id) !== String(id));
-    if (db.referrals) db.referrals = db.referrals.filter(r => String(r.referrer_id) !== String(id) && String(r.referred_id) !== String(id));
-    if (db.wallet_transactions) db.wallet_transactions = db.wallet_transactions.filter(t => String(t.user_id) !== String(id));
-  }
   if (db[table]) {
     db[table] = db[table].filter(record => String(record.id) !== String(id));
   }
