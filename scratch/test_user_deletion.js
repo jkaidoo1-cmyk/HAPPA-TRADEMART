@@ -54,12 +54,44 @@ async function testDeleteUser() {
   if (!createdUserId) throw new Error('User creation failed!');
   console.log('  ✅ User created successfully!\n');
 
-  // 2. Call DELETE /api/users/:id
-  console.log('2. Deleting user account ID:', createdUserId);
+  // 2. Create associated records to test foreign key constraints
+  console.log('2. Creating mock dependencies (store, notification, wallet transaction)...');
+  const storeData = {
+    name: 'Test Store Delete',
+    slug: 'test-store-delete-' + timestamp,
+    vendor_id: createdUserId,
+    status: 'pending_approval'
+  };
+  const storeRes = await apiRequest('POST', '/api/stores', storeData);
+  console.log('  -> Store creation status:', storeRes.status, 'ID:', storeRes.data?.id);
+
+  const notifData = {
+    user_id: createdUserId,
+    type: 'system',
+    title: 'Welcome',
+    message: 'Hello'
+  };
+  const notifRes = await apiRequest('POST', '/api/notifications', notifData);
+  console.log('  -> Notification status:', notifRes.status);
+
+  const txnData = {
+    user_id: createdUserId,
+    type: 'deposit',
+    amount: 100,
+    status: 'completed',
+    payment_method: 'momo',
+    description: 'Initial deposit'
+  };
+  const txnRes = await apiRequest('POST', '/api/wallet_transactions', txnData);
+  console.log('  -> Transaction status:', txnRes.status);
+
+  // 3. Call DELETE /api/users/:id
+  console.log('\n3. Deleting user account ID:', createdUserId);
   const delRes = await apiRequest('DELETE', `/api/users/${createdUserId}`);
   console.log('  -> DELETE Response Status:', delRes.status);
+  console.log('  -> DELETE Response Data:', delRes.data || delRes.raw);
   if (delRes.status !== 204 && delRes.status !== 200) {
-    throw new Error(`DELETE endpoint returned status ${delRes.status}`);
+    throw new Error(`DELETE endpoint returned status ${delRes.status}: ${JSON.stringify(delRes.data || delRes.raw)}`);
   }
   console.log('  ✅ DELETE request returned HTTP 204/200!\n');
 

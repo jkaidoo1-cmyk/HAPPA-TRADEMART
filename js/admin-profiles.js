@@ -1707,3 +1707,8 @@ window._apApproveStorefront = async function(storeId, storeName) {
   showToast(`Storefront for "${storeName}" approved & live ✅`, 'success');
   if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
 };
+
+window._apDeleteUser = _apDeleteUser;
+window._apResetUserPassword = _apResetUserPassword;
+window._apChangeUserRole = _apChangeUserRole;
+window._apMarkStorePaid = _apMarkStorePaid;
