@@ -3032,7 +3032,7 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-group">
               <label class="form-label">Slide Interval (seconds) *</label>
-              <input class="form-control" type="number" id="ad-camp-interval" min="2" max="30" value="${intervalVal}" required>
+              <input class="form-control" type="number" id="ad-camp-interval" min="1" max="120" value="${intervalVal}" onfocus="this.select()" required>
             </div>
             <div class="form-group">
               <label class="form-label">Show Store Name Badge</label>
@@ -3074,7 +3074,7 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
                     </label>
                     <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
                       <span style="font-size:.72rem;color:var(--text-muted)">Daily Budget:</span>
-                      <input type="number" class="form-control ad-store-budget" data-store-id="${s.id}" min="5" max="1440" value="${budgetMins}" style="width:75px;padding:2px 6px;font-size:.78rem">
+                      <input type="number" class="form-control ad-store-budget" data-store-id="${s.id}" min="1" max="1440" value="${budgetMins}" onfocus="this.select()" style="width:75px;padding:2px 6px;font-size:.78rem">
                       <span style="font-size:.72rem;color:var(--text-muted)">mins</span>
                     </div>
                   </div>`;
@@ -3105,7 +3105,10 @@ window.saveAdCampaign = async function(e, campaignId = null) {
   }
 
   const name = document.getElementById('ad-camp-name')?.value.trim();
-  const intervalVal = parseInt(document.getElementById('ad-camp-interval')?.value || '3', 10);
+  let intervalVal = parseInt(document.getElementById('ad-camp-interval')?.value || '3', 10);
+  if (isNaN(intervalVal) || intervalVal < 1) intervalVal = 3;
+  if (intervalVal > 120) intervalVal = 120;
+
   const showStoreName = document.getElementById('ad-camp-storename')?.value === 'true';
 
   if (!name) { showToast('Please enter a campaign name', 'warning'); return; }
@@ -3125,7 +3128,10 @@ window.saveAdCampaign = async function(e, campaignId = null) {
       const sid = chk.dataset.storeId;
       selectedStoreIds.push(sid);
       const budgetInput = document.querySelector(`.ad-store-budget[data-store-id="${sid}"]`);
-      storeBudgets[sid] = parseInt(budgetInput?.value || '30', 10);
+      let bVal = parseInt(budgetInput?.value || '30', 10);
+      if (isNaN(bVal) || bVal < 1) bVal = 30;
+      if (bVal > 1440) bVal = 1440;
+      storeBudgets[sid] = bVal;
     }
   });
 

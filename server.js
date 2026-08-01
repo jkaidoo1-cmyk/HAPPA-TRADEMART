@@ -675,6 +675,7 @@ app.get('/api/:table/:id', async (req, res) => {
 app.post('/api/:table', async (req, res) => {
   const table = req.params.table;
   const body = req.body || {};
+  invalidateApiCache(table); // Clear server GET cache so next read reflects new record
 
   if (table === 'storefronts') {
     const rawStoreId = body.store_id || body.id || '';
@@ -794,6 +795,7 @@ app.put('/api/:table/:id', async (req, res) => {
   const table = req.params.table;
   const id = req.params.id;
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
+  invalidateApiCache(table); // Clear server GET cache so next read reflects update
 
   if (table === 'storefronts') {
     const cleanId = String(id).replace(/^sft-/, '');
@@ -924,6 +926,7 @@ app.patch('/api/:table/:id', async (req, res) => {
   const table = req.params.table;
   const id = req.params.id;
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
+  invalidateApiCache(table); // Clear server GET cache so next read reflects patch
 
   // Hash password if being updated
   if (table === 'users' && body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
@@ -1062,6 +1065,7 @@ app.patch('/api/:table/:id', async (req, res) => {
 app.delete('/api/:table/:id', async (req, res) => {
   const table = req.params.table;
   const id = req.params.id;
+  invalidateApiCache(table); // Clear server GET cache so next read excludes deleted record
 
   if (supabase) {
     try {
