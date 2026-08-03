@@ -41,3 +41,37 @@ test('product insert candidates fall back to a minimal payload when the schema i
   assert.equal(candidates[1].images[0], 'img1');
   assert.equal(candidates[1].unknown_field, undefined);
 });
+
+test('wallet transactions preserve ledger metadata without leaking store-only aliases', () => {
+  const prepared = api.prepareRecordForDb('wallet_transactions', {
+    id: 'txn-1',
+    user_id: 'u-1',
+    type: 'withdrawal',
+    amount: 100,
+    balance_before: 450,
+    balance_after: 350,
+    payment_method: 'mobile_money',
+    payment_ref: 'WD-123',
+    status: 'pending',
+    note: 'Withdrawal pending review',
+    network: 'MTN Mobile Money',
+    account_number: '0241234567',
+    reviewed_by: 'admin-1'
+  });
+
+  const serialized = api.serializeRecord(prepared);
+
+  assert.equal(serialized.user_id, 'u-1');
+  assert.equal(serialized.type, 'withdrawal');
+  assert.equal(serialized.amount, 100);
+  assert.equal(serialized.balance_before, 450);
+  assert.equal(serialized.balance_after, 350);
+  assert.equal(serialized.payment_method, 'mobile_money');
+  assert.equal(serialized.status, 'pending');
+  assert.equal(serialized.note, 'Withdrawal pending review');
+  assert.equal(serialized.network, 'MTN Mobile Money');
+  assert.equal(serialized.account_number, '0241234567');
+  assert.equal(serialized.reviewed_by, 'admin-1');
+  assert.equal(serialized.payment_ref, 'WD-123');
+  assert.equal(serialized.about_us, undefined);
+});

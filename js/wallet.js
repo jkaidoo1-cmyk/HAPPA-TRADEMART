@@ -417,13 +417,15 @@ function walletTxnRowHTML(t) {
   const isCredit = ['deposit', 'earning', 'refund', 'referral_reward'].includes(t.type);
   const icon = {
     deposit: 'fas fa-arrow-down', withdrawal: 'fas fa-arrow-up',
-    earning: 'fas fa-coins', refund: 'fas fa-undo', referral_reward: 'fas fa-gift'
+    earning: 'fas fa-coins', refund: 'fas fa-undo', referral_reward: 'fas fa-gift',
+    order_payment: 'fas fa-shopping-cart'
   }[t.type] || 'fas fa-exchange-alt';
   const color     = isCredit ? 'var(--success)' : 'var(--danger)';
   const bgColor   = isCredit ? '#d1fae5' : '#fee2e2';
   const sign      = isCredit ? '+' : '-';
   const typeLabel = { deposit: 'Deposit', withdrawal: 'Withdrawal', earning: 'Earning',
-                      refund: 'Refund', referral_reward: 'Referral Reward' }[t.type] || t.type;
+                      refund: 'Refund', referral_reward: 'Referral Reward',
+                      order_payment: 'Order Payment' }[t.type] || t.type;
 
   const statusClass = {
     pending: 'pending',
@@ -587,7 +589,8 @@ function adminTxnRowHTML(t) {
   const color     = isCredit ? 'var(--success)' : 'var(--danger)';
   const sign      = isCredit ? '+' : '-';
   const typeLabel = { deposit:'Deposit', withdrawal:'Withdrawal', earning:'Earning',
-                      refund:'Refund', referral_reward:'Referral Reward' }[t.type] || t.type;
+                      refund:'Refund', referral_reward:'Referral Reward',
+                      order_payment:'Order Payment' }[t.type] || t.type;
 
   // Resolve user info from user_id
   const user = (App.allUsers || []).find(u => String(u.id) === String(t.user_id)) || {};

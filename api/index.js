@@ -154,6 +154,23 @@ function unpackPackageMeta(record) {
   return out;
 }
 
+function looksLikeStoreRecord(out) {
+  return !!(out && (
+    'slug' in out || 'logo_url' in out || 'banner_url' in out ||
+    'store_price' in out || 'storefront_status' in out ||
+    'business_hours' in out || 'plan_prices' in out ||
+    'subscription_plan' in out
+  ));
+}
+
+function looksLikeProductRecord(out) {
+  return !!(out && (
+    'category' in out || 'stock_qty' in out || 'is_available' in out ||
+    'weight_kg' in out || 'commission_pct' in out || 'sell_count' in out ||
+    'total_sold' in out
+  ));
+}
+
 function serializeRecord(record) {
   let out = { ...record };
 
@@ -179,7 +196,7 @@ function serializeRecord(record) {
 
   // ── Field aliasing: DB name → frontend expected name ──────────
   // Products: total_sold → sold_count (frontend uses sold_count everywhere)
-  if ('total_sold' in out && !('sold_count' in out)) {
+  if (looksLikeProductRecord(out) && 'total_sold' in out && !('sold_count' in out)) {
     out.sold_count = out.total_sold;
   }
   // Users: avatar_url → avatar
@@ -187,19 +204,19 @@ function serializeRecord(record) {
     out.avatar = out.avatar_url;
   }
   // Stores: description → about_us (used by store views)
-  if ('description' in out && !('about_us' in out)) {
+  if (looksLikeStoreRecord(out) && 'description' in out && !('about_us' in out)) {
     out.about_us = out.description;
   }
   // Stores: return_policy → shipping_policy fallback
-  if ('return_policy' in out && !('shipping_policy' in out)) {
+  if (looksLikeStoreRecord(out) && 'return_policy' in out && !('shipping_policy' in out)) {
     out.shipping_policy = out.return_policy;
   }
   // Stores: review_count → followers fallback for display
-  if ('review_count' in out && !('followers' in out)) {
+  if (looksLikeStoreRecord(out) && 'review_count' in out && !('followers' in out)) {
     out.followers = out.review_count || 0;
   }
   // Products: review_count → views fallback
-  if ('review_count' in out && !('views' in out)) {
+  if (looksLikeProductRecord(out) && 'review_count' in out && !('views' in out)) {
     out.views = (out.review_count || 0) * 10;
   }
   // Ad campaigns: title → name fallback (legacy Supabase column is 'title')

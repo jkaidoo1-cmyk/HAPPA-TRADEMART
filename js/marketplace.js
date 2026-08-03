@@ -3157,6 +3157,13 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
   const orderBtn = event?.target?.closest('button');
   if (orderBtn) orderBtn.disabled = true;
 
+  if (!App.allUsers || !App.allUsers.length) {
+    try {
+      const uRes = await apiGet('users', 'limit=500');
+      App.allUsers = uRes?.data || uRes || [];
+    } catch (e) {}
+  }
+
   const name = document.getElementById('sf-ch-name')?.value.trim();
   const phone = document.getElementById('sf-ch-phone')?.value.trim();
   const address = document.getElementById('sf-ch-address')?.value.trim();
@@ -3183,9 +3190,25 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
       if (orderBtn) orderBtn.disabled = false;
       return;
     }
-    user.wallet_balance = (user.wallet_balance || 0) - totalAmount;
+    const balBefore = Number(user.wallet_balance || 0);
+    const balAfter  = balBefore - totalAmount;
+    user.wallet_balance = balAfter;
     localStorage.setItem('happa_session', JSON.stringify(user));
-    await apiPatch('users', user.id, { wallet_balance: user.wallet_balance });
+    await apiPatch('users', user.id, { wallet_balance: balAfter });
+    await apiPost('wallet_transactions', {
+      user_id: user.id,
+      type: 'order_payment',
+      amount: totalAmount,
+      balance_before: balBefore,
+      balance_after: balAfter,
+      payment_method: 'wallet',
+      payment_ref: 'SF-ORDER-' + Date.now(),
+      network: 'wallet',
+      account_number: '',
+      status: 'completed',
+      note: `Storefront order payment for ${storeId}`,
+      reviewed_by: ''
+    });
   } else if (payment === 'momo') {
     // Simulate Momo Authorization Prompt
     const num = prompt('Enter your Mobile Money phone number:', phone);
@@ -3204,20 +3227,31 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
   const key = 'happa_store_cart_' + storeId;
   const storeCart = JSON.parse(localStorage.getItem(key) || '[]');
   const pCode = 'PK-' + Math.floor(10000 + Math.random() * 89999);
+  const storeObj = App.allStores.find(st => String(st.id) === String(storeId)) || {};
+  const vendorId = storeObj.vendor_id || 'u-vendor-001';
+  const grossAmt = storeCart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1), 0);
+  const commission = storeCart.reduce((sum, item) => {
+    const pct = parseFloat(item.commission_pct || item.vendor_fee_pct || 8) || 8;
+    return sum + ((parseFloat(item.price) || 0) * (parseInt(item.qty) || 1) * pct / 100);
+  }, 0);
+  const vendorShare = Math.max(0, grossAmt - commission);
+  const storeName = storeObj.name || 'Vendor Storefront';
+  const storefrontSource = `Storefront order from ${storeName}`;
 
   // Post order package record to DB so vendor receives it
   const newPkg = await apiPost('packages', {
     id: 'pkg-' + Date.now(),
     package_code: pCode,
     store_id: storeId,
-    vendor_id: App.allStores.find(st => String(st.id) === String(storeId))?.vendor_id || 'u-vendor-001',
+    vendor_id: vendorId,
     buyer_id: user.id || 'guest',
     buyer_name: name,
     buyer_phone: phone,
     delivery_address: address,
     payment_method: payment === 'wallet' ? 'wallet' : (payment === 'momo' ? 'momo' : 'cod'),
     payment_status: payment === 'cod' ? 'pending' : 'paid',
-    vendor_status: 'pending',
+    vendor_status: 'accepted',
+    admin_status: 'vendor_controlled',
     delivery_status: 'pending',
     total_amount: totalAmount,
     items_count: storeCart.reduce((sum, item) => sum + item.qty, 0),
@@ -3225,10 +3259,59 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
       product_id: item.id,
       name: item.name,
       price: item.price,
-      qty: item.qty
+      qty: item.qty,
+      commission_pct: item.commission_pct || item.vendor_fee_pct || 8
     })),
+    order_source: 'storefront',
+    storefront_id: storeId,
+    storefront_name: storeName,
+    balance_released: payment !== 'cod',
     created_at: new Date().toISOString()
   });
+
+  if (newPkg && payment !== 'cod') {
+    const vendorUser = (App.allUsers || []).find(u => String(u.id) === String(vendorId)) || await apiFetch('users/' + vendorId).catch(() => null);
+    if (vendorUser) {
+      const oldVendorBal = parseFloat(vendorUser.wallet_balance || 0);
+      const newVendorBal = oldVendorBal + vendorShare;
+      await apiPatch('users', vendorId, { wallet_balance: newVendorBal }).catch(() => {});
+      await apiPost('wallet_transactions', {
+        user_id: vendorId,
+        type: 'earning',
+        amount: vendorShare,
+        balance_before: oldVendorBal,
+        balance_after: newVendorBal,
+        payment_method: 'system',
+        payment_ref: `SF-PAYOUT-${Date.now()}`,
+        network: '',
+        account_number: '',
+        status: 'completed',
+        note: `${storefrontSource} — payout ${pCode} (${vendorShare.toFixed(2)} after platform share)`,
+        reviewed_by: ''
+      }).catch(() => {});
+    }
+
+    const adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin') || await apiFetch('users/admin').catch(() => null);
+    if (adminUser) {
+      const oldAdminBal = parseFloat(adminUser.wallet_balance || 0);
+      const newAdminBal = oldAdminBal + commission;
+      await apiPatch('users', adminUser.id, { wallet_balance: newAdminBal }).catch(() => {});
+      await apiPost('wallet_transactions', {
+        user_id: adminUser.id,
+        type: 'earning',
+        amount: commission,
+        balance_before: oldAdminBal,
+        balance_after: newAdminBal,
+        payment_method: 'system',
+        payment_ref: `SF-COMM-${Date.now()}`,
+        network: '',
+        account_number: '',
+        status: 'completed',
+        note: `${storefrontSource} — platform commission ${pCode} (${commission.toFixed(2)})`,
+        reviewed_by: ''
+      }).catch(() => {});
+    }
+  }
 
   if (newPkg) {
     showToast('Order placed successfully! 🎉', 'success');
