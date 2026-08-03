@@ -466,6 +466,16 @@ async function verifySessionUser() {
     
     const foundUser = userList.find(u => String(u.id) === uid);
 
+    if (!foundUser) {
+      console.warn(`[Session Revoked] Account "${uid}" was deleted. Logging out.`);
+      if (typeof stopNotifPolling === 'function') stopNotifPolling();
+      if (typeof stopDashboardSyncPolling === 'function') stopDashboardSyncPolling();
+      logout(true);
+      showToast('Your account has been deleted.', 'warning');
+      try { localStorage.setItem('happa_logout_user_id', uid); } catch(e){}
+      return false;
+    }
+
     if (foundUser) {
       if (foundUser.status === 'deleted' || foundUser.status === 'suspended') {
         console.warn(`[Session Revoked] Account "${uid}" status is ${foundUser.status}. Logging out.`);
