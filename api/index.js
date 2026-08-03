@@ -902,20 +902,78 @@ app.delete('/api/:table/:id', async (req, res) => {
       if (!supabase) {
         dataStore.ensureTable('users');
         const store = dataStore.getStore();
-        const user = store.users.find(r => String(r.id) === String(id));
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        user.status = 'deleted';
-        // Deactivate vendor store if exists
+
+        // Dissociate in local tables
+        dataStore.ensureTable('orders');
+        store.orders.forEach(o => {
+          if (String(o.buyer_id) === String(id)) o.buyer_id = null;
+          if (String(o.vendor_id) === String(id)) o.vendor_id = null;
+        });
+
+        dataStore.ensureTable('packages');
+        store.packages.forEach(p => {
+          if (String(p.buyer_id) === String(id)) p.buyer_id = null;
+          if (String(p.vendor_id) === String(id)) p.vendor_id = null;
+        });
+
+        dataStore.ensureTable('wallet_transactions');
+        store.wallet_transactions.forEach(t => {
+          if (String(t.user_id) === String(id)) t.user_id = null;
+        });
+
+        dataStore.ensureTable('referrals');
+        store.referrals.forEach(r => {
+          if (String(r.referrer_id) === String(id)) r.referrer_id = null;
+          if (String(r.referred_id) === String(id)) r.referred_id = null;
+        });
+
+        dataStore.ensureTable('reviews');
+        store.reviews.forEach(r => {
+          if (String(r.buyer_id) === String(id)) r.buyer_id = null;
+        });
+
+        // Delete dependencies in local tables
+        dataStore.ensureTable('notifications');
+        store.notifications = store.notifications.filter(n => String(n.user_id) !== String(id));
+
+        dataStore.ensureTable('ad_campaigns');
+        store.ad_campaigns = store.ad_campaigns.filter(a => String(a.vendor_id) !== String(id));
+
+        dataStore.ensureTable('services');
+        store.services = store.services.filter(s => String(s.rendor_id) !== String(id));
+
+        dataStore.ensureTable('products');
+        store.products = store.products.filter(p => String(p.vendor_id) !== String(id));
+
         dataStore.ensureTable('stores');
-        const userStore = store.stores.find(s => String(s.vendor_id) === String(id));
-        if (userStore) userStore.status = 'inactive';
+        store.stores = store.stores.filter(s => String(s.vendor_id) !== String(id));
+
+        // Delete user
+        store.users = store.users.filter(r => String(r.id) !== String(id));
+
         dataStore.saveToFile();
         return res.status(204).send();
       } else {
-        const { error } = await supabase.from('users').update({ status: 'deleted' }).eq('id', id);
+        // 1. Dissociate historical records by setting their user reference to NULL
+        try { await supabase.from('orders').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+        try { await supabase.from('orders').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('packages').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+        try { await supabase.from('packages').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('wallet_transactions').update({ user_id: null }).eq('user_id', id); } catch (e) {}
+        try { await supabase.from('referrals').update({ referrer_id: null }).eq('referrer_id', id); } catch (e) {}
+        try { await supabase.from('referrals').update({ referred_id: null }).eq('referred_id', id); } catch (e) {}
+        try { await supabase.from('reviews').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+
+        // 2. Delete temporary/personal dependencies (stores, products, ads, notifications, services)
+        try { await supabase.from('notifications').delete().eq('user_id', id); } catch (e) {}
+        try { await supabase.from('ad_campaigns').delete().eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('services').delete().eq('rendor_id', id); } catch (e) {}
+        try { await supabase.from('products').delete().eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('stores').delete().eq('vendor_id', id); } catch (e) {}
+
+        // 3. Now safely hard-delete the user account
+        const { error } = await supabase.from('users').delete().eq('id', id);
         if (error) return res.status(500).json({ error: error.message });
-        try { await supabase.from('stores').update({ status: 'inactive' }).eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('products').update({ status: 'inactive' }).eq('vendor_id', id); } catch (e) {}
         return res.status(204).send();
       }
     }

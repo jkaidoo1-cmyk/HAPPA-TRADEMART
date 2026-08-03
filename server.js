@@ -1188,28 +1188,62 @@ app.delete('/api/:table/:id', async (req, res) => {
   if (table === 'users') {
     if (supabase) {
       try {
-        const { error } = await supabase.from('users').update({ status: 'deleted' }).eq('id', id);
+        // 1. Dissociate historical records by setting their user reference to NULL
+        try { await supabase.from('orders').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+        try { await supabase.from('orders').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('packages').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+        try { await supabase.from('packages').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('wallet_transactions').update({ user_id: null }).eq('user_id', id); } catch (e) {}
+        try { await supabase.from('referrals').update({ referrer_id: null }).eq('referrer_id', id); } catch (e) {}
+        try { await supabase.from('referrals').update({ referred_id: null }).eq('referred_id', id); } catch (e) {}
+        try { await supabase.from('reviews').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+
+        // 2. Delete temporary/personal dependencies (stores, products, ads, notifications, services)
+        try { await supabase.from('notifications').delete().eq('user_id', id); } catch (e) {}
+        try { await supabase.from('ad_campaigns').delete().eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('services').delete().eq('rendor_id', id); } catch (e) {}
+        try { await supabase.from('products').delete().eq('vendor_id', id); } catch (e) {}
+        try { await supabase.from('stores').delete().eq('vendor_id', id); } catch (e) {}
+
+        // 3. Now safely hard-delete the user account
+        const { error } = await supabase.from('users').delete().eq('id', id);
         if (error) throw error;
-        try { await supabase.from('stores').update({ status: 'inactive' }).eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('products').update({ status: 'inactive' }).eq('vendor_id', id); } catch (e) {}
       } catch (err) {
         console.error(`[Supabase Delete Exception] table=${table} id=${id}:`, err.message);
         return res.status(500).json({ error: err.message });
       }
     }
     const db = loadDb();
-    const rows = getTable(db, 'users');
-    const idx = rows.findIndex(r => String(r.id) === String(id));
-    if (idx !== -1) {
-      rows[idx].status = 'deleted';
-      saveDb(db);
-    }
-    const stores = getTable(db, 'stores');
-    const sIdx = stores.findIndex(s => String(s.vendor_id) === String(id));
-    if (sIdx !== -1) {
-      stores[sIdx].status = 'inactive';
-      saveDb(db);
-    }
+    
+    // Dissociate in local db
+    getTable(db, 'orders').forEach(o => {
+      if (String(o.buyer_id) === String(id)) o.buyer_id = null;
+      if (String(o.vendor_id) === String(id)) o.vendor_id = null;
+    });
+    getTable(db, 'packages').forEach(p => {
+      if (String(p.buyer_id) === String(id)) p.buyer_id = null;
+      if (String(p.vendor_id) === String(id)) p.vendor_id = null;
+    });
+    getTable(db, 'wallet_transactions').forEach(t => {
+      if (String(t.user_id) === String(id)) t.user_id = null;
+    });
+    getTable(db, 'referrals').forEach(r => {
+      if (String(r.referrer_id) === String(id)) r.referrer_id = null;
+      if (String(r.referred_id) === String(id)) r.referred_id = null;
+    });
+    getTable(db, 'reviews').forEach(r => {
+      if (String(r.buyer_id) === String(id)) r.buyer_id = null;
+    });
+
+    // Delete in local db
+    db.notifications = getTable(db, 'notifications').filter(n => String(n.user_id) !== String(id));
+    db.ad_campaigns = getTable(db, 'ad_campaigns').filter(a => String(a.vendor_id) !== String(id));
+    db.services = getTable(db, 'services').filter(s => String(s.rendor_id) !== String(id));
+    db.products = getTable(db, 'products').filter(p => String(p.vendor_id) !== String(id));
+    db.stores = getTable(db, 'stores').filter(s => String(s.vendor_id) !== String(id));
+    db.users = getTable(db, 'users').filter(r => String(r.id) !== String(id));
+
+    saveDb(db);
     return res.status(204).send();
   }
 
