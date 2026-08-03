@@ -1516,6 +1516,18 @@ async function submitAddProduct(e, storeId, vendorId) {
   const store    = App.allStores.find(s => s.id === storeId) || {};
   const tags     = tagsStr ? tagsStr.split(',').map(t=>t.trim()).filter(Boolean) : [];
 
+  if (!images.length) {
+    showToast('Please upload at least one product image before saving.', 'warning');
+    resetBtn();
+    return;
+  }
+
+  if (!name) {
+    showToast('Please enter a product name before saving.', 'warning');
+    resetBtn();
+    return;
+  }
+
   if (isNaN(price) || isNaN(stock)) {
     showToast('Fill in price and stock with valid numbers', 'warning');
     resetBtn();
@@ -2840,6 +2852,22 @@ async function _bapSubmitAll() {
     const allowBuyerNote  = document.getElementById('bap-allow-note-' + i)?.checked || false;
     const buyerNotePrompt = (document.getElementById('bap-note-prompt-' + i)?.value || '').trim() || 'Add a note (e.g. color, size)';
     const images = _bapCollectCardImages(i);
+
+    if (!images.length) {
+      failed++;
+      const card = document.getElementById('bap-card-' + i);
+      if (card) card.classList.add('bap-card-error');
+      const statusDiv = document.getElementById('bap-status-' + i);
+      if (statusDiv) {
+        statusDiv.style.display = 'flex';
+        statusDiv.innerHTML = '<i class="fas fa-times-circle" style="color:var(--danger)"></i>';
+      }
+      showToast(`Item #${i + 1} is missing its cover image. Please re-pick the image.`, 'warning');
+      const pct = Math.round(((done + failed) / active.length) * 100);
+      if (progressBr) progressBr.style.width = pct + '%';
+      if (statusEl)   statusEl.textContent    = `${done + failed} / ${active.length} uploaded...`;
+      continue;
+    }
 
     // Show uploading state on card
     const statusDiv = document.getElementById('bap-status-' + i);
