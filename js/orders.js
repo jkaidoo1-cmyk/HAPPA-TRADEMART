@@ -892,12 +892,17 @@ function packageDetailHTML(rawPkg) {
   const vsLabel = VENDOR_STATUS_LABELS[vs] || { text: vs, css: 'pending' };
   const pkgId = pkg.id;
   const pCode = pkg.package_code;
+  const sourceLabel = pkg.order_source === 'storefront' ? 'Storefront Order' : 'Website Order';
+  const sourceSubtext = pkg.order_source === 'storefront' ? `${pkg.storefront_name || 'Storefront'} — direct vendor fulfillment` : 'Shared marketplace order';
 
   return `
 <div class="package-card">
   <div class="package-header">
     <span class="package-code"><i class="fas fa-cube" style="margin-right:4px"></i>${escHtml(pCode)}</span>
     <span class="status-badge status-${vsLabel.css}" style="font-size:.72rem">${vsLabel.text}</span>
+  </div>
+  <div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#f8fafc;border:1px solid var(--border);font-size:.72rem;color:var(--text-muted)">
+    <strong style="color:var(--primary)">${sourceLabel}</strong> · ${escHtml(sourceSubtext)}
   </div>
   <div class="package-body">
 

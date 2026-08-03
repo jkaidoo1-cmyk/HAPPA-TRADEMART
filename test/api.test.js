@@ -42,6 +42,47 @@ test('product insert candidates fall back to a minimal payload when the schema i
   assert.equal(candidates[1].unknown_field, undefined);
 });
 
+test('storefront packages preserve source and delivery metadata for vendor processing', () => {
+  const prepared = api.prepareRecordForDb('packages', {
+    id: 'pkg-1',
+    package_code: 'PK-100',
+    store_id: 'store-1',
+    vendor_id: 'vendor-1',
+    buyer_id: 'buyer-1',
+    buyer_name: 'Jane Doe',
+    buyer_phone: '0241234567',
+    delivery_name: 'Jane Doe',
+    delivery_phone: '0241234567',
+    delivery_address: 'Home 2, East Legon',
+    delivery_location: 'Accra',
+    order_source: 'storefront',
+    storefront_id: 'store-1',
+    storefront_name: 'Jane Boutique',
+    total_amount: 125,
+    platform_fee: 1.25,
+    vendor_status: 'accepted',
+    admin_status: 'vendor_controlled',
+    balance_released: true
+  });
+
+  const serialized = api.serializeRecord(prepared);
+
+  assert.equal(serialized.order_source, 'storefront');
+  assert.equal(serialized.storefront_id, 'store-1');
+  assert.equal(serialized.storefront_name, 'Jane Boutique');
+  assert.equal(serialized.buyer_name, 'Jane Doe');
+  assert.equal(serialized.buyer_phone, '0241234567');
+  assert.equal(serialized.delivery_name, 'Jane Doe');
+  assert.equal(serialized.delivery_phone, '0241234567');
+  assert.equal(serialized.delivery_address, 'Home 2, East Legon');
+  assert.equal(serialized.delivery_location, 'Accra');
+  assert.equal(serialized.total_amount, 125);
+  assert.equal(serialized.platform_fee, 1.25);
+  assert.equal(serialized.vendor_status, 'accepted');
+  assert.equal(serialized.admin_status, 'vendor_controlled');
+  assert.equal(serialized.balance_released, true);
+});
+
 test('wallet transactions preserve ledger metadata without leaking store-only aliases', () => {
   const prepared = api.prepareRecordForDb('wallet_transactions', {
     id: 'txn-1',

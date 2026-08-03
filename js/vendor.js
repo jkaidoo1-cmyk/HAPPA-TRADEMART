@@ -1057,10 +1057,11 @@ function vendorProductRowHTML(p) {
 }
 
 function packageRowHTML(pkg) {
+  const sourceLabel = pkg.order_source === 'storefront' ? 'Storefront Order' : 'Website Order';
   return `
 <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
   <code style="background:var(--secondary);color:var(--accent);padding:3px 7px;border-radius:4px;font-size:.75rem;font-weight:700;flex-shrink:0">${pkg.package_code||'—'}</code>
-  <div style="flex:1;font-size:.8rem;color:var(--text-muted)">${(pkg.items||[]).length} item(s) · ${pkg.origin_location||''}</div>
+  <div style="flex:1;font-size:.8rem;color:var(--text-muted)">${(pkg.items||[]).length} item(s) · ${pkg.origin_location||''}<br><span style="color:var(--primary);font-weight:700">${sourceLabel}</span></div>
   <span class="status-badge status-${pkg.status}">${pkg.status}</span>
 </div>`;
 }

@@ -219,7 +219,7 @@ async function showWithdrawalModal() {
   <div style="background:linear-gradient(135deg,var(--success),#16a34a);border-radius:var(--radius-md);padding:14px 16px;color:#fff;margin-bottom:18px">
     <div style="font-size:.75rem;opacity:.8;margin-bottom:2px">Available Balance</div>
     <div style="font-size:1.6rem;font-weight:800">GHS ${balance.toFixed(2)}</div>
-    <div style="font-size:.75rem;opacity:.75;margin-top:4px">Balance releases after delivery confirmation</div>
+    <div style="font-size:.75rem;opacity:.75;margin-top:4px">Storefront payouts settle immediately. Marketplace payouts still wait for delivery confirmation.</div>
   </div>
 
   ${pendingWithdrawals.length >= MAX_WITHDRAWAL_PENDING ? `
@@ -423,9 +423,15 @@ function walletTxnRowHTML(t) {
   const color     = isCredit ? 'var(--success)' : 'var(--danger)';
   const bgColor   = isCredit ? '#d1fae5' : '#fee2e2';
   const sign      = isCredit ? '+' : '-';
-  const typeLabel = { deposit: 'Deposit', withdrawal: 'Withdrawal', earning: 'Earning',
-                      refund: 'Refund', referral_reward: 'Referral Reward',
-                      order_payment: 'Order Payment' }[t.type] || t.type;
+  let typeLabel = { deposit: 'Deposit', withdrawal: 'Withdrawal', earning: 'Earning',
+                    refund: 'Refund', referral_reward: 'Referral Reward',
+                    order_payment: 'Order Payment' }[t.type] || t.type;
+  if (t.type === 'earning' && String(t.note || '').toLowerCase().includes('platform fee')) {
+    typeLabel = 'Storefront Platform Fee';
+  }
+  if (t.type === 'earning' && String(t.note || '').toLowerCase().includes('payout')) {
+    typeLabel = 'Storefront Payout';
+  }
 
   const statusClass = {
     pending: 'pending',
@@ -588,9 +594,15 @@ function adminTxnRowHTML(t) {
   const isCredit  = ['deposit','earning','refund','referral_reward'].includes(t.type);
   const color     = isCredit ? 'var(--success)' : 'var(--danger)';
   const sign      = isCredit ? '+' : '-';
-  const typeLabel = { deposit:'Deposit', withdrawal:'Withdrawal', earning:'Earning',
-                      refund:'Refund', referral_reward:'Referral Reward',
-                      order_payment:'Order Payment' }[t.type] || t.type;
+  let typeLabel = { deposit:'Deposit', withdrawal:'Withdrawal', earning:'Earning',
+                    refund:'Refund', referral_reward:'Referral Reward',
+                    order_payment:'Order Payment' }[t.type] || t.type;
+  const noteText = String(t.note || '').toLowerCase();
+  if (t.type === 'earning' && noteText.includes('platform fee')) {
+    typeLabel = 'Storefront Platform Fee';
+  } else if (t.type === 'earning' && noteText.includes('payout')) {
+    typeLabel = 'Storefront Payout';
+  }
 
   // Resolve user info from user_id
   const user = (App.allUsers || []).find(u => String(u.id) === String(t.user_id)) || {};

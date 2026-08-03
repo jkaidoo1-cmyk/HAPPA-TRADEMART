@@ -58,7 +58,9 @@ const PACKAGE_META_FIELDS = [
   'has_review', 'rejected_reason', 'vendor_amount', 'commission_amount', 'gross_amount',
   'origin_location', 'dest_location', 'is_intercity', 'tracking_link', 'tracking_number',
   'delivery_partner', 'pickup_date', 'delivered_date', 'balance_released', 'refunded',
-  'buyer_name', 'buyer_phone', 'payment_status', 'total_amount', 'items_count', 'delivery_status'
+  'buyer_name', 'buyer_phone', 'buyer_email', 'payment_status', 'total_amount', 'items_count',
+  'delivery_status', 'order_source', 'storefront_id', 'storefront_name', 'platform_fee',
+  'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location'
 ];
 
 const ORDER_META_FIELDS = [

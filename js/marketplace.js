@@ -3177,6 +3177,9 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
   }
 
   const user = App.currentUser || {};
+  const platformFee = Number((totalAmount * 0.01).toFixed(2));
+  const buyerPayTotal = Number((totalAmount + platformFee).toFixed(2));
+
   if (payment === 'wallet') {
     if (!user.id) {
       showToast('Please sign in to pay with wallet', 'warning');
@@ -3184,21 +3187,21 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
       if (orderBtn) orderBtn.disabled = false;
       return;
     }
-    if ((user.wallet_balance || 0) < totalAmount) {
+    if ((user.wallet_balance || 0) < buyerPayTotal) {
       showToast('Insufficient wallet balance!', 'danger');
       _placingStorefrontOrder = false;
       if (orderBtn) orderBtn.disabled = false;
       return;
     }
     const balBefore = Number(user.wallet_balance || 0);
-    const balAfter  = balBefore - totalAmount;
+    const balAfter  = balBefore - buyerPayTotal;
     user.wallet_balance = balAfter;
     localStorage.setItem('happa_session', JSON.stringify(user));
     await apiPatch('users', user.id, { wallet_balance: balAfter });
     await apiPost('wallet_transactions', {
       user_id: user.id,
       type: 'order_payment',
-      amount: totalAmount,
+      amount: buyerPayTotal,
       balance_before: balBefore,
       balance_after: balAfter,
       payment_method: 'wallet',
@@ -3206,7 +3209,7 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
       network: 'wallet',
       account_number: '',
       status: 'completed',
-      note: `Storefront order payment for ${storeId}`,
+      note: `Storefront order payment for ${storeId} (includes 1% platform fee)`,
       reviewed_by: ''
     });
   } else if (payment === 'momo') {
@@ -3230,11 +3233,8 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
   const storeObj = App.allStores.find(st => String(st.id) === String(storeId)) || {};
   const vendorId = storeObj.vendor_id || 'u-vendor-001';
   const grossAmt = storeCart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1), 0);
-  const commission = storeCart.reduce((sum, item) => {
-    const pct = parseFloat(item.commission_pct || item.vendor_fee_pct || 8) || 8;
-    return sum + ((parseFloat(item.price) || 0) * (parseInt(item.qty) || 1) * pct / 100);
-  }, 0);
-  const vendorShare = Math.max(0, grossAmt - commission);
+  const vendorShare = Number(grossAmt.toFixed(2));
+  const adminShare = Number(platformFee.toFixed(2));
   const storeName = storeObj.name || 'Vendor Storefront';
   const storefrontSource = `Storefront order from ${storeName}`;
 
@@ -3247,20 +3247,29 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     buyer_id: user.id || 'guest',
     buyer_name: name,
     buyer_phone: phone,
+    buyer_email: user.email || '',
+    delivery_name: name,
+    delivery_phone: phone,
     delivery_address: address,
+    delivery_location: address,
     payment_method: payment === 'wallet' ? 'wallet' : (payment === 'momo' ? 'momo' : 'cod'),
     payment_status: payment === 'cod' ? 'pending' : 'paid',
     vendor_status: 'accepted',
     admin_status: 'vendor_controlled',
     delivery_status: 'pending',
     total_amount: totalAmount,
+    gross_amount: grossAmt,
+    vendor_amount: vendorShare,
+    commission_amount: 0,
+    platform_fee: adminShare,
     items_count: storeCart.reduce((sum, item) => sum + item.qty, 0),
     items: storeCart.map(item => ({
       product_id: item.id,
       name: item.name,
       price: item.price,
       qty: item.qty,
-      commission_pct: item.commission_pct || item.vendor_fee_pct || 8
+      commission_pct: item.commission_pct || item.vendor_fee_pct || 8,
+      buyer_note: item.buyer_note || ''
     })),
     order_source: 'storefront',
     storefront_id: storeId,
@@ -3286,7 +3295,7 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
         network: '',
         account_number: '',
         status: 'completed',
-        note: `${storefrontSource} — payout ${pCode} (${vendorShare.toFixed(2)} after platform share)`,
+        note: `${storefrontSource} — payout ${pCode} (${vendorShare.toFixed(2)} direct payout)`,
         reviewed_by: ''
       }).catch(() => {});
     }
@@ -3294,12 +3303,12 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     const adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin') || await apiFetch('users/admin').catch(() => null);
     if (adminUser) {
       const oldAdminBal = parseFloat(adminUser.wallet_balance || 0);
-      const newAdminBal = oldAdminBal + commission;
+      const newAdminBal = oldAdminBal + adminShare;
       await apiPatch('users', adminUser.id, { wallet_balance: newAdminBal }).catch(() => {});
       await apiPost('wallet_transactions', {
         user_id: adminUser.id,
         type: 'earning',
-        amount: commission,
+        amount: adminShare,
         balance_before: oldAdminBal,
         balance_after: newAdminBal,
         payment_method: 'system',
@@ -3307,7 +3316,7 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
         network: '',
         account_number: '',
         status: 'completed',
-        note: `${storefrontSource} — platform commission ${pCode} (${commission.toFixed(2)})`,
+        note: `${storefrontSource} — platform fee ${pCode} (${adminShare.toFixed(2)})`,
         reviewed_by: ''
       }).catch(() => {});
     }
