@@ -1535,8 +1535,8 @@ async function submitAddProduct(e, storeId, vendorId) {
   }
 
   // Learn from user's input
-  if (name && cat && desc) {
-    localLearnCorrection(name, cat, desc);
+  if (name && cat && desc && typeof window.localLearnCorrection === 'function') {
+    window.localLearnCorrection(name, cat, desc);
   }
 
   let finalPrice = price;
@@ -1737,8 +1737,8 @@ async function saveProductEdit(productId) {
     p.stock_qty = stock; p.price = finalPrice; p.original_price = finalOrig; p.is_flash_sale = flash; p.status = status; p.images = images;
     p.allow_buyer_note = allowBuyerNote; p.buyer_note_prompt = allowBuyerNote ? buyerNotePrompt : '';
   }
-  if (name && category && description) {
-    localLearnCorrection(name, category, description);
+  if (name && category && description && typeof window.localLearnCorrection === 'function') {
+    window.localLearnCorrection(name, category, description);
   }
   closeModalForce();
   showToast('Product updated! ✅', 'success');
