@@ -1378,25 +1378,34 @@ function saveLocalTable(table, data) {
 }
 
 // Drop the images of the oldest products so a new one fits in localStorage.
-// We keep the product records but strip their base64 image arrays to
-// reduce footprint.
+// We keep the product records but strip their base64 image arrays to reduce footprint.
 function trimProductsForQuota(products) {
-  // Newest first (highest created_at); strip from the end (oldest)
-  const sorted = [...products].sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-  let working = sorted.map(p => p);
-  while (working.length) {
+  const working = (products || []).map(p => ({ ...p }));
+  let iterations = 0;
+  while (working.length && iterations < 100) {
+    iterations++;
     try {
-      // Try the current state
       const blob = JSON.stringify(working);
-      // Quick heuristic: if blob > 4MB, drop images from the oldest
-      if (blob.length < 4 * 1024 * 1024) break;
-      // Drop images from the last item
-      const victim = working[working.length - 1];
-      if (victim && Array.isArray(victim.images) && victim.images.length) {
-        victim.images = [];
+      if (blob.length < 3.2 * 1024 * 1024) break;
+      let victim = null;
+      for (let i = working.length - 1; i >= 0; i--) {
+        if (Array.isArray(working[i].images) && working[i].images.length > 0) {
+          victim = working[i];
+          break;
+        }
+      }
+      if (victim) {
+        if (victim.images.length > 1) {
+          victim.images = [victim.images[0]];
+        } else {
+          victim.images = [];
+        }
       } else {
-        // No images to drop; bail to avoid infinite loop
-        break;
+        if (working.length > 1) {
+          working.pop();
+        } else {
+          break;
+        }
       }
     } catch (_) { break; }
   }
@@ -1705,9 +1714,21 @@ async function apiFetch(table, opts = {}) {
 
   const url = API + table;
   try {
-    const resp = await fetch(url, { ...opts, headers });
-    if (!resp.ok) {
-      let errDetail = `HTTP ${resp.status}`;
+    let resp;
+    try {
+      resp = await fetch(url, { ...opts, headers });
+      if (!resp.ok && url.startsWith('/api/') && window.location.port !== '9000') {
+        resp = await fetch('http://localhost:9000' + url, { ...opts, headers });
+      }
+    } catch (netErr) {
+      if (url.startsWith('/api/') && window.location.port !== '9000') {
+        resp = await fetch('http://localhost:9000' + url, { ...opts, headers });
+      } else {
+        throw netErr;
+      }
+    }
+    if (!resp || !resp.ok) {
+      let errDetail = `HTTP ${resp ? resp.status : 'Error'}`;
       try {
         const errJson = await resp.json();
         if (errJson && (errJson.error || errJson.message)) {
