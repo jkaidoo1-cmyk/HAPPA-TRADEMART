@@ -4,7 +4,7 @@
  *            Offline fallback page for navigation requests.
  */
 
-const CACHE_NAME      = 'happa-v28';
+const CACHE_NAME      = 'happa-v29';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install
@@ -77,6 +77,18 @@ self.addEventListener('fetch', event => {
   // Skip non-GET and chrome-extension requests
   if (request.method !== 'GET') return;
   if (url.protocol === 'chrome-extension:') return;
+
+  // ── Storefront / store / store-admin URLs → Never intercept ──
+  // These pages must always open in the real browser, not inside the PWA.
+  const storefrontPaths = ['/storefront/', '/store/', '/store-admin/'];
+  const isStorefrontNav = storefrontPaths.some(p => url.pathname.startsWith(p));
+  // Also detect hash-based storefront routes served through index.html
+  const isStorefrontHash =
+    url.pathname === '/' || url.pathname.endsWith('/index.html') || url.pathname === '';
+  if (isStorefrontNav && request.mode === 'navigate') {
+    // Let the browser handle it natively — don't touch the request
+    return;
+  }
 
   // ── API calls (tables/) → Network-first, no cache ─────────
   if (url.pathname.includes('/tables/') || url.pathname.includes('api/')) {

@@ -112,6 +112,36 @@ window.renderItemsProgressively = renderItemsProgressively;
 
 // ── Initialize ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
+  // ── PWA Storefront Link Interceptor ─────────────────────────────
+  // If the app is installed as a PWA, intercept any <a> click or
+  // programmatic navigation that targets a storefront/store-admin URL
+  // and open it in the default browser instead.
+  const isPWA = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    window.navigator.standalone === true;
+
+  document.addEventListener('click', e => {
+    if (!isPWA()) return;
+    const anchor = e.target.closest('a[href]');
+    if (!anchor) return;
+    const href = anchor.getAttribute('href') || '';
+    const storefrontPatterns = [
+      /^\/storefront\//,
+      /^\/store\//,
+      /^\/store-admin\//,
+      /#storefront\//,
+      /#store-admin\//,
+    ];
+    const isStorefrontLink = storefrontPatterns.some(p => p.test(href));
+    if (isStorefrontLink) {
+      e.preventDefault();
+      const absUrl = new URL(href, window.location.origin).href;
+      window.open(absUrl, '_blank', 'noopener,noreferrer');
+    }
+  }, { capture: true });
+
+
   // Bump this version string whenever seed data changes to force a re-seed
   const SEED_VERSION = 'v5';
   if (localStorage.getItem('happa_seed_v') !== SEED_VERSION) {
@@ -824,6 +854,28 @@ async function runPageInit(pageId) {
 }
 
 function showPage(pageId, entityId = null) {
+  // ── PWA Storefront Guard ─────────────────────────────────────
+  // When running as an installed PWA (standalone/fullscreen), storefront pages
+  // must open in the real browser — never inside the PWA shell.
+  const isPWA = window.matchMedia('(display-mode: standalone)').matches ||
+                window.matchMedia('(display-mode: fullscreen)').matches ||
+                window.navigator.standalone === true;
+  const isStorefrontTarget = pageId === 'storefront' || pageId === 'store-admin';
+  if (isPWA && isStorefrontTarget && entityId) {
+    // Build the storefront URL and open in the browser
+    const sf = (App.allStorefronts || []).find(
+      s => String(s.store_id) === String(entityId) || String(s.id) === String(entityId)
+    );
+    const slug = sf?.url_slug || entityId;
+    const baseOrigin = window.location.origin;
+    const targetPath = pageId === 'store-admin'
+      ? `/store-admin/${slug}`
+      : `/storefront/${slug}`;
+    const targetUrl = baseOrigin + targetPath;
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
   // Block any attempts to navigate away to main marketplace pages when viewing a standalone storefront
   if (document.body.classList.contains('is-storefront-view')) {
     if (pageId !== 'storefront' && pageId !== 'store-admin' && pageId !== 'auth') {
