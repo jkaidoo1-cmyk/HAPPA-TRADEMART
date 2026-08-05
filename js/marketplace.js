@@ -3134,7 +3134,7 @@ window.renderStorefrontCheckout = function(storeId) {
         <div class="card-header"><h3>📋 Summary</h3></div>
         <div class="card-body" style="padding:12px 16px; font-size:0.85rem; display:grid; gap:6px">
           <div style="display:flex; justify-content:space-between"><span>Items Subtotal:</span><span>GHS ${subtotal}</span></div>
-          <div style="display:flex; justify-content:space-between"><span>Delivery Fee:</span><span>GHS ${delivery}</span></div>
+          <!-- <div style="display:flex; justify-content:space-between"><span>Delivery Fee:</span><span>GHS ${delivery}</span></div> -->
           <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1rem; border-top:1px solid var(--border); padding-top:8px">
             <span>Total:</span>
             <span style="color:${primaryColor}">GHS ${total}</span>

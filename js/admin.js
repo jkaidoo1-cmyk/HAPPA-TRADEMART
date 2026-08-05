@@ -199,9 +199,11 @@ async function renderAdminDashboard() {
       <div class="admin-action-btn" onclick="switchTab(null,'admin-wallet');renderAdminTransactions('admin-txn-wrap')">
         <i class="fas fa-money-bill-wave"></i><span>Withdrawals</span>
       </div>
+      <!-- Delivery Rates button commented out
       <div class="admin-action-btn" onclick="showPage('delivery')">
         <i class="fas fa-truck"></i><span>Delivery Rates</span>
       </div>
+      -->
     </div>
 
     ${pendingVendors.length ? `
@@ -543,6 +545,7 @@ async function renderAdminDashboard() {
     <form onsubmit="saveAdminSettings(event)">
 
       <!-- 2. Commission & Fees -->
+      <!-- Delivery Fees section commented out per user request (not charging delivery on site)
       <div class="card" style="margin-bottom:14px">
         <div class="card-header">
           <h3>💰 Delivery Fees</h3>
@@ -560,6 +563,7 @@ async function renderAdminDashboard() {
           </div>
         </div>
       </div>
+      -->
 
       <!-- 3. Wallet & Withdrawals -->
       <div class="card" style="margin-bottom:14px">
