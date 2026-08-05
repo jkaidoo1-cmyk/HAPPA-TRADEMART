@@ -38,7 +38,7 @@
   </script>
 
   <!-- ── PWA Manifest ── -->
-  <link rel="manifest" href="manifest.json?v=2">
+  <link rel="manifest" href="/manifest.json?v=2">
 
   <!-- ── PWA / Mobile meta ── -->
   <meta name="theme-color" content="#e85d04">
@@ -51,10 +51,10 @@
   <meta name="msapplication-TileImage" content="images/icon-192.png">
 
   <!-- ── Icons ── -->
-  <link rel="icon" type="image/png" sizes="192x192" href="images/icon-192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="images/icon-512.png">
-  <link rel="apple-touch-icon" href="images/icon-192.png">
-  <link rel="apple-touch-icon" sizes="512x512" href="images/icon-512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/images/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/images/icon-512.png">
+  <link rel="apple-touch-icon" href="/images/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="/images/icon-512.png">
 
   <!-- ── iOS Splash / Safe-area ── -->
   <meta name="format-detection" content="telephone=no">
@@ -93,7 +93,7 @@
   <!-- Preload critical core fonts & brand logo for zero-latency initial paint -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" href="images/photo_2026-05-30_17-40-49-Photoroom.png" as="image">
+  <link rel="preload" href="/images/photo_2026-05-30_17-40-49-Photoroom.png" as="image">
 
   <!-- Google Fonts (Optimized: Core Fonts only; Custom store fonts are loaded dynamically on-demand) -->
   <link
@@ -104,7 +104,7 @@
   <!-- Chart.js (Deferred) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="/css/style.css">
   <style>
     /* PWA Splash Screen Styles */
     #pwa-splash-screen {
@@ -221,7 +221,7 @@
   <div id="pwa-splash-screen">
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
       <div class="splash-logo-container">
-        <img src="images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA Logo" style="width:128px;height:128px;object-fit:contain;">
+        <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA Logo" style="width:128px;height:128px;object-fit:contain;">
       </div>
       <div class="splash-brand-text">HAPPA<span>MART</span></div>
       <div class="splash-subtitle">Ghana's Premier Marketplace</div>
@@ -316,7 +316,7 @@
      ============================================================ -->
   <nav id="top-nav">
     <div class="nav-logo" onclick="showPage('home')" role="button" aria-label="HAPPA TRADEMART Home">
-      <img src="images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA TRADEMART logo">
+      <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA TRADEMART logo">
       <div class="nav-logo-text">
         <span class="nav-logo-name">HAPPA<span>MART</span></span>
         <span class="nav-logo-sub">Ghana's Marketplace</span>
@@ -798,33 +798,33 @@
   <!-- ============================================================
      SCRIPTS (Deferred to prevent render blocking)
      ============================================================ -->
-  <script src="js/optimistic_ui.js" defer></script>
-  <script src="js/local_autofill.js" defer></script>
-  <script src="js/app.js" defer></script>
-  <script src="js/auth.js" defer></script>
-  <script src="js/orders.js" defer></script>
-  <script src="js/marketplace.js" defer></script>
-  <script src="js/cart.js" defer></script>
-  <script src="js/checkout.js" defer></script>
-  <script src="js/wallet.js" defer></script>
+  <script src="/js/optimistic_ui.js" defer></script>
+  <script src="/js/local_autofill.js" defer></script>
+  <script src="/js/app.js" defer></script>
+  <script src="/js/auth.js" defer></script>
+  <script src="/js/orders.js" defer></script>
+  <script src="/js/marketplace.js" defer></script>
+  <script src="/js/cart.js" defer></script>
+  <script src="/js/checkout.js" defer></script>
+  <script src="/js/wallet.js" defer></script>
 
-  <script src="js/vendor.js" defer></script>
-  <script src="js/rendor.js" defer></script>
-  <script src="js/admin.js" defer></script>
-  <script src="js/admin-settings.js" defer></script>
-  <script src="js/admin-profiles.js" defer></script>
-  <script src="js/buyer.js" defer></script>
-  <script src="js/search.js" defer></script>
-  <script src="js/notifications.js" defer></script>
-  <script src="js/delivery.js" defer></script>
-  <script src="js/utils.js" defer></script>
-  <script src="js/ads.js" defer></script>
+  <script src="/js/vendor.js" defer></script>
+  <script src="/js/rendor.js" defer></script>
+  <script src="/js/admin.js" defer></script>
+  <script src="/js/admin-settings.js" defer></script>
+  <script src="/js/admin-profiles.js" defer></script>
+  <script src="/js/buyer.js" defer></script>
+  <script src="/js/search.js" defer></script>
+  <script src="/js/notifications.js" defer></script>
+  <script src="/js/delivery.js" defer></script>
+  <script src="/js/utils.js" defer></script>
+  <script src="/js/ads.js" defer></script>
 
   <!-- ── PWA Service Worker Registration ── -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js', { scope: './' })
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
           .then(reg => {
             console.log('[PWA] Service Worker registered ✅ scope:', reg.scope);
 
@@ -907,7 +907,7 @@
         'box-shadow:0 8px 32px rgba(0,0,0,.6)'
       ].join(';');
       banner.innerHTML = `
-      <img src="images/photo_2026-05-30_17-40-49-Photoroom.png" style="width:42px;height:42px;object-fit:cover;border-radius:8px;flex-shrink:0" alt="HAPPA">
+      <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" style="width:42px;height:42px;object-fit:cover;border-radius:8px;flex-shrink:0" alt="HAPPA">
       <div style="flex:1;min-width:0">
         <div style="font-weight:800;font-size:.88rem;color:#fff">Install HAPPA TRADEMART</div>
         <div style="font-size:.75rem;color:rgba(255,255,255,.6);margin-top:1px">Add to home screen for a faster experience</div>

@@ -176,14 +176,20 @@ window.addEventListener('DOMContentLoaded', () => {
   loadSession();
   updateNavForUser(); // apply role-based nav immediately after session load
   initCountdown();
-  // Handle storefront links in hash e.g. #storefront/elsbee or ?storefront=elsbee on startup
+  // Handle storefront links in hash e.g. #storefront/elsbee, ?storefront=elsbee,
+  // or path-based URLs e.g. /storefront/<slug> and /store-admin/<slug> on startup
   const startupHash = window.location.hash || '';
   const searchParams = new URLSearchParams(window.location.search);
-  const isStoreAdmin = startupHash.startsWith('#store-admin/');
-  const isStorefrontPage = startupHash.startsWith('#storefront/') || startupHash.includes('storefront');
+  const pathStorefrontMatch = window.location.pathname.match(/^\/storefront\/([^/]+)/);
+  const pathAdminMatch = window.location.pathname.match(/^\/store-admin\/([^/]+)/);
+  const pathSlug = pathStorefrontMatch ? decodeURIComponent(pathStorefrontMatch[1]) :
+                   (pathAdminMatch ? decodeURIComponent(pathAdminMatch[1]) : null);
+  const isStoreAdmin = !!pathAdminMatch || startupHash.startsWith('#store-admin/');
+  const isStorefrontPage = !!pathStorefrontMatch || startupHash.startsWith('#storefront/') || startupHash.includes('storefront');
   const isDirectStorefront = isStorefrontPage || isStoreAdmin || searchParams.has('storefront');
-  
-  const storeSlug = searchParams.get('store') || 
+
+  const storeSlug = pathSlug ||
+                    searchParams.get('store') ||
                     (startupHash.startsWith('#store/') ? startupHash.substring(7) : null) ||
                     (isStoreAdmin ? startupHash.substring(13) : null) ||
                     searchParams.get('storefront') ||
@@ -915,7 +921,7 @@ function showPage(pageId, entityId = null) {
 
   // Reset PWA manifest when leaving store detail, storefront or store-admin page
   if (pageId !== 'store-detail' && pageId !== 'storefront' && pageId !== 'store-admin') {
-    updatePWAManifest('HAPPAMART', 'images/icon-192.png', '#e85d04');
+    updatePWAManifest('HAPPAMART', '/images/icon-192.png', '#e85d04');
   }
 
   // map dashboard route

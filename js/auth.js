@@ -26,7 +26,7 @@ function renderAuth() {
 
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
 
-      <img src="images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA MART Logo" style="width:48px;height:48px;">
+      <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA MART Logo" style="width:48px;height:48px;">
 
       <div class="auth-logo" style="font-size:1.6rem;font-weight:900;color:var(--primary);letter-spacing:-1px">HAPPA<span style="color:var(--secondary)">MART</span></div>
 
@@ -1049,7 +1049,7 @@ function showPendingScreen() {
 
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
 
-      <img src="images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA MART Logo" style="width:48px;height:48px;">
+      <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA MART Logo" style="width:48px;height:48px;">
 
       <div class="auth-logo" style="font-size:1.6rem;font-weight:900;color:var(--primary);letter-spacing:-1px">HAPPA<span style="color:var(--secondary)">MART</span></div>
 

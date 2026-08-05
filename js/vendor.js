@@ -3295,8 +3295,8 @@ window.updateStorefrontPreview = function() {
   };
 
   // Choose placeholder images if none provided
-  const bannerSrc = banner ? banner : 'images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const logoSrc = logo ? logo : 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const bannerSrc = banner ? banner : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const logoSrc = logo ? logo : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
 
   // Base layout styles based on selected theme
   let headerHTML = '';

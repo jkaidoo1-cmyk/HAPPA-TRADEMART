@@ -4,6 +4,8 @@
 
 function addToCart(product, qty = 1, buyerNote = '') {
   if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
+    // Vendors/admins can't shop — explain it instead of silently doing nothing.
+    showToast('Shopping is for buyer accounts — sign in with a buyer account to add items to your cart.', 'info', 4500);
     return false;
   }
   if (!product) return false;
@@ -229,6 +231,7 @@ ${Object.values(storeGroups).map(sg => `
 
 function proceedToCheckout() {
   if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
+    showToast('Shopping is for buyer accounts — sign in with a buyer account to continue.', 'info', 4500);
     return;
   }
   if (!App.cart.length) { showToast('Your cart is empty', 'warning'); return; }

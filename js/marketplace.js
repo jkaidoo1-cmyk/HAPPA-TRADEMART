@@ -871,6 +871,7 @@ async function addToCartFromDetail(productId) {
 
 async function buyNow(productId) {
   if (App.currentUser && ['admin', 'vendor', 'pending_vendor'].includes(App.currentUser.role)) {
+    showToast('Shopping is for buyer accounts — sign in with a buyer account to buy items.', 'info', 4500);
     return;
   }
 
@@ -967,8 +968,8 @@ async function renderStoreDetail(id) {
   const slogan = s.slogan || 'Welcome to our store!';
   const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
   let followed = App.savedStores.includes(id);
-  const bannerSrc = s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const logoSrc = s.logo_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const bannerSrc = s.banner_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const logoSrc = s.logo_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
   const storeName = s.name;
   if (typeof updatePWAManifest === 'function') {
     updatePWAManifest(storeName, logoSrc, s.primary_color || '#e85d04');
@@ -1256,7 +1257,7 @@ async function renderStorefront(id) {
 
     // Update dynamic PWA manifest for storefront branding
     if (typeof updatePWAManifest === 'function') {
-      updatePWAManifest(sf?.name || s.name, sf?.logo_url || s.logo_url || 'images/icon-192.png', sf?.primary_color || s.primary_color || '#e85d04');
+      updatePWAManifest(sf?.name || s.name, sf?.logo_url || s.logo_url || '/images/icon-192.png', sf?.primary_color || s.primary_color || '#e85d04');
     }
 
     const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && p.status !== 'archived');
@@ -1267,8 +1268,8 @@ async function renderStorefront(id) {
     let followed = (App.savedStores || []).includes(realStoreId) || (App.savedStores || []).includes(targetId);
     const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
 
-    const bannerSrc = sf?.banner_url || s.banner_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const logoSrc = sf?.logo_url || s.logo_url || 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+    const bannerSrc = sf?.banner_url || s.banner_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const logoSrc = sf?.logo_url || s.logo_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
   const storeName = sf?.name || s.name;
 
   let themeStyles = '';
@@ -2909,7 +2910,15 @@ window.submitStorefrontReview = async function(form, storeId) {
 
 window.openStorefrontProductModal = async function(productId) {
   let p = App.allProducts.find(prod => String(prod.id) === String(productId));
-  if (!p) return;
+  // Product may not be preloaded (e.g. deep-linked storefront URL) — fetch it so
+  // the modal opens instead of silently doing nothing.
+  if (!p) {
+    try { p = await apiFetch('products/' + productId); } catch(e) {}
+  }
+  if (!p) {
+    showToast('Could not load this product. Please try again.', 'error');
+    return;
+  }
   p = toStorefrontProduct(p);
 
   // Create overlay modal if not exists
@@ -2927,7 +2936,7 @@ window.openStorefrontProductModal = async function(productId) {
 
   const s = App.allStores.find(st => String(st.id) === String(p.store_id)) || {};
   const primaryColor = s.primary_color || '#e85d04';
-  const img = p.images && p.images[0] ? p.images[0] : 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const img = p.images && p.images[0] ? p.images[0] : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
 
   modal.innerHTML = `
     <div style="background:#ffffff; border-radius:18px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.15); overflow:hidden; position:relative; animation: slideUp 0.3s ease;">
@@ -2968,11 +2977,22 @@ window.updateStorefrontModalQty = function(delta) {
   qtyEl.textContent = val;
 };
 
-window.addStorefrontCartItem = function(storeId, productId) {
+window.addStorefrontCartItem = async function(storeId, productId) {
   const qtyEl = document.getElementById('store-modal-qty');
   const qty = qtyEl ? parseInt(qtyEl.textContent) : 1;
   let p = App.allProducts.find(prod => String(prod.id) === String(productId));
-  if (!p) return;
+  // Product may not be preloaded yet (e.g. deep-linked storefront URL) — fetch it.
+  if (!p) {
+    try { p = await apiFetch('products/' + productId); } catch(e) {}
+  }
+  if (!p) {
+    showToast('Could not load this product. Please try again.', 'error');
+    return;
+  }
+  if (p.stock_qty === 0 || p.status === 'sold_out') {
+    showToast('This item is out of stock', 'error');
+    return;
+  }
   p = toStorefrontProduct(p);
 
   const key = 'happa_store_cart_' + storeId;
@@ -3028,7 +3048,7 @@ window.renderStorefrontCart = function(storeId) {
   const listHTML = storeCart.map(item => {
     const total = item.price * item.qty;
     subtotal += total;
-    const img = item.images && item.images[0] ? item.images[0] : 'images/photo_2026-05-30_17-40-49-Photoroom.png';
+    const img = item.images && item.images[0] ? item.images[0] : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
     return `
       <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border)">
         <img src="${img}" style="width:50px; height:50px; border-radius:8px; object-fit:cover; background:#f8f9fa">
