@@ -1354,7 +1354,53 @@ function loadLocalTable(table) {
   return seedLocalTable(table);
 }
 function saveLocalTable(table, data) {
-  localStorage.setItem(localDbKey(table), JSON.stringify(data || []));
+  try {
+    localStorage.setItem(localDbKey(table), JSON.stringify(data || []));
+    return true;
+  } catch (e) {
+    // Most common cause: QuotaExceededError — base64 images are too big.
+    // Try to recover by removing the oldest image-heavy products and retrying.
+    if (table === 'products' && e && e.name === 'QuotaExceededError') {
+      try {
+        const trimmed = trimProductsForQuota(data || []);
+        localStorage.setItem(localDbKey(table), JSON.stringify(trimmed));
+        console.warn('[LocalDB] Quota exceeded — trimmed older product images to fit. Lost data:',
+          (data || []).length - trimmed.length, 'products');
+        return true;
+      } catch (e2) {
+        console.error('[LocalDB] save failed even after trim:', e2);
+        throw new Error('Browser storage is full. Try removing some products or images.');
+      }
+    }
+    console.error('[LocalDB] save failed:', e);
+    throw e;
+  }
+}
+
+// Drop the images of the oldest products so a new one fits in localStorage.
+// We keep the product records but strip their base64 image arrays to
+// reduce footprint.
+function trimProductsForQuota(products) {
+  // Newest first (highest created_at); strip from the end (oldest)
+  const sorted = [...products].sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  let working = sorted.map(p => p);
+  while (working.length) {
+    try {
+      // Try the current state
+      const blob = JSON.stringify(working);
+      // Quick heuristic: if blob > 4MB, drop images from the oldest
+      if (blob.length < 4 * 1024 * 1024) break;
+      // Drop images from the last item
+      const victim = working[working.length - 1];
+      if (victim && Array.isArray(victim.images) && victim.images.length) {
+        victim.images = [];
+      } else {
+        // No images to drop; bail to avoid infinite loop
+        break;
+      }
+    } catch (_) { break; }
+  }
+  return working;
 }
 function seedLocalTable(table) {
   let data = [];
@@ -1678,7 +1724,11 @@ async function apiFetch(table, opts = {}) {
     try {
       const localRes = localTablesApi(table, opts);
       if (localRes) return localRes;
-    } catch(_) {}
+      // local returned null but no error — surface a clear message
+      window.lastApiError = window.lastApiError || 'Server unavailable and local storage returned no result';
+    } catch(localErr) {
+      window.lastApiError = localErr.message || String(localErr);
+    }
     return null;
   }
 }

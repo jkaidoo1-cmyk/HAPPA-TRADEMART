@@ -22,7 +22,7 @@ function saveLearnedData(data) {
 }
 
 // User's objects and logic
-const CATEGORIES = {
+const AUTOFILL_CATEGORIES = {
   'electronics': { label:'Electronics', icon:'fa-solid fa-microchip', keywords:{ 'phone':5,'smartphone':5,'laptop':5,'tablet':5,'headphone':5,'headphones':5,'earbuds':5,'speaker':5,'camera':5,'monitor':5,'tv':5,'television':5,'router':5,'keyboard':5,'mouse':5,'printer':5,'scanner':5,'wireless':3,'bluetooth':3,'usb':3,'hdmi':3,'led':3,'oled':3,'noise cancelling':4,'noise canceling':4,'smart':2,'digital':3,'battery':2,'charger':4,'adapter':3,'cable':2,'gaming':3,'playstation':5,'xbox':5,'nintendo':5,'switch':3,'console':4,'ssd':5,'hdd':5,'ram':5,'processor':5,'gpu':5,'graphics':2,'drone':5,'gopro':5,'dash cam':5,'sony':3,'samsung':3,'apple':3,'lg':3,'dell':4,'hp':3,'lenovo':3,'bose':4,'jbl':4,'logitech':4,'razer':4,'corsair':4,'airpods':5,'macbook':5,'ipad':5,'iphone':5,'galaxy':3,'watch':2,'smartwatch':5,'fitbit':5,'garmin':4,'microphone':5,'webcam':5,'projector':5 }},
   'clothing': { label:'Clothing & Apparel', icon:'fa-solid fa-shirt', keywords:{ 'shirt':5,'t-shirt':5,'tshirt':5,'pants':5,'jeans':5,'dress':5,'jacket':5,'coat':5,'hoodie':5,'sweater':5,'blazer':5,'skirt':5,'shorts':5,'leggings':5,'joggers':5,'underwear':4,'bra':4,'boxers':4,'socks':4,'suit':5,'vest':4,'cardigan':4,'pullover':4,'cotton':2,'denim':3,'silk':2,'wool':2,'linen':2,'polyester':1,'slim fit':2,'regular fit':2,'oversized':2,'fitted':2,'nike':3,'adidas':3,'puma':3,'zara':4,'levis':4,'gucci':4,'prada':4,'ralph lauren':4,'tommy hilfiger':4,'sneakers':4,'running shoes':4,'boots':3,'heels':4,'sandals':3,'loafers':4,'sneaker':4,'shoes':2 }},
   'home-kitchen': { label:'Home & Kitchen', icon:'fa-solid fa-house-chimney', keywords:{ 'sofa':5,'couch':5,'table':3,'chair':3,'bed':4,'mattress':5,'desk':3,'shelf':4,'bookshelf':5,'cabinet':4,'drawer':3,'lamp':5,'chandelier':5,'curtain':4,'rug':4,'carpet':4,'pillow':4,'blanket':4,'towel':3,'bedsheet':4,'duvet':4,'blender':5,'toaster':5,'microwave':5,'oven':4,'fridge':5,'refrigerator':5,'dishwasher':5,'coffee maker':5,'coffeemaker':5,'fryer':5,'air fryer':5,'mixer':4,'kettle':4,'pan':3,'pot':3,'knife':3,'cutlery':4,'cookware':5,'bakeware':5,'instant pot':5,'ikea':5,'kitchenaid':5,'ninja':3,'vacuum':5,'robot vacuum':5,'air purifier':5,'humidifier':5,'dyson':5,'shark':3 }},
@@ -62,7 +62,7 @@ function extractAttrs(name) {
 
 function classifyProduct(name) {
   const l = name.toLowerCase(), scores = {};
-  for (const [ck, cd] of Object.entries(CATEGORIES)) {
+  for (const [ck, cd] of Object.entries(AUTOFILL_CATEGORIES)) {
     let s = 0;
     for (const [kw, w] of Object.entries(cd.keywords)) {
       const rx = new RegExp('\\b' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');

@@ -110,7 +110,7 @@ document.addEventListener('error', (e) => {
 // previewWrapperId : id of the wrapper div shown after selection
 // hiddenId         : id of <input type="hidden"> storing base64 data-URL
 // Thumb element id is derived by replacing 'preview' → 'thumb' in previewWrapperId.
-async function compressImage(file, maxWidth = 1200, quality = 0.8) {
+async function compressImage(file, maxWidth = 900, quality = 0.72) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -129,7 +129,22 @@ async function compressImage(file, maxWidth = 1200, quality = 0.8) {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        let q = quality;
+        let dataUrl = canvas.toDataURL('image/jpeg', q);
+        // Keep payloads under ~700KB so multi-image POSTs fit API/Vercel limits
+        const maxChars = 700 * 1024;
+        while (dataUrl.length > maxChars && q > 0.4) {
+          q = Math.round((q - 0.1) * 10) / 10;
+          dataUrl = canvas.toDataURL('image/jpeg', q);
+        }
+        if (dataUrl.length > maxChars && width > 600) {
+          const scale = 600 / width;
+          canvas.width = 600;
+          canvas.height = Math.round(height * scale);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+        }
+        resolve(dataUrl);
       };
       img.onerror = reject;
     };

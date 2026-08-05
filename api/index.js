@@ -12,7 +12,7 @@ const { createClient } = require('@supabase/supabase-js');
 const dataStore = require('./data-store');
 
 const app = express();
-app.use(express.json({ limit: '8mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 // ── CORS ──────────────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -44,6 +44,12 @@ function generateId() {
 const JSONB_COLS = new Set([
   'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra'
 ]);
+
+// Optional product columns — may be missing on slim Supabase schemas
+const PRODUCT_OPTIONAL_COLS = [
+  'weight_kg', 'allow_buyer_note', 'buyer_note_prompt',
+  'campus', 'tags', 'commission_pct', 'flash_sale_end'
+];
 
 // Ad campaign fields that live in the extra JSONB column (Supabase table has legacy schema)
 const AD_CAMPAIGN_EXTRA_FIELDS = [
@@ -168,9 +174,21 @@ function looksLikeStoreRecord(out) {
 function looksLikeProductRecord(out) {
   return !!(out && (
     'category' in out || 'stock_qty' in out || 'is_available' in out ||
-    'weight_kg' in out || 'commission_pct' in out || 'sell_count' in out ||
+    'weight_kg' in out || 'commission_pct' in out || 'sold_count' in out ||
     'total_sold' in out
   ));
+}
+
+function unpackProductMeta(record) {
+  if (!record || !looksLikeProductRecord(record)) return record;
+  const out = { ...record };
+  const extra = parseExtraObject(out.extra);
+  for (const key of PRODUCT_OPTIONAL_COLS) {
+    if ((out[key] === undefined || out[key] === null || out[key] === '') && key in extra) {
+      out[key] = extra[key];
+    }
+  }
+  return out;
 }
 
 function serializeRecord(record) {
@@ -185,6 +203,7 @@ function serializeRecord(record) {
 
   out = unpackPackageMeta(out);
   out = unpackUserMeta(out);
+  out = unpackProductMeta(out);
 
   if (out.extra && typeof out.extra === 'object') {
     out = unpackWalletTxnMeta(out);
@@ -720,9 +739,8 @@ app.post('/api/:table', async (req, res) => {
       }
     }
 
-    // Supabase path
-    const dbRecord = prepareRecordForDb(table, record);
-    const { data, error } = await supabase.from(table).insert(dbRecord).select().single();
+    // Supabase path — retry with slim candidates when optional columns are missing
+    const { data, error } = await writeWithCandidates(supabase, table, 'insert', record);
     if (error) {
       console.error('[POST] Supabase error:', table, error);
       return res.status(500).json({ error: error.message, backend: 'supabase' });
@@ -753,8 +771,7 @@ app.put('/api/:table/:id', async (req, res) => {
       return res.json(serializeRecord(record));
     }
     
-    const dbRecord = prepareRecordForDb(table, record);
-    const { data, error } = await supabase.from(table).upsert(dbRecord).select().single();
+    const { data, error } = await writeWithCandidates(supabase, table, 'upsert', record);
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
   } catch (err) {
@@ -900,9 +917,8 @@ app.patch('/api/:table/:id', async (req, res) => {
       return res.json(serializeRecord(idx === -1 ? dbRecord : store[table][idx]));
     }
     
-    const dbRecord = prepareRecordForDb(table, record, existingRecord);
-    // Use update instead of upsert to perform partial updates without wiping other columns
-    const { data, error } = await supabase.from(table).update(dbRecord).eq('id', id).select().single();
+    // Use update instead of upsert; retry slim candidates when optional columns are missing
+    const { data, error } = await writeWithCandidates(supabase, table, 'update', record, existingRecord, id);
     if (error) return res.status(500).json({ error: error.message });
     res.json(serializeRecord(data));
   } catch (err) {
@@ -1015,21 +1031,54 @@ app.delete('/api/:table/:id', async (req, res) => {
   }
 });
 
-function getRecordCandidatesForTable(table, record) {
-  const primary = prepareRecordForDb(table, record);
+function getRecordCandidatesForTable(table, record, existingRecord) {
+  const primary = prepareRecordForDb(table, record, existingRecord);
+  if (table !== 'products') return [primary];
+
   const slim = { ...primary };
-  delete slim.weight_kg;
-  delete slim.allow_buyer_note;
-  delete slim.buyer_note_prompt;
-  delete slim.campus;
-  delete slim.tags;
-  delete slim.commission_pct;
-  delete slim.flash_sale_end;
-  return [primary, slim];
+  const extra = { ...parseExtraObject(slim.extra) };
+  for (const key of PRODUCT_OPTIONAL_COLS) {
+    if (key in slim) {
+      extra[key] = slim[key];
+      delete slim[key];
+    }
+  }
+  if (Object.keys(extra).length) slim.extra = extra;
+  // Deduplicate if slim === primary
+  const same = JSON.stringify(primary) === JSON.stringify(slim);
+  return same ? [primary] : [primary, slim];
+}
+
+function isMissingColumnError(error) {
+  if (!error) return false;
+  const msg = `${error.message || ''} ${error.details || ''} ${error.hint || ''} ${error.code || ''}`;
+  return /column|schema cache|Could not find|PGRST204|42703/i.test(msg);
+}
+
+async function writeWithCandidates(supabase, table, mode, record, existingRecord, id) {
+  const candidates = getRecordCandidatesForTable(table, record, existingRecord);
+  let lastError = null;
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    let result;
+    if (mode === 'insert') {
+      result = await supabase.from(table).insert(candidate).select().single();
+    } else if (mode === 'upsert') {
+      result = await supabase.from(table).upsert(candidate).select().single();
+    } else {
+      result = await supabase.from(table).update(candidate).eq('id', id).select().single();
+    }
+    if (!result.error) return { data: result.data, error: null };
+    lastError = result.error;
+    if (!isMissingColumnError(result.error) || i === candidates.length - 1) break;
+    console.warn(`[${mode.toUpperCase()}] ${table} schema mismatch, retrying slim payload:`, result.error.message);
+  }
+  return { data: null, error: lastError };
 }
 
 app.getRecordCandidatesForTable = getRecordCandidatesForTable;
 app.prepareRecordForDb = prepareRecordForDb;
 app.serializeRecord = serializeRecord;
+app.writeWithCandidates = writeWithCandidates;
 
 module.exports = app;
