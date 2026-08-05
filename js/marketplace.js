@@ -1122,57 +1122,68 @@ async function renderStorefront(id) {
   try {
     // Resilient Store & Storefront Lookup: Supports store ID, storefront ID, and URL slug
     const targetId = String(id || '').trim();
-    let s = (App.allStores || []).find(st => 
-      String(st.id) === targetId || 
-      String(st.slug) === targetId || 
+
+    // Fast path: resolve store + storefront from already-loaded caches (no network)
+    let s = (App.allStores || []).find(st =>
+      String(st.id) === targetId ||
+      String(st.slug) === targetId ||
       String(st.slug) === targetId.toLowerCase()
-    );
-
-    if (!s) {
-      const storesRes = await apiGet('stores', 'limit=500').catch(() => null);
-      if (storesRes?.data && storesRes.data.length) App.allStores = storesRes.data;
-      s = (App.allStores || []).find(st => 
-        String(st.id) === targetId || 
-        String(st.slug) === targetId || 
-        String(st.slug) === targetId.toLowerCase()
-      );
-    }
-
-    // Fetch storefront records
-    let sf = null;
-    const sfRes = await apiGet('storefronts', 'limit=500').catch(() => null);
-    const allSF = sfRes?.data || [];
-    if (allSF.length) App.allStorefronts = allSF;
-
-    sf = allSF.find(sfRecord => 
-      String(sfRecord.store_id) === targetId || 
+    ) || null;
+    let sf = (App.allStorefronts || []).find(sfRecord =>
+      String(sfRecord.store_id) === targetId ||
       String(sfRecord.url_slug) === targetId ||
       String(sfRecord.id) === targetId
     ) || null;
 
+    // Fetch everything still missing in ONE parallel batch (stores, storefronts and
+    // products resolve together), so the storefront renders after a single round-trip
+    // instead of three sequential ones.
+    const prodStoreId = s?.id || sf?.store_id || null;
+    const needStores = !s && !sf;
+    const needStorefronts = !sf;
+    const needProducts = !!prodStoreId && !(App.allProducts || []).some(p =>
+      String(p.store_id) === String(prodStoreId) || String(p.store_id) === String(targetId)
+    );
+    const [storesRes, sfRes, prodRes] = await Promise.all([
+      needStores ? apiGet('stores', 'limit=500').catch(() => null) : Promise.resolve(null),
+      needStorefronts ? apiGet('storefronts', 'limit=500').catch(() => null) : Promise.resolve(null),
+      needProducts ? apiGet('products', `search=${encodeURIComponent(prodStoreId)}&limit=100`).catch(() => null) : Promise.resolve(null)
+    ]);
+
+    if (storesRes?.data && storesRes.data.length) App.allStores = storesRes.data;
+    if (sfRes?.data && sfRes.data.length) App.allStorefronts = sfRes.data;
+
+    if (!s) {
+      s = (App.allStores || []).find(st =>
+        String(st.id) === targetId ||
+        String(st.slug) === targetId ||
+        String(st.slug) === targetId.toLowerCase()
+      ) || null;
+    }
+    if (!sf) {
+      sf = (App.allStorefronts || []).find(sfRecord =>
+        String(sfRecord.store_id) === targetId ||
+        String(sfRecord.url_slug) === targetId ||
+        String(sfRecord.id) === targetId
+      ) || null;
+    }
     if (!s && sf) {
-      s = (App.allStores || []).find(st => String(st.id) === String(sf.store_id));
+      s = (App.allStores || []).find(st => String(st.id) === String(sf.store_id)) || null;
     }
 
-    if (!s) { 
-      c.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center"><i class="fas fa-store-slash" style="font-size:3rem;color:var(--text-light);margin-bottom:12px"></i><h3 style="font-size:1.2rem;font-weight:800">Storefront Not Found</h3><p style="color:var(--text-muted);font-size:.85rem;margin-top:4px">The requested storefront URL could not be located or may have been removed.</p></div>'; 
-      return; 
+    if (!s) {
+      c.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center"><i class="fas fa-store-slash" style="font-size:3rem;color:var(--text-light);margin-bottom:12px"></i><h3 style="font-size:1.2rem;font-weight:800">Storefront Not Found</h3><p style="color:var(--text-muted);font-size:.85rem;margin-top:4px">The requested storefront URL could not be located or may have been removed.</p></div>';
+      return;
     }
 
     const realStoreId = s.id;
     App.currentStoreId = realStoreId;
 
-    // Ensure store products are loaded into App.allProducts before rendering
-    const hasStoreProds = (App.allProducts || []).some(p => String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId));
-    if (!hasStoreProds) {
-      try {
-        const prodRes = await apiGet('products', `search=${encodeURIComponent(realStoreId)}&limit=100`);
-        if (prodRes && prodRes.data && prodRes.data.length) {
-          const fetched = prodRes.data;
-          const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(realStoreId));
-          App.allProducts = [...other, ...fetched];
-        }
-      } catch(e) {}
+    // Merge freshly-fetched products into App.allProducts before rendering
+    if (prodRes && prodRes.data && prodRes.data.length) {
+      const fetched = prodRes.data;
+      const other = (App.allProducts || []).filter(p => String(p.store_id) !== String(realStoreId));
+      App.allProducts = [...other, ...fetched];
     }
 
     // Enforce storefront visibility: allow owner, admin, or active/approved stores to view
