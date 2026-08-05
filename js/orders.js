@@ -130,7 +130,8 @@ async function showPackageDetailModal(packageId) {
   const vs = pkg.vendor_status || 'pending';
   const as = pkg.admin_status  || 'pending';
   const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
-  const total = itemSubtotal + (parseFloat(pkg.delivery_fee)||0);
+  // Delivery is free — do not add any stored/legacy delivery fee to the total.
+  const total = itemSubtotal;
 
   showModal(`
 <div class="modal-handle"></div>
@@ -797,7 +798,8 @@ function adminPackageRowHTML(rawPkg, allUsers) {
   const vs  = pkg.vendor_status || 'pending';
   const as  = pkg.admin_status  || 'pending';
   const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
-  const total = itemSubtotal + (parseFloat(pkg.delivery_fee)||0);
+  // Delivery is free — do not add any stored/legacy delivery fee to the total.
+  const total = itemSubtotal;
 
   const vsLabel = VENDOR_STATUS_LABELS[vs] || { text: vs, css: 'pending' };
   const asLabel = ADMIN_STATUS_LABELS[as]  || { text: as, css: 'pending' };

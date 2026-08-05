@@ -1078,6 +1078,13 @@ async function renderStoreDetail(id) {
   }
 }
 
+// True when a real storefront page (not the skeleton) is already on screen —
+// guards against re-render races replacing a live storefront with an error state.
+function storefrontPageIsRendered(c) {
+  return !!c && !!c.querySelector('#storefront-page-container') &&
+    !c.querySelector('#storefront-page-container .skeleton-box');
+}
+
 async function renderStorefront(id) {
   let c = document.getElementById('storefront-content');
   if (!c) {
@@ -1139,7 +1146,9 @@ async function renderStorefront(id) {
     // products resolve together), so the storefront renders after a single round-trip
     // instead of three sequential ones.
     const prodStoreId = s?.id || sf?.store_id || null;
-    const needStores = !s && !sf;
+    // Always try to resolve the store if it's missing — a cached storefront record
+    // alone is not enough (its store may not be in App.allStores yet).
+    const needStores = !s;
     const needStorefronts = !sf;
     const needProducts = !!prodStoreId && !(App.allProducts || []).some(p =>
       String(p.store_id) === String(prodStoreId) || String(p.store_id) === String(targetId)
@@ -1172,6 +1181,26 @@ async function renderStorefront(id) {
     }
 
     if (!s) {
+      // If a storefront is already on screen (background refresh / re-render race),
+      // never replace it with an error state.
+      if (storefrontPageIsRendered(c)) {
+        console.warn('[renderStorefront] Could not re-resolve store "' + targetId + '" — keeping the already-rendered storefront.');
+        return;
+      }
+      // A failed network request is NOT proof the storefront is gone — offer a
+      // retry instead of a false "not available".
+      if (needStores && !storesRes) {
+        c.innerHTML = `
+          <div class="empty-state" style="padding:60px 20px;text-align:center">
+            <i class="fas fa-wifi" style="font-size:3rem;color:var(--text-light);margin-bottom:12px"></i>
+            <h3 style="font-size:1.2rem;font-weight:800">Couldn't Reach Storefront</h3>
+            <p style="color:var(--text-muted);font-size:.85rem;margin-top:4px">There was a connection problem while loading this storefront. Check your connection and try again.</p>
+            <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="apiCache.clear(); renderStorefront('${id}')">
+              <i class="fas fa-redo"></i> Retry Loading
+            </button>
+          </div>`;
+        return;
+      }
       c.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center"><i class="fas fa-store-slash" style="font-size:3rem;color:var(--text-light);margin-bottom:12px"></i><h3 style="font-size:1.2rem;font-weight:800">Storefront Not Found</h3><p style="color:var(--text-muted);font-size:.85rem;margin-top:4px">The requested storefront URL could not be located or may have been removed.</p></div>';
       return;
     }
@@ -1194,6 +1223,11 @@ async function renderStorefront(id) {
     const isLive = (storefrontStatus === 'active' || storefrontStatus === 'approved') && isStoreActive;
 
     if (!isLive && !isOwner && !isAdmin) {
+      // A background re-render that failed to load the storefront record (sf) can
+      // briefly see status 'none' — never nuke an already-live storefront.
+      if (storefrontPageIsRendered(c)) {
+        return;
+      }
       c.innerHTML = `
         <div class="empty-state" style="padding: 60px 20px; text-align: center;">
           <div style="font-size: 3.5rem; margin-bottom: 16px;">🏪</div>
@@ -3090,7 +3124,9 @@ window.renderStorefrontCheckout = function(storeId) {
 
   let subtotal = 0;
   storeCart.forEach(i => subtotal += i.price * i.qty);
-  const delivery = 15;
+  // Delivery is currently free — no delivery fee is charged on the site.
+  // (calcDelivery in app.js also returns rate 0; this mirrors that policy.)
+  const delivery = 0;
   const total = subtotal + delivery;
 
   const user = App.currentUser || {};

@@ -244,14 +244,22 @@ window.addEventListener('DOMContentLoaded', () => {
     }, 150);
   } else if (storeSlug) {
     Promise.all([
-      apiGet('stores', 'limit=200'),
-      apiGet('storefronts', 'limit=200')
+      apiGet('stores', 'limit=500'),
+      apiGet('storefronts', 'limit=500')
     ]).then(([storesRes, sfRes]) => {
       const allStores = storesRes ? storesRes.data || [] : [];
       const allStorefronts = sfRes ? sfRes.data || [] : [];
       App.allStores = allStores;
       App.allStorefronts = allStorefronts;
-      
+
+      // Direct storefront URLs are already rendering above via the startup block —
+      // renderStorefront resolves the slug itself. Here we only warm the caches.
+      // (limit=500 matches renderStorefront's fetch keys, so the apiCache reuses
+      // the very same in-flight requests instead of issuing duplicates.)
+      // NOTE: store-admin URLs are excluded — renderStorefrontAdminPortalPage only
+      // resolves store IDs, so it still needs this slug-to-id resolution below.
+      if (isDirectStorefront && !isStoreAdmin) return;
+
       let found = null;
       if (isStorefrontPage || isStoreAdmin || searchParams.has('storefront')) {
         // Resolve storefront first
@@ -260,7 +268,7 @@ window.addEventListener('DOMContentLoaded', () => {
           found = allStores.find(s => String(s.id) === String(sf.store_id));
         }
       }
-      
+
       // Fallback/Direct Store Lookup
       if (!found) {
         found = allStores.find(s => String(s.slug) === storeSlug || String(s.id) === storeSlug);
@@ -478,7 +486,13 @@ function loadSession() {
 
   if (App.currentUser && App.currentUser.id) {
     App.notifications = (App.notifications || []).filter(notif => String(notif.user_id) === String(App.currentUser.id));
-    verifySessionUser();
+    // On standalone storefront URLs, don't fire the heavy users-list verification
+    // at startup — it competes with the storefront's own fetches for bandwidth.
+    // The 5s session heartbeat re-verifies anyway.
+    const _startupUrl = window.location.hash + window.location.search + window.location.pathname;
+    if (!_startupUrl.includes('storefront') && !_startupUrl.includes('store-admin')) {
+      verifySessionUser();
+    }
   } else {
     App.currentUser = null;
     App.notifications = [];
