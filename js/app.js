@@ -67,11 +67,13 @@ function renderItemsProgressively(containerEl, items, cardHtmlFn, options = {}) 
 
   // 1. Render first item immediately so top left starts instantly
   const firstItem = items[0];
-  const firstRaw = cardHtmlFn(firstItem, 0);
-  const firstHtml = (firstRaw && typeof firstRaw === 'string')
-    ? firstRaw.replace(/^<([a-z0-9]+)/i, '<$1 class="progressive-card" style="animation-delay: 0s;"')
-    : firstRaw;
-  containerEl.innerHTML = firstHtml || '';
+  const firstHtml = (cardHtmlFn(firstItem, 0) || '');
+  containerEl.innerHTML = firstHtml;
+  const firstCard = containerEl.firstElementChild;
+  if (firstCard) {
+    firstCard.classList.add('progressive-card');
+    firstCard.style.animationDelay = '0s';
+  }
 
   // 2. Stream remaining items ONE BY ONE
   if (items.length > 1) {
@@ -87,11 +89,13 @@ function renderItemsProgressively(containerEl, items, cardHtmlFn, options = {}) 
       const item = items[currentIndex];
       const staggerDelay = ((currentIndex % 8) * 0.02).toFixed(3);
       const rawHtml = cardHtmlFn(item, currentIndex);
-      const itemHtml = (rawHtml && typeof rawHtml === 'string')
-        ? rawHtml.replace(/^<([a-z0-9]+)/i, `<$1 class="progressive-card" style="animation-delay: ${staggerDelay}s;"`)
-        : rawHtml;
 
-      containerEl.insertAdjacentHTML('beforeend', itemHtml || '');
+      containerEl.insertAdjacentHTML('beforeend', rawHtml || '');
+      const card = containerEl.lastElementChild;
+      if (card) {
+        card.classList.add('progressive-card');
+        card.style.animationDelay = `${staggerDelay}s`;
+      }
       currentIndex++;
 
       if (currentIndex < items.length) {
@@ -473,6 +477,18 @@ function resolveRouteFromHash(hashStr) {
       }
     });
   }, 4000); // 4 seconds after DOM load to prioritize initial render
+
+  // ── Back-to-top floating button ──
+  const _mainScroll = document.getElementById('main-content');
+  const _backToTop = document.getElementById('back-to-top');
+  if (_mainScroll && _backToTop) {
+    const _bttSync = () => _backToTop.classList.toggle('show', _mainScroll.scrollTop > 600);
+    _mainScroll.addEventListener('scroll', _bttSync, { passive: true });
+    _backToTop.addEventListener('click', () => {
+      _mainScroll.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    _bttSync();
+  }
 
   document.addEventListener('click', closeProfileMenu);
 });
@@ -1005,6 +1021,10 @@ function showPage(pageId, entityId = null) {
       mainContent.style.paddingBottom = '';
     }
   }
+
+  // Back-to-top visibility — hidden on standalone storefront pages
+  const bttEl = document.getElementById('back-to-top');
+  if (bttEl) bttEl.style.display = (pageId === 'storefront' || pageId === 'store-admin') ? 'none' : '';
 
   // update bottom nav
   document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));

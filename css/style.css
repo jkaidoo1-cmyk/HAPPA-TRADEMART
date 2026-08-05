@@ -3046,4 +3046,74 @@ html.is-storefront-root body #main-content {
   overflow-wrap: anywhere;
 }
 
+/* ============================================================
+   SMOOTH FLOW ENHANCEMENTS
+   ============================================================ */
+
+/* Page-to-page transition — re-triggers on every showPage (display toggle) */
+.page.active { animation: pageFade 0.28s ease both; }
+@keyframes pageFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Streamed product cards fade in one by one (works with renderItemsProgressively).
+   The keyframes live inline in index.html (progressiveItemFadeIn); this class is
+   injected onto cards by renderItemsProgressively in js/app.js. */
+
+/* Tactile press feedback */
+.btn:active { transform: scale(0.97); }
+.product-card:active { transform: scale(0.98); }
+.bottom-nav-item:active { transform: scale(0.94); }
+.qty-btn:active, .qty-control button:active { transform: scale(0.88); }
+.back-btn:active, .nav-icon-btn:active { transform: scale(0.92); }
+
+/* Bottom nav animated active indicator */
+.bottom-nav-item::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%;
+  width: 22px; height: 3px;
+  border-radius: 0 0 4px 4px;
+  background: var(--primary);
+  transform: translateX(-50%) scaleX(0);
+  transform-origin: center;
+  transition: transform 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.bottom-nav-item.active::before { transform: translateX(-50%) scaleX(1); }
+
+/* Back-to-top floating button */
+#back-to-top {
+  position: fixed;
+  bottom: calc(var(--bottom-h) + 16px);
+  right: 16px;
+  width: 46px; height: 46px;
+  border-radius: var(--radius-full);
+  background: var(--secondary);
+  color: #fff;
+  border: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.05rem;
+  box-shadow: var(--shadow-lg);
+  z-index: 900;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 0.25s ease, transform 0.25s ease, background var(--transition);
+}
+#back-to-top.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+#back-to-top:hover { background: var(--primary); }
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .page.active, .progressive-card, .toast, #back-to-top,
+  .bottom-nav-item::before, .skeleton-box,
+  .product-card, .btn, .bottom-nav-item, .qty-btn, .qty-control button,
+  .back-btn, .nav-icon-btn {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 

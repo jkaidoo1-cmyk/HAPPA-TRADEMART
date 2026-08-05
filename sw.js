@@ -1,10 +1,11 @@
 /**
  * HAPPA TRADEMART — Service Worker
- * Strategy: Cache-first for static assets, Network-first for API calls,
+ * Strategy: Stale-while-revalidate for static assets (instant + always fresh),
+ *            Network-first for API calls,
  *            Offline fallback page for navigation requests.
  */
 
-const CACHE_NAME      = 'happa-v29';
+const CACHE_NAME      = 'happa-v30';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install
@@ -121,26 +122,38 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // ── Everything else → Cache-first, network fallback ────────
+  // ── Everything else → Stale-while-revalidate ──────────────
+  // Same-origin assets: serve instantly from cache, but refresh in
+  // the background so new deploys (CSS/JS fixes) reach users without
+  // a manual cache bump. CDN assets (fonts/icons) are immutable, so
+  // keep them true cache-first — no pointless background refetches.
   event.respondWith(
     caches.match(request).then(cached => {
-      if (cached) return cached;
+      const isSameOrigin = url.origin === self.location.origin;
 
-      return fetch(request).then(response => {
-        // Only cache successful same-origin or CDN responses
-        if (
-          response.ok &&
-          (url.origin === self.location.origin ||
-            url.hostname.includes('jsdelivr') ||
-            url.hostname.includes('googleapis') ||
-            url.hostname.includes('fontawesome') ||
-            url.hostname.includes('gstatic'))
-        ) {
+      // CDN assets (immutable) → cache-first, network fallback
+      if (!isSameOrigin) {
+        if (cached) return cached;
+        return fetch(request).then(response => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone)).catch(() => {});
+          }
+          return response;
+        }).catch(() => new Response('', { status: 408 }));
+      }
+
+      // Same-origin assets → stale-while-revalidate
+      const networkFetch = fetch(request).then(response => {
+        if (response.ok) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone)).catch(() => {});
         }
         return response;
       }).catch(() => cached || new Response('', { status: 408 }));
+
+      // Serve cached copy instantly if present; otherwise wait for network
+      return cached || networkFetch;
     })
   );
 });
