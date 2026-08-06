@@ -221,7 +221,7 @@ function normalizeRecord(table, record) {
 }
 
 const JSONB_COLS = new Set([
-  'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra', 'pages', 'store_ids', 'store_budgets', 'plan_prices'
+  'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra', 'pages', 'store_ids', 'store_budgets', 'plan_prices', 'messages'
 ]);
 
 const TXN_META_FIELDS = [
@@ -347,6 +347,7 @@ const TABLE_COLUMNS = {
   delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
   referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'reward_amount', 'reward_pct', 'order_id', 'status', 'created_at', 'updated_at', 'extra'],
   wallet_transactions: ['id', 'user_id', 'type', 'amount', 'balance_before', 'balance_after', 'description', 'reference', 'payment_method', 'status', 'note', 'created_at', 'extra'],
+  support_tickets: ['id', 'user_id', 'user_name', 'user_email', 'user_role', 'subject', 'category', 'priority', 'status', 'message', 'messages', 'assigned_to', 'created_at', 'updated_at', 'extra'],
   storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'plan_prices', 'created_at', 'updated_at', 'extra']
 };
 
@@ -760,7 +761,7 @@ app.get('/api/:table/:id', async (req, res) => {
 });
 
 app.post('/api/:table', async (req, res) => {
-  const table = req.params.table;
+  let table = req.params.table;
   const body = req.body || {};
   invalidateApiCache(table); // Clear server GET cache so next read reflects new record
   if (table === 'storefronts') invalidateApiCache('stores');
@@ -847,12 +848,16 @@ app.post('/api/:table', async (req, res) => {
     };
     return res.status(201).json(sf);
   }
+  // Legacy alias: old code posted adjustments to a `transactions` table nobody ever reads.
+  // Route those writes into the visible wallet ledger so every balance change is traceable.
+  if (table === 'transactions') table = 'wallet_transactions';
   if (!body.id) body.id = `${table.slice(0, 3)}-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
   body.id = String(body.id);
   if (!body.created_at) body.created_at = new Date().toISOString();
   body.updated_at = new Date().toISOString();
 
   // If creating a user with a password, hash it with bcrypt server-side
+  if (table === 'users' && body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
   if (table === 'users' && body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
     try {
       body.password_hash = await bcrypt.hash(body.password_hash, 10);
@@ -880,11 +885,20 @@ app.post('/api/:table', async (req, res) => {
 });
 
 app.put('/api/:table/:id', async (req, res) => {
-  const table = req.params.table;
+  let table = req.params.table;
   const id = req.params.id;
+  if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
   invalidateApiCache(table); // Clear server GET cache so next read reflects update
   if (table === 'storefronts') invalidateApiCache('stores');
+
+  // Hash user passwords server-side (admin reset sends password/password_hash)
+  if (table === 'users') {
+    if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+    if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
+      try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
+    }
+  }
 
   if (table === 'storefronts') {
     const cleanId = String(id).replace(/^sft-/, '');
@@ -1012,13 +1026,15 @@ app.put('/api/:table/:id', async (req, res) => {
 });
 
 app.patch('/api/:table/:id', async (req, res) => {
-  const table = req.params.table;
+  let table = req.params.table;
   const id = req.params.id;
+  if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
   invalidateApiCache(table); // Clear server GET cache so next read reflects patch
   if (table === 'storefronts') invalidateApiCache('stores');
 
   // Hash password if being updated
+  if (table === 'users' && body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
   if (table === 'users' && body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
     try {
       body.password_hash = await bcrypt.hash(body.password_hash, 10);

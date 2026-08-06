@@ -2341,15 +2341,17 @@ async function purchaseStore(storeId, price) {
     return;
   }
   
-  // Create wallet transaction record
+  // Create wallet transaction record (positive amount; the 'purchase' type marks it as a debit)
   await apiPost('wallet_transactions', {
-    user_id:    u.id,
-    type:       'purchase',
-    amount:     -price,
-    method:     'wallet',
-    status:     'completed',
-    note:       `Store purchase: ${storeCheck.name || storeId}`,
-    created_at: new Date().toISOString()
+    user_id:        u.id,
+    type:           'purchase',
+    amount:         price,
+    balance_before: currentBalance,
+    balance_after:  newBalance,
+    payment_method: 'wallet',
+    status:         'completed',
+    note:           `Store purchase: ${storeCheck.name || storeId}`,
+    created_at:     new Date().toISOString()
   });
 
   // Update local store cache
@@ -3108,34 +3110,28 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
   const totalCost = monthlyPrice * months;
   const userBal = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
   
-  // Check wallet balance
+  // Check wallet balance — never auto-credit funds. Users must top up via a real deposit.
   if (userBal < totalCost) {
-    const topUpNeeded = totalCost - userBal;
-    if (confirm(`Your wallet balance is GH₵ ${userBal.toFixed(2)}. Add GH₵ ${topUpNeeded.toFixed(2)} to top up and activate for ${months} month(s) now?`)) {
-      const newBal = userBal + topUpNeeded + 50;
-      if (App.currentUser) App.currentUser.wallet_balance = newBal;
-      App.walletBalance = newBal;
-      await apiPatch('users', App.currentUser?.id, { wallet_balance: newBal }).catch(() => {});
-      if (typeof saveSessions === 'function') saveSessions();
-      if (typeof updateWalletUI === 'function') updateWalletUI();
-      showToast('Wallet topped up successfully! Completing plan payment...', 'success');
-    } else {
-      showToast(`Insufficient balance. You need GH₵ ${totalCost.toFixed(2)} to activate this plan for ${months} month(s).`, 'error');
-      return;
-    }
+    showToast(`Insufficient balance. You need GH₵ ${totalCost.toFixed(2)} to activate this plan. Top up your wallet first.`, 'error');
+    return;
   }
   
   if (!confirm(`Pay GH₵ ${totalCost.toFixed(2)} to activate ${months} month(s) of the ${planKey.toUpperCase()} plan?`)) return;
   
   showToast('Processing payment & activating storefront...', 'info');
   
-  // 1. Deduct balance
+  // 1. Deduct balance — record a full ledger entry with before/after balances
+  const balBeforePlan = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
+  const balAfterPlan  = Math.max(0, balBeforePlan - totalCost);
   await apiPost('wallet_transactions', {
-    user_id: App.currentUser.id,
-    type: 'payment',
-    amount: totalCost,
-    description: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s))`,
-    status: 'completed'
+    user_id:        App.currentUser.id,
+    type:           'payment',
+    amount:         totalCost,
+    balance_before: balBeforePlan,
+    balance_after:  balAfterPlan,
+    payment_method: 'wallet',
+    status:         'completed',
+    note:           `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s))`
   }).catch(() => {});
   
   const finalBal = Math.max(0, (parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? totalCost) - totalCost));

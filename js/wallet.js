@@ -414,18 +414,25 @@ async function renderWalletHistory(containerId) {
 }
 
 function walletTxnRowHTML(t) {
-  const isCredit = ['deposit', 'earning', 'refund', 'referral_reward'].includes(t.type);
+  const type = t.type || 'other';
+  // admin_adjustment is signed: positive delta = credit, negative delta = debit
+  const isCredit = ['deposit', 'earning', 'refund', 'referral_reward'].includes(type)
+    || (type === 'admin_adjustment' && (parseFloat(t.amount) || 0) >= 0);
   const icon = {
     deposit: 'fas fa-arrow-down', withdrawal: 'fas fa-arrow-up',
     earning: 'fas fa-coins', refund: 'fas fa-undo', referral_reward: 'fas fa-gift',
-    order_payment: 'fas fa-shopping-cart'
-  }[t.type] || 'fas fa-exchange-alt';
+    order_payment: 'fas fa-shopping-cart', purchase: 'fas fa-store',
+    payment: 'fas fa-credit-card', admin_adjustment: 'fas fa-sliders-h',
+    withdrawal_hold: 'fas fa-pause-circle'
+  }[type] || 'fas fa-exchange-alt';
   const color     = isCredit ? 'var(--success)' : 'var(--danger)';
   const bgColor   = isCredit ? '#d1fae5' : '#fee2e2';
   const sign      = isCredit ? '+' : '-';
   let typeLabel = { deposit: 'Deposit', withdrawal: 'Withdrawal', earning: 'Earning',
                     refund: 'Refund', referral_reward: 'Referral Reward',
-                    order_payment: 'Order Payment' }[t.type] || t.type;
+                    order_payment: 'Order Payment', purchase: 'Store Purchase',
+                    payment: 'Payment', admin_adjustment: 'Admin Adjustment',
+                    withdrawal_hold: 'Withdrawal Hold' }[type] || type;
   if (t.type === 'earning' && String(t.note || '').toLowerCase().includes('platform fee')) {
     typeLabel = 'Storefront Platform Fee';
   }
@@ -450,7 +457,7 @@ function walletTxnRowHTML(t) {
     <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">${formatDateTime(t.created_at)}</div>
   </div>
   <div style="text-align:right;flex-shrink:0">
-    <div style="font-weight:700;color:${color}">${sign} GHS ${(t.amount||0).toFixed(2)}</div>
+    <div style="font-weight:700;color:${color}">${sign} GHS ${Math.abs(parseFloat(t.amount)||0).toFixed(2)}</div>
     <span class="status-badge status-${statusClass}" style="font-size:.62rem">${t.status || 'pending'}</span>
   </div>
 </div>`;
@@ -591,12 +598,16 @@ async function filterAdminTxns(filter, el, containerId) {
 }
 
 function adminTxnRowHTML(t) {
-  const isCredit  = ['deposit','earning','refund','referral_reward'].includes(t.type);
+  const type = t.type || 'other';
+  const isCredit = ['deposit','earning','refund','referral_reward'].includes(type)
+    || (type === 'admin_adjustment' && (parseFloat(t.amount) || 0) >= 0);
   const color     = isCredit ? 'var(--success)' : 'var(--danger)';
   const sign      = isCredit ? '+' : '-';
   let typeLabel = { deposit:'Deposit', withdrawal:'Withdrawal', earning:'Earning',
                     refund:'Refund', referral_reward:'Referral Reward',
-                    order_payment:'Order Payment' }[t.type] || t.type;
+                    order_payment:'Order Payment', purchase:'Store Purchase',
+                    payment:'Payment', admin_adjustment:'Admin Adjustment',
+                    withdrawal_hold:'Withdrawal Hold' }[type] || type;
   const noteText = String(t.note || '').toLowerCase();
   if (t.type === 'earning' && noteText.includes('platform fee')) {
     typeLabel = 'Storefront Platform Fee';
@@ -686,7 +697,7 @@ function adminTxnRowHTML(t) {
     ` : ''}
   </div>
   <div style="text-align:right;flex-shrink:0">
-    <div style="font-weight:700;color:${color}">${sign} GHS ${(t.amount||0).toFixed(2)}</div>
+    <div style="font-weight:700;color:${color}">${sign} GHS ${Math.abs(parseFloat(t.amount)||0).toFixed(2)}</div>
   </div>
 </div>`;
 }

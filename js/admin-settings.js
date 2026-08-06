@@ -17,6 +17,10 @@ const SETTINGS_CONFIG = [
   { key: 'require_phone_verify',       id: 'setting-require-phone-verify',       type: 'checkbox', default: 'true' },
   { key: 'require_id_verify',          id: 'setting-require-id-verify',          type: 'checkbox', default: 'true' },
   { key: 'vendor_auto_approve',        id: 'setting-vendor-auto-approve',        type: 'checkbox', default: 'false'},
+  // Customer Care contact channels (shown on the Help & Support page)
+  { key: 'support_whatsapp',           id: 'setting-support-whatsapp',           type: 'text',     default: '233240000000' },
+  { key: 'support_email',              id: 'setting-support-email',              type: 'text',     default: 'support@happamart.com' },
+  { key: 'support_phone',              id: 'setting-support-phone',              type: 'text',     default: '+233 24 000 0000' },
   // Note: announcement fields are loaded separately (outside the form) via loadAdminSettings
   // but saved via sendAnnouncement() / clearAnnouncement()
 ];

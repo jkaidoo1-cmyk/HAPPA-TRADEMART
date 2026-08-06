@@ -44,7 +44,11 @@ function sanitizePackage(pkg) {
   }
 
   pkg.gross_amount = subtotal;
-  if (!pkg.commission_amount) pkg.commission_amount = parseFloat((subtotal * 0.05).toFixed(2));
+  // Only default the commission when it was never set — a stored 0 (e.g. storefront
+  // orders, which use a separate platform_fee) must NOT be silently replaced with 5%.
+  if (pkg.commission_amount == null || pkg.commission_amount === '') {
+    pkg.commission_amount = parseFloat((subtotal * 0.05).toFixed(2));
+  }
   if (!pkg.vendor_amount) pkg.vendor_amount = parseFloat((subtotal - (pkg.commission_amount || 0)).toFixed(2));
 
   return pkg;
@@ -511,7 +515,11 @@ async function confirmRejectOrder(packageId) {
   const productCost = parseFloat(pkg.gross_amount) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
   const deliveryFee = parseFloat(pkg.delivery_fee) || 0;
   const refundAmt = productCost + deliveryFee;
-  if (pkg.buyer_id) {
+  // Only refund if the buyer actually paid — a COD order was never charged, so
+  // crediting the wallet would mint money out of thin air.
+  const wasPaid = String(pkg.payment_status || '').toLowerCase() !== 'pending'
+    && String(pkg.payment_method || '').toLowerCase() !== 'cod';
+  if (pkg.buyer_id && wasPaid) {
     let buyer = null;
     try {
       buyer = await apiFetch('users/' + pkg.buyer_id);
@@ -520,13 +528,16 @@ async function confirmRejectOrder(packageId) {
     if (!buyer && App.allUsers) buyer = App.allUsers.find(u => String(u.id) === String(pkg.buyer_id));
 
     if (buyer) {
-      const newBal = (parseFloat(buyer.wallet_balance)||0) + refundAmt;
+      const balBefore = parseFloat(buyer.wallet_balance)||0;
+      const newBal = balBefore + refundAmt;
       buyer.wallet_balance = newBal;
       await apiPatch('users', pkg.buyer_id, { wallet_balance: newBal });
       await apiPost('wallet_transactions', {
         user_id:        pkg.buyer_id,
         type:           'refund',
         amount:         refundAmt,
+        balance_before: balBefore,
+        balance_after:  newBal,
         payment_method: 'wallet',
         status:         'completed',
         note:           `Refund for rejected order ${pCode}: ${reason}`
@@ -590,6 +601,26 @@ async function confirmRejectOrder(packageId) {
 // Admin can mark On Delivery any time (override), and Delivered after On Delivery.
 // Marking Delivered auto-releases vendor earnings.
 const _adminStatusInFlight = new Set();
+
+// Ledger-based idempotency guard: returns true if vendor earnings were already
+// released for this package. This prevents double-crediting even if the
+// balance_released flag write failed on a previous delivery attempt.
+async function _packageEarningsReleased(pkg) {
+  const pCode = pkg.package_code || pkg.code || '';
+  if (!pkg.vendor_id || !pCode) return false;
+  try {
+    const res = await apiGet('wallet_transactions', `search=${encodeURIComponent(pkg.vendor_id)}&limit=200`);
+    const txns = res?.data || [];
+    return txns.some(t =>
+      String(t.user_id) === String(pkg.vendor_id) &&
+      t.type === 'earning' &&
+      String(t.note || '').includes(String(pCode))
+    );
+  } catch (e) {
+    return false; // on error, fall back to the status-flag guard only
+  }
+}
+
 async function updateAdminStatus(packageId, newStatus) {
   if (_adminStatusInFlight.has(packageId)) return;
   _adminStatusInFlight.add(packageId);
@@ -652,24 +683,49 @@ async function updateAdminStatus(packageId, newStatus) {
 
   // Auto-release vendor earnings on delivery
   // vendor_amount already has commission deducted at checkout (it's what vendor earns, not order total)
-  if (newStatus === 'delivered') {
+  if (newStatus === 'delivered' && !(await _packageEarningsReleased(pkg))) {
     const vendor = await apiFetch('users/' + pkg.vendor_id);
     if (vendor) {
       // vendor_amount is the net amount after platform commission was deducted at order time
       const earnAmt      = parseFloat(pkg.vendor_amount)      || 0;
       const commAmt      = parseFloat(pkg.commission_amount)  || 0;
-      const newBal       = (parseFloat(vendor.wallet_balance) || 0) + earnAmt;
+      const vendorBalBefore = parseFloat(vendor.wallet_balance) || 0;
+      const newBal       = vendorBalBefore + earnAmt;
       await apiPatch('users', pkg.vendor_id, { wallet_balance: newBal });
       await apiPost('wallet_transactions', {
         user_id:        pkg.vendor_id,
         type:           'earning',
         amount:         earnAmt,
+        balance_before: vendorBalBefore,
+        balance_after:  newBal,
         payment_method: 'system',
         status:         'completed',
         note:           `Earnings released: ${pkg.package_code} — GHS ${earnAmt.toFixed(2)} paid to vendor (commission GHS ${commAmt.toFixed(2)} retained by platform)`
       });
       addNotification(pkg.vendor_id, 'earning', '💰 Payment Released',
         `GHS ${earnAmt.toFixed(2)} from order ${pkg.package_code} has been released to your wallet.`);
+    }
+
+    // Platform commission: credit the admin wallet so the fee actually lands somewhere
+    // traceable (previously it was written off in the ledger note but never recorded).
+    if (commAmt > 0) {
+      let adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin');
+      if (!adminUser) adminUser = await apiFetch('users/admin').catch(() => null);
+      if (adminUser) {
+        const adminBalBefore = parseFloat(adminUser.wallet_balance) || 0;
+        const adminNewBal    = adminBalBefore + commAmt;
+        await apiPatch('users', adminUser.id, { wallet_balance: adminNewBal }).catch(() => {});
+        await apiPost('wallet_transactions', {
+          user_id:        adminUser.id,
+          type:           'earning',
+          amount:         commAmt,
+          balance_before: adminBalBefore,
+          balance_after:  adminNewBal,
+          payment_method: 'system',
+          status:         'completed',
+          note:           `Platform commission: ${pkg.package_code} — GHS ${commAmt.toFixed(2)}`
+        }).catch(() => {});
+      }
     }
 
     // NOTE: store total_sales + total_orders are already incremented at checkout (checkout.js).

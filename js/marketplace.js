@@ -3243,6 +3243,29 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     return;
   }
 
+  const key = 'happa_store_cart_' + storeId;
+  const storeCart = JSON.parse(localStorage.getItem(key) || '[]');
+  if (!storeCart.length) {
+    showToast('Your cart is empty.', 'warning');
+    _placingStorefrontOrder = false;
+    if (orderBtn) orderBtn.disabled = false;
+    return;
+  }
+
+  // Dedup guard: if this exact cart was already submitted (e.g. the user retried
+  // because a slow response made the first attempt look like it failed), refuse to
+  // create a second order — otherwise the vendor gets paid twice for one purchase.
+  const cartHash = storeCart.map(i => `${i.id}x${i.qty}`).sort().join('|');
+  const pendKey  = 'happa_sf_pending_' + storeId;
+  let pending = null;
+  try { pending = JSON.parse(localStorage.getItem(pendKey) || 'null'); } catch (e) {}
+  if (pending && pending.cartHash === cartHash && (Date.now() - (pending.at || 0)) < 10 * 60 * 1000) {
+    showToast(`This order was already placed. Package code: ${pending.pCode || ''}`, 'info', 5000);
+    _placingStorefrontOrder = false;
+    if (orderBtn) orderBtn.disabled = false;
+    return;
+  }
+
   const user = App.currentUser || {};
   const platformFee = Number((totalAmount * 0.01).toFixed(2));
   const buyerPayTotal = Number((totalAmount + platformFee).toFixed(2));
@@ -3294,9 +3317,6 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     await new Promise(r => setTimeout(r, 1200));
   }
 
-  const key = 'happa_store_cart_' + storeId;
-  const storeCart = JSON.parse(localStorage.getItem(key) || '[]');
-  const pCode = 'PK-' + Math.floor(10000 + Math.random() * 89999);
   const storeObj = App.allStores.find(st => String(st.id) === String(storeId)) || {};
   const vendorId = storeObj.vendor_id || 'u-vendor-001';
   const grossAmt = storeCart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1), 0);
@@ -3305,8 +3325,13 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
   const storeName = storeObj.name || 'Vendor Storefront';
   const storefrontSource = `Storefront order from ${storeName}`;
 
+  // Mark the submission as pending ONLY after payment succeeded — a cancelled MoMo
+  // prompt or an insufficient-balance check must never leave a stale block.
+  const pCode = 'PK-' + Math.floor(10000 + Math.random() * 89999);
+  try { localStorage.setItem(pendKey, JSON.stringify({ cartHash, pCode, at: Date.now() })); } catch (e) {}
+
   // Post order package record to DB so vendor receives it
-  const newPkg = await apiPost('packages', {
+  let newPkg = await apiPost('packages', {
     id: 'pkg-' + Date.now(),
     package_code: pCode,
     store_id: storeId,
@@ -3345,13 +3370,34 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     created_at: new Date().toISOString()
   });
 
-  if (newPkg && payment !== 'cod') {
+  // If the response was lost (slow network), verify whether the package actually
+  // landed before declaring failure — this prevents both duplicate orders (double
+  // vendor payouts) and false "already placed" blocks on genuine retries.
+  if (!newPkg) {
+    try {
+      const chkRes = await apiGet('packages', 'search=' + pCode + '&limit=5');
+      const found = (chkRes?.data || []).find(p => String(p.package_code || p.code) === String(pCode));
+      if (found) newPkg = found;
+    } catch (e) {}
+  }
+
+  if (!newPkg) {
+    // Genuinely failed — clear the pending marker so the user can retry.
+    try { localStorage.removeItem(pendKey); } catch (e) {}
+    showToast('Order failed to submit. Please try again.', 'error');
+    _placingStorefrontOrder = false;
+    if (orderBtn) orderBtn.disabled = false;
+    return;
+  }
+
+  if (payment !== 'cod') {
     const vendorUser = (App.allUsers || []).find(u => String(u.id) === String(vendorId)) || await apiFetch('users/' + vendorId).catch(() => null);
     if (vendorUser) {
       const oldVendorBal = parseFloat(vendorUser.wallet_balance || 0);
       const newVendorBal = oldVendorBal + vendorShare;
-      await apiPatch('users', vendorId, { wallet_balance: newVendorBal }).catch(() => {});
-      await apiPost('wallet_transactions', {
+      // Ledger first: never credit a balance without a trace. If the ledger write fails,
+      // skip the credit entirely and flag it for manual reconciliation.
+      const vendorLedger = await apiPost('wallet_transactions', {
         user_id: vendorId,
         type: 'earning',
         amount: vendorShare,
@@ -3364,15 +3410,19 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
         status: 'completed',
         note: `${storefrontSource} — payout ${pCode} (${vendorShare.toFixed(2)} direct payout)`,
         reviewed_by: ''
-      }).catch(() => {});
+      }).catch(() => null);
+      if (vendorLedger) {
+        await apiPatch('users', vendorId, { wallet_balance: newVendorBal }).catch(() => {});
+      } else {
+        console.warn('[Wallet] Vendor payout ledger failed for', pCode, '— balance NOT credited. Reconcile manually.');
+      }
     }
 
     const adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin') || await apiFetch('users/admin').catch(() => null);
-    if (adminUser) {
+    if (adminUser && adminShare > 0) {
       const oldAdminBal = parseFloat(adminUser.wallet_balance || 0);
       const newAdminBal = oldAdminBal + adminShare;
-      await apiPatch('users', adminUser.id, { wallet_balance: newAdminBal }).catch(() => {});
-      await apiPost('wallet_transactions', {
+      const adminLedger = await apiPost('wallet_transactions', {
         user_id: adminUser.id,
         type: 'earning',
         amount: adminShare,
@@ -3385,29 +3435,33 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
         status: 'completed',
         note: `${storefrontSource} — platform fee ${pCode} (${adminShare.toFixed(2)})`,
         reviewed_by: ''
-      }).catch(() => {});
+      }).catch(() => null);
+      if (adminLedger) {
+        await apiPatch('users', adminUser.id, { wallet_balance: newAdminBal }).catch(() => {});
+      } else {
+        console.warn('[Wallet] Platform fee ledger failed for', pCode, '— balance NOT credited. Reconcile manually.');
+      }
     }
   }
 
-  if (newPkg) {
-    showToast('Order placed successfully! 🎉', 'success');
-    localStorage.removeItem(key);
+  showToast('Order placed successfully! 🎉', 'success');
+  localStorage.removeItem(key);
+  try { localStorage.removeItem(pendKey); } catch (e) {}
 
-    // Reset badge
-    window.updateStorefrontCartBadge(storeId, 0);
+  // Reset badge
+  window.updateStorefrontCartBadge(storeId, 0);
 
-    // Show confirmation tab content
-    const contentEl = getStoreTabContentEl();
-    if (contentEl) {
-      contentEl.innerHTML = `
-        <div class="empty-state" style="padding:60px 20px">
-          <i class="fas fa-check-circle" style="font-size:3rem;color:var(--success)"></i>
-          <h3>Thank you for your purchase!</h3>
-          <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Your order has been sent to the store. Package Code: <strong>${pCode}</strong></p>
-          <button class="btn store-theme-btn btn-sm" onclick="switchStorefrontTab('home', '${storeId}')">Back to Store</button>
-        </div>
-      `;
-    }
+  // Show confirmation tab content
+  const contentEl = getStoreTabContentEl();
+  if (contentEl) {
+    contentEl.innerHTML = `
+      <div class="empty-state" style="padding:60px 20px">
+        <i class="fas fa-check-circle" style="font-size:3rem;color:var(--success)"></i>
+        <h3>Thank you for your purchase!</h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Your order has been sent to the store. Package Code: <strong>${pCode}</strong></p>
+        <button class="btn store-theme-btn btn-sm" onclick="switchStorefrontTab('home', '${storeId}')">Back to Store</button>
+      </div>
+    `;
   }
 };
 

@@ -9,6 +9,7 @@
 
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const bcrypt = require('bcryptjs');
 const dataStore = require('./data-store');
 
 const app = express();
@@ -42,7 +43,7 @@ function generateId() {
 // Columns that are stored as JSON arrays/objects in Postgres (jsonb)
 // We serialize them before writing and parse them after reading
 const JSONB_COLS = new Set([
-  'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra'
+  'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra', 'messages'
 ]);
 
 // Optional product columns — may be missing on slim Supabase schemas
@@ -270,6 +271,7 @@ const TABLE_COLUMNS = {
   delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
   referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'status', 'created_at'],
   wallet_transactions: ['id', 'user_id', 'type', 'amount', 'description', 'reference', 'created_at', 'extra'],
+  support_tickets: ['id', 'user_id', 'user_name', 'user_email', 'user_role', 'subject', 'category', 'priority', 'status', 'message', 'messages', 'assigned_to', 'created_at', 'updated_at', 'extra'],
   storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'name', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'business_hours', 'shipping_policy', 'return_policy', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'created_at', 'updated_at']
 };
 
@@ -635,8 +637,16 @@ app.get('/api/:table/:id', async (req, res) => {
 app.post('/api/:table', async (req, res) => {
   try {
     const supabase = getSupabase();
-    const table = req.params.table;
+    let table = req.params.table;
     const body = req.body || {};
+
+    // Hash user passwords server-side (admin reset sends password/password_hash)
+    if (table === 'users') {
+      if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+      if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
+        try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
+      }
+    }
 
     if (table === 'storefronts') {
       const storeId = body.store_id || body.id;
@@ -717,6 +727,9 @@ app.post('/api/:table', async (req, res) => {
       };
       return res.status(201).json(sf);
     }
+    // Legacy alias: old code posted adjustments to a `transactions` table nobody ever reads.
+    // Route those writes into the visible wallet ledger so every balance change is traceable.
+    if (table === 'transactions') table = 'wallet_transactions';
     if (!body.id) body.id = generateId();
     body.id = String(body.id);
     if (!body.created_at) body.created_at = new Date().toISOString();
@@ -757,9 +770,19 @@ app.post('/api/:table', async (req, res) => {
 app.put('/api/:table/:id', async (req, res) => {
   try {
     const supabase = getSupabase();
-    const table = req.params.table;
+    let table = req.params.table;
     const id = req.params.id;
+    if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
     const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
+
+    // Hash user passwords server-side
+    if (table === 'users') {
+      if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+      if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
+        try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
+      }
+    }
+
     const record = serializeRecord(body);
     
     if (!supabase) {
@@ -783,9 +806,19 @@ app.put('/api/:table/:id', async (req, res) => {
 app.patch('/api/:table/:id', async (req, res) => {
   try {
     const supabase = getSupabase();
-    const table = req.params.table;
+    let table = req.params.table;
     const id = req.params.id;
+    if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
     const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
+
+    // Hash user passwords server-side
+    if (table === 'users') {
+      if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+      if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
+        try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
+      }
+    }
+
     const record = serializeRecord(body);
 
     if (table === 'storefronts') {

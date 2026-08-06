@@ -352,6 +352,10 @@
             <i class="fas fa-cog"></i>
             <span>Settings</span>
           </button>
+          <button class="profile-dropdown-item" onclick="showPage('support'); closeProfileMenu()">
+            <i class="fas fa-headset"></i>
+            <span>Help &amp; Support</span>
+          </button>
           <button class="profile-dropdown-item" onclick="logout(); closeProfileMenu()">
             <i class="fas fa-sign-out-alt"></i>
             <span>Logout</span>
@@ -614,6 +618,18 @@
       <div id="settings-page-content"></div>
     </div>
 
+    <!-- ══════════ SUPPORT / CUSTOMER CARE ══════════ -->
+    <div class="page" id="page-support">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
+        <h2>Help &amp; Support</h2>
+        <button class="btn btn-ghost btn-sm" onclick="renderSupportPage()" style="margin-left:auto" title="Refresh">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+      <div id="support-page-content"></div>
+    </div>
+
     <!-- ══════════ BUYER DASHBOARD ══════════ -->
     <div class="page" id="page-buyer-dashboard">
       <div class="page-header">
@@ -819,6 +835,7 @@
   <script src="/js/buyer.js" defer></script>
   <script src="/js/search.js" defer></script>
   <script src="/js/notifications.js" defer></script>
+  <script src="/js/support.js" defer></script>
   <script src="/js/delivery.js" defer></script>
   <script src="/js/utils.js" defer></script>
   <script src="/js/ads.js" defer></script>

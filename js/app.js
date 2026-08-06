@@ -867,6 +867,7 @@ async function runPageInit(pageId) {
       case 'checkout':       renderCheckout(); break;
       case 'auth':           renderAuth(); break;
       case 'settings':       await renderSettingsPage(); break;
+      case 'support':        await renderSupportPage(); break;
       case 'buyer-dashboard': await renderBuyerDashboard(); break;
       case 'vendor-dashboard':  await renderVendorDashboard(); break;
       case 'vendor-my-store':   await renderVendorMyStorePage(); break;
@@ -1148,6 +1149,16 @@ function renderSettingsPage() {
           <p style="font-size:.8rem;color:var(--text-muted);margin:0">Add HAPPA TRADEMART to your device home screen for a faster, offline-enabled app experience.</p>
           <button class="btn btn-primary btn-sm btn-block" onclick="window.triggerPWAInstall()">
             <i class="fas fa-download"></i> Install HAPPA PWA App
+          </button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><h3>🎧 Customer Care</h3></div>
+        <div class="card-body">
+          <p style="font-size:.8rem;color:var(--text-muted);margin:0 0 10px">Questions about your order, wallet, or store? Contact our support team or open a ticket.</p>
+          <button class="btn btn-primary btn-sm btn-block" onclick="showPage('support')">
+            <i class="fas fa-headset"></i> Help &amp; Support
           </button>
         </div>
       </div>
@@ -1715,7 +1726,12 @@ function applyFilters(data, params) {
   return result;
 }
 function localTablesApi(table, opts = {}) {
-  const [path, queryString = ''] = table.split('?');
+  let [path, queryString = ''] = table.split('?');
+  // Legacy alias: old code wrote to a `transactions` table nothing reads — route
+  // those writes into the visible wallet ledger here too (mirrors the server shim).
+  if (path === 'transactions' || path.startsWith('transactions/')) {
+    path = 'wallet_transactions' + path.slice('transactions'.length);
+  }
   const [tableName, id] = path.split('/');
   const params = parseQueryParams(queryString);
   const method = (opts.method || 'GET').toUpperCase();

@@ -118,7 +118,10 @@ async function _apResetUserPassword(userId) {
   const el = document.getElementById('ap-new-pw-' + userId);
   const pw = el?.value?.trim();
   if (!pw) { showToast('Enter a new password', 'warning'); return; }
-  await apiPatch('users', userId, { password: pw });
+  if (pw.length < 6) { showToast('Password must be at least 6 characters', 'warning'); return; }
+  // The auth system stores/compares `password_hash` — posting `password` was silently ignored.
+  const updated = await apiPatch('users', userId, { password_hash: pw }).catch(() => null);
+  if (!updated) { showToast('Password reset failed. Please try again.', 'error'); return; }
   showToast('Password reset ✅', 'success');
   if (el) el.value = '';
 }

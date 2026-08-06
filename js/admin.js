@@ -70,6 +70,7 @@ async function renderAdminDashboard() {
 
   <div class="tab-btn ${activeTabId === 'admin-ads' ? 'active' : ''}" onclick="switchTab(this,'admin-ads');loadAdminAds()">🎯 Ads</div>
   <div class="tab-btn ${activeTabId === 'admin-referrals' ? 'active' : ''}" onclick="switchTab(this,'admin-referrals');loadAdminReferrals()">🔗 Referrals</div>
+  <div class="tab-btn ${activeTabId === 'admin-support' ? 'active' : ''}" onclick="switchTab(this,'admin-support');loadAdminSupport()">🎧 Support</div>
   <div class="tab-btn ${activeTabId === 'admin-settings' ? 'active' : ''}" onclick="switchTab(this,'admin-settings');loadAdminSettings()">Settings</div>
 </div>
 
@@ -589,6 +590,29 @@ async function renderAdminDashboard() {
         </div>
       </div>
 
+      <!-- 3b. Customer Care -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header">
+          <h3>🎧 Customer Care</h3>
+        </div>
+        <div class="card-body">
+          <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:12px">Contact details shown on the Help &amp; Support page for all users.</p>
+          <div class="form-group">
+            <label class="form-label">Support WhatsApp Number (international format, no +)</label>
+            <input class="form-control" id="setting-support-whatsapp" type="text" value="233240000000">
+            <div class="form-hint">e.g. 233240000000 — opens a direct WhatsApp chat</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Support Email</label>
+            <input class="form-control" id="setting-support-email" type="email" value="support@happamart.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Support Phone</label>
+            <input class="form-control" id="setting-support-phone" type="text" value="+233 24 000 0000">
+          </div>
+        </div>
+      </div>
+
       <!-- 4. Referral Programme -->
       <div class="card" style="margin-bottom:14px">
         <div class="card-header">
@@ -773,6 +797,17 @@ async function renderAdminDashboard() {
       </div>
     </div>
 
+    <!-- ── Support / Customer Care Tab ── -->
+    <div class="tab-content ${activeTabId === 'admin-support' ? 'active' : ''}" id="admin-support">
+      <div class="dashboard-wrap">
+        <h3 style="font-size:.95rem;font-weight:700;margin-bottom:4px">🎧 Customer Care / Support Tickets</h3>
+        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:14px">Tickets submitted by buyers and vendors. Reply to close the loop — users get notified in-app and by email.</p>
+        <div id="admin-support-content">
+          <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>`;
 
@@ -790,6 +825,8 @@ async function renderAdminDashboard() {
       loadAdminAds();
     } else if (activeTabId === 'admin-referrals' && typeof loadAdminReferrals === 'function') {
       loadAdminReferrals();
+    } else if (activeTabId === 'admin-support' && typeof loadAdminSupport === 'function') {
+      loadAdminSupport();
     } else if (activeTabId === 'admin-settings' && typeof loadAdminSettings === 'function') {
       loadAdminSettings();
     }
@@ -2077,6 +2114,12 @@ async function applyWalletAdjustment(userId, userName, currentBalance) {
 
   if (amount <= 0 && adjType !== 'set') { showToast('Please enter a valid amount', 'warning'); return; }
 
+  // Compute the actual balance delta so the ledger always reflects the true movement.
+  // (For 'set', the delta is newBalance - currentBalance — could be positive or negative.)
+  const delta = adjType === 'credit' ? amount
+              : adjType === 'debit'  ? -Math.min(amount, currentBalance)
+              :                        amount - currentBalance;
+
   let newBalance = currentBalance;
   if (adjType === 'credit') newBalance = currentBalance + amount;
   else if (adjType === 'debit')  newBalance = Math.max(0, currentBalance - amount);
@@ -2084,17 +2127,34 @@ async function applyWalletAdjustment(userId, userName, currentBalance) {
 
   newBalance = parseFloat(newBalance.toFixed(2));
 
-  await apiPatch('users', userId, { wallet_balance: newBalance });
+  // Ledger FIRST: a balance change must never happen without a trace. If the ledger
+  // write fails, abort before touching the balance.
+  const ledger = await apiPost('wallet_transactions', {
+    user_id:        userId,
+    type:           'admin_adjustment',
+    amount:         parseFloat(delta.toFixed(2)),
+    balance_before: currentBalance,
+    balance_after:  newBalance,
+    payment_method: 'admin',
+    status:         'completed',
+    note:           `Admin ${adjType} — ${note}`,
+    reviewed_by:    App.currentUser?.id || 'admin'
+  }).catch(() => null);
 
-  // Record the transaction
-  await apiPost('transactions', {
-    user_id:     userId,
-    type:        'admin_adjustment',
-    amount:      adjType === 'debit' ? -amount : amount,
-    description: note,
-    status:      'completed',
-    created_at:  new Date().toISOString()
-  });
+  if (!ledger) {
+    showToast('Could not record the transaction. Wallet was NOT changed.', 'error');
+    closeModalForce();
+    return;
+  }
+
+  const patched = await apiPatch('users', userId, { wallet_balance: newBalance }).catch(() => null);
+  if (!patched) {
+    // Balance update failed — remove the ledger row so no orphan entry exists.
+    try { if (ledger.id) await apiDelete('wallet_transactions', ledger.id); } catch (e) {}
+    showToast('Wallet update failed. Please try again.', 'error');
+    closeModalForce();
+    return;
+  }
 
   addNotification(userId, 'wallet', '💰 Wallet Updated',
     `Your wallet balance has been updated to GHS ${newBalance.toFixed(2)}. Note: ${note}`);
