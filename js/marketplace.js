@@ -406,7 +406,7 @@ async function renderStores() {
 
 
 
-  let stores = App.allStores.filter(s => s.status === 'active' && s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin') && shouldShowStoreOnMainWebsite(s));
+  let stores = App.allStores.filter(s => isStoreVisibleOnMain(s) && s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin') && shouldShowStoreOnMainWebsite(s));
 
   const ul = App.currentUser?.location || '';
 
@@ -590,7 +590,7 @@ async function renderProductDetail(id) {
 
     </span>
 
-    <span class="tag"><i class="fas fa-map-marker-alt"></i> ${p.location}</span>
+    <span class="tag"><i class="fas fa-map-marker-alt"></i> ${p.location || 'N/A'}</span>
 
     ${Array.isArray(p.tags) ? p.tags.slice(0,3).map(t=>`<span class="tag">${escHtml(t)}</span>`).join('') : ''}
 
@@ -682,7 +682,7 @@ ${store.id ? `
 
   <div class="card-body" style="display:flex;align-items:center;gap:12px">
 
-    <img src="${store.logo_url||'https://via.placeholder.com/60x60?text=Store'}" alt="${escHtml(store.name)}"
+    <img src="${store.logo_url||'https://via.placeholder.com/60x60?text=Store'}" alt="${escHtml(store.name || store.slug || 'Store')}"
 
          style="width:48px;height:48px;border-radius:var(--radius-sm);object-fit:cover"
 
@@ -690,7 +690,7 @@ ${store.id ? `
 
     <div style="flex:1">
 
-      <div style="font-weight:700;font-size:.9rem">${escHtml(store.name)}</div>
+      <div style="font-weight:700;font-size:.9rem">${escHtml(store.name || store.slug || 'Store')}</div>
 
       <div style="font-size:.75rem;color:var(--text-light)">${store.category||''} · ${store.location||''}</div>
 
@@ -991,7 +991,7 @@ async function renderStoreDetail(id) {
             <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
               ${renderStars(s.avg_rating || 0)}
               <span style="font-size:.75rem;color:var(--text-muted)">${(s.avg_rating || 0).toFixed(1)} (${s.review_count || 0})</span>
-              <span style="font-size:.75rem;color:var(--text-muted)"><i class="fas fa-map-marker-alt"></i> ${s.location}</span>
+              <span style="font-size:.75rem;color:var(--text-muted)"><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</span>
             </div>
           </div>
         </div>
@@ -1003,7 +1003,7 @@ async function renderStoreDetail(id) {
     <div id="admin-store-toolbar" style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:10px 16px;box-shadow:0 2px 8px rgba(0,0,0,.4)">
       <div style="display:flex;align-items:center;gap:8px">
         <i class="fas fa-shield-alt" style="color:#f59e0b;font-size:.8rem"></i>
-        <span style="color:#f59e0b;font-weight:800;font-size:.75rem;text-transform:uppercase">Admin View — ${escHtml(s.name)}</span>
+        <span style="color:#f59e0b;font-weight:800;font-size:.75rem;text-transform:uppercase">Admin View — ${escHtml(s.name || s.slug || 'Store')}</span>
       </div>
     </div>` : '';
 
@@ -1270,7 +1270,7 @@ async function renderStorefront(id) {
 
     const bannerSrc = sf?.banner_url || s.banner_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
   const logoSrc = sf?.logo_url || s.logo_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const storeName = sf?.name || s.name;
+  const storeName = sf?.name || s.name || (s.slug ? s.slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'My Store');
 
   let themeStyles = '';
   let headerHTML = '';
@@ -1301,7 +1301,7 @@ async function renderStorefront(id) {
           <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
         </div>
         <h4 class="store-name-title" style="font-size:1.2rem; font-weight:900; margin:0; text-transform:uppercase">${storeName} ${verifiedBadge}</h4>
-        <div class="store-location-tag" style="font-size:0.7rem; font-weight:700; margin-top:2px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location}</div>
+        <div class="store-location-tag" style="font-size:0.7rem; font-weight:700; margin-top:2px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</div>
       </div>
       <div style="background:${secondaryColor}; padding:10px 12px; text-align:center">
         <h5 class="store-slogan-text" style="font-size:0.8rem; font-weight:800; margin:0; text-transform:uppercase">${slogan}</h5>
@@ -1338,7 +1338,7 @@ async function renderStorefront(id) {
           </div>
           <h4 class="store-name-title" style="font-family:'Outfit', 'Inter', sans-serif; font-size:1.15rem; font-weight:800; margin:0; letter-spacing:0.5px">${storeName} ${verifiedBadge}</h4>
           <p class="store-slogan-text" style="font-size:0.75rem; margin:4px 0 0 0; font-weight:500; font-style:italic;">${slogan}</p>
-          <div class="store-location-tag" style="font-size:0.7rem; font-weight:700; margin-top:4px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location}</div>
+          <div class="store-location-tag" style="font-size:0.7rem; font-weight:700; margin-top:4px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</div>
         </div>
       </div>
     `;
@@ -1377,7 +1377,7 @@ async function renderStorefront(id) {
         <div style="text-align:center; margin-top:6px">
           <h4 class="store-name-title" style="font-size:1.15rem; font-weight:800; margin:0">${storeName} ${verifiedBadge}</h4>
           <p class="store-slogan-text" style="font-size:0.75rem; margin:4px 0 0 0; font-style: italic">${slogan}</p>
-          <div class="store-location-tag" style="font-size:0.75rem; font-weight:700; margin-top:4px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location}</div>
+          <div class="store-location-tag" style="font-size:0.75rem; font-weight:700; margin-top:4px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</div>
         </div>
       </div>
     `;
@@ -1410,7 +1410,7 @@ async function renderStorefront(id) {
               </h1>
               <p class="store-slogan-text" style="font-size:.85rem;margin:4px 0 0 0;font-style:italic">${escHtml(slogan)}</p>
               <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
-                <span class="store-location-tag" style="font-size:.78rem; font-weight:700; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location}</span>
+                <span class="store-location-tag" style="font-size:.78rem; font-weight:700; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</span>
               </div>
             </div>
           </div>
@@ -1567,7 +1567,7 @@ async function renderStorefront(id) {
               </h4>
               <div style="display:grid; gap:4px; color:${footerTextColor}">
                 <div><i class="fas fa-calendar-alt" style="width:16px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
-                <div><i class="fas fa-map-marker-alt" style="width:16px; color:${primaryColor}"></i> ${s.location}</div>
+                <div><i class="fas fa-map-marker-alt" style="width:16px; color:${primaryColor}"></i> ${s.location || '—'}</div>
                 ${(() => {
                   const vendorObj = (App.allUsers || []).find(u => String(u.id) === String(s.vendor_id)) || {};
                   const storeEmail = s.email || vendorObj.email || '';
@@ -2808,7 +2808,7 @@ window.switchStorefrontTab = async function(tabName, storeId) {
           <div class="card-body" style="font-size:.85rem;color:var(--text-light);display:grid;gap:6px">
             <div><i class="fas fa-envelope" style="width:20px"></i> Email: ${escHtml(s.email || 'support@happamart.com')}</div>
             <div><i class="fas fa-phone" style="width:20px"></i> Hotline: ${escHtml(s.phone || '+233 (0) 244 123 456')}</div>
-            <div><i class="fas fa-map-marker-alt" style="width:20px"></i> Location: ${s.location}</div>
+            <div><i class="fas fa-map-marker-alt" style="width:20px"></i> Location: ${s.location || '—'}</div>
           </div>
         </div>
         <div class="card">
@@ -3147,7 +3147,9 @@ window.renderStorefrontCheckout = function(storeId) {
   // Delivery is currently free — no delivery fee is charged on the site.
   // (calcDelivery in app.js also returns rate 0; this mirrors that policy.)
   const delivery = 0;
-  const total = subtotal + delivery;
+  // Platform fee: 1% of the item subtotal is added to the buyer's total.
+  const platformFee = Number((subtotal * 0.01).toFixed(2));
+  const total = Number((subtotal + platformFee).toFixed(2));
 
   const user = App.currentUser || {};
 
@@ -3200,24 +3202,25 @@ window.renderStorefrontCheckout = function(storeId) {
       <div class="card">
         <div class="card-header"><h3>📋 Summary</h3></div>
         <div class="card-body" style="padding:12px 16px; font-size:0.85rem; display:grid; gap:6px">
-          <div style="display:flex; justify-content:space-between"><span>Items Subtotal:</span><span>GHS ${subtotal}</span></div>
+          <div style="display:flex; justify-content:space-between"><span>Items Subtotal:</span><span>GHS ${subtotal.toFixed(2)}</span></div>
+          <div style="display:flex; justify-content:space-between"><span>Platform Fee (1%):</span><span>GHS ${platformFee.toFixed(2)}</span></div>
           <!-- <div style="display:flex; justify-content:space-between"><span>Delivery Fee:</span><span>GHS ${delivery}</span></div> -->
           <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1rem; border-top:1px solid var(--border); padding-top:8px">
             <span>Total:</span>
-            <span style="color:${primaryColor}">GHS ${total}</span>
+            <span style="color:${primaryColor}">GHS ${total.toFixed(2)}</span>
           </div>
         </div>
       </div>
 
-      <button onclick="window.placeStorefrontOrder('${storeId}', ${total})" style="background:${primaryColor}; color:#fff; border:none; padding:12px; border-radius:10px; font-weight:800; font-size:0.95rem; width:100%; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px">
-        <i class="fas fa-check-circle"></i> Place Order (GHS ${total})
+      <button onclick="window.placeStorefrontOrder('${storeId}', ${subtotal})" style="background:${primaryColor}; color:#fff; border:none; padding:12px; border-radius:10px; font-weight:800; font-size:0.95rem; width:100%; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px">
+        <i class="fas fa-check-circle"></i> Place Order (GHS ${total.toFixed(2)})
       </button>
     </div>
   `;
 };
 
 let _placingStorefrontOrder = false;
-window.placeStorefrontOrder = async function(storeId, totalAmount) {
+window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   if (_placingStorefrontOrder) return;
   _placingStorefrontOrder = true;
 
@@ -3267,8 +3270,9 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
   }
 
   const user = App.currentUser || {};
-  const platformFee = Number((totalAmount * 0.01).toFixed(2));
-  const buyerPayTotal = Number((totalAmount + platformFee).toFixed(2));
+  // The passed amount is the item subtotal; the buyer is charged subtotal + 1% platform fee.
+  const platformFee = Number((subtotalAmount * 0.01).toFixed(2));
+  const buyerPayTotal = Number((subtotalAmount + platformFee).toFixed(2));
 
   if (payment === 'wallet') {
     if (!user.id) {
@@ -3306,7 +3310,7 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     // Simulate Momo Authorization Prompt
     const num = prompt('Enter your Mobile Money phone number:', phone);
     if (!num) { _placingStorefrontOrder = false; if (orderBtn) orderBtn.disabled = false; return; }
-    const pin = prompt('Enter MoMo PIN to authorize GHS ' + totalAmount + ' payment:');
+    const pin = prompt('Enter MoMo PIN to authorize GHS ' + buyerPayTotal + ' payment:');
     if (!pin) {
       showToast('Payment cancelled', 'info');
       _placingStorefrontOrder = false;
@@ -3349,7 +3353,7 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     vendor_status: 'accepted',
     admin_status: 'vendor_controlled',
     delivery_status: 'pending',
-    total_amount: totalAmount,
+    total_amount: buyerPayTotal,
     gross_amount: grossAmt,
     vendor_amount: vendorShare,
     commission_amount: 0,
@@ -3389,6 +3393,15 @@ window.placeStorefrontOrder = async function(storeId, totalAmount) {
     if (orderBtn) orderBtn.disabled = false;
     return;
   }
+
+  // Record the 1% platform fee so it reflects in admin Platform Revenue stats & chart
+  await apiPost('platform_revenue', {
+    source: 'platform_fee',
+    amount: adminShare,
+    reference: pCode,
+    description: `Platform fee (1%) on storefront order ${pCode} — ${storeName}`,
+    created_at: new Date().toISOString()
+  }).catch(e => console.warn('[Revenue] platform_fee record failed:', e && e.message || e));
 
   if (payment !== 'cod') {
     const vendorUser = (App.allUsers || []).find(u => String(u.id) === String(vendorId)) || await apiFetch('users/' + vendorId).catch(() => null);

@@ -367,6 +367,16 @@ async function placeOrder() {
     return;
   }
 
+  // Record the platform fee charged on this order so it reflects in the admin
+  // Platform Revenue stats & weekly chart.
+  await apiPost('platform_revenue', {
+    source: 'platform_fee',
+    amount: parseFloat(totals.platformFee) || 0,
+    reference: 'ORD-' + (order.id || '') + '-' + Date.now(),
+    description: `Platform fee (${PLATFORM_FEE_PCT}%) on order ${order.id || ''}`,
+    created_at: new Date().toISOString()
+  }).catch(e => console.warn('[Revenue] platform_fee record failed:', e && e.message || e));
+
   // Clear cart after order is confirmed created
   App.cart = [];
   App.appliedReferral = null;

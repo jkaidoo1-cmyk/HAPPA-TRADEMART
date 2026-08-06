@@ -15,6 +15,30 @@ const dataStore = require('./data-store');
 const app = express();
 app.use(express.json({ limit: '15mb' }));
 
+// ── Response security: never leak password hashes to clients ──────────
+// Deep-copies the payload, dropping `password_hash` at any depth. Applied at
+// the single response boundary so every route is covered without touching
+// the stored records (writes still persist the hash).
+function scrubSensitive(obj) {
+  if (Array.isArray(obj)) return obj.map(scrubSensitive);
+  if (obj instanceof Date) return obj;
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const key of Object.keys(obj)) {
+      if (key === 'password_hash') continue;
+      const val = obj[key];
+      out[key] = (val && typeof val === 'object') ? scrubSensitive(val) : val;
+    }
+    return out;
+  }
+  return obj;
+}
+
+const _origResJson = app.response.json;
+app.response.json = function (body) {
+  return _origResJson.call(this, scrubSensitive(body));
+};
+
 // ── CORS ──────────────────────────────────────────────────────
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -271,6 +295,7 @@ const TABLE_COLUMNS = {
   delivery_rates: ['id', 'origin', 'destination', 'base_rate', 'per_kg_rate', 'est_days', 'is_local', 'created_at'],
   referrals: ['id', 'referrer_id', 'referred_id', 'reward', 'status', 'created_at'],
   wallet_transactions: ['id', 'user_id', 'type', 'amount', 'description', 'reference', 'created_at', 'extra'],
+  platform_revenue: ['id', 'source', 'amount', 'reference', 'description', 'created_at', 'extra'],
   support_tickets: ['id', 'user_id', 'user_name', 'user_email', 'user_role', 'subject', 'category', 'priority', 'status', 'message', 'messages', 'assigned_to', 'created_at', 'updated_at', 'extra'],
   storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'name', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'business_hours', 'shipping_policy', 'return_policy', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'created_at', 'updated_at']
 };
@@ -485,7 +510,10 @@ app.get('/api/:table', async (req, res) => {
         id: st.id,
         store_id: st.id,
         vendor_id: st.vendor_id,
+        name: st.name || '',
         status: st.storefront_status || 'none',
+        location: st.location || '',
+        category: st.category || '',
         url_slug: st.slug || '',
         theme: st.theme || 'classic',
         font_family: st.font_family || 'Outfit',
@@ -572,16 +600,25 @@ app.get('/api/:table/:id', async (req, res) => {
     const id = req.params.id;
 
     if (table === 'storefronts') {
-      let stores = [];
-      if (!supabase) {
-        dataStore.ensureTable('stores');
-        const store = dataStore.getStore();
-        stores = store.stores.map(serializeRecord);
-      } else {
+      // Merge local db.json + Supabase like the list handler does, so records
+      // that live only in one backend are still resolvable.
+      let supastores = [];
+      if (supabase) {
         const { data, error } = await supabase.from('stores').select('*');
         if (error) return res.status(500).json({ error: error.message });
-        stores = (data || []).map(serializeRecord);
+        supastores = (data || []).map(serializeRecord);
       }
+      dataStore.ensureTable('stores');
+      const store = dataStore.getStore();
+      const localStores = store.stores.map(serializeRecord);
+      const storeMap = new Map();
+      supastores.forEach(s => storeMap.set(String(s.id), s));
+      localStores.forEach(s => {
+        const key = String(s.id);
+        const existing = storeMap.get(key) || {};
+        storeMap.set(key, { ...existing, ...s });
+      });
+      const stores = Array.from(storeMap.values());
 
       const st = stores.find(s => String(s.id) === String(id) || String(s.vendor_id) === String(id) || (s.slug && String(s.slug).toLowerCase() === String(id).toLowerCase()));
       if (!st) return res.status(404).json({ error: 'Storefront not found' });
@@ -590,7 +627,10 @@ app.get('/api/:table/:id', async (req, res) => {
         id: st.id,
         store_id: st.id,
         vendor_id: st.vendor_id,
+        name: st.name || '',
         status: st.storefront_status || 'draft',
+        location: st.location || '',
+        category: st.category || '',
         url_slug: st.slug || '',
         theme: st.theme || 'classic',
         font_family: st.font_family || 'Outfit',
@@ -666,6 +706,10 @@ app.post('/api/:table', async (req, res) => {
 
       const storeUpdates = {
         storefront_status: body.status || 'draft',
+        name: body.name || st.name || 'My Store',
+        status: st.status || 'active',
+        category: body.category || st.category || 'General',
+        location: body.location || st.location || '',
         slug: body.url_slug || st.slug || '',
         theme: body.theme || 'classic',
         font_family: body.font_family || 'Outfit',

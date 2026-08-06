@@ -11,12 +11,13 @@ async function renderAdminDashboard() {
   }
 
   // Fetch all data in parallel
-  const [usersRes, storesRes, productsRes, ordersRes, pkgsRes] = await Promise.all([
+  const [usersRes, storesRes, productsRes, ordersRes, pkgsRes, platformRevenueRes] = await Promise.all([
     apiGet('users',    'limit=200'),
     apiGet('stores',   'limit=200'),
     apiGet('products', 'limit=200'),
     apiGet('orders',   'limit=200'),
-    apiGet('packages', 'limit=200')
+    apiGet('packages', 'limit=200'),
+    apiGet('platform_revenue', 'limit=500').catch(() => null)
   ]);
 
   const allUsers    = (usersRes?.data || []).filter(u => u.role !== 'admin');
@@ -24,6 +25,7 @@ async function renderAdminDashboard() {
   const allProducts = productsRes?.data || [];
   const allOrders   = ordersRes?.data   || [];
   const allPkgs     = pkgsRes?.data     || [];
+  const platformRevenue = platformRevenueRes?.data || [];
 
   App.allStores   = allStores;
   App.allProducts = allProducts;
@@ -40,7 +42,12 @@ async function renderAdminDashboard() {
   const rejectedPkgs   = allPkgs.filter(p => p.vendor_status === 'rejected' || p.status === 'cancelled');
 
   const grossRev       = activePkgs.reduce((s, p) => s + (parseFloat(p.gross_amount || p.vendor_amount || p.total) || 0), 0);
-  const totalRevenue   = activePkgs.reduce((s, p) => s + (parseFloat(p.commission_amount) || 0), 0);
+  // Platform income: order commissions (on packages) + recorded fees & subscription payments (ledger)
+  const pkgCommissions  = activePkgs.reduce((s, p) => s + (parseFloat(p.commission_amount) || 0), 0);
+  const feeRev          = platformRevenue.filter(r => r.source === 'platform_fee').reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const subscriptionRev = platformRevenue.filter(r => r.source === 'subscription').reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const platformFees    = pkgCommissions + feeRev;
+  const totalRevenue    = platformFees + subscriptionRev;
   const refundedAmt    = rejectedPkgs.reduce((s, p) => s + ((parseFloat(p.gross_amount || p.total) || 0) + (parseFloat(p.delivery_fee) || 0)), 0);
   const rejectionRate  = allPkgs.length ? ((rejectedPkgs.length / allPkgs.length) * 100).toFixed(1) : '0.0';
 
@@ -232,6 +239,15 @@ async function renderAdminDashboard() {
     <div class="card" style="margin-top:16px">
       <div class="card-header"><h3>📊 Weekly Revenue</h3></div>
       <div class="card-body"><div class="chart-container"><canvas id="admin-revenue-chart"></canvas></div></div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="card-header"><h3>💰 Revenue Sources</h3></div>
+      <div class="card-body" style="padding:12px 16px;font-size:.85rem;display:grid;gap:8px">
+        <div style="display:flex;justify-content:space-between"><span>Order Commissions &amp; Platform Fees</span><strong>GHS ${platformFees.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>Storefront Subscriptions</span><strong>GHS ${subscriptionRev.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:.95rem;border-top:1px solid var(--border);padding-top:8px"><span>Total Platform Revenue</span><strong style="color:var(--primary)">GHS ${totalRevenue.toFixed(2)}</strong></div>
+      </div>
     </div>
   </div>
 </div>
@@ -471,7 +487,7 @@ async function renderAdminDashboard() {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-percentage" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">GHS ${totalRevenue.toFixed(2)}</div>
+        <div class="stat-value">GHS ${platformFees.toFixed(2)}</div>
         <div class="stat-label">Platform Fees</div>
       </div>
       <div class="stat-card" style="background:${rejectedPkgs.length ? '#fff5f5' : '#f9fafb'};border-color:${rejectedPkgs.length ? '#fca5a5' : '#e5e7eb'}">
@@ -813,7 +829,7 @@ async function renderAdminDashboard() {
 
   setTimeout(() => {
     if (activeTabId === 'admin-overview') {
-      renderAdminRevenueChart(allPkgs);
+      renderAdminRevenueChart(allPkgs, platformRevenue);
       renderAdminLocationChart(allOrders);
     } else if (activeTabId === 'admin-orders' && typeof refreshAdminOrdersList === 'function') {
       refreshAdminOrdersList();
@@ -2343,7 +2359,7 @@ function exitPreviewMode() {
 }
 
 // ── Charts ────────────────────────────────────────────────
-function renderAdminRevenueChart(packages = []) {
+function renderAdminRevenueChart(packages = [], platformRevenue = []) {
   const canvas = document.getElementById('admin-revenue-chart');
   if (!canvas) return;
 
@@ -2364,8 +2380,21 @@ function renderAdminRevenueChart(packages = []) {
 
     const bucketIndex = 4 - Math.floor(diffMs / oneWeekMs);
     if (bucketIndex >= 0 && bucketIndex < 5) {
-      const comm = parseFloat(p.commission_amount || p.platform_fee || 0);
+      const comm = parseFloat(p.commission_amount || 0);
       data[bucketIndex] += comm;
+    }
+  });
+
+  // Include recorded platform revenue (fees + subscription payments) in the weekly buckets
+  (platformRevenue || []).forEach(r => {
+    const dateStr = r.created_at;
+    if (!dateStr) return;
+    const revDate = new Date(dateStr);
+    const diffMs = now - revDate;
+    if (diffMs < 0 || diffMs > 5 * oneWeekMs) return;
+    const bucketIndex = 4 - Math.floor(diffMs / oneWeekMs);
+    if (bucketIndex >= 0 && bucketIndex < 5) {
+      data[bucketIndex] += parseFloat(r.amount) || 0;
     }
   });
 

@@ -1332,7 +1332,7 @@ async function renderVendorMyStorePage() {
       <span class="status-badge status-${freshStore.status}">${freshStore.status}</span>
     </div>
     <div style="font-size:.8rem;color:var(--text-light);margin-bottom:8px">
-      <i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> ${escHtml(freshStore.location)}
+      <i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> ${escHtml(freshStore.location || '')}
     </div>
     <div style="font-size:.8rem;margin-bottom:10px">${stars} <span style="color:var(--text-muted)">(${freshStore.review_count||0} reviews)</span></div>
     ${freshStore.description ? `<p style="font-size:.82rem;color:var(--text-light);margin-bottom:12px;line-height:1.6">${escHtml(freshStore.description)}</p>` : ''}
@@ -2437,7 +2437,7 @@ function renderLocalProducts() {
 function renderFeaturedStores() {
   const list = document.getElementById('featured-stores-list');
   if (!list) return;
-  const stores = App.allStores.filter(s => s.status === 'active' && s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin') && shouldShowStoreOnMainWebsite(s)).slice(0, 6);
+  const stores = App.allStores.filter(s => isStoreVisibleOnMain(s) && s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin') && shouldShowStoreOnMainWebsite(s)).slice(0, 6);
   list.innerHTML = stores.map(s => storeCardHTML(s, true)).join('');
 }
 
@@ -2527,7 +2527,7 @@ function productCardHTML(p) {
       <span class="product-sold">${p.sold_count||0} sold</span>
     </div>
     <div class="product-location">
-      <i class="fas fa-map-marker-alt"></i>${p.location}
+      <i class="fas fa-map-marker-alt"></i>${p.location || ''}
     </div>
   </div>
 </div>`;
@@ -2555,34 +2555,36 @@ function storeCardHTML(s, compact = false) {
   const stars = renderStars(s.avg_rating || 0);
   const banner = s.banner_url || 'https://via.placeholder.com/800x200?text=Store+Banner';
   const logo   = s.logo_url  || 'https://via.placeholder.com/100x100?text=Logo';
+  const storeName = s.name || s.slug || 'Store';
+  const storeLoc  = s.location || '';
   if (compact) {
     // 2-column layout: smaller logo, tighter padding, taller banner
     return `
 <div class="store-card store-card-compact" onclick="openStore('${s.id}')">
   <div class="store-banner-wrap">
-    <img class="store-banner" src="${banner}" alt="${escHtml(s.name)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
-    <img class="store-logo store-logo-compact" src="${logo}" alt="${escHtml(s.name)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+    <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
+    <img class="store-logo store-logo-compact" src="${logo}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
   </div>
   <div class="store-info">
-    <div class="store-name">${escHtml(s.name)}</div>
+    <div class="store-name">${escHtml(storeName)}</div>
     <div class="store-cat">${s.category || ''}</div>
     <div class="store-meta">
       <span class="store-rating">${stars} (${s.review_count || 0})</span>
-      <span class="store-location-tag"><i class="fas fa-map-marker-alt"></i> ${s.location}</span>
+      <span class="store-location-tag"><i class="fas fa-map-marker-alt"></i> ${storeLoc || '—'}</span>
     </div>
   </div>
 </div>`;
   }
   return `
 <div class="store-card" onclick="openStore('${s.id}')">
-  <img class="store-banner" src="${banner}" alt="${escHtml(s.name)}" loading="lazy" onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
-  <img class="store-logo" src="${logo}" alt="${escHtml(s.name)}" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+  <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
+  <img class="store-logo" src="${logo}" alt="${escHtml(storeName)}" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
   <div class="store-info">
-    <div class="store-name">${escHtml(s.name)}</div>
+    <div class="store-name">${escHtml(storeName)}</div>
     <div class="store-cat">${s.category || ''}</div>
     <div class="store-meta">
       <span class="store-rating">${stars} (${s.review_count || 0})</span>
-      <span class="store-location-tag"><i class="fas fa-map-marker-alt"></i> ${s.location}</span>
+      <span class="store-location-tag"><i class="fas fa-map-marker-alt"></i> ${storeLoc || '—'}</span>
     </div>
   </div>
 </div>`;

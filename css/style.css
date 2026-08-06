@@ -3068,20 +3068,6 @@ html.is-storefront-root body #main-content {
 .qty-btn:active, .qty-control button:active { transform: scale(0.88); }
 .back-btn:active, .nav-icon-btn:active { transform: scale(0.92); }
 
-/* Bottom nav animated active indicator */
-.bottom-nav-item::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 50%;
-  width: 22px; height: 3px;
-  border-radius: 0 0 4px 4px;
-  background: var(--primary);
-  transform: translateX(-50%) scaleX(0);
-  transform-origin: center;
-  transition: transform 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-.bottom-nav-item.active::before { transform: translateX(-50%) scaleX(1); }
-
 /* Back-to-top floating button */
 #back-to-top {
   position: fixed;
@@ -3108,7 +3094,7 @@ html.is-storefront-root body #main-content {
 /* Respect users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .page.active, .progressive-card, .toast, #back-to-top,
-  .bottom-nav-item::before, .skeleton-box,
+  .skeleton-box,
   .product-card, .btn, .bottom-nav-item, .qty-btn, .qty-control button,
   .back-btn, .nav-icon-btn {
     animation: none !important;

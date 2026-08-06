@@ -10,15 +10,17 @@
 // ── Status label maps ─────────────────────────────────────
 const VENDOR_STATUS_LABELS = {
   pending:   { text: 'Awaiting Vendor',  css: 'pending'   },
+  accepted:  { text: 'Vendor Accepted',  css: 'received'  },
   received:  { text: 'Vendor Received',  css: 'received'  },
   processed: { text: 'Ready for Pickup', css: 'processed' },
   rejected:  { text: 'Rejected',         css: 'rejected'  }
 };
 
 const ADMIN_STATUS_LABELS = {
-  pending:     { text: 'Not Dispatched', css: 'pending'     },
-  on_delivery: { text: 'On Delivery',    css: 'on_delivery' },
-  delivered:   { text: 'Delivered',      css: 'delivered'   }
+  pending:           { text: 'Not Dispatched',  css: 'pending'     },
+  vendor_controlled: { text: 'Storefront Order', css: 'pending'     },
+  on_delivery:       { text: 'On Delivery',     css: 'on_delivery' },
+  delivered:         { text: 'Delivered',       css: 'delivered'   }
 };
 
 function sanitizePackage(pkg) {
@@ -397,7 +399,9 @@ async function updateVendorStatus(packageId, newStatus) {
   const pCode = pkg.package_code || targetId;
 
   const currentVs = pkg.vendor_status || 'pending';
-  const validTransitions = { pending: ['received'], received: ['processed'] };
+  // 'accepted' is set by storefront orders (auto-accepted at checkout); treat it as
+  // the starting point so the vendor can acknowledge and progress the order.
+  const validTransitions = { pending: ['received'], accepted: ['received'], received: ['processed'] };
   if (!(validTransitions[currentVs] || []).includes(newStatus)) {
     showToast(`Cannot change status from "${currentVs}" to "${newStatus}"`, 'warning');
     _vendorStatusInFlight.delete(packageId);
@@ -557,6 +561,39 @@ async function confirmRejectOrder(packageId) {
     }
   }
 
+  // Storefront prepaid orders paid the vendor at checkout — claw the payout back on
+  // rejection, otherwise the platform refunds the buyer AND the vendor keeps the money.
+  const vendorPaidAmt = parseFloat(pkg.vendor_amount) || 0;
+  const vendorWasPaid = !!pkg.balance_released && String(pkg.payment_status || '').toLowerCase() !== 'pending' && vendorPaidAmt > 0;
+  if (vendorWasPaid && pkg.vendor_id) {
+    let vendorUser = null;
+    try {
+      vendorUser = await apiFetch('users/' + pkg.vendor_id);
+      if (vendorUser && vendorUser.data && Array.isArray(vendorUser.data)) vendorUser = vendorUser.data[0];
+    } catch(e){}
+    if (!vendorUser && App.allUsers) vendorUser = App.allUsers.find(u => String(u.id) === String(pkg.vendor_id));
+    if (vendorUser) {
+      const vBalBefore = parseFloat(vendorUser.wallet_balance) || 0;
+      const clawback = Math.min(vendorPaidAmt, vBalBefore);
+      if (clawback > 0) {
+        const vBalAfter = parseFloat((vBalBefore - clawback).toFixed(2));
+        await apiPatch('users', pkg.vendor_id, { wallet_balance: vBalAfter }).catch(() => {});
+        await apiPost('wallet_transactions', {
+          user_id:        pkg.vendor_id,
+          type:           'reversal',
+          amount:         clawback,
+          balance_before: vBalBefore,
+          balance_after:  vBalAfter,
+          payment_method: 'system',
+          status:         'completed',
+          note:           `Payout reversal: order ${pCode} was rejected — GHS ${clawback.toFixed(2)} clawed back from vendor`
+        }).catch(() => {});
+        addNotification(pkg.vendor_id, 'earning', '↩️ Payout Reversed',
+          `GHS ${clawback.toFixed(2)} from order ${pCode} was reversed because the order was rejected.`);
+      }
+    }
+  }
+
   // Restore product stock & update status back to active
   if (Array.isArray(pkg.items)) {
     for (const item of pkg.items) {
@@ -656,12 +693,9 @@ async function updateAdminStatus(packageId, newStatus) {
     if (btn) btn.disabled = false;
     return;
   }
-  if (newStatus === 'delivered' && pkg.balance_released) {
-    showToast('Package is already delivered and earnings released.', 'info');
-    _adminStatusInFlight.delete(packageId);
-    if (btn) btn.disabled = false;
-    return;
-  }
+  // NOTE: prepaid storefront orders carry balance_released=true from checkout (the
+  // vendor is paid at order time). That must NOT block the delivered transition — the
+  // ledger-based _packageEarningsReleased guard below already prevents double payouts.
   if (as === newStatus) {
     showToast(`Package is already "${newStatus}".`, 'info');
     _adminStatusInFlight.delete(packageId);
@@ -684,11 +718,13 @@ async function updateAdminStatus(packageId, newStatus) {
   // Auto-release vendor earnings on delivery
   // vendor_amount already has commission deducted at checkout (it's what vendor earns, not order total)
   if (newStatus === 'delivered' && !(await _packageEarningsReleased(pkg))) {
-    const vendor = await apiFetch('users/' + pkg.vendor_id);
+    // vendor_amount is the net amount after platform commission was deducted at order time.
+    // Hoisted above the vendor lookup so a failed vendor fetch can't crash the whole
+    // delivery transition (package is already marked delivered at this point).
+    const earnAmt      = parseFloat(pkg.vendor_amount)      || 0;
+    const commAmt      = parseFloat(pkg.commission_amount)  || 0;
+    const vendor = await apiFetch('users/' + pkg.vendor_id).catch(() => null);
     if (vendor) {
-      // vendor_amount is the net amount after platform commission was deducted at order time
-      const earnAmt      = parseFloat(pkg.vendor_amount)      || 0;
-      const commAmt      = parseFloat(pkg.commission_amount)  || 0;
       const vendorBalBefore = parseFloat(vendor.wallet_balance) || 0;
       const newBal       = vendorBalBefore + earnAmt;
       await apiPatch('users', pkg.vendor_id, { wallet_balance: newBal });
@@ -860,9 +896,11 @@ function adminPackageRowHTML(rawPkg, allUsers) {
   const vsLabel = VENDOR_STATUS_LABELS[vs] || { text: vs, css: 'pending' };
   const asLabel = ADMIN_STATUS_LABELS[as]  || { text: as, css: 'pending' };
 
-  // Admin can mark On Delivery any time the package isn't cancelled or already delivered
-  const canMarkOnDelivery = vs !== 'rejected' && as === 'pending';
-  const canMarkDelivered  = as === 'on_delivery';
+  // Admin can mark On Delivery any time the package isn't cancelled or already delivered.
+  // Storefront orders use admin_status 'vendor_controlled' — treat it like 'pending' so
+  // the admin can still dispatch/confirm them.
+  const canMarkOnDelivery = vs !== 'rejected' && (as === 'pending' || as === 'vendor_controlled');
+  const canMarkDelivered  = as === 'on_delivery' || as === 'vendor_controlled';
 
   return `
 <div class="card" style="margin-bottom:12px">
@@ -927,15 +965,16 @@ function adminPackageRowHTML(rawPkg, allUsers) {
       ` : as === 'delivered' ? `
         <span style="font-size:.78rem;color:var(--success)"><i class="fas fa-check-double"></i> Delivered &amp; earnings released</span>
       ` : `
-        ${as === 'pending' ? `
+        ${canMarkOnDelivery ? `
         <button class="btn btn-primary btn-sm" data-label="Mark On Delivery"
                 onclick="updateAdminStatus('${pkg.id}','on_delivery')">
           <i class="fas fa-truck"></i> Mark On Delivery
         </button>` : ''}
+        ${canMarkDelivered ? `
         <button class="btn btn-success btn-sm" data-label="Mark Delivered"
                 onclick="updateAdminStatus('${pkg.id}','delivered')">
           <i class="fas fa-check-circle"></i> Mark Delivered
-        </button>
+        </button>` : ''}
       `}
     </div>
   </div>
@@ -969,7 +1008,7 @@ function packageDetailHTML(rawPkg) {
       <div style="font-size:.78rem;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Your Action</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
 
-        ${vs === 'pending' ? `
+        ${vs === 'pending' || vs === 'accepted' ? `
         <button class="btn btn-success btn-sm" onclick="updateVendorStatus('${pkgId}','received')">
           <i class="fas fa-check"></i> Mark Received
         </button>

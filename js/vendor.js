@@ -239,6 +239,9 @@ async function renderVendorDashboard() {
         <div class="admin-action-btn" onclick="window.triggerPWAInstall()" style="background:rgba(232,93,4,0.06);border:1px solid rgba(232,93,4,0.15);">
           <i class="fas fa-download" style="color:var(--primary)"></i><span style="color:var(--primary);font-weight:700">Install App</span>
         </div>
+        <div class="admin-action-btn" onclick="showPage('support')">
+          <i class="fas fa-headset"></i><span>Help &amp; Support</span>
+        </div>
       </div>
     </div>
 
@@ -3168,6 +3171,15 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
     }).catch(() => {});
   }
   
+  // 4. Record platform revenue for this subscription payment (reflects in admin revenue)
+  await apiPost('platform_revenue', {
+    source: 'subscription',
+    amount: totalCost,
+    reference: 'SUB-' + storeId + '-' + Date.now(),
+    description: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — ${storeIdx !== -1 ? (App.allStores[storeIdx].name || '') : ''}`,
+    created_at: now.toISOString()
+  }).catch(e => console.warn('[Revenue] subscription record failed:', e && e.message || e));
+
   try {
     localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
     localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
@@ -4041,6 +4053,54 @@ window.confirmStorefrontSubscription = async function(storeId) {
 
   // Simulate payment processing
   await new Promise(r => setTimeout(r, 1800));
+
+  // Payment: actually deduct the vendor's HAPPA Wallet (ledger-first) or record the MoMo payment
+  if (method === 'wallet') {
+    if (!App.currentUser?.id) {
+      showToast('Please sign in to pay with your HAPPA Wallet.', 'error');
+      return;
+    }
+    const balBefore = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
+    const amt = parseFloat(total);
+    if (balBefore < amt) {
+      showToast(`Insufficient wallet balance. You need GH₵ ${total} to activate this plan. Top up your wallet first.`, 'error');
+      return;
+    }
+    const balAfter = Math.max(0, balBefore - amt);
+    await apiPost('wallet_transactions', {
+      user_id: App.currentUser.id,
+      type: 'payment',
+      amount: amt,
+      balance_before: balBefore,
+      balance_after: balAfter,
+      payment_method: 'wallet',
+      status: 'completed',
+      note: `Storefront Subscription: ${plan.name} (${months} month(s)) — via wallet`
+    }).catch(e => console.warn('[Revenue] subscription wallet ledger failed:', e && e.message || e));
+    if (App.currentUser) App.currentUser.wallet_balance = balAfter;
+    App.walletBalance = balAfter;
+    await apiPatch('users', App.currentUser.id, { wallet_balance: balAfter }).catch(() => {});
+    if (typeof saveSessions === 'function') saveSessions();
+    if (typeof updateWalletUI === 'function') updateWalletUI();
+  } else if (method === 'momo') {
+    await apiPost('wallet_transactions', {
+      user_id: App.currentUser?.id || '',
+      type: 'payment',
+      amount: parseFloat(total),
+      payment_method: 'momo',
+      status: 'completed',
+      note: `Storefront Subscription: ${plan.name} (${months} month(s)) — via MoMo`
+    }).catch(e => console.warn('[Revenue] subscription momo ledger failed:', e && e.message || e));
+  }
+
+  // Record platform revenue so the payment reflects in admin revenue stats & chart
+  await apiPost('platform_revenue', {
+    source: 'subscription',
+    amount: parseFloat(total),
+    reference: 'SUB-' + storeId + '-' + Date.now(),
+    description: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''}`,
+    created_at: now.toISOString()
+  }).catch(e => console.warn('[Revenue] subscription record failed:', e && e.message || e));
 
   // Update store subscription fields
   App.allStores[idx].subscription_plan = planKey;

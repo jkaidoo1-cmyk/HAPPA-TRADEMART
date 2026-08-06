@@ -226,6 +226,17 @@ window.shouldShowProductOnMainWebsite = function(product) {
   return true;
 };
 
+// A store is visible on the main site when it is active — either its own
+// `status` is 'active', or its storefront is active. Explicit moderation
+// statuses (suspended/inactive/pending/rejected) always hide it, so an
+// admin-suspended store can't sneak back in via an active storefront.
+window.isStoreVisibleOnMain = function(store) {
+  if (!store) return false;
+  const st = String(store.status || '').toLowerCase();
+  if (['suspended', 'inactive', 'pending', 'rejected', 'deleted', 'archived'].includes(st)) return false;
+  return st === 'active' || String(store.storefront_status || '').toLowerCase() === 'active';
+};
+
 window.shouldShowStoreOnMainWebsite = function(store) {
   if (!store) return true;
   let extra = store.extra;
