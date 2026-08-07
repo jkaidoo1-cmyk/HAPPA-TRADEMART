@@ -569,8 +569,12 @@ async function notifyAdminSubscription(planId, price, planLabel) {
 }
 
 // ── Contact admin modal ────────────────────────────────────
-function showRendorAdminContactModal() {
+async function showRendorAdminContactModal() {
   const u = App.currentUser;
+  // Use the admin's configured support WhatsApp number (Admin → Settings → Customer Care)
+  // so any update the admin makes is reflected here automatically.
+  const adminWhatsApp = await getSetting('support_whatsapp', '233240000000');
+  const waHref = waMeHref(adminWhatsApp);
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
@@ -579,8 +583,18 @@ function showRendorAdminContactModal() {
 </div>
 <div class="modal-body">
   <p style="font-size:.85rem;color:var(--text-light);margin-bottom:16px;line-height:1.7">
-    Send a message to admin regarding your subscription or account.
+    Chat with admin regarding your subscription or account.
   </p>
+  ${waHref ? `
+  <a class="btn btn-block" href="${waHref}" target="_blank" rel="noopener"
+     style="background:#25d366;color:#fff;border-color:#25d366;margin-bottom:14px;display:inline-flex;align-items:center;justify-content:center;gap:8px">
+    <i class="fab fa-whatsapp"></i> Chat with Admin on WhatsApp
+  </a>
+  <div style="display:flex;align-items:center;gap:10px;margin:4px 0 14px;color:var(--text-muted);font-size:.75rem">
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <span>or send an in-app message</span>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+  </div>` : ''}
   <div class="form-group">
     <label class="form-label">Message *</label>
     <textarea class="form-control" id="admin-msg-inp" rows="4"

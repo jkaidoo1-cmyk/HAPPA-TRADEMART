@@ -5,7 +5,7 @@
       "name": "Admin User",
       "email": "admin@happatrademart.com",
       "phone": "0000000000",
-      "password_hash": "admin123",
+      "password_hash": "$2b$10$RLzWn4oS6SdaSOBvMcHpEuLvcD.0meWVjZlug5CKuBwoLm4jFi2nq",
       "role": "admin",
       "status": "active",
       "location": "Accra",
@@ -18,7 +18,7 @@
       "name": "Nana Ama",
       "email": "nana@test.com",
       "phone": "0200000000",
-      "password_hash": "rendor123",
+      "password_hash": "$2b$10$I1I58aSgC40JsHI3/D7u1.9AYksx9h3EVpAWiCcUGKp9TnN.uPr8K",
       "role": "rendor",
       "status": "active",
       "location": "Accra",
@@ -44,10 +44,16 @@
       "rendor_website": "https://example.com",
       "rendor_contact_other": "Available Mon–Sat, 8am–8pm. WhatsApp preferred.",
       "rendor_sub_status": "active",
-      "rendor_sub_expiry": "1788211657528",
+      "rendor_sub_expiry": "1788652800000",
       "rendor_sub_plan": "monthly",
-      "is_verified": true,
-      "id_verified": true
+      "is_verified": false,
+      "id_verified": false,
+      "updated_at": "2026-08-07T17:32:12.781Z",
+      "extra": {},
+      "sub_request_status": null,
+      "sub_quote_monthly": "50",
+      "sub_quote_quarterly": "120",
+      "sub_quote_biannual": ""
     }
   ],
   "stores": [
@@ -255,7 +261,41 @@
     }
   ],
   "wallet_transactions": [],
-  "notifications": [],
+  "notifications": [
+    {
+      "id": "n1786123710321djli1",
+      "user_id": "rendor",
+      "type": "system",
+      "title": "🎉 Subscription Activated!",
+      "message": "Your Monthly (30 days) — GHS 50 subscription is now active. Your profile is visible to clients until 6 September 2026. Keep creating great posts!",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-07T17:28:30.321Z",
+      "updated_at": "2026-08-07T17:28:30.342Z"
+    },
+    {
+      "id": "n1786123913444zw5sd",
+      "user_id": "rendor",
+      "type": "system",
+      "title": "🏧 Withdrawal Requested",
+      "message": "GHS 25.00 withdrawal request submitted. Processed within 1–2 business days.",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-07T17:31:53.444Z",
+      "updated_at": "2026-08-07T17:31:53.445Z"
+    },
+    {
+      "id": "n1786123913446xjfhv",
+      "user_id": "admin",
+      "type": "system",
+      "title": "💸 New Withdrawal Request",
+      "message": "Rendor Nana Ama requested GHS 25.00 via MTN Mobile Money.",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-07T17:31:53.446Z",
+      "updated_at": "2026-08-07T17:31:53.533Z"
+    }
+  ],
   "ad_campaigns": [],
   "settings": [
     {
@@ -289,5 +329,6 @@
     }
   ],
   "reviews": [],
-  "service_orders": []
+  "service_orders": [],
+  "platform_revenue": []
 }

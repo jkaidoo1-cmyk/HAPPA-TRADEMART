@@ -1896,6 +1896,13 @@ async function apiDelete(table, id) {
   return apiFetch(table + '/' + id, { method: 'DELETE' });
 }
 
+// ── WhatsApp link helper ─────────────────────────────────
+// Build a wa.me link from a phone number (any format). Returns '' if no digits.
+function waMeHref(number) {
+  const digits = String(number || '').replace(/\D/g, '');
+  return digits ? `https://wa.me/${digits}` : '';
+}
+
 // ── Settings Helper ───────────────────────────────────────
 async function getSetting(key, defaultValue = '') {
   try {

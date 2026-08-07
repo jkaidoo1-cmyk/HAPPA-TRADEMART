@@ -3498,31 +3498,6 @@ window.updateStorefrontPreview = function() {
         </div>
       </div>
     `;
-  } else if (window.previewActiveTab === 'about') {
-    bodyHTML = `
-      <div style="padding:12px; display:flex; flex-direction:column; gap:10px; font-size:0.7rem;">
-        <div>
-          <div class="prev-about-title" style="font-weight:800; margin-bottom:2px">📅 Business Hours</div>
-          <div class="prev-about-text">${hours}</div>
-        </div>
-        <div>
-          <div class="prev-about-title" style="font-weight:800; margin-bottom:2px">🚀 Shipping & Delivery</div>
-          <p class="prev-about-text" style="margin:0">${shipping}</p>
-        </div>
-        <div>
-          <div class="prev-about-title" style="font-weight:800; margin-bottom:2px">↩️ Return Policy</div>
-          <p class="prev-about-text" style="margin:0">${returns}</p>
-        </div>
-        <div>
-          <div class="prev-about-title" style="font-weight:800; margin-bottom:4px">🔗 Connected Socials</div>
-          <div style="display:flex; gap:8px">
-            <i class="fab fa-facebook" style="font-size:1.1rem; color:#1877f2"></i>
-            <i class="fab fa-instagram" style="font-size:1.1rem; color:#e1306c"></i>
-            <i class="fab fa-youtube" style="font-size:1.1rem; color:#ff0000"></i>
-          </div>
-        </div>
-      </div>
-    `;
   } else {
     // Home tab
     bodyHTML = `
@@ -3589,7 +3564,6 @@ window.updateStorefrontPreview = function() {
     <div class="prev-tab-list" style="display:flex; text-align:center">
       <div class="prev-tab ${window.previewActiveTab === 'home' ? 'active' : ''}" onclick="window.setPreviewTab('home')">Home</div>
       <div class="prev-tab ${window.previewActiveTab === 'products' ? 'active' : ''}" onclick="window.setPreviewTab('products')">Products</div>
-      <div class="prev-tab ${window.previewActiveTab === 'about' ? 'active' : ''}" onclick="window.setPreviewTab('about')">About</div>
     </div>
 
     <!-- Active body content wrapper -->

@@ -952,7 +952,11 @@ async function renderStoreDetail(id) {
 
   const isOwner = App.currentUser && String(App.currentUser.id) === String(s.vendor_id);
   const isAdmin = App.currentUser && App.currentUser.role === 'admin';
-  if (s.status !== 'active' && !isOwner && !isAdmin) {
+  // A store is viewable when it is marketplace-active OR its storefront is live
+  // (storefront_status mirrors the storefront record; a paid/approved storefront
+  // must not be hidden just because the marketplace `status` flag is unset).
+  const storeDetailLive = s.status === 'active' || s.storefront_status === 'active' || s.storefront_status === 'approved';
+  if (!storeDetailLive && !isOwner && !isAdmin) {
     c.innerHTML = `
       <div class="empty-state" style="padding: 40px 20px; text-align: center;">
         <div style="font-size: 3rem; margin-bottom: 16px;">🏪</div>
@@ -1216,12 +1220,15 @@ async function renderStorefront(id) {
       App.allProducts = [...other, ...fetched];
     }
 
-    // Enforce storefront visibility: allow owner, admin, or active/approved stores to view
+    // Enforce storefront visibility: allow owner, admin, or active/approved storefronts to view.
+    // A storefront is live when its own status (storefront record or store's storefront_status
+    // mirror) is active/approved — the store's separate `status` field is the marketplace
+    // listing flag and must NOT gate the storefront page (a paid, approved storefront was
+    // wrongly showing "under construction" when the marketplace status was unset).
     const isOwner = App.currentUser && (String(App.currentUser.id) === String(s.vendor_id) || String(App.currentUser.id) === String(s.user_id));
     const isAdmin = App.currentUser && App.currentUser.role === 'admin';
     const storefrontStatus = sf?.status || s.storefront_status || 'none';
-    const isStoreActive = s.status === 'active';
-    const isLive = (storefrontStatus === 'active' || storefrontStatus === 'approved') && isStoreActive;
+    const isLive = storefrontStatus === 'active' || storefrontStatus === 'approved';
 
     if (!isLive && !isOwner && !isAdmin) {
       // A background re-render that failed to load the storefront record (sf) can
@@ -2774,53 +2781,6 @@ window.switchStorefrontTab = async function(tabName, storeId) {
 
   } else if (tabName === 'checkout') {
     window.renderStorefrontCheckout(storeId);
-
-  } else if (tabName === 'about') {
-    let socialLinksHTML = '';
-    if (facebook_url || instagram_url || youtube_url) {
-      socialLinksHTML = `
-        <div class="card" style="margin-top:12px">
-          <div class="card-header"><h3>🔗 Connect With Us</h3></div>
-          <div class="card-body" style="display:flex;gap:16px;font-size:1.3rem;padding:12px 16px">
-            ${facebook_url ? `<a href="${facebook_url}" target="_blank" style="color:#1877f2" title="Facebook"><i class="fab fa-facebook"></i></a>` : ''}
-            ${instagram_url ? `<a href="${instagram_url}" target="_blank" style="color:#e1306c" title="Instagram"><i class="fab fa-instagram"></i></a>` : ''}
-            ${youtube_url ? `<a href="${youtube_url}" target="_blank" style="color:#ff0000" title="YouTube"><i class="fab fa-youtube"></i></a>` : ''}
-          </div>
-        </div>
-      `;
-    }
-    contentEl.innerHTML = `
-      <div style="padding:16px;line-height:1.6;display:grid;gap:12px">
-        <div class="card">
-          <div class="card-header"><h3>🏪 About Us</h3></div>
-          <div class="card-body">
-            <p class="store-description-text" style="font-size:.85rem;color:var(--text-light)">${escHtml(description)}</p>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>⏰ Business Hours</h3></div>
-          <div class="card-body" style="font-size:.85rem;color:var(--text-light)">
-            <p>${escHtml(business_hours)}</p>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>📞 Contact info</h3></div>
-          <div class="card-body" style="font-size:.85rem;color:var(--text-light);display:grid;gap:6px">
-            <div><i class="fas fa-envelope" style="width:20px"></i> Email: ${escHtml(s.email || 'support@happamart.com')}</div>
-            <div><i class="fas fa-phone" style="width:20px"></i> Hotline: ${escHtml(s.phone || '+233 (0) 244 123 456')}</div>
-            <div><i class="fas fa-map-marker-alt" style="width:20px"></i> Location: ${s.location || '—'}</div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>📦 Policies</h3></div>
-          <div class="card-body" style="font-size:.82rem;color:var(--text-light);display:grid;gap:8px">
-            <div><strong>Shipping:</strong> ${escHtml(shipping_policy)}</div>
-            <div><strong>Returns:</strong> ${escHtml(return_policy)}</div>
-          </div>
-        </div>
-        ${socialLinksHTML}
-      </div>
-    `;
 
   } else if (tabName === 'admin') {
     window.renderStorefrontAdminPortal(storeId);

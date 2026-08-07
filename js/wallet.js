@@ -182,6 +182,7 @@ async function processDeposit(amount, method, network, accountNum, ref) {
 
   // Refresh current dashboard
   if (u.role === 'vendor') renderVendorDashboard();
+  else if (u.role === 'rendor') renderRendorDashboard();
   else renderBuyerDashboard();
 }
 
@@ -193,8 +194,8 @@ async function showWithdrawalModal() {
   if (!App.currentUser) { showPage('auth'); return; }
   const u = App.currentUser;
 
-  if (u.role !== 'vendor') {
-    showToast('Only vendors can request withdrawals', 'warning'); return;
+  if (u.role !== 'vendor' && u.role !== 'rendor') {
+    showToast('Only vendors and rendors can request withdrawals', 'warning'); return;
   }
   if (!u.is_verified || !u.id_verified) {
     showToast('Complete phone & ID verification before withdrawing', 'warning'); return;
@@ -384,11 +385,12 @@ async function submitWithdrawal(balance) {
   const adminUser = (App.allUsers || []).find(usr => usr.role === 'admin');
   const adminId = adminUser?.id || 'admin';
   addNotification(adminId, 'system', '💸 New Withdrawal Request',
-    `Vendor ${u.name} requested GHS ${amount.toFixed(2)} via ${method === 'mobile_money' ? network : 'Bank Transfer'}.`);
+    `${u.role === 'rendor' ? 'Rendor' : 'Vendor'} ${u.name} requested GHS ${amount.toFixed(2)} via ${method === 'mobile_money' ? network : 'Bank Transfer'}.`);
 
   closeModalForce();
   showToast(`Withdrawal request for GHS ${amount.toFixed(2)} submitted! ✅`, 'success');
-  renderVendorDashboard();
+  if (u.role === 'rendor') renderRendorDashboard();
+  else renderVendorDashboard();
 }
 
 
@@ -727,7 +729,7 @@ async function setWithdrawalStatus(txnId, newStatus) {
   const userRes = await apiGet(`users/${userId}`);
   const user = userRes || null;
   if (!user) {
-    showToast('Vendor user not found', 'error');
+    showToast('User not found', 'error');
     renderAdminDashboard();
     return;
   }

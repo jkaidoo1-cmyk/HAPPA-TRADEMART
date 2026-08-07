@@ -235,12 +235,15 @@ async function applyCoupon() {
     } else {
       const currentUserId = App.currentUser ? App.currentUser.id : null;
       const usedBy = validCoupon.used_by || [];
+      // used_count is the total redemption counter (guests included). Fall back to
+      // used_by.length for legacy coupons created before used_count existed.
+      const usedCount = (parseInt(validCoupon.used_count) || 0) || (usedBy.length || 0);
       const maxUses = parseInt(validCoupon.max_uses) || 0;
 
       if (currentUserId && usedBy.includes(currentUserId)) {
         if (msg) msg.innerHTML = '<span style="color:var(--danger)">You have already used this coupon</span>';
         App.appliedCoupon = null;
-      } else if (maxUses > 0 && usedBy.length >= maxUses) {
+      } else if (maxUses > 0 && usedCount >= maxUses) {
         if (msg) msg.innerHTML = '<span style="color:var(--danger)">This coupon has reached its usage limit</span>';
         App.appliedCoupon = null;
       } else {
@@ -390,8 +393,11 @@ async function placeOrder() {
     apiPatch('users', App.currentUser.id, { referral_commission_used: newUsed });
   }
 
-  // Update coupon usage if a standard coupon was applied
-  if (savedCoupon && !savedCoupon.is_referral && App.currentUser) {
+  // Update coupon usage if a standard coupon was applied.
+  // Increment used_count for EVERY redemption (logged-in or guest) so max_uses
+  // is enforced even for guest checkouts; used_by only records logged-in users
+  // to prevent per-user reuse.
+  if (savedCoupon && !savedCoupon.is_referral) {
     try {
       const res = await apiGet('settings', 'key=coupons');
       const couponRow = res?.data?.find(r => r.key === 'coupons');
@@ -400,11 +406,14 @@ async function placeOrder() {
         let updated = false;
         coupons = coupons.map(c => {
           if (String(c.code).trim().toUpperCase() === String(savedCoupon.code).trim().toUpperCase()) {
-            c.used_by = c.used_by || [];
-            if (!c.used_by.includes(App.currentUser.id)) {
-              c.used_by.push(App.currentUser.id);
-              updated = true;
+            c.used_count = (parseInt(c.used_count) || 0) + 1;
+            if (App.currentUser) {
+              c.used_by = c.used_by || [];
+              if (!c.used_by.includes(App.currentUser.id)) {
+                c.used_by.push(App.currentUser.id);
+              }
             }
+            updated = true;
           }
           return c;
         });

@@ -180,10 +180,15 @@ app.use((req, res, next) => {
     invalidateApiCache(table);
   }
 
-  // Set HTTP caching headers for read-only GET API endpoints
+  // Set HTTP caching headers for read-only GET API endpoints.
+  // NOTE: 'settings' (coupons, fees, support contacts, flags) drives live
+  // behavior and is edited by admins — it must ALWAYS revalidate (no-cache + ETag)
+  // so browsers never apply stale coupons/values after an admin save.
   if (req.method === 'GET' && req.path.startsWith('/api/')) {
     const table = req.path.substring(5).split('/')[0];
-    if (['products', 'stores', 'storefronts', 'categories', 'settings'].includes(table)) {
+    if (table === 'settings') {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    } else if (['products', 'stores', 'storefronts', 'categories'].includes(table)) {
       res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
     }
   }

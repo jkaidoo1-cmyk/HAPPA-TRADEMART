@@ -126,8 +126,11 @@ function getCartTotals(overrideDest) {
 
   let discount = 0;
   if (App.appliedCoupon) {
-    if (App.appliedCoupon.type === 'pct') {
-      discount = subtotal * (App.appliedCoupon.value / 100);
+    // Coupons are created in the admin editor with type '%' or 'GHS'.
+    // Accept both '%' and legacy 'pct' as a percentage discount.
+    const cType = App.appliedCoupon.type;
+    if (cType === 'pct' || cType === '%') {
+      discount = Math.min(subtotal, subtotal * (App.appliedCoupon.value / 100));
     } else {
       discount = Math.min(subtotal, App.appliedCoupon.value);
     }

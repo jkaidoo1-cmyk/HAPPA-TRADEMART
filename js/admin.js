@@ -1655,12 +1655,26 @@ async function _doSendSubQuote(userId, displayName) {
 }
 
 // ── Rendor subscription activation (admin-side) ───────────
-function adminActivateRendorSub(userId, displayName) {
-  const PLANS = [
+async function adminActivateRendorSub(userId, displayName) {
+  // Use the rendor's admin-quoted prices when available (falls back to defaults)
+  let PLANS = [
     { id:'monthly',   label:'Monthly (30 days)',   days:30,  price:30  },
     { id:'quarterly', label:'3 Months (90 days)',  days:90,  price:80  },
     { id:'biannual',  label:'6 Months (180 days)', days:180, price:150 },
   ];
+  try {
+    const u = await apiGet('users/' + userId);
+    if (u) {
+      const m = parseFloat(u.sub_quote_monthly), q = parseFloat(u.sub_quote_quarterly), b = parseFloat(u.sub_quote_biannual);
+      if (m > 0 || q > 0 || b > 0) {
+        PLANS = [
+          { id:'monthly',   label:'Monthly (30 days)',   days:30,  price:m },
+          { id:'quarterly', label:'3 Months (90 days)',  days:90,  price:q },
+          { id:'biannual',  label:'6 Months (180 days)', days:180, price:b },
+        ].filter(p => p.price > 0);
+      }
+    }
+  } catch(e) {}
 
   showModal(`
 <div class="modal-handle"></div>
@@ -1675,7 +1689,7 @@ function adminActivateRendorSub(userId, displayName) {
   <div class="form-group">
     <label class="form-label">Plan *</label>
     <select class="form-control form-select" id="sub-plan-sel">
-      ${PLANS.map(p => `<option value="${p.id}" data-days="${p.days}">${p.label} — GHS ${p.price}</option>`).join('')}
+      ${PLANS.map(p => `<option value="${p.id}" data-days="${p.days}" data-price="${p.price}">${p.label} — GHS ${p.price}</option>`).join('')}
     </select>
   </div>
   <div class="form-group">
@@ -1705,6 +1719,7 @@ async function _doActivateRendorSub(userId) {
   const sel       = document.getElementById('sub-plan-sel');
   const planId    = sel?.value;
   const days      = parseInt(sel?.selectedOptions[0]?.dataset.days || '30');
+  const price     = parseFloat(sel?.selectedOptions[0]?.dataset.price || '0') || 0;
   const startRaw  = document.getElementById('sub-start-date')?.value;
   const startMs   = startRaw ? new Date(startRaw).getTime() : Date.now();
   const expiryMs  = startMs + days * 86400000;
@@ -1719,6 +1734,17 @@ async function _doActivateRendorSub(userId) {
     rendor_sub_plan:   planId,
     sub_request_status: null,
   });
+
+  // Record platform revenue for this subscription payment (reflects in admin revenue + weekly chart)
+  if (price > 0) {
+    await apiPost('platform_revenue', {
+      source: 'subscription',
+      amount: price,
+      reference: 'RENDORSUB-' + userId + '-' + Date.now(),
+      description: `Rendor Subscription: ${planLabel.replace(/—.*$/, '').trim()} (${planId})`,
+      created_at: new Date().toISOString()
+    }).catch(e => console.warn('[Revenue] rendor subscription record failed:', e && e.message || e));
+  }
 
   addNotification(userId, 'system', '🎉 Subscription Activated!',
     `Your ${planLabel} subscription is now active. Your profile is visible to clients until ${new Date(expiryMs).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}. Keep creating great posts!`

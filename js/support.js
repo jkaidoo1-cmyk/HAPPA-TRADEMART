@@ -108,7 +108,7 @@ async function renderSupportPage() {
         <div style="font-size:.85rem;opacity:.8;margin-bottom:16px">Our customer care team is available Mon–Sat, 8am–8pm. Average response time: under 24 hours.</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <a class="btn" style="background:#25d366;border:none;color:#fff;display:inline-flex;align-items:center;gap:8px"
-             href="https://wa.me/${escHtml(String(contact.whatsapp).replace(/\\D/g, ''))}" target="_blank">
+             href="${waMeHref(contact.whatsapp)}" target="_blank">
             <i class="fab fa-whatsapp"></i> WhatsApp Us
           </a>
           <a class="btn" style="background:#1d4ed8;border:none;color:#fff;display:inline-flex;align-items:center;gap:8px"

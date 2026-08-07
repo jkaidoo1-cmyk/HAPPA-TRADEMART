@@ -374,7 +374,7 @@ function renderCouponsEditor() {
         <label style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap; margin-bottom:0">Max Uses (0=unlimited):</label>
         <input class="form-control" type="number" min="0" step="1" value="${c.max_uses || 0}" oninput="updateCoupon(${i},'max_uses',this.value)" style="width:80px; padding:4px; height:auto; font-size:0.8rem">
         <span style="font-size:0.75rem; color:var(--text-light); margin-left:auto">
-          Used: ${c.used_by ? c.used_by.length : 0} times
+          Used: ${(parseInt(c.used_count) || 0) || (c.used_by ? c.used_by.length : 0)} times
         </span>
       </div>
     </div>
@@ -382,7 +382,7 @@ function renderCouponsEditor() {
 }
 
 window.addCoupon = function() {
-  _coupons.push({ code: '', type: '%', value: 0, max_uses: 0, used_by: [] });
+  _coupons.push({ code: '', type: '%', value: 0, max_uses: 0, used_by: [], used_count: 0 });
   renderCouponsEditor();
 };
 
