@@ -447,6 +447,135 @@ app.get('/api', (req, res) => {
   });
 });
 
+// ── Session Token Store (30-day TTL) ──────────────────────────
+const activeSessions = new Map(); // token -> { userId, role, expiresAt }
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const crypto = require('crypto');
+
+function createSessionToken(userId, role) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + THIRTY_DAYS_MS;
+  activeSessions.set(token, { userId: String(userId), role, expiresAt });
+  return token;
+}
+
+function getSessionUser(req) {
+  const authHeader = req.headers['authorization'] || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7).trim();
+  if (!token) return null;
+  const session = activeSessions.get(token);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    activeSessions.delete(token);
+    return null;
+  }
+  return session;
+}
+
+// ── Auth Endpoints ─────────────────────────────────────────────
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+
+    // Load users from Supabase (primary) + local db.json (fallback), merge by id
+    let supaUsers = [];
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('users').select('*');
+        if (!error && data) supaUsers = data.map(serializeRecord);
+      } catch (err) {}
+    }
+
+    // Always also check local db.json (admin lives here if not in Supabase)
+    dataStore.ensureTable('users');
+    const store = dataStore.getStore();
+    const localUsers = (store.users || []).map(serializeRecord);
+
+    const userMap = new Map();
+    supaUsers.forEach(u => userMap.set(String(u.id), u));
+    localUsers.forEach(u => {
+      const key = String(u.id);
+      const existing = userMap.get(key) || {};
+      userMap.set(key, { ...existing, ...u }); // local wins for same id
+    });
+    const users = Array.from(userMap.values());
+
+    const user = users.find(u =>
+      (u.email?.toLowerCase() === cleanEmail || u.phone === cleanEmail) &&
+      u.status !== 'deleted'
+    );
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    // Verify password (bcrypt or legacy plaintext)
+    let isValidPassword = false;
+    const dbHash = user.password_hash || '';
+
+    if (dbHash.startsWith('$2a$') || dbHash.startsWith('$2b$')) {
+      isValidPassword = await bcrypt.compare(password, dbHash);
+    } else {
+      // Plaintext fallback + auto-migrate to bcrypt
+      if (dbHash === password) {
+        isValidPassword = true;
+        try {
+          const newHash = await bcrypt.hash(password, 10);
+          // Update local store
+          const uIdx = store.users.findIndex(u => String(u.id) === String(user.id));
+          if (uIdx !== -1) { store.users[uIdx].password_hash = newHash; dataStore.saveToFile(); }
+          // Update Supabase if active
+          if (supabase) await supabase.from('users').update({ password_hash: newHash }).eq('id', user.id).catch(() => {});
+        } catch (e) {}
+      }
+    }
+
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    if (user.status === 'suspended') {
+      return res.status(403).json({ error: 'Your account has been suspended. Contact support.' });
+    }
+
+    // Issue 30-day session token
+    const token = createSessionToken(user.id, user.role);
+    const userSafe = { ...user };
+    delete userSafe.password_hash;
+
+    return res.json({ token, user: userSafe });
+  } catch (err) {
+    console.error('[Auth/Login] Error:', err.message);
+    return res.status(500).json({ error: 'Login failed. Please try again.' });
+  }
+});
+
+// POST /api/auth/logout
+app.post('/api/auth/logout', (req, res) => {
+  const authHeader = req.headers['authorization'] || '';
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    activeSessions.delete(token);
+  }
+  return res.json({ success: true });
+});
+
+// GET /api/auth/verify
+app.get('/api/auth/verify', (req, res) => {
+  const session = getSessionUser(req);
+  if (!session) return res.status(401).json({ valid: false });
+  return res.json({ valid: true, userId: session.userId, role: session.role });
+});
+
 app.post('/api/clean-temp-database-records', async (req, res) => {
   try {
     const supabase = getSupabase();
