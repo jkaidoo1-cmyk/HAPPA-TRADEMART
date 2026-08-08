@@ -180,6 +180,7 @@ async function renderVendorDashboard() {
   c.innerHTML = `
 <div class="tab-nav" id="vendor-tabs">
   <div class="tab-btn ${activeTabId === 'vendor-overview' ? 'active' : ''}" onclick="switchTab(this,'vendor-overview')">Overview</div>
+  <div class="tab-btn ${activeTabId === 'vendor-products' ? 'active' : ''}" onclick="switchTab(this,'vendor-products')">Products</div>
   <div class="tab-btn ${activeTabId === 'vendor-earnings' ? 'active' : ''}" onclick="switchTab(this,'vendor-earnings')">Earnings</div>
   <div class="tab-btn ${activeTabId === 'vendor-wallet' ? 'active' : ''}" onclick="switchTab(this,'vendor-wallet');renderWalletHistory('vendor-txn-list')">Wallet</div>
   <div class="tab-btn ${activeTabId === 'vendor-referral' ? 'active' : ''}" onclick="switchTab(this,'vendor-referral')">Referrals</div>
@@ -1656,9 +1657,21 @@ function _rehydrateAddProductModal(prev, images) {
   if (!images.length) _addProductImgSlot('new-p');
 }
 
-function showEditProductModal(productId) {
-  const p = App.allProducts.find(p => p.id === productId);
-  if (!p) return;
+async function showEditProductModal(productId) {
+  let p = App.allProducts.find(p => String(p.id) === String(productId));
+  if (!p) {
+    // The My Store page renders from its own local list and doesn't populate
+    // App.allProducts — fetch the product so Edit works from any page.
+    try {
+      const res = await apiFetch('products/' + productId);
+      if (res && res.id) p = res;
+    } catch (e) {}
+  }
+  if (!p) { showToast('Product not found', 'error'); return; }
+  // Keep it in memory so archive/delete and re-renders can find it too
+  if (!App.allProducts.some(x => String(x.id) === String(productId))) {
+    App.allProducts.push(p);
+  }
 
   // Build existing-image rows HTML
   const existingImgs = Array.isArray(p.images) ? p.images : (p.images ? [p.images] : []);
@@ -1844,10 +1857,7 @@ async function deleteVendorProduct(productId) {
   if (!confirm('Permanently delete this product? This cannot be undone.')) return;
   await apiDelete('products', productId);
   // Remove from global cache immediately so it doesn't reappear
-  if (Array.isArray(App.allProducts)) {
-    const idx = App.allProducts.findIndex(p => String(p.id) === String(productId));
-    if (idx > -1) App.allProducts.splice(idx, 1);
-  }
+  if (typeof removeProductFromCaches === 'function') removeProductFromCaches(productId);
   showToast('Product deleted', 'warning');
   if (App.currentPage === 'vendor-my-store') {
     renderVendorMyStorePage();

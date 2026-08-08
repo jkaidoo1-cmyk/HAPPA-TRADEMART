@@ -1369,7 +1369,7 @@ async function renderVendorMyStorePage() {
       </div>
       ${products.length ? `
       <div class="product-grid">
-        ${products.map(p => productCardHTML(p)).join('')}
+        ${products.map(p => vendorProductCardHTML(p)).join('')}
       </div>` : `
       <div class="empty-state" style="padding:30px">
         <i class="fas fa-box-open"></i>
@@ -1892,6 +1892,31 @@ async function apiPatch(table, id, data) {
 async function apiDelete(table, id) {
   invalidateAppState(table);
   return apiFetch(table + '/' + id, { method: 'DELETE' });
+}
+
+// Remove a product from every in-memory cache so a deleted product can't keep
+// rendering on the home page, shop, storefront, search results or the admin's
+// vendor-profile view. Every delete path (admin, vendor, storefront, auto-cleanup)
+// must call this after the server confirms the delete.
+function removeProductFromCaches(productId) {
+  const id = String(productId);
+  if (Array.isArray(App.allProducts)) {
+    App.allProducts = App.allProducts.filter(p => String(p.id) !== id);
+  }
+  // Admin vendor-profile cache (admin-profiles.js) may hold the product too
+  if (window._apCache && typeof window._apCache === 'object') {
+    Object.keys(window._apCache).forEach(uid => {
+      const entry = window._apCache[uid];
+      if (entry && Array.isArray(entry.products)) {
+        entry.products = entry.products.filter(p => String(p.id) !== id);
+      }
+    });
+  }
+  // Ad banners keep their own product copy (ads.js / admin.js)
+  if (typeof AdEngine !== 'undefined' && AdEngine && Array.isArray(AdEngine.products)) {
+    AdEngine.products = AdEngine.products.filter(p => String(p.id) !== id);
+  }
+  apiCache.clear();
 }
 
 // ── WhatsApp link helper ─────────────────────────────────
@@ -2533,6 +2558,46 @@ function productCardHTML(p) {
     </div>
     <div class="product-location">
       <i class="fas fa-map-marker-alt"></i>${p.location || ''}
+    </div>
+  </div>
+</div>`;
+}
+
+// ── Helper: Vendor Product Card (My Store grid) ───────────
+// Same buyer-style card, plus vendor management actions (edit / archive / delete).
+// Only rendered on the vendor's own My Store page — never on public pages.
+function vendorProductCardHTML(p) {
+  const isSoldOut = p.stock_qty === 0 || p.status === 'sold_out';
+  const discount = p.original_price > p.price
+    ? `<span class="product-original-price">GHS ${p.original_price}</span>` : '';
+  const flash = p.is_flash_sale ? '<span class="flash-badge">FLASH</span>' : '';
+  const soldOut = isSoldOut ? '<div class="sold-out-overlay">SOLD OUT</div>' : '';
+  const stars = renderStars(p.avg_rating || 0);
+  const imageBlock = _pcSlideshowHTML(p.images, escHtml(p.name));
+  const stockBadge = p.stock_qty === 0
+    ? '<span style="color:var(--danger);font-size:.68rem;font-weight:700">SOLD OUT</span>'
+    : p.stock_qty <= 3
+      ? `<span style="color:var(--warning);font-size:.68rem;font-weight:700">${p.stock_qty} left</span>`
+      : `<span style="color:var(--success);font-size:.68rem">${p.stock_qty} in stock</span>`;
+  return `
+<div class="product-card" data-prod-id="${p.id}" onclick="openProduct('${p.id}')" style="position:relative">
+  ${flash}
+  ${soldOut}
+  ${imageBlock}
+  <div class="product-body">
+    <div class="product-name">${escHtml(p.name)}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="product-price">GHS ${p.price}</span>${discount}</span>
+      ${stockBadge}
+    </div>
+    <div class="product-meta">
+      <span class="product-rating">${stars}</span>
+      <span class="product-sold">${p.sold_count||0} sold</span>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+      <button class="btn btn-outline btn-sm" style="flex:1" onclick="event.stopPropagation();showEditProductModal('${p.id}')" title="Edit product"><i class="fas fa-edit"></i> Edit</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;color:var(--warning)" onclick="event.stopPropagation();archiveProduct('${p.id}')" title="Archive product"><i class="fas fa-archive"></i></button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;color:var(--danger)" onclick="event.stopPropagation();deleteVendorProduct('${p.id}')" title="Delete product permanently"><i class="fas fa-trash"></i></button>
     </div>
   </div>
 </div>`;

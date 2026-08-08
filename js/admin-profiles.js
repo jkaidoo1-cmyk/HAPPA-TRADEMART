@@ -230,9 +230,13 @@ async function _apToggleProductAvail(prodId, userId) {
 }
 async function _apDeleteProduct(prodId, userId) {
   if (!confirm('Delete this product permanently?')) return;
-  await apiDelete('products', prodId);
-  const prods = window._apCache?.[userId]?.products || [];
-  window._apCache[userId].products = prods.filter(x=>x.id!==prodId);
+  const res = await apiDelete('products', prodId);
+  if (!res) {
+    showToast('Delete failed — ' + (window.lastApiError || 'server rejected the delete'), 'error');
+    return;
+  }
+  // Purge from every in-memory cache (home, shop, storefront, search, this view)
+  if (typeof removeProductFromCaches === 'function') removeProductFromCaches(prodId);
   _apRenderVendorProducts(userId);
   showToast('Product deleted ✅', 'success');
 }

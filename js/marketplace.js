@@ -2020,9 +2020,7 @@ async function _sdDeleteProduct(productId, productName, btn) {
 
   await apiDelete('products', productId);
 
-  const idx = (App.allProducts||[]).findIndex(p => p.id === productId);
-
-  if (idx > -1) App.allProducts.splice(idx, 1);
+  if (typeof removeProductFromCaches === 'function') removeProductFromCaches(productId);
 
   showToast('Product deleted', 'warning');
 

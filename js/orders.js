@@ -832,7 +832,7 @@ async function updateAdminStatus(packageId, newStatus) {
           );
           if (stillPending) continue; // keep for undelivered orders
           await apiDelete('products', pId).catch(() => {});
-          App.allProducts = (App.allProducts || []).filter(p => String(p.id) !== String(pId));
+          if (typeof removeProductFromCaches === 'function') removeProductFromCaches(pId);
           console.log('[AutoCleanup] Sold-out product deleted after final delivery:', pId);
         }
       } catch (err) {

@@ -499,7 +499,9 @@ app.get('/api/:table', async (req, res) => {
     if (['packages', 'orders', 'wallet_transactions', 'notifications', 'referrals', 'platform_revenue', 'support_tickets', 'reviews', 'delivery_rates'].includes(table)) {
       res.setHeader('Cache-Control', 'no-store, must-revalidate');
     } else if (['products', 'stores', 'storefronts', 'categories'].includes(table)) {
-      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+      // Catalog data must revalidate on every request: max-age/SWR kept a
+      // product the admin just deleted visible in the browser for minutes.
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
 
     if (table === 'storefronts') {
