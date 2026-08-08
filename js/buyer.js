@@ -8,16 +8,18 @@ async function renderBuyerDashboard() {
   if (!App.currentUser) { showPage('auth'); return; }
   const u = App.currentUser;
 
-  // Fetch orders & packages
+  // Fetch orders & packages. Packages are fetched broadly and matched client-side
+  // (buyerOwnsPackage) so guest storefront orders placed with the buyer's
+  // email/phone still appear after they sign in.
   const [ordersRes, pkgsRes, refsRes, refBalance] = await Promise.all([
     apiGet('orders', `search=${u.id}&limit=50`),
-    apiGet('packages', `search=${u.id}&limit=50`),
+    apiGet('packages', 'limit=200'),
     apiGet('referrals', `search=${u.id}&limit=50`),
     calculateUserReferralBalance(u.id)
   ]);
 
   const myOrders   = (ordersRes?.data || []).filter(o => o.buyer_id === u.id);
-  const myPackages = (pkgsRes?.data || []).filter(p => p.buyer_id === u.id);
+  const myPackages = (pkgsRes?.data || []).filter(p => buyerOwnsPackage(p, u));
   const myRefs     = (refsRes?.data || []).filter(r => r.referrer_id === u.id);
 
   // Saved stores

@@ -190,6 +190,11 @@ app.use((req, res, next) => {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     } else if (['products', 'stores', 'storefronts', 'categories'].includes(table)) {
       res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    } else if (['packages', 'orders', 'wallet_transactions', 'notifications', 'referrals', 'platform_revenue', 'support_tickets', 'reviews', 'delivery_rates'].includes(table)) {
+      // Order/wallet/notification data changes constantly and is fetched fresh on
+      // every page view — never let the browser HTTP cache serve a stale empty
+      // list (that made storefront orders look missing right after checkout).
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
     }
   }
 

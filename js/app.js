@@ -478,18 +478,6 @@ function resolveRouteFromHash(hashStr) {
     });
   }, 4000); // 4 seconds after DOM load to prioritize initial render
 
-  // ── Back-to-top floating button ──
-  const _mainScroll = document.getElementById('main-content');
-  const _backToTop = document.getElementById('back-to-top');
-  if (_mainScroll && _backToTop) {
-    const _bttSync = () => _backToTop.classList.toggle('show', _mainScroll.scrollTop > 600);
-    _mainScroll.addEventListener('scroll', _bttSync, { passive: true });
-    _backToTop.addEventListener('click', () => {
-      _mainScroll.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-    _bttSync();
-  }
-
   document.addEventListener('click', closeProfileMenu);
 });
 
@@ -1022,10 +1010,6 @@ function showPage(pageId, entityId = null) {
       mainContent.style.paddingBottom = '';
     }
   }
-
-  // Back-to-top visibility — hidden on standalone storefront pages
-  const bttEl = document.getElementById('back-to-top');
-  if (bttEl) bttEl.style.display = (pageId === 'storefront' || pageId === 'store-admin') ? 'none' : '';
 
   // update bottom nav
   document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
@@ -1821,6 +1805,8 @@ async function apiFetch(table, opts = {}) {
   }
 
   const url = API + table;
+  const method = (opts.method || 'GET').toUpperCase();
+  const isWrite = method !== 'GET';
   try {
     let resp;
     try {
@@ -1843,13 +1829,25 @@ async function apiFetch(table, opts = {}) {
           errDetail += `: ${errJson.error || errJson.message}`;
         }
       } catch(_) {}
-      throw new Error(errDetail);
+      const err = new Error(errDetail);
+      err.status = resp ? resp.status : 0;
+      throw err;
     }
     if (resp.status === 204) return { success: true };
     return await resp.json();
   } catch(e) {
     console.warn('API Error:', table, e);
     window.lastApiError = e.message || String(e);
+    // Writes (POST/PATCH/PUT/DELETE) must NEVER silently fall back to localStorage
+    // on a server error: an order that "succeeds" only in the local browser is
+    // invisible to the vendor, buyer and admin. Only a pure network failure
+    // (offline) may fall back so the offline mode keeps working.
+    const isNetworkFailure = !e || !e.status || e.status === 0;
+    if (isWrite && !isNetworkFailure) {
+      console.error('[API] Write rejected by server — NOT saving locally:', table, e.message);
+      window.lastApiError = 'Server rejected the save: ' + (e.message || 'unknown error');
+      return null;
+    }
     try {
       const localRes = localTablesApi(table, opts);
       if (localRes) return localRes;

@@ -1,3 +1,4 @@
 [Supabase] Testing database connection... ⚡
 HAPPA backend running on http://localhost:54321
 [Supabase] Connected to database successfully! ⚡
+[Supabase] platform_revenue insert fallback to db.json: Supabase timeout

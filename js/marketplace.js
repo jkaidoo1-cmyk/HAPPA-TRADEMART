@@ -782,7 +782,7 @@ ${store.id ? `
 
   // Load related
 
-  const related = App.allProducts.filter(rp => rp.id !== p.id && (rp.category === p.category || rp.location === p.location) && rp.status !== 'archived').slice(0,4);
+  const related = App.allProducts.filter(rp => rp.id !== p.id && (rp.category === p.category || rp.location === p.location) && isProductListable(rp)).slice(0,4);
 
   const relDiv = document.getElementById('related-products');
 
@@ -968,7 +968,7 @@ async function renderStoreDetail(id) {
     return;
   }
 
-  const storeProds = App.allProducts.filter(p => String(p.store_id) === String(id) && p.status !== 'archived');
+  const storeProds = App.allProducts.filter(p => String(p.store_id) === String(id) && isProductListable(p));
   const slogan = s.slogan || 'Welcome to our store!';
   const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
   let followed = App.savedStores.includes(id);
@@ -1267,7 +1267,7 @@ async function renderStorefront(id) {
       updatePWAManifest(sf?.name || s.name, sf?.logo_url || s.logo_url || '/images/icon-192.png', sf?.primary_color || s.primary_color || '#e85d04');
     }
 
-    const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && p.status !== 'archived');
+    const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && isProductListable(p));
 
     const primaryColor = sf?.primary_color || s.primary_color || '#e85d04';
     const secondaryColor = sf?.secondary_color || s.secondary_color || '#0d0d0d';
@@ -2723,7 +2723,7 @@ window.switchStorefrontTab = async function(tabName, storeId) {
     } catch(e) {}
   }
 
-  const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && p.status === 'active')
+  const storeProds = (App.allProducts || []).filter(p => (String(p.store_id) === String(realStoreId) || String(p.store_id) === String(targetId)) && isProductListable(p))
     .map(toStorefrontProduct);
 
   const isStorefrontPage = App.currentPage === 'storefront';
@@ -2821,7 +2821,7 @@ window.handleStoreProductSearch = function(storeId, query) {
   if (!contentEl) return;
 
   const needle = query.trim().toLowerCase();
-  const storeProds = App.allProducts.filter(p => p.store_id === storeId && p.status === 'active')
+  const storeProds = App.allProducts.filter(p => p.store_id === storeId && isProductListable(p))
     .map(toStorefrontProduct);
   const filtered = storeProds.filter(p => p.name.toLowerCase().includes(needle) || (p.description && p.description.toLowerCase().includes(needle)));
 
@@ -3281,8 +3281,31 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     await new Promise(r => setTimeout(r, 1200));
   }
 
-  const storeObj = App.allStores.find(st => String(st.id) === String(storeId)) || {};
-  const vendorId = storeObj.vendor_id || 'u-vendor-001';
+  // Resolve the store + its real vendor owner. NEVER fall back to a hardcoded
+  // dummy vendor id — that made storefront orders invisible to the vendor's own
+  // orders page (they were attributed to 'u-vendor-001' which no account owns).
+  let storeObj = (App.allStores || []).find(st => String(st.id) === String(storeId)) || null;
+  if (!storeObj) {
+    try {
+      const sfRes = await apiGet('stores', 'limit=500');
+      const sfStores = (sfRes?.data || []);
+      if (sfStores.length) App.allStores = sfStores;
+      storeObj = sfStores.find(st => String(st.id) === String(storeId)) || null;
+    } catch (e) {}
+  }
+  if (!storeObj) {
+    showToast('Could not identify the store for this order. Please try again.', 'danger');
+    _placingStorefrontOrder = false;
+    if (orderBtn) orderBtn.disabled = false;
+    return;
+  }
+  const vendorId = storeObj.vendor_id || '';
+  if (!vendorId) {
+    showToast('This store has no vendor account — order cannot be placed.', 'danger');
+    _placingStorefrontOrder = false;
+    if (orderBtn) orderBtn.disabled = false;
+    return;
+  }
   const grossAmt = storeCart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1), 0);
   const vendorShare = Number(grossAmt.toFixed(2));
   const adminShare = Number(platformFee.toFixed(2));
@@ -3363,6 +3386,9 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     created_at: new Date().toISOString()
   }).catch(e => console.warn('[Revenue] platform_fee record failed:', e && e.message || e));
 
+  // Vendor payout: for prepaid storefront orders the vendor is paid immediately at
+  // checkout. For COD the vendor is paid when the package is marked delivered
+  // (handled in orders.js), so no payout here.
   if (payment !== 'cod') {
     const vendorUser = (App.allUsers || []).find(u => String(u.id) === String(vendorId)) || await apiFetch('users/' + vendorId).catch(() => null);
     if (vendorUser) {
@@ -3390,30 +3416,33 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
         console.warn('[Wallet] Vendor payout ledger failed for', pCode, '— balance NOT credited. Reconcile manually.');
       }
     }
+  }
 
-    const adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin') || await apiFetch('users/admin').catch(() => null);
-    if (adminUser && adminShare > 0) {
-      const oldAdminBal = parseFloat(adminUser.wallet_balance || 0);
-      const newAdminBal = oldAdminBal + adminShare;
-      const adminLedger = await apiPost('wallet_transactions', {
-        user_id: adminUser.id,
-        type: 'earning',
-        amount: adminShare,
-        balance_before: oldAdminBal,
-        balance_after: newAdminBal,
-        payment_method: 'system',
-        payment_ref: `SF-COMM-${Date.now()}`,
-        network: '',
-        account_number: '',
-        status: 'completed',
-        note: `${storefrontSource} — platform fee ${pCode} (${adminShare.toFixed(2)})`,
-        reviewed_by: ''
-      }).catch(() => null);
-      if (adminLedger) {
-        await apiPatch('users', adminUser.id, { wallet_balance: newAdminBal }).catch(() => {});
-      } else {
-        console.warn('[Wallet] Platform fee ledger failed for', pCode, '— balance NOT credited. Reconcile manually.');
-      }
+  // Platform fee (1%): credit the admin wallet on EVERY storefront order — the fee is
+  // charged from the buyer at order time regardless of payment method, so it must land
+  // in the admin wallet even for Cash on Delivery (previously skipped for COD orders).
+  const adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin') || await apiFetch('users/admin').catch(() => null);
+  if (adminUser && adminShare > 0) {
+    const oldAdminBal = parseFloat(adminUser.wallet_balance || 0);
+    const newAdminBal = oldAdminBal + adminShare;
+    const adminLedger = await apiPost('wallet_transactions', {
+      user_id: adminUser.id,
+      type: 'earning',
+      amount: adminShare,
+      balance_before: oldAdminBal,
+      balance_after: newAdminBal,
+      payment_method: 'system',
+      payment_ref: `SF-COMM-${Date.now()}`,
+      network: '',
+      account_number: '',
+      status: 'completed',
+      note: `${storefrontSource} — platform fee ${pCode} (${adminShare.toFixed(2)})`,
+      reviewed_by: ''
+    }).catch(() => null);
+    if (adminLedger) {
+      await apiPatch('users', adminUser.id, { wallet_balance: newAdminBal }).catch(() => {});
+    } else {
+      console.warn('[Wallet] Platform fee ledger failed for', pCode, '— balance NOT credited. Reconcile manually.');
     }
   }
 

@@ -211,8 +211,19 @@ function clearProductImage(previewWrapperId, fileInputId, hiddenId) {
   if (hid)   hid.value           = '';
 }
 
+// A product is publicly listable only while it still has stock. Out-of-stock
+// products stay in the DB only for pending deliveries (order snapshots need
+// them) and are auto-deleted once the last delivery completes.
+window.isProductListable = function(product) {
+  if (!product) return false;
+  if ((parseInt(product.stock_qty) || 0) <= 0) return false;
+  if (product.status === 'sold_out' || product.status === 'archived') return false;
+  return true;
+};
+
 window.shouldShowProductOnMainWebsite = function(product) {
-  if (!product || !product.store_id) return true;
+  if (!isProductListable(product)) return false;
+  if (!product.store_id) return true;
   const store = (App.allStores || []).find(s => String(s.id) === String(product.store_id));
   if (store) {
     let extra = store.extra;

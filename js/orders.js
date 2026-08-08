@@ -56,6 +56,22 @@ function sanitizePackage(pkg) {
   return pkg;
 }
 
+// A package belongs to the current buyer if it was linked to their account id,
+// OR they placed it as a guest (buyer_id 'guest') with their email/phone — so
+// storefront orders are still visible to the customer after they sign in.
+function buyerOwnsPackage(pkg, user) {
+  if (!pkg || !user) return false;
+  if (pkg.buyer_id && String(pkg.buyer_id) === String(user.id)) return true;
+  const norm = v => String(v || '').replace(/\D/g, '');
+  const pkgEmail  = String(pkg.buyer_email || pkg.email || '').trim().toLowerCase();
+  const userEmail = String(user.email || '').trim().toLowerCase();
+  if (pkgEmail && userEmail && pkgEmail === userEmail) return true;
+  const pkgPhone  = norm(pkg.buyer_phone || pkg.delivery_phone || pkg.phone);
+  const userPhone = norm(user.phone);
+  if (pkgPhone && userPhone && pkgPhone === userPhone) return true;
+  return false;
+}
+
 // Buyer-facing combined status (what buyer sees — no confirm action)
 function getBuyerDisplayStatus(pkg) {
   const vs = pkg.vendor_status || 'pending';
@@ -345,7 +361,7 @@ async function refreshBuyerOrdersList() {
 
   listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div>';
   const res  = await apiGet('packages', 'limit=200');
-  const pkgs = (res?.data || []).filter(p => p.buyer_id === uid);
+  const pkgs = (res?.data || []).filter(p => buyerOwnsPackage(p, App.currentUser));
   listEl.innerHTML = pkgs.length
     ? pkgs.map(p => buyerPackageCard(p)).join('')
     : '<div class="empty-state" style="padding:30px"><i class="fas fa-inbox"></i><h3>No orders yet</h3><p>Your orders will appear here after checkout</p></div>';
@@ -744,22 +760,28 @@ async function updateAdminStatus(packageId, newStatus) {
 
     // Platform commission: credit the admin wallet so the fee actually lands somewhere
     // traceable (previously it was written off in the ledger note but never recorded).
-    if (commAmt > 0) {
+    // Main-site orders carry BOTH commission_amount (8% deducted from the vendor) and
+    // platform_fee (1.5% charged to the buyer) — both are the platform's revenue.
+    // Storefront orders set commission_amount:0 and are excluded here because their
+    // 1% platform fee is already credited to the admin wallet at checkout.
+    const sfPlatformFee = parseFloat(pkg.platform_fee) || 0;
+    const adminShareAmt = commAmt + (String(pkg.order_source) !== 'storefront' ? sfPlatformFee : 0);
+    if (adminShareAmt > 0) {
       let adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin');
       if (!adminUser) adminUser = await apiFetch('users/admin').catch(() => null);
       if (adminUser) {
         const adminBalBefore = parseFloat(adminUser.wallet_balance) || 0;
-        const adminNewBal    = adminBalBefore + commAmt;
+        const adminNewBal    = adminBalBefore + adminShareAmt;
         await apiPatch('users', adminUser.id, { wallet_balance: adminNewBal }).catch(() => {});
         await apiPost('wallet_transactions', {
           user_id:        adminUser.id,
           type:           'earning',
-          amount:         commAmt,
+          amount:         adminShareAmt,
           balance_before: adminBalBefore,
           balance_after:  adminNewBal,
           payment_method: 'system',
           status:         'completed',
-          note:           `Platform commission: ${pkg.package_code} — GHS ${commAmt.toFixed(2)}`
+          note:           `Platform earnings: ${pkg.package_code} — GHS ${adminShareAmt.toFixed(2)} (commission GHS ${commAmt.toFixed(2)}${sfPlatformFee > 0 && String(pkg.order_source) !== 'storefront' ? ` + platform fee GHS ${sfPlatformFee.toFixed(2)}` : ''})`
         }).catch(() => {});
       }
     }
@@ -784,6 +806,37 @@ async function updateAdminStatus(packageId, newStatus) {
             }
           } catch(e){}
         }
+      }
+    }
+
+    // ── Auto-delete sold-out products once all deliveries are complete ──
+    // A product that reached 0 stock is kept in the DB only while orders for it
+    // are still being fulfilled. Once this delivery completes and no other
+    // undelivered package references the product, it is removed from the site.
+    if (Array.isArray(pkg.items)) {
+      try {
+        const pkgsRes = await apiGet('packages', 'limit=200').catch(() => null);
+        const allPkgs = Array.isArray(pkgsRes) ? pkgsRes : (pkgsRes?.data || []);
+        for (const item of pkg.items) {
+          const pId = item.id || item.product_id;
+          if (!pId) continue;
+          let pObj = await apiFetch('products/' + pId).catch(() => null);
+          if (pObj && pObj.data) pObj = Array.isArray(pObj.data) ? pObj.data[0] : pObj.data;
+          if (!pObj || !pObj.id) continue;
+          if ((parseInt(pObj.stock_qty) || 0) > 0) continue;      // restocked / still selling — keep
+          if ((parseInt(pObj.total_sold || pObj.sold_count) || 0) <= 0) continue; // never sold — keep
+          const stillPending = allPkgs.some(pk =>
+            String(pk.id) !== String(packageId) &&
+            !['delivered', 'cancelled', 'rejected'].includes(String(pk.admin_status || pk.status || '').toLowerCase()) &&
+            Array.isArray(pk.items) && pk.items.some(it => String(it.id || it.product_id) === String(pId))
+          );
+          if (stillPending) continue; // keep for undelivered orders
+          await apiDelete('products', pId).catch(() => {});
+          App.allProducts = (App.allProducts || []).filter(p => String(p.id) !== String(pId));
+          console.log('[AutoCleanup] Sold-out product deleted after final delivery:', pId);
+        }
+      } catch (err) {
+        console.warn('[AutoCleanup] Product cleanup error:', err);
       }
     }
 

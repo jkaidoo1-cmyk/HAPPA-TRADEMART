@@ -9,9 +9,11 @@
       "role": "admin",
       "status": "active",
       "location": "Accra",
-      "wallet_balance": 0,
+      "wallet_balance": 0.5,
       "referral_code": "ADMIN001",
-      "registered_at": "2026-08-01T21:27:37.527Z"
+      "registered_at": "2026-08-01T21:27:37.527Z",
+      "updated_at": "2026-08-08T10:55:04.183Z",
+      "extra": {}
     },
     {
       "id": "rendor",
@@ -54,6 +56,21 @@
       "sub_quote_monthly": "50",
       "sub_quote_quarterly": "120",
       "sub_quote_biannual": ""
+    },
+    {
+      "id": "msd1o03vue18",
+      "name": "Mimis Vendor",
+      "email": "vendor@mimis.com",
+      "phone": "0240000000",
+      "password_hash": "vendor123",
+      "role": "vendor",
+      "status": "active",
+      "location": "Accra",
+      "wallet_balance": 276,
+      "registered_at": "2026-08-07T22:12:34.127Z",
+      "created_at": "2026-08-07T22:12:34.128Z",
+      "updated_at": "2026-08-08T10:55:02.432Z",
+      "extra": {}
     }
   ],
   "stores": [
@@ -199,10 +216,270 @@
       "created_at": "2026-08-03T13:58:44.116Z",
       "updated_at": "2026-08-06T15:23:50.741Z",
       "total_sold": 0
+    },
+    {
+      "id": "prod-sf-test-1",
+      "store_id": "store-msd1o03vue18",
+      "vendor_id": "msd1o03vue18",
+      "name": "Storefront Test Item",
+      "category": "Fashion",
+      "price": 50,
+      "stock_qty": 10,
+      "images": [
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+      ],
+      "status": "active",
+      "is_available": true,
+      "created_at": "2026-08-07T22:09:49.198Z",
+      "updated_at": "2026-08-08T10:55:06.512Z",
+      "total_sold": 3
     }
   ],
   "orders": [],
-  "packages": [],
+  "packages": [
+    {
+      "id": "pkg-test-1",
+      "package_code": "PK-TEST-1",
+      "vendor_id": "u-vendor-test",
+      "buyer_id": "u-buyer-test",
+      "store_id": "s-test",
+      "items": [
+        {
+          "id": "p1",
+          "name": "Test Item",
+          "price": 10,
+          "qty": 1
+        }
+      ],
+      "vendor_amount": 10,
+      "created_at": "2026-08-07T00:00:00.000Z",
+      "updated_at": "2026-08-07T21:12:36.254Z"
+    },
+    {
+      "id": "pkg-live-test-1",
+      "package_code": "PK-LIVE-1",
+      "store_id": "s1",
+      "vendor_id": "u-vendor-001",
+      "buyer_id": "u-buyer-001",
+      "buyer_name": "Test Buyer",
+      "buyer_phone": "0241111111",
+      "delivery_name": "Test Buyer",
+      "delivery_phone": "0241111111",
+      "delivery_address": "Accra",
+      "payment_method": "wallet",
+      "payment_status": "paid",
+      "vendor_status": "accepted",
+      "admin_status": "vendor_controlled",
+      "delivery_status": "pending",
+      "total_amount": 101,
+      "gross_amount": 100,
+      "vendor_amount": 100,
+      "commission_amount": 0,
+      "platform_fee": 1,
+      "items_count": 1,
+      "items": [
+        {
+          "product_id": "p1",
+          "name": "Test",
+          "price": 100,
+          "qty": 1
+        }
+      ],
+      "order_source": "storefront",
+      "balance_released": true,
+      "created_at": "2026-08-07T22:01:28.721Z",
+      "updated_at": "2026-08-07T22:01:28.721Z"
+    },
+    {
+      "id": "pkg-browser-test-1",
+      "package_code": "PK-BR-1",
+      "vendor_id": "u-browser-test",
+      "buyer_id": "u-browser-buyer",
+      "items": [
+        {
+          "id": "x",
+          "name": "X",
+          "price": 5,
+          "qty": 1
+        }
+      ],
+      "created_at": "2026-08-07T22:04:51.360Z",
+      "updated_at": "2026-08-07T22:04:51.360Z"
+    },
+    {
+      "id": "pkg-1786140662130",
+      "package_code": "PK-69764",
+      "store_id": "store-msd1o03vue18",
+      "vendor_id": "msd1o03vue18",
+      "buyer_id": "rendor",
+      "buyer_name": "Nana Ama",
+      "buyer_phone": "0200000000",
+      "buyer_email": "nana@test.com",
+      "delivery_name": "Nana Ama",
+      "delivery_phone": "0200000000",
+      "delivery_address": "Accra",
+      "delivery_location": "Accra",
+      "payment_method": "cod",
+      "payment_status": "pending",
+      "vendor_status": "accepted",
+      "admin_status": "vendor_controlled",
+      "delivery_status": "pending",
+      "total_amount": 50.5,
+      "gross_amount": 50,
+      "vendor_amount": 50,
+      "commission_amount": 0,
+      "platform_fee": 0.5,
+      "items_count": 1,
+      "items": [
+        {
+          "product_id": "prod-sf-test-1",
+          "name": "Storefront Test Item",
+          "price": 50,
+          "qty": 1,
+          "commission_pct": 8,
+          "buyer_note": ""
+        }
+      ],
+      "order_source": "storefront",
+      "storefront_id": "store-msd1o03vue18",
+      "storefront_name": "Vendor Storefront",
+      "balance_released": false,
+      "created_at": "2026-08-07T22:11:02.131Z",
+      "updated_at": "2026-08-07T22:11:02.136Z"
+    },
+    {
+      "id": "pkg-rls-test-1",
+      "package_code": "PK-RLS-1",
+      "vendor_id": "msd1o03vue18",
+      "buyer_id": "u-buyer-rls",
+      "items": [
+        {
+          "id": "p1",
+          "name": "RLS Test",
+          "price": 10,
+          "qty": 1
+        }
+      ],
+      "total": 10,
+      "payment_method": "cod",
+      "status": "pending",
+      "vendor_status": "accepted",
+      "admin_status": "vendor_controlled",
+      "created_at": "2026-08-07T22:23:22.520Z",
+      "updated_at": "2026-08-07T22:23:22.520Z"
+    },
+    {
+      "id": "pkg-apiidx-test-1",
+      "package_code": "PK-AI-1",
+      "vendor_id": "msd1o03vue18",
+      "buyer_id": "u-buyer-ai",
+      "items": [
+        {
+          "id": "p1",
+          "name": "AI Test",
+          "price": 5,
+          "qty": 1
+        }
+      ],
+      "total": 5,
+      "payment_method": "cod",
+      "status": "pending",
+      "vendor_status": "accepted",
+      "admin_status": "vendor_controlled",
+      "created_at": "2026-08-07T22:23:32.181Z",
+      "updated_at": "2026-08-07T22:23:32.182Z",
+      "code": "PK-AI-1",
+      "gross_amount": 5
+    },
+    {
+      "id": "pkg-1786181836319",
+      "package_code": "PK-28106",
+      "store_id": "store-msd1o03vue18",
+      "vendor_id": "msd1o03vue18",
+      "buyer_id": "rendor",
+      "buyer_name": "Nana Ama",
+      "buyer_phone": "0200000000",
+      "buyer_email": "nana@test.com",
+      "delivery_name": "Nana Ama",
+      "delivery_phone": "0200000000",
+      "delivery_address": "Accra",
+      "delivery_location": "Accra",
+      "payment_method": "cod",
+      "payment_status": "pending",
+      "vendor_status": "accepted",
+      "admin_status": "vendor_controlled",
+      "delivery_status": "pending",
+      "total_amount": 50.5,
+      "gross_amount": 50,
+      "vendor_amount": 50,
+      "commission_amount": 0,
+      "platform_fee": 0.5,
+      "items_count": 1,
+      "items": [
+        {
+          "product_id": "prod-sf-test-1",
+          "name": "Storefront Test Item",
+          "price": 50,
+          "qty": 1,
+          "commission_pct": 8,
+          "buyer_note": ""
+        }
+      ],
+      "order_source": "storefront",
+      "storefront_id": "store-msd1o03vue18",
+      "storefront_name": "Vendor Storefront",
+      "balance_released": false,
+      "created_at": "2026-08-08T09:37:16.320Z",
+      "updated_at": "2026-08-08T09:37:16.441Z"
+    },
+    {
+      "id": "pkg-1786185477658",
+      "package_code": "PK-89428",
+      "store_id": "store-msd1o03vue18",
+      "vendor_id": "msd1o03vue18",
+      "buyer_id": "rendor",
+      "buyer_name": "Nana Ama",
+      "buyer_phone": "0200000000",
+      "buyer_email": "nana@test.com",
+      "delivery_name": "Nana Ama",
+      "delivery_phone": "0200000000",
+      "delivery_address": "Accra",
+      "delivery_location": "Accra",
+      "payment_method": "cod",
+      "payment_status": "pending",
+      "vendor_status": "received",
+      "admin_status": "vendor_controlled",
+      "delivery_status": "pending",
+      "total_amount": 50.5,
+      "gross_amount": 50,
+      "vendor_amount": 50,
+      "commission_amount": 0,
+      "platform_fee": 0.5,
+      "items_count": 1,
+      "items": [
+        {
+          "product_id": "prod-sf-test-1",
+          "name": "Storefront Test Item",
+          "price": 50,
+          "qty": 1,
+          "commission_pct": 8,
+          "buyer_note": ""
+        }
+      ],
+      "order_source": "storefront",
+      "storefront_id": "store-msd1o03vue18",
+      "storefront_name": "Vendor Storefront",
+      "balance_released": false,
+      "created_at": "2026-08-08T10:37:57.658Z",
+      "updated_at": "2026-08-08T10:38:22.562Z",
+      "code": "PK-89428"
+    },
+    {
+      "id": "PK-89428",
+      "vendor_status": "received",
+      "updated_at": "2026-08-08T10:38:14.386Z"
+    }
+  ],
   "services": [
     {
       "id": "svc-1",
@@ -260,7 +537,25 @@
       "created_at": "2026-08-01T21:27:37.528Z"
     }
   ],
-  "wallet_transactions": [],
+  "wallet_transactions": [
+    {
+      "user_id": "admin",
+      "type": "earning",
+      "amount": 0.5,
+      "balance_before": 0,
+      "balance_after": 0.5,
+      "payment_method": "system",
+      "payment_ref": "SF-COMM-1786185478675",
+      "network": "",
+      "account_number": "",
+      "status": "completed",
+      "note": "Storefront order from Vendor Storefront — platform fee PK-89428 (0.50)",
+      "reviewed_by": "",
+      "id": "wal-1786185478677-625",
+      "created_at": "2026-08-08T10:37:58.677Z",
+      "updated_at": "2026-08-08T10:37:58.677Z"
+    }
+  ],
   "notifications": [
     {
       "id": "n1786123710321djli1",
@@ -294,6 +589,72 @@
       "action_url": "",
       "created_at": "2026-08-07T17:31:53.446Z",
       "updated_at": "2026-08-07T17:31:53.533Z"
+    },
+    {
+      "id": "n1786186347970f7wnr",
+      "user_id": "msd1o03vue18",
+      "type": "earning",
+      "title": "💰 Payment Released",
+      "message": "GHS 92.00 from order PK-DELIVTEST has been released to your wallet.",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-08T10:52:27.970Z",
+      "updated_at": "2026-08-08T10:52:27.979Z"
+    },
+    {
+      "id": "n1786186352896gop5d",
+      "user_id": "rendor",
+      "type": "order",
+      "title": "📬 Order Delivered!",
+      "message": "Package PK-DELIVTEST has been delivered. You can now rate the store.",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-08T10:52:32.897Z",
+      "updated_at": "2026-08-08T10:52:32.910Z"
+    },
+    {
+      "id": "n1786186433232x618s",
+      "user_id": "msd1o03vue18",
+      "type": "earning",
+      "title": "💰 Payment Released",
+      "message": "GHS 92.00 from order PK-DELIV2 has been released to your wallet.",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-08T10:53:53.232Z",
+      "updated_at": "2026-08-08T10:53:53.239Z"
+    },
+    {
+      "id": "n1786186437954mzplb",
+      "user_id": "rendor",
+      "type": "order",
+      "title": "📬 Order Delivered!",
+      "message": "Package PK-DELIV2 has been delivered. You can now rate the store.",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-08T10:53:57.955Z",
+      "updated_at": "2026-08-08T10:53:57.962Z"
+    },
+    {
+      "id": "n1786186504191fgl26",
+      "user_id": "msd1o03vue18",
+      "type": "earning",
+      "title": "💰 Payment Released",
+      "message": "GHS 92.00 from order PK-DELIV3 has been released to your wallet.",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-08T10:55:04.191Z",
+      "updated_at": "2026-08-08T10:55:04.201Z"
+    },
+    {
+      "id": "n1786186508799mp5yl",
+      "user_id": "rendor",
+      "type": "order",
+      "title": "📬 Order Delivered!",
+      "message": "Package PK-DELIV3 has been delivered. You can now rate the store.",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-08T10:55:08.799Z",
+      "updated_at": "2026-08-08T10:55:08.809Z"
     }
   ],
   "ad_campaigns": [],
@@ -330,5 +691,33 @@
   ],
   "reviews": [],
   "service_orders": [],
-  "platform_revenue": []
+  "platform_revenue": [
+    {
+      "source": "platform_fee",
+      "amount": 0.5,
+      "reference": "PK-69764",
+      "description": "Platform fee (1%) on storefront order PK-69764 — Vendor Storefront",
+      "created_at": "2026-08-07T22:11:04.260Z",
+      "id": "pla-1786140664269-887",
+      "updated_at": "2026-08-07T22:11:04.269Z"
+    },
+    {
+      "source": "platform_fee",
+      "amount": 0.5,
+      "reference": "PK-28106",
+      "description": "Platform fee (1%) on storefront order PK-28106 — Vendor Storefront",
+      "created_at": "2026-08-08T09:37:17.274Z",
+      "id": "pla-1786181837290-993",
+      "updated_at": "2026-08-08T09:37:17.290Z"
+    },
+    {
+      "source": "platform_fee",
+      "amount": 0.5,
+      "reference": "PK-89428",
+      "description": "Platform fee (1%) on storefront order PK-89428 — Vendor Storefront",
+      "created_at": "2026-08-08T10:37:58.154Z",
+      "id": "pla-1786185478162-418",
+      "updated_at": "2026-08-08T10:37:58.162Z"
+    }
+  ]
 }

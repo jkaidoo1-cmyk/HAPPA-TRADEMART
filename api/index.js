@@ -494,6 +494,14 @@ app.get('/api/:table', async (req, res) => {
     const table = req.params.table;
     const { search, limit, page, sort, ...filters } = req.query;
 
+    // Order/wallet/notification data must never be served from the browser HTTP
+    // cache — a stale empty list made fresh storefront orders look missing.
+    if (['packages', 'orders', 'wallet_transactions', 'notifications', 'referrals', 'platform_revenue', 'support_tickets', 'reviews', 'delivery_rates'].includes(table)) {
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    } else if (['products', 'stores', 'storefronts', 'categories'].includes(table)) {
+      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    }
+
     if (table === 'storefronts') {
       let stores = [];
       if (!supabase) {
@@ -566,26 +574,69 @@ app.get('/api/:table', async (req, res) => {
       return;
     }
 
-    // Supabase path
-    let queryBuilder = supabase.from(table).select('*');
-    for (const [key, value] of Object.entries(filters)) {
-      if (value !== undefined && value !== '') {
-        queryBuilder = queryBuilder.eq(key, value);
+    // Supabase path — fetch BOTH backends and merge (same strategy as server.js).
+    // A record written only to db.json (Supabase insert failure fallback) must
+    // still be readable here, otherwise orders vanish from every list page.
+    let supaRows = [];
+    let supaError = null;
+    if (supabase) {
+      let queryBuilder = supabase.from(table).select('*');
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined && value !== '') {
+          queryBuilder = queryBuilder.eq(key, value);
+        }
       }
-    }
-    if (sort) queryBuilder = queryBuilder.order(sort, { ascending: false });
-    if (limit && !search) {
-      const max = parseInt(limit, 10);
-      if (!isNaN(max) && max > 0) {
-        const pageNum = parseInt(page, 10) || 1;
-        const start = (pageNum - 1) * max;
-        queryBuilder = queryBuilder.range(start, start + max - 1);
+      if (sort) queryBuilder = queryBuilder.order(sort, { ascending: false });
+      if (limit && !search) {
+        const max = parseInt(limit, 10);
+        if (!isNaN(max) && max > 0) {
+          const pageNum = parseInt(page, 10) || 1;
+          const start = (pageNum - 1) * max;
+          queryBuilder = queryBuilder.range(start, start + max - 1);
+        }
       }
+      const { data, error } = await queryBuilder;
+      if (error) supaError = error;
+      else supaRows = (data || []).map(serializeRecord);
     }
-    const { data, error } = await queryBuilder;
-    if (error) return res.status(500).json({ error: error.message });
-    let rows = (data || []).map(serializeRecord);
+
+    // Merge local db.json rows (idempotent by id — local wins for same id).
+    dataStore.ensureTable(table);
+    const store = dataStore.getStore();
+    const localRows = (store[table] || []).map(serializeRecord);
+    const rowMap = new Map();
+    supaRows.forEach(r => rowMap.set(String(r.id), r));
+    localRows.forEach(r => {
+      const key = String(r.id);
+      const existing = rowMap.get(key) || {};
+      rowMap.set(key, { ...existing, ...r });
+    });
+    let rows = Array.from(rowMap.values());
+
+    // Apply filters client-side (query params were also pushed to Supabase for
+    // efficiency; local rows need them applied here).
     if (search) rows = applyClientFilters(rows, { search, limit, page });
+    for (const [k, v] of Object.entries(filters)) {
+      if (!v) continue;
+      rows = rows.filter(r => String(r[k] ?? '').toLowerCase() === String(v).toLowerCase());
+    }
+    if (sort) rows.sort((a, b) => {
+      const av = a[sort], bv = b[sort];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return bv - av;
+      return String(bv).localeCompare(String(av));
+    });
+    const max = parseInt(limit, 10);
+    const pageNum = parseInt(page, 10) || 1;
+    if (!Number.isNaN(max) && max > 0) {
+      const start = (pageNum - 1) * max;
+      rows = rows.slice(start, start + max);
+    }
+    if (supaError && rows.length === 0) {
+      return res.status(500).json({ error: supaError.message });
+    }
     res.json({ data: rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -796,11 +847,25 @@ app.post('/api/:table', async (req, res) => {
       }
     }
 
-    // Supabase path — retry with slim candidates when optional columns are missing
+    // Supabase path — retry with slim candidates when optional columns are missing.
+    // If Supabase rejects the write (RLS policy, missing column, schema drift),
+    // fall back to the local db.json store so the record is NEVER lost — the
+    // frontend must not receive a 500 here, because it would silently route the
+    // write to localStorage and the order would vanish from every list page.
     const { data, error } = await writeWithCandidates(supabase, table, 'insert', record);
     if (error) {
-      console.error('[POST] Supabase error:', table, error);
-      return res.status(500).json({ error: error.message, backend: 'supabase' });
+      console.error('[POST] Supabase error:', table, error.message, '— falling back to db.json');
+      try {
+        dataStore.ensureTable(table);
+        const store = dataStore.getStore();
+        store[table].push(record);
+        const fileSaved = dataStore.saveToFile();
+        console.log(`[POST] Fallback: saved ${table}/${record.id} to local store${fileSaved ? ' + db.json' : ' (memory only)'}`);
+        return res.status(201).json(serializeRecord(record));
+      } catch (localErr) {
+        console.error('[POST] Local fallback failed:', table, localErr);
+        return res.status(500).json({ error: localErr.message, backend: 'supabase' });
+      }
     }
     console.log(`[POST] Saved ${table}/${data.id} to Supabase`);
     res.status(201).json(serializeRecord(data));
@@ -839,7 +904,20 @@ app.put('/api/:table/:id', async (req, res) => {
     }
     
     const { data, error } = await writeWithCandidates(supabase, table, 'upsert', record);
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error('[PUT] Supabase error:', table, error.message, '— falling back to db.json');
+      try {
+        dataStore.ensureTable(table);
+        const store = dataStore.getStore();
+        const idx = store[table].findIndex(r => String(r.id) === String(id));
+        if (idx === -1) store[table].push(record); else store[table][idx] = { ...store[table][idx], ...record };
+        dataStore.saveToFile();
+        return res.json(serializeRecord(record));
+      } catch (localErr) {
+        console.error('[PUT] Local fallback failed:', table, localErr);
+        return res.status(500).json({ error: localErr.message });
+      }
+    }
     res.json(serializeRecord(data));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -994,9 +1072,29 @@ app.patch('/api/:table/:id', async (req, res) => {
       return res.json(serializeRecord(idx === -1 ? dbRecord : store[table][idx]));
     }
     
-    // Use update instead of upsert; retry slim candidates when optional columns are missing
+    // Use update instead of upsert; retry slim candidates when optional columns are missing.
+    // On Supabase failure, persist to the local store so the update is never lost.
     const { data, error } = await writeWithCandidates(supabase, table, 'update', record, existingRecord, id);
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error('[PATCH] Supabase error:', table, error.message, '— falling back to db.json');
+      try {
+        dataStore.ensureTable(table);
+        const store = dataStore.getStore();
+        const idx = store[table].findIndex(r => String(r.id) === String(id));
+        const mergedRecord = serializeRecord({ ...existingRecord, ...body, id: id });
+        const dbRecord = prepareRecordForDb(table, mergedRecord, existingRecord);
+        if (idx === -1) {
+          store[table].push(dbRecord);
+        } else {
+          store[table][idx] = { ...store[table][idx], ...dbRecord };
+        }
+        dataStore.saveToFile();
+        return res.json(serializeRecord(idx === -1 ? dbRecord : store[table][idx]));
+      } catch (localErr) {
+        console.error('[PATCH] Local fallback failed:', table, localErr);
+        return res.status(500).json({ error: localErr.message });
+      }
+    }
     res.json(serializeRecord(data));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1101,7 +1199,18 @@ app.delete('/api/:table/:id', async (req, res) => {
     }
     
     const { error } = await supabase.from(table).delete().eq('id', id);
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error('[DELETE] Supabase error:', table, error.message, '— falling back to db.json');
+      // RLS may reject the delete on the deployed backend; still remove it
+      // locally so the record (e.g. auto-deleted sold-out product) is gone.
+      dataStore.ensureTable(table);
+      const store = dataStore.getStore();
+      const before = store[table].length;
+      store[table] = store[table].filter(r => String(r.id) !== String(id));
+      dataStore.saveToFile();
+      if (store[table].length === before) return res.status(404).json({ error: 'Record not found' });
+      return res.status(204).send();
+    }
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });

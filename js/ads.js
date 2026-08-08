@@ -242,7 +242,7 @@ function _buildSlotState(campaign, pageKey) {
 
   for (const sid of storeIds) {
     const products = AdEngine.products.filter(p =>
-      p.status !== 'archived' && String(p.store_id) === String(sid)
+      isProductListable(p) && String(p.store_id) === String(sid)
     );
     if (!products.length) continue;
     allStoreEntries.push({ sid, products, cursor: 0 });
@@ -250,7 +250,7 @@ function _buildSlotState(campaign, pageKey) {
 
   // Fallback: If selected stores have no direct product matches yet, use all non-archived platform products so campaign still displays!
   if (!allStoreEntries.length && AdEngine.products.length) {
-    const fallbackProducts = AdEngine.products.filter(p => p.status !== 'archived');
+    const fallbackProducts = AdEngine.products.filter(p => isProductListable(p));
     if (fallbackProducts.length) {
       allStoreEntries.push({ sid: storeIds[0] || 'store-fallback', products: fallbackProducts, cursor: 0 });
     }

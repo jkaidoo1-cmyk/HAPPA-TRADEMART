@@ -1,6 +1,3 @@
 [Supabase] Testing database connection... ⚡
 HAPPA backend running on http://localhost:54321
 [Supabase] Connected to database successfully! ⚡
-[Auth Migration Error] supabase.from(...).update(...).eq(...).catch is not a function
-[Supabase Delete Exception] table=platform_revenue id=pla-1786123709568-459: Could not find the table 'public.platform_revenue' in the schema cache
-[Supabase Delete Exception] table=platform_revenue id=pla-1786123709568-459: Could not find the table 'public.platform_revenue' in the schema cache

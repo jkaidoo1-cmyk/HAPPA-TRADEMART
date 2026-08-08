@@ -1439,12 +1439,6 @@ async function submitAddProduct(e, storeId, vendorId) {
     return;
   }
 
-  if (!name) {
-    showToast('Please enter a product name before saving.', 'warning');
-    setBtn('idle');
-    return;
-  }
-
   if (isNaN(price) || isNaN(stock)) {
     showToast('Fill in price and stock with valid numbers', 'warning');
     setBtn('idle');
@@ -1466,8 +1460,9 @@ async function submitAddProduct(e, storeId, vendorId) {
   }
 
   const commission = getCommission(finalPrice);
+  const productName = name || cat || 'Product';
   const productData = {
-    name, description: desc, price: finalPrice, original_price: finalOrig,
+    name: productName, description: desc, price: finalPrice, original_price: finalOrig,
     store_id: storeId, vendor_id: vendorId, category: cat,
     images,
     stock_qty: stock, sold_count: 0, views: 0,
@@ -1487,7 +1482,7 @@ async function submitAddProduct(e, storeId, vendorId) {
   const tempProduct = { ...productData, id: tempId, _isOptimistic: true, created_at: Date.now() };
   App.allProducts.push(tempProduct);
   closeModalForce();
-  showToast(`"${name}" added! 🎉`, 'success', 2200);
+  showToast(`"${productName}" added! 🎉`, 'success', 2200);
   if (App.currentPage === 'vendor-my-store') {
     renderVendorMyStorePage();
   } else {
@@ -1553,11 +1548,11 @@ function _addProductModalHTML(storeId, vendorId, prev) {
       <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">JPG, PNG or WEBP · Max 5MB each</div>
     </div>
     <div class="form-group">
-      <label class="form-label">Product Name</label>
+      <label class="form-label">Product Name <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(optional)</span></label>
       <input class="form-control" id="new-p-name" placeholder="e.g. Nike Air Max 90" value="${escHtml(prev.name || '')}">
     </div>
     <div class="form-group">
-      <label class="form-label">Description</label>
+      <label class="form-label">Description <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(optional)</span></label>
       <textarea class="form-control" id="new-p-desc" rows="3" placeholder="Describe your product...">${escHtml(prev.desc || '')}</textarea>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -2483,13 +2478,13 @@ function _bapRenderStep1() {
   if (!panel) return;
 
   panel.innerHTML = `
-${_bapHeader('Bulk Add Products', 'up to 10 items at once')}
+${_bapHeader('Bulk Add Products', 'up to 20 items at once')}
 <div class="bap-body">
 
   <div class="bap-drop-zone" onclick="document.getElementById('bap-file-input').click()">
     <i class="fas fa-images"></i>
     <h3>Tap to select product images</h3>
-    <p>Choose 1-10 images from your gallery</p>
+    <p>Choose 1-20 images from your gallery</p>
     <p style="margin-top:6px;font-size:.72rem">JPG, PNG, WEBP · Max 5MB each</p>
   </div>
   <input type="file" id="bap-file-input" accept="image/*" multiple style="display:none"
@@ -2526,7 +2521,7 @@ async function _bapOnFilePick(input) {
   if (!strip) return;
 
   for (const file of files) {
-    if (_bap.drafts.length >= 10) break;
+    if (_bap.drafts.length >= 20) break;
     const maxBytes = 5 * 1024 * 1024;
     if (file.size > maxBytes) {
       showToast(`"${file.name}" is too large (max 5MB)`, 'warning');
@@ -2577,7 +2572,7 @@ async function _bapOnFilePick(input) {
     }
   }
 
-  if (_bap.drafts.length >= 10) showToast('Maximum 10 images reached', 'info');
+  if (_bap.drafts.length >= 20) showToast('Maximum 20 images reached', 'info');
 }
 
 // ── Remove a draft from step 1 ───────────────────────────────
@@ -2967,6 +2962,7 @@ async function _bapSubmitAll() {
     const stock  = parseInt(document.getElementById('bap-stock-'  + i)?.value)   || 0;
     const weight = parseFloat(document.getElementById('bap-weight-' + i)?.value) || 0.5;
     const cat    = document.getElementById('bap-cat-'   + i)?.value || 'Other';
+    const finalName = name || cat || 'Product';
     const flash        = document.getElementById('bap-flash-' + i)?.checked || false;
     const allowBuyerNote  = document.getElementById('bap-allow-note-' + i)?.checked || false;
     const buyerNotePrompt = (document.getElementById('bap-note-prompt-' + i)?.value || '').trim() || 'Add a note (e.g. color, size)';
@@ -2994,7 +2990,7 @@ async function _bapSubmitAll() {
 
     const commission = getCommission(price);
     const prod = await apiPost('products', {
-      name, description: desc, price, original_price: orig,
+      name: finalName, description: desc, price, original_price: orig,
       store_id: storeId, vendor_id: vendorId, category: cat,
       images,
       stock_qty: stock, sold_count: 0, views: 0,
@@ -3281,9 +3277,9 @@ window.updateStorefrontPreview = function() {
   const storeNameVal = document.getElementById('store-name')?.value || '';
   const myStore = (App.allStores || []).find(s => String(s.vendor_id) === String(App.currentUser?.id) || String(s.id) === String(App.myStore?.id) || s.name === storeNameVal) || App.myStore || {};
   if (window.App && Array.isArray(App.allProducts)) {
-    displayProducts = App.allProducts.filter(p => String(p.store_id) === String(myStore.id) && p.status === 'active');
+    displayProducts = App.allProducts.filter(p => String(p.store_id) === String(myStore.id) && isProductListable(p));
     if (displayProducts.length === 0) {
-      displayProducts = App.allProducts.filter(p => String(p.vendor_id) === String(App.currentUser?.id) && p.status === 'active');
+      displayProducts = App.allProducts.filter(p => String(p.vendor_id) === String(App.currentUser?.id) && isProductListable(p));
     }
   }
   if (displayProducts.length === 0) {
