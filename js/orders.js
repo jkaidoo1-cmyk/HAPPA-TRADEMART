@@ -9,11 +9,13 @@
 
 // ── Status label maps ─────────────────────────────────────
 const VENDOR_STATUS_LABELS = {
-  pending:   { text: 'Awaiting Vendor',  css: 'pending'   },
-  accepted:  { text: 'Vendor Accepted',  css: 'received'  },
-  received:  { text: 'Vendor Received',  css: 'received'  },
-  processed: { text: 'Ready for Pickup', css: 'processed' },
-  rejected:  { text: 'Rejected',         css: 'rejected'  }
+  pending:     { text: 'Awaiting Vendor',  css: 'pending'     },
+  accepted:    { text: 'Vendor Accepted',  css: 'received'    },
+  received:    { text: 'Vendor Received',  css: 'received'    },
+  processed:   { text: 'Ready for Pickup', css: 'processed'   },
+  on_delivery: { text: 'On Delivery',      css: 'on_delivery' },
+  delivered:   { text: 'Delivered',        css: 'delivered'   },
+  rejected:    { text: 'Rejected',         css: 'rejected'    }
 };
 
 const ADMIN_STATUS_LABELS = {
@@ -54,6 +56,17 @@ function sanitizePackage(pkg) {
   if (!pkg.vendor_amount) pkg.vendor_amount = parseFloat((subtotal - (pkg.commission_amount || 0)).toFixed(2));
 
   return pkg;
+}
+
+// Storefront orders are fully managed by the VENDOR — the admin never sees or
+// touches them. They are identified by order_source 'storefront' (set at checkout)
+// or the admin_status marker 'vendor_controlled' on older records.
+function isStorefrontOrder(pkg) {
+  return !!(pkg && (
+    String(pkg.order_source || '') === 'storefront' ||
+    String(pkg.admin_status || '') === 'vendor_controlled' ||
+    !!pkg.storefront_id
+  ));
 }
 
 // A package belongs to the current buyer if it was linked to their account id,
@@ -415,9 +428,14 @@ async function updateVendorStatus(packageId, newStatus) {
   const pCode = pkg.package_code || targetId;
 
   const currentVs = pkg.vendor_status || 'pending';
+  const isSfOrder = isStorefrontOrder(pkg);
   // 'accepted' is set by storefront orders (auto-accepted at checkout); treat it as
   // the starting point so the vendor can acknowledge and progress the order.
-  const validTransitions = { pending: ['received'], accepted: ['received'], received: ['processed'] };
+  // Storefront orders are vendor-managed end-to-end: the vendor also dispatches and
+  // delivers them — the admin never sees or touches storefront orders.
+  const validTransitions = isSfOrder
+    ? { pending: ['received'], accepted: ['received'], received: ['processed'], processed: ['on_delivery', 'delivered'], on_delivery: ['delivered'] }
+    : { pending: ['received'], accepted: ['received'], received: ['processed'] };
   if (!(validTransitions[currentVs] || []).includes(newStatus)) {
     showToast(`Cannot change status from "${currentVs}" to "${newStatus}"`, 'warning');
     _vendorStatusInFlight.delete(packageId);
@@ -426,6 +444,25 @@ async function updateVendorStatus(packageId, newStatus) {
   }
 
   await apiPatch('packages', targetId, { vendor_status: newStatus });
+
+  // Storefront orders are delivered by the vendor directly (no admin involvement):
+  // mirror the admin delivery transition so the buyer sees the right tracking state,
+  // and run the same delivery finalization (release earnings, sold counts,
+  // auto-delete sold-out, referral, buyer notify) exactly once.
+  if (isSfOrder && newStatus === 'on_delivery') {
+    await apiPatch('packages', targetId, { admin_status: 'on_delivery', status: 'in_transit' }).catch(() => {});
+  } else if (isSfOrder && newStatus === 'delivered') {
+    await apiPatch('packages', targetId, {
+      admin_status: 'delivered',
+      status: 'delivered',
+      delivered_date: new Date().toISOString(),
+      balance_released: true
+    }).catch(() => {});
+    if (pkg.order_id) {
+      await apiPatch('orders', pkg.order_id, { status: 'delivered' }).catch(() => {});
+    }
+    await finalizePackageDelivery(pkg, targetId, 'delivered');
+  }
   
   // Update in-memory package object
   pkg.vendor_status = newStatus;
@@ -731,6 +768,22 @@ async function updateAdminStatus(packageId, newStatus) {
     await apiPatch('orders', pkg.order_id, { status: statusMap[newStatus] || 'delivered' }).catch(() => {});
   }
 
+  // Finalize delivery — release vendor earnings, credit platform fees, bump product
+  // sold counts, auto-delete sold-out products, pay referrals, and notify the buyer.
+  // Shared with the vendor flow for storefront orders (which are vendor-managed).
+  await finalizePackageDelivery(pkg, packageId, newStatus);
+
+  showToast(`Package marked as "${newStatus}" ✅`, 'success');
+  _adminStatusInFlight.delete(packageId);
+  await refreshAdminOrdersList();
+}
+
+// ── Shared: finalize a package delivery ───────────────────
+// Releases vendor earnings, credits platform fees, bumps product sold counts,
+// auto-deletes sold-out products, pays referral rewards, and notifies the buyer.
+// Used by the admin flow (main-site orders) AND by vendors marking storefront
+// orders delivered — storefront orders are vendor-managed end to end.
+async function finalizePackageDelivery(pkg, packageId, newStatus) {
   // Auto-release vendor earnings on delivery
   // vendor_amount already has commission deducted at checkout (it's what vendor earns, not order total)
   if (newStatus === 'delivered' && !(await _packageEarningsReleased(pkg))) {
@@ -905,10 +958,6 @@ async function updateAdminStatus(packageId, newStatus) {
   };
   if (notifs[newStatus])
     addNotification(pkg.buyer_id, 'order', notifs[newStatus][0], notifs[newStatus][1]);
-
-  showToast(`Package marked as "${newStatus}" ✅`, 'success');
-  _adminStatusInFlight.delete(packageId);
-  await refreshAdminOrdersList();
 }
 
 // ── Admin: re-fetch and re-render just the orders list ────
@@ -927,7 +976,8 @@ async function refreshAdminOrdersList() {
     apiGet('packages', 'limit=200'),
     apiGet('users',    'limit=200')
   ]);
-  const allPkgs  = pkgsRes?.data  || [];
+  // Storefront orders are vendor-managed — exclude them from the admin's order list.
+  const allPkgs  = (pkgsRes?.data || []).filter(p => !isStorefrontOrder(p));
   const allUsers = usersRes?.data || [];
 
   listEl.innerHTML = allPkgs.length
@@ -1080,7 +1130,24 @@ function packageDetailHTML(rawPkg) {
 
         ${vs === 'processed' ? `
         <span class="status-badge status-processed" style="font-size:.72rem"><i class="fas fa-check-double"></i> Processed</span>
-        <span style="font-size:.78rem;color:var(--text-muted)">Waiting for admin dispatch</span>` : ''}
+        ${isStorefrontOrder(pkg) ? `
+        <button class="btn btn-primary btn-sm" onclick="updateVendorStatus('${pkgId}','on_delivery')">
+          <i class="fas fa-truck"></i> Mark On Delivery
+        </button>
+        <button class="btn btn-success btn-sm" onclick="updateVendorStatus('${pkgId}','delivered')">
+          <i class="fas fa-check-circle"></i> Mark Delivered
+        </button>` : `
+        <span style="font-size:.78rem;color:var(--text-muted)">Waiting for admin dispatch</span>`}` : ''}
+
+        ${vs === 'on_delivery' ? `
+        <span class="status-badge status-on_delivery" style="font-size:.72rem"><i class="fas fa-truck"></i> On Delivery</span>
+        <button class="btn btn-success btn-sm" onclick="updateVendorStatus('${pkgId}','delivered')">
+          <i class="fas fa-check-circle"></i> Mark Delivered
+        </button>` : ''}
+
+        ${vs === 'delivered' ? `
+        <span class="status-badge status-delivered" style="font-size:.72rem"><i class="fas fa-check-double"></i> Delivered</span>
+        <span style="font-size:.78rem;color:var(--success)"><i class="fas fa-check-circle"></i> Payment released to your wallet</span>` : ''}
 
         ${vs === 'rejected' ? `
         <span class="status-badge status-rejected" style="font-size:.72rem"><i class="fas fa-ban"></i> Rejected</span>

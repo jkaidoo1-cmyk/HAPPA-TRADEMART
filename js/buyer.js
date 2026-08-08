@@ -20,6 +20,10 @@ async function renderBuyerDashboard() {
 
   const myOrders   = (ordersRes?.data || []).filter(o => o.buyer_id === u.id);
   const myPackages = (pkgsRes?.data || []).filter(p => buyerOwnsPackage(p, u));
+  // Storefront orders also create packages; count them toward Total Orders even if
+  // they predate the orders-record mirroring (no order_id link).
+  const sfPkgsWithoutOrder = myPackages.filter(p => isStorefrontOrder(p) && !p.order_id);
+  const totalOrderCount    = myOrders.length + sfPkgsWithoutOrder.length;
   const myRefs     = (refsRes?.data || []).filter(r => r.referrer_id === u.id);
 
   // Saved stores
@@ -67,7 +71,7 @@ async function renderBuyerDashboard() {
     <div class="stats-grid">
       <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('nav-buyer-orders').click()">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-shopping-bag" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">${myOrders.length}</div>
+        <div class="stat-value">${totalOrderCount}</div>
         <div class="stat-label">Total Orders</div>
       </div>
 

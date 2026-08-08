@@ -3148,12 +3148,6 @@ window.renderStorefrontCheckout = function(storeId) {
             <input type="radio" name="sf-ch-payment" value="cod">
             <span>💵 Cash on Delivery</span>
           </label>
-          ${user.id ? `
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.85rem">
-            <input type="radio" name="sf-ch-payment" value="wallet">
-            <span>💰 Pay with Wallet (Bal: GHS ${user.wallet_balance || 0})</span>
-          </label>
-          ` : ''}
         </div>
       </div>
 
@@ -3232,39 +3226,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   const platformFee = Number((subtotalAmount * 0.01).toFixed(2));
   const buyerPayTotal = Number((subtotalAmount + platformFee).toFixed(2));
 
-  if (payment === 'wallet') {
-    if (!user.id) {
-      showToast('Please sign in to pay with wallet', 'warning');
-      _placingStorefrontOrder = false;
-      if (orderBtn) orderBtn.disabled = false;
-      return;
-    }
-    if ((user.wallet_balance || 0) < buyerPayTotal) {
-      showToast('Insufficient wallet balance!', 'danger');
-      _placingStorefrontOrder = false;
-      if (orderBtn) orderBtn.disabled = false;
-      return;
-    }
-    const balBefore = Number(user.wallet_balance || 0);
-    const balAfter  = balBefore - buyerPayTotal;
-    user.wallet_balance = balAfter;
-    localStorage.setItem('happa_session', JSON.stringify(user));
-    await apiPatch('users', user.id, { wallet_balance: balAfter });
-    await apiPost('wallet_transactions', {
-      user_id: user.id,
-      type: 'order_payment',
-      amount: buyerPayTotal,
-      balance_before: balBefore,
-      balance_after: balAfter,
-      payment_method: 'wallet',
-      payment_ref: 'SF-ORDER-' + Date.now(),
-      network: 'wallet',
-      account_number: '',
-      status: 'completed',
-      note: `Storefront order payment for ${storeId} (includes 1% platform fee)`,
-      reviewed_by: ''
-    });
-  } else if (payment === 'momo') {
+  if (payment === 'momo') {
     // Simulate Momo Authorization Prompt
     const num = prompt('Enter your Mobile Money phone number:', phone);
     if (!num) { _placingStorefrontOrder = false; if (orderBtn) orderBtn.disabled = false; return; }
@@ -3329,7 +3291,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     delivery_phone: phone,
     delivery_address: address,
     delivery_location: address,
-    payment_method: payment === 'wallet' ? 'wallet' : (payment === 'momo' ? 'momo' : 'cod'),
+    payment_method: payment === 'momo' ? 'momo' : 'cod',
     payment_status: payment === 'cod' ? 'pending' : 'paid',
     vendor_status: 'accepted',
     admin_status: 'vendor_controlled',
@@ -3373,6 +3335,34 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     _placingStorefrontOrder = false;
     if (orderBtn) orderBtn.disabled = false;
     return;
+  }
+
+  // Mirror the main-site checkout: create an `orders` record too, so the storefront
+  // order shows up in the buyer's Total Orders stat and any orders-table views just
+  // like a main-site order. It is tagged order_source 'storefront' so the admin's
+  // orders-table views can exclude it (storefront orders are vendor-managed).
+  const orderRec = await apiPost('orders', {
+    buyer_id: user.id || 'guest',
+    buyer_name: name,
+    buyer_phone: phone,
+    buyer_email: user.email || '',
+    items: storeCart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, store_id: storeId, buyer_note: i.buyer_note || '' })),
+    subtotal: grossAmt,
+    platform_fee: platformFee,
+    delivery_fee: 0,
+    total: buyerPayTotal,
+    payment_method: payment === 'momo' ? 'momo' : 'cod',
+    payment_ref: pCode,
+    status: payment === 'cod' ? 'pending' : 'paid',
+    delivery_address: address,
+    buyer_location: address,
+    order_source: 'storefront',
+    storefront_id: storeId,
+    created_at: new Date().toISOString()
+  }).catch(() => null);
+  if (orderRec && orderRec.id) {
+    // Link the package to the order record so delivery updates flow to both.
+    await apiPatch('packages', newPkg.id, { order_id: orderRec.id }).catch(() => {});
   }
 
   // Record the 1% platform fee so it reflects in admin Platform Revenue stats & chart

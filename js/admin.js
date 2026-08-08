@@ -23,8 +23,10 @@ async function renderAdminDashboard() {
   const allUsers    = (usersRes?.data || []).filter(u => u.role !== 'admin');
   const allStores   = (storesRes?.data || []).filter(s => s.vendor_id !== 'admin' && !(s.name || '').toLowerCase().includes('admin'));
   const allProducts = productsRes?.data || [];
-  const allOrders   = ordersRes?.data   || [];
-  const allPkgs     = pkgsRes?.data     || [];
+  // Storefront orders are vendor-managed — exclude them from the admin's stats too.
+  // (Storefront checkouts now also create `orders` records, so filter those as well.)
+  const allOrders   = (ordersRes?.data || []).filter(o => !isStorefrontOrder(o));
+  const allPkgs     = (pkgsRes?.data || []).filter(p => !isStorefrontOrder(p));
   const platformRevenue = platformRevenueRes?.data || [];
 
   App.allStores   = allStores;
@@ -2933,7 +2935,8 @@ async function loadAdminReferrals() {
 
     const users = usersRes?.data || [];
     const referrals = refsRes?.data || [];
-    const orders = ordersRes?.data || [];
+    // Storefront orders are vendor-managed — exclude them from the admin referral board.
+    const orders = (ordersRes?.data || []).filter(o => !isStorefrontOrder(o));
 
     // Group referrals by referrer
     const grouped = {};
