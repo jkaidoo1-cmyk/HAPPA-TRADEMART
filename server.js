@@ -83,7 +83,13 @@ const hasSupabaseKey = process.env.SUPABASE_KEY && !process.env.SUPABASE_KEY.inc
 if (hasSupabaseUrl && hasSupabaseKey) {
   try {
     const { createClient } = require('@supabase/supabase-js');
-    const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+    // Cap every Supabase request at 2.5s: a slow or missing table (or flaky
+    // network) must never block a response — callers fall back to db.json.
+    const timedFetch = (input, init) => Promise.race([
+      globalThis.fetch(input, init),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase request timeout')), 2500))
+    ]);
+    const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, { global: { fetch: timedFetch } });
     console.log('[Supabase] Testing database connection... ⚡');
     withSupaTimeout(client.from('users').select('id').limit(1), 2000)
       .then(({ error }) => {
@@ -1275,12 +1281,17 @@ app.delete('/api/:table/:id', async (req, res) => {
         try { await supabase.from('products').delete().eq('vendor_id', id); } catch (e) {}
         try { await supabase.from('stores').delete().eq('vendor_id', id); } catch (e) {}
 
-        // 3. Now safely hard-delete the user account
-        const { error } = await supabase.from('users').delete().eq('id', id);
-        if (error) throw error;
+        // 3. Now safely hard-delete the user account (best-effort — if Supabase
+        // fails, still remove the account from the local db below).
+        try {
+          const { error } = await supabase.from('users').delete().eq('id', id);
+          if (error) console.error('[Supabase] user delete rejected:', error.message);
+        } catch (err) {
+          console.error('[Supabase] user delete failed (falling back to local db):', err.message);
+        }
       } catch (err) {
         console.error(`[Supabase Delete Exception] table=${table} id=${id}:`, err.message);
-        return res.status(500).json({ error: err.message });
+        // Continue to local removal below rather than failing the whole request.
       }
     }
     const db = loadDb();
@@ -1322,8 +1333,9 @@ app.delete('/api/:table/:id', async (req, res) => {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw error;
     } catch (err) {
-      console.error(`[Supabase Delete Exception] table=${table} id=${id}:`, err.message);
-      return res.status(500).json({ error: err.message });
+      // Supabase rejected/timed out (missing table, RLS, outage) — don't fail
+      // the request; still remove the record from the local db so it stays gone.
+      console.error(`[Supabase Delete fallback] table=${table} id=${id}:`, err.message);
     }
   }
 

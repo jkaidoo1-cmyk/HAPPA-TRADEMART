@@ -209,11 +209,6 @@ async function renderAdminDashboard() {
       <div class="admin-action-btn" onclick="switchTab(null,'admin-wallet');renderAdminTransactions('admin-txn-wrap')">
         <i class="fas fa-money-bill-wave"></i><span>Withdrawals</span>
       </div>
-      <!-- Delivery Rates button commented out
-      <div class="admin-action-btn" onclick="showPage('delivery')">
-        <i class="fas fa-truck"></i><span>Delivery Rates</span>
-      </div>
-      -->
     </div>
 
     ${pendingVendors.length ? `
@@ -564,25 +559,6 @@ async function renderAdminDashboard() {
     <form onsubmit="saveAdminSettings(event)">
 
       <!-- 2. Commission & Fees -->
-      <!-- Delivery Fees section commented out per user request (not charging delivery on site)
-      <div class="card" style="margin-bottom:14px">
-        <div class="card-header">
-          <h3>💰 Delivery Fees</h3>
-        </div>
-        <div class="card-body">
-          <div class="form-group">
-            <label class="form-label">Delivery Fee — Same City (GHS)</label>
-            <input class="form-control" id="setting-delivery-local" type="number" min="0" step="0.5" value="5">
-            <div class="form-hint">Base fee for deliveries within the same city</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Delivery Fee — Intercity (GHS)</label>
-            <input class="form-control" id="setting-delivery-intercity" type="number" min="0" step="0.5" value="15">
-            <div class="form-hint">Base fee for deliveries between cities</div>
-          </div>
-        </div>
-      </div>
-      -->
 
       <!-- 3. Wallet & Withdrawals -->
       <div class="card" style="margin-bottom:14px">

@@ -56,7 +56,14 @@ function getSupabase() {
   if (!url || !key) {
     return null; // caller will fall back to local DB
   }
-  return createClient(url, key);
+  // Cap every Supabase request at 2.5s: a slow/missing table or flaky network
+  // must never hold the response (Vercel functions time out at 10s). Callers
+  // fall back to the local data store on timeout/error.
+  const timedFetch = (input, init) => Promise.race([
+    globalThis.fetch(input, init),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase request timeout')), 2500))
+  ]);
+  return createClient(url, key, { global: { fetch: timedFetch } });
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -641,8 +648,23 @@ app.get('/api/:table', async (req, res) => {
         stores = store.stores.map(serializeRecord);
       } else {
         const { data, error } = await supabase.from('stores').select('*');
-        if (error) return res.status(500).json({ error: error.message });
-        stores = (data || []).map(serializeRecord);
+        if (error) {
+          console.error('[GET] Supabase error on stores:', error.message, '— using local stores');
+        } else {
+          stores = (data || []).map(serializeRecord);
+        }
+        // Merge local stores too, so records that only live in db.json (written
+        // while Supabase was down) are still resolvable — "storefront not available".
+        dataStore.ensureTable('stores');
+        const localStores = dataStore.getStore().stores.map(serializeRecord);
+        const storeMap = new Map();
+        stores.forEach(s => storeMap.set(String(s.id), s));
+        localStores.forEach(s => {
+          const key = String(s.id);
+          const existing = storeMap.get(key) || {};
+          storeMap.set(key, { ...existing, ...s });
+        });
+        stores = Array.from(storeMap.values());
       }
 
       let rows = stores.map(st => ({
@@ -765,8 +787,11 @@ app.get('/api/:table', async (req, res) => {
       const start = (pageNum - 1) * max;
       rows = rows.slice(start, start + max);
     }
-    if (supaError && rows.length === 0) {
-      return res.status(500).json({ error: supaError.message });
+    if (supaError) {
+      // Supabase read failed (missing table, RLS, timeout) — return whatever the
+      // local store has instead of 500. A 500 here makes the browser fall back
+      // to localStorage, so records that exist locally look "missing".
+      console.error('[GET] Supabase error on', table + ':', supaError.message, '— returning local rows (' + rows.length + ')');
     }
     res.json({ data: rows });
   } catch (err) {
@@ -787,8 +812,11 @@ app.get('/api/:table/:id', async (req, res) => {
       let supastores = [];
       if (supabase) {
         const { data, error } = await supabase.from('stores').select('*');
-        if (error) return res.status(500).json({ error: error.message });
-        supastores = (data || []).map(serializeRecord);
+        if (error) {
+          console.error('[GET] Supabase error on stores:', error.message, '— using local stores');
+        } else {
+          supastores = (data || []).map(serializeRecord);
+        }
       }
       dataStore.ensureTable('stores');
       const store = dataStore.getStore();
@@ -847,9 +875,16 @@ app.get('/api/:table/:id', async (req, res) => {
       return res.json(serializeRecord(found));
     }
     
-    const { data, error } = await supabase.from(table).select('*').eq('id', id).single();
-    if (error || !data) return res.status(404).json({ error: 'Record not found' });
-    res.json(serializeRecord(data));
+    const { data, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+    if (!error && data) return res.json(serializeRecord(data));
+    if (error) console.error('[GET] Supabase error on', table + '/' + id + ':', error.message, '— falling back to local store');
+    // Fall back to the local store so records written during a Supabase outage
+    // (or in tables Supabase doesn't have) are still resolvable.
+    dataStore.ensureTable(table);
+    const store = dataStore.getStore();
+    const found = store[table].find(r => String(r.id) === String(id));
+    if (!found) return res.status(404).json({ error: 'Record not found' });
+    res.json(serializeRecord(found));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

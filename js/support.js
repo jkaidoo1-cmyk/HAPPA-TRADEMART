@@ -28,8 +28,8 @@ const SUPPORT_FAQS = [
     a: 'Browse the marketplace, add items to your cart, then go to checkout. Choose your payment method (Mobile Money, Cash on Delivery, or Wallet) and confirm your delivery details.'
   },
   {
-    q: 'Is delivery really free?',
-    a: 'Yes — delivery is currently free on all orders across the platform. Just enter your delivery address at checkout and your items will be shipped at no extra cost.'
+    q: 'How does delivery work?',
+    a: 'Delivery is arranged directly between you and the vendor. After you place your order, the vendor will contact you to agree on the delivery method and any delivery charges — delivery is not handled by the platform.'
   },
   {
     q: 'How do I pay with my wallet?',
@@ -336,8 +336,15 @@ async function loadAdminSupport() {
   if (!container) return;
   container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading tickets…</div>';
 
-  const res = await apiGet('support_tickets', 'limit=200');
-  const tickets = (res?.data || []).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  const res = await apiGet('support_tickets', 'limit=200').catch(err => {
+    console.error('loadAdminSupport failed:', err);
+    return null;
+  });
+  if (!res || !Array.isArray(res.data)) {
+    container.innerHTML = '<div class="empty-state" style="padding:30px"><i class="fas fa-exclamation-triangle"></i><h3>Could not load tickets</h3><p>The support service did not respond. Please try again in a moment.</p><button class="btn" style="margin-top:10px" onclick="loadAdminSupport()">Retry</button></div>';
+    return;
+  }
+  const tickets = (res.data || []).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
   const counts = {
     open: tickets.filter(t => t.status === 'open').length,

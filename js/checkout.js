@@ -66,16 +66,6 @@ function renderCheckout() {
     </div>
   </div>
 
-  <!-- Shipping Schedule -->
-  <div class="ship-schedule-card" style="margin-bottom:14px">
-    <div style="font-size:2rem">📅</div>
-    <div>
-      <div style="font-weight:700;font-size:.9rem">Scheduled Shipping</div>
-      <div style="font-size:.8rem;opacity:.8">Items will be picked up &amp; shipped on</div>
-      <span class="ship-date-badge">${sat.toLocaleDateString('en-GH',{weekday:'long',day:'numeric',month:'long'})}</span>
-    </div>
-  </div>
-
   <!-- Package Preview -->
   <div class="card" style="margin-bottom:14px">
     <div class="card-header"><h3>📦 Your Packages</h3></div>
@@ -161,8 +151,6 @@ function renderCheckout() {
   <div class="checkout-summary" style="margin-bottom:14px">
     <div class="summary-row"><span>Subtotal (${App.cart.reduce((s,i)=>s+i.qty,0)} items)</span><span>GHS ${totals.subtotal.toFixed(2)}</span></div>
     <div class="summary-row"><span>Platform Fee (${PLATFORM_FEE_PCT}%)</span><span>GHS ${totals.platformFee.toFixed(2)}</span></div>
-    <!-- Delivery Fee row hashed out temporarily for mean time:
-    <div class="summary-row"><span>Delivery Fee</span><span id="checkout-delivery">GHS ${totals.deliveryFee.toFixed(2)}</span></div> -->
     <div class="summary-row" id="discount-row" style="display:${totals.discount > 0 ? 'flex' : 'none'}"><span style="color:var(--success)">Discount</span><span id="discount-amt" style="color:var(--success)">- GHS ${(totals.discount || 0).toFixed(2)}</span></div>
     <div class="summary-row total"><span>Total</span><span class="amount" id="checkout-total">GHS ${totals.total.toFixed(2)}</span></div>
   </div>
@@ -343,7 +331,7 @@ async function placeOrder() {
     buyer_name: buyerName,
     buyer_phone: buyerPhone,
     buyer_email: buyerEmail,
-    items: App.cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, store_id: i.store_id, buyer_note: i.buyer_note || '' })),
+    items: App.cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, image: i.image || '', store_id: i.store_id, buyer_note: i.buyer_note || '' })),
     subtotal: totals.subtotal, platform_fee: totals.platformFee,
     delivery_fee: totals.deliveryFee, total: totals.total,
     payment_method: selectedPayment, payment_ref: 'REF' + Date.now(),
@@ -443,7 +431,7 @@ async function placeOrder() {
       buyer_name: buyerName, buyer_phone: buyerPhone, buyer_email: buyerEmail,
       delivery_address: address, delivery_name: buyerName, delivery_phone: buyerPhone,
       delivery_location: dest, notes: address,
-      items: items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price, buyer_note: i.buyer_note || '' })),
+      items: items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price, image: i.image || '', buyer_note: i.buyer_note || '' })),
       vendor_amount: vendorAmt, commission_amount: commission, gross_amount: grossAmt, delivery_fee: d.rate,
       status: 'pending',
       vendor_status: 'pending',

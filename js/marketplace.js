@@ -462,6 +462,18 @@ async function renderProductDetail(id) {
     p = toStorefrontProduct(p);
   }
 
+  // Make sure the full catalog is in memory so the "You may also like" section
+  // below has products to suggest — deep links land here before the home page
+  // ever loads, leaving App.allProducts empty and the section blank.
+  if (!App.allProducts || !App.allProducts.length) {
+    try {
+      const prodsRes = await apiGet('products', 'limit=500');
+      if (prodsRes?.data?.length) App.allProducts = prodsRes.data;
+    } catch (e) {
+      console.warn('[renderProductDetail] Could not load catalog for related products:', e);
+    }
+  }
+
 
 
   // Increment view
@@ -710,35 +722,20 @@ ${store.id ? `
 
 
 
-<!-- Description -->
+<!-- Description (only shown when the vendor wrote one — no empty header/"No description" filler) -->
 
+${(p.description || '').trim() ? `
 <div class="card" style="margin:0 12px 12px">
 
   <div class="card-header"><h3>Product Description</h3></div>
 
   <div class="card-body">
 
-    <p style="font-size:.875rem;color:var(--text-light);line-height:1.7">${escHtml(p.description || 'No description available.')}</p>
+    <p style="font-size:.875rem;color:var(--text-light);line-height:1.7">${escHtml(p.description)}</p>
 
   </div>
 
-</div>
-
-
-
-<!-- Delivery Info -->
-
-<div class="card" style="margin:0 12px 12px">
-
-  <div class="card-header"><h3><i class="fas fa-truck"></i> Delivery Info</h3></div>
-
-  <div class="card-body" id="product-delivery-info">
-
-    ${renderProductDelivery(p)}
-
-  </div>
-
-</div>
+</div>` : ''}
 
 
 
@@ -795,44 +792,6 @@ ${store.id ? `
     if (c) c.innerHTML = `<div style="padding:40px;color:red;white-space:pre-wrap">Error rendering product detail:\n\n${e.stack}</div>`;
     console.error(e);
   }
-}
-
-
-
-function renderProductDelivery(p) {
-
-  const ul = App.currentUser?.location || '';
-
-  if (!ul) return `<p style="font-size:.85rem;color:var(--text-muted)"><a href="javascript:void(0)" onclick="showPage('auth')" style="color:var(--primary)">Sign in</a> to see delivery rates to your location</p>`;
-
-  const d = calcDelivery(p.location, ul, p.weight_kg || 0.5);
-
-  const sat = getNextSaturday();
-
-  return `
-
-<div style="font-size:.85rem;display:flex;flex-direction:column;gap:8px">
-
-  <div style="display:flex;justify-content:space-between">
-
-    <span><i class="fas fa-truck" style="color:var(--primary)"></i> ${d.intercity ? 'Intercity' : 'Local'} Delivery</span>
-
-    <strong>GHS ${d.rate.toFixed(0)}</strong>
-
-  </div>
-
-  <div style="display:flex;justify-content:space-between">
-
-    <span><i class="fas fa-calendar" style="color:var(--primary)"></i> Ships on</span>
-
-    <strong>${sat.toLocaleDateString('en-GH',{weekday:'short',day:'numeric',month:'short'})}</strong>
-
-  </div>
-
-  ${d.intercity ? '<p style="color:var(--text-muted);font-size:.78rem">Intercity delivery via Bolt Send or Ghana Post</p>' : ''}
-
-</div>`;
-
 }
 
 
@@ -911,7 +870,7 @@ async function shareProduct(productId) {
 
   const baseUrl = window.location.origin + window.location.pathname;
   const url = baseUrl + '?product=' + productId;
-  const title = p.name;
+  const title = p.name || 'Product on HAPPA TRADEMART';
   const desc = p.description ? `${p.description}` : '';
   const text = `${title}\n\n${desc ? desc + '\n\n' : ''}Check this out on HAPPA TRADEMART!\n${url}`;
 
@@ -921,17 +880,55 @@ async function shareProduct(productId) {
     url: url
   };
 
+  // Attach the product image so the shared link travels with a picture
+  // (Web Share API `files` — supported by mobile share sheets like WhatsApp).
+  let files = [];
+  try {
+    const img = p.images && p.images[0];
+    const file = await productImageToFile(img);
+    if (file) files.push(file);
+  } catch (e) {
+    console.warn('[Share] Could not attach image, sharing text + link only:', e);
+  }
+
   try {
     if (navigator.share) {
-      // Intentionally NOT attaching files (images) because OS share sheets often split files and text into separate messages.
-      // By sending only the URL, we rely on the Open Graph meta tags to render a proper rich link preview.
-      await navigator.share(shareData);
+      if (files.length && navigator.canShare && navigator.canShare({ files })) {
+        await navigator.share({ ...shareData, files });
+      } else {
+        await navigator.share(shareData);
+      }
     } else {
       navigator.clipboard?.writeText(text);
       showToast('Product details copied! 📋', 'success');
     }
   } catch (err) {
+    // If the OS rejected the file share (files unsupported/blocked), retry
+    // with just the text + link. Don't retry if the user cancelled.
+    if (files.length && err && err.name !== 'AbortError') {
+      try { await navigator.share(shareData); return; } catch (e2) {}
+    }
     console.log('Share failed or was cancelled:', err);
+  }
+}
+
+// Convert a product image (data URL, http(s) URL, or site-relative path) into a
+// File for the Web Share API. Returns null when the image can't be loaded.
+async function productImageToFile(imgSrc) {
+  if (!imgSrc) return null;
+  let src = imgSrc;
+  if (src.startsWith('/') && !src.startsWith('//')) {
+    src = window.location.origin + src;
+  }
+  if (!src.startsWith('data:') && !/^https?:/i.test(src)) return null;
+  try {
+    const res = await fetch(src);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const ext = (blob.type || 'image/jpeg').split('/')[1] || 'jpg';
+    return new File([blob], `product-${Date.now()}.${ext}`, { type: blob.type || 'image/jpeg' });
+  } catch (e) {
+    return null;
   }
 }
 
@@ -2910,7 +2907,7 @@ window.openStorefrontProductModal = async function(productId) {
           <span style="font-size:1.25rem; font-weight:900; color:${primaryColor}">GHS ${p.price}</span>
           <span style="font-size:0.75rem; background:#f3f4f6; padding:3px 8px; border-radius:12px; color:var(--text-muted)">In Stock: ${p.stock_qty || 0}</span>
         </div>
-        <p style="font-size:0.82rem; color:var(--text-light); line-height:1.5; margin:0; max-height:80px; overflow-y:auto">${escHtml(p.description || 'No description available.')}</p>
+        ${(p.description||'').trim() ? `<p style="font-size:0.82rem; color:var(--text-light); line-height:1.5; margin:0; max-height:80px; overflow-y:auto">${escHtml(p.description)}</p>` : ''}
         
         <div style="display:flex; align-items:center; gap:8px; margin-top:8px">
           <div style="display:flex; align-items:center; border:1.5px solid var(--border); border-radius:8px; overflow:hidden">
@@ -3102,8 +3099,8 @@ window.renderStorefrontCheckout = function(storeId) {
 
   let subtotal = 0;
   storeCart.forEach(i => subtotal += i.price * i.qty);
-  // Delivery is currently free — no delivery fee is charged on the site.
-  // (calcDelivery in app.js also returns rate 0; this mirrors that policy.)
+  // The platform does not handle or charge delivery — the vendor and customer
+  // arrange delivery directly. So no delivery fee is added to the total here.
   const delivery = 0;
   // Platform fee: 1% of the item subtotal is added to the buyer's total.
   const platformFee = Number((subtotal * 0.01).toFixed(2));
@@ -3156,7 +3153,6 @@ window.renderStorefrontCheckout = function(storeId) {
         <div class="card-body" style="padding:12px 16px; font-size:0.85rem; display:grid; gap:6px">
           <div style="display:flex; justify-content:space-between"><span>Items Subtotal:</span><span>GHS ${subtotal.toFixed(2)}</span></div>
           <div style="display:flex; justify-content:space-between"><span>Platform Fee (1%):</span><span>GHS ${platformFee.toFixed(2)}</span></div>
-          <!-- <div style="display:flex; justify-content:space-between"><span>Delivery Fee:</span><span>GHS ${delivery}</span></div> -->
           <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1rem; border-top:1px solid var(--border); padding-top:8px">
             <span>Total:</span>
             <span style="color:${primaryColor}">GHS ${total.toFixed(2)}</span>
@@ -3307,6 +3303,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
       name: item.name,
       price: item.price,
       qty: item.qty,
+      image: item.image || (item.images && item.images[0]) || '',
       commission_pct: item.commission_pct || item.vendor_fee_pct || 8,
       buyer_note: item.buyer_note || ''
     })),
@@ -3346,7 +3343,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     buyer_name: name,
     buyer_phone: phone,
     buyer_email: user.email || '',
-    items: storeCart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, store_id: storeId, buyer_note: i.buyer_note || '' })),
+    items: storeCart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, image: i.image || (i.images && i.images[0]) || '', store_id: storeId, buyer_note: i.buyer_note || '' })),
     subtotal: grossAmt,
     platform_fee: platformFee,
     delivery_fee: 0,
@@ -3441,14 +3438,28 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   // Reset badge
   window.updateStorefrontCartBadge(storeId, 0);
 
-  // Show confirmation tab content
+  // Show confirmation tab content — with the purchased items (and their images)
   const contentEl = getStoreTabContentEl();
   if (contentEl) {
+    const confItems = (storeCart || []).map(item => {
+      const confImg = item.image || (item.images && item.images[0]) || '';
+      const confTitle = item.name && item.name.trim() ? escHtml(item.name) : 'Item';
+      return `
+        <div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+          ${confImg ? `<img src="${confImg}" alt="${confTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">` : `<div style="width:42px;height:42px;border-radius:6px;background:var(--bg);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:.7rem"><i class="fas fa-box"></i></div>`}
+          <div style="flex:1;min-width:0;text-align:left">
+            <div style="font-size:.82rem;font-weight:700">${confTitle}</div>
+            <div style="font-size:.72rem;color:var(--text-muted)">Qty: ${item.qty || 1}</div>
+          </div>
+          <div style="font-weight:700;font-size:.82rem;flex-shrink:0">GHS ${((parseFloat(item.price)||0)*(parseInt(item.qty)||1)).toFixed(2)}</div>
+        </div>`;
+    }).join('');
     contentEl.innerHTML = `
-      <div class="empty-state" style="padding:60px 20px">
+      <div style="padding:40px 16px;max-width:440px;margin:0 auto;text-align:center">
         <i class="fas fa-check-circle" style="font-size:3rem;color:var(--success)"></i>
-        <h3>Thank you for your purchase!</h3>
-        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Your order has been sent to the store. Package Code: <strong>${pCode}</strong></p>
+        <h3 style="margin:10px 0 4px">Thank you for your purchase!</h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:16px">Your order has been sent to the store. Package Code: <strong>${pCode}</strong></p>
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;text-align:left;margin-bottom:16px">${confItems}</div>
         <button class="btn store-theme-btn btn-sm" onclick="switchStorefrontTab('home', '${storeId}')">Back to Store</button>
       </div>
     `;

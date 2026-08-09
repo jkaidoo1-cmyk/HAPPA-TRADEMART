@@ -165,7 +165,7 @@ async function showPackageDetailModal(packageId) {
   const vs = pkg.vendor_status || 'pending';
   const as = pkg.admin_status  || 'pending';
   const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
-  // Delivery is free — do not add any stored/legacy delivery fee to the total.
+  // The platform does not charge delivery — it is arranged between the vendor and customer.
   const total = itemSubtotal;
 
   showModal(`
@@ -232,10 +232,6 @@ async function showPackageDetailModal(packageId) {
           </div>
         </div>`;
       }).join('')}
-      <!-- Delivery Fee hashed out for mean time:
-      <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-muted);padding:4px 0">
-        <span>Delivery Fee</span><span>GHS ${(pkg.delivery_fee||0).toFixed(2)}</span>
-      </div> -->
       <div style="display:flex;justify-content:space-between;font-size:.9rem;font-weight:700;padding:8px 0 0;color:var(--primary)">
         <span>Total Paid</span><span>GHS ${total.toFixed(2)}</span>
       </div>
@@ -993,7 +989,7 @@ function adminPackageRowHTML(rawPkg, allUsers) {
   const vs  = pkg.vendor_status || 'pending';
   const as  = pkg.admin_status  || 'pending';
   const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
-  // Delivery is free — do not add any stored/legacy delivery fee to the total.
+  // The platform does not charge delivery — it is arranged between the vendor and customer.
   const total = itemSubtotal;
 
   const vsLabel = VENDOR_STATUS_LABELS[vs] || { text: vs, css: 'pending' };

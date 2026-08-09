@@ -340,7 +340,7 @@ function resolveRouteFromHash(hashStr) {
   const validPages = [
     'home', 'marketplace', 'stores', 'cart', 'checkout', 'auth', 'settings',
     'buyer-dashboard', 'vendor-dashboard', 'vendor-my-store', 'vendor-orders',
-    'rendor-dashboard', 'admin-dashboard', 'notifications', 'delivery', 'privacy'
+    'rendor-dashboard', 'admin-dashboard', 'notifications', 'privacy'
   ];
 
   if (route === 'register-vendor' || route === 'auth-vendor') {
@@ -461,7 +461,7 @@ function resolveRouteFromHash(hashStr) {
   // ── Background Prefetching ──
   // Start preloading all static pages in the background to speed up navigation
   setTimeout(() => {
-    const prefetchPages = ['marketplace', 'stores', 'cart', 'notifications', 'delivery', 'privacy'];
+    const prefetchPages = ['marketplace', 'stores', 'cart', 'notifications', 'privacy'];
     if (App.cart && App.cart.length) prefetchPages.push('checkout');
     if (App.currentUser) {
       prefetchPages.push('settings');
@@ -849,9 +849,9 @@ async function runPageInit(pageId) {
   try {
     switch(pageId) {
       case 'home':           await loadHomeData().then(() => initAdBanners('home')); break;
-      case 'marketplace':    await renderMarketplace().then(() => initAdBanners('shop')); calcDaysToSaturday(); break;
+      case 'marketplace':    await renderMarketplace().then(() => initAdBanners('shop')); break;
       case 'stores':         await renderStores().then(() => initAdBanners('stores')); break;
-      case 'cart':           renderCart(); calcDaysToSaturday(); break;
+      case 'cart':           renderCart(); break;
       case 'checkout':       renderCheckout(); break;
       case 'auth':           renderAuth(); break;
       case 'settings':       await renderSettingsPage(); break;
@@ -864,7 +864,6 @@ async function runPageInit(pageId) {
       case 'rendor-profile':    await renderRendorProfilePublic(); break;
       case 'admin-dashboard':   await renderAdminDashboard(); if (typeof window.refreshAIBadge==='function') window.refreshAIBadge(); break;
       case 'notifications':     await renderNotifications(); break;
-      case 'delivery':         renderDeliveryPage(); break;
       case 'privacy':          renderPrivacyPage(); break;
       case 'product':          await renderProductDetail(App.currentProductId); break;
       case 'store-detail':     await renderStoreDetail(App.currentStoreId); break;
@@ -914,6 +913,12 @@ function showPage(pageId, entityId = null) {
     if (splash) splash.remove();
   }
 
+  // Capture the entity currently displayed for this page BEFORE updating it —
+  // the guard below compares against this value, and assigning first made
+  // same-page navigation (product → product via "You may also like", store →
+  // store, rendor → rendor) look like a no-op so clicks silently did nothing.
+  const prevEntityId = getPageEntityId(pageId);
+
   if (entityId) {
     if (pageId === 'store-detail' || pageId === 'storefront' || pageId === 'store-admin') {
       App.currentStoreId = entityId;
@@ -939,7 +944,7 @@ function showPage(pageId, entityId = null) {
   }
 
   const targetEntity = entityId || getPageEntityId(pageId);
-  const currentEntity = getPageEntityId(App.currentPage);
+  const currentEntity = prevEntityId;
   const targetEl = document.getElementById('page-' + pageId);
   if (App.currentPage === pageId && String(targetEntity || '') === String(currentEntity || '') && targetEl && targetEl.classList.contains('active') && targetEl.style.display !== 'none') {
     return;
@@ -1963,12 +1968,6 @@ function getNextSaturday() {
   sat.setHours(8, 0, 0, 0);
   return sat;
 }
-function calcDaysToSaturday() {
-  const sat = getNextSaturday();
-  const diff = Math.ceil((sat - new Date()) / (1000 * 60 * 60 * 24));
-  const el = document.getElementById('days-to-saturday');
-  if (el) el.textContent = diff;
-}
 
 // ── Flash Sale Countdown & Group Rotation ──────────────────
 function syncFlashSaleStates() {
@@ -2673,12 +2672,16 @@ function renderStars(rating) {
 
 // ── Product & Store Open ──────────────────────────────────
 async function openProduct(id) {
-  App.currentProductId = id;
   if (App.currentPage === 'store-detail' || App.currentPage === 'storefront') {
+    App.currentProductId = id;
     if (typeof openStorefrontProductModal === 'function') {
       openStorefrontProductModal(id);
     }
   } else {
+    // Do NOT pre-set App.currentProductId here: showPage's "already showing this
+    // page+entity" guard derives the current entity from that field, so setting
+    // it first made product → product navigation (e.g. "You may also like") look
+    // like a no-op and the clicked product never opened.
     showPage('product', id);
   }
 }
@@ -2840,7 +2843,8 @@ function applyAdvancedFilter() {
   showToast('Filters applied', 'success');
 }
 
-// ── Delivery Rate Calculator (TEMPORARILY HASHED FOR FREE DELIVERY MEAN TIME) ──
+// ── Delivery Rate Calculator (the platform does not handle or charge delivery;
+//     delivery is arranged directly between the vendor and the customer) ──
 function calcDelivery(originLoc, destLoc, weightKg = 0.5) {
   /* 
   // ORIGINAL DELIVERY RATE CALCULATOR (Hashed out for mean time — to be restored when delivery partner is active):
@@ -2859,31 +2863,9 @@ function calcDelivery(originLoc, destLoc, weightKg = 0.5) {
   return { rate: base + weightExtra, intercity: true, days: 1 };
   */
 
-  // Return zero delivery fee for mean time
+  // The platform does not handle or charge delivery — it is arranged directly
+  // between the vendor and the customer, so no delivery fee is ever added.
   return { rate: 0, intercity: false, days: 0, partner: 'Standard Delivery' };
-}
-
-// ── Delivery Page ──────────────────────────────────────────
-function renderDeliveryPage() {
-  const c = document.getElementById('delivery-content');
-  if (!c) return;
-  c.innerHTML = `
-<h3 style="font-weight:700;margin-bottom:12px">📦 Standard Shipping Information</h3>
-<div class="ship-schedule-card" style="margin-bottom:16px">
-  <div style="font-size:2rem">🎁</div>
-  <div>
-    <div style="font-weight:700">Free Standard Delivery</div>
-    <div style="font-size:.8rem;opacity:.8;margin-top:4px">We currently offer free delivery on all orders. Select your delivery location at checkout.</div>
-  </div>
-</div>
-
-<!-- 
-ORIGINAL DELIVERY PARTNER & RATE TABLES (Hashed out for mean time — to be restored when delivery partner is contracted):
-<h3 style="font-weight:700;margin-bottom:12px">🚚 Delivery Rates by Route</h3>
-...
-<h3 style="font-weight:700;margin:20px 0 12px">🤝 Delivery Partners</h3>
-...
--->`;
 }
 
 // ── Privacy Page ───────────────────────────────────────────

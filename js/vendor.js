@@ -181,8 +181,7 @@ async function renderVendorDashboard() {
 <div class="tab-nav" id="vendor-tabs">
   <div class="tab-btn ${activeTabId === 'vendor-overview' ? 'active' : ''}" onclick="switchTab(this,'vendor-overview')">Overview</div>
   <div class="tab-btn ${activeTabId === 'vendor-products' ? 'active' : ''}" onclick="switchTab(this,'vendor-products')">Products</div>
-  <div class="tab-btn ${activeTabId === 'vendor-earnings' ? 'active' : ''}" onclick="switchTab(this,'vendor-earnings')">Earnings</div>
-  <div class="tab-btn ${activeTabId === 'vendor-wallet' ? 'active' : ''}" onclick="switchTab(this,'vendor-wallet');renderWalletHistory('vendor-txn-list')">Wallet</div>
+  <div class="tab-btn ${activeTabId === 'vendor-wallet' ? 'active' : ''}" onclick="switchTab(this,'vendor-wallet');renderWalletHistory('vendor-txn-list');if(typeof renderVendorChart==='function'&&window._vendorSalesPackages)renderVendorChart(window._vendorSalesPackages)">Wallet</div>
   <div class="tab-btn ${activeTabId === 'vendor-referral' ? 'active' : ''}" onclick="switchTab(this,'vendor-referral')">Referrals</div>
   <div class="tab-btn ${activeTabId === 'vendor-verify' ? 'active' : ''}" onclick="switchTab(this,'vendor-verify')">Verify</div>
   <div class="tab-btn ${activeTabId === 'vendor-storefront' ? 'active' : ''}" onclick="switchTab(this,'vendor-storefront')">Storefront</div>
@@ -234,7 +233,7 @@ async function renderVendorDashboard() {
         <div class="admin-action-btn" onclick="showPage('vendor-orders')">
           <i class="fas fa-shopping-bag"></i><span>Orders</span>
         </div>
-        <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=vendor-earnings]'),'vendor-earnings')">
+        <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=vendor-wallet]'),'vendor-wallet');renderWalletHistory('vendor-txn-list');if(typeof renderVendorChart==='function'&&window._vendorSalesPackages)renderVendorChart(window._vendorSalesPackages)">
           <i class="fas fa-chart-line"></i><span>Analytics</span>
         </div>
         <div class="admin-action-btn" onclick="window.triggerPWAInstall()" style="background:rgba(232,93,4,0.06);border:1px solid rgba(232,93,4,0.15);">
@@ -274,23 +273,24 @@ async function renderVendorDashboard() {
 
 
 
-<!-- ── Earnings Tab ── -->
-<div class="tab-content" id="vendor-earnings">
+<!-- Wallet Tab (Earnings + Wallet) -->
+<div class="tab-content" id="vendor-wallet">
   <div class="dashboard-wrap">
 
-    <!-- Balance + Action Buttons -->
+    <!-- Balance Header -->
     <div style="background:linear-gradient(135deg,var(--success),#16a34a);border-radius:var(--radius-md);padding:18px;color:#fff;margin-bottom:16px">
-      <div style="font-size:.78rem;opacity:.8;margin-bottom:4px">Available Balance</div>
+      <div style="font-size:.78rem;opacity:.8;margin-bottom:4px">Wallet Balance</div>
       <div style="font-size:2rem;font-weight:800;line-height:1">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
       <div style="font-size:.75rem;opacity:.7;margin:4px 0 14px">Earnings release after delivery is confirmed</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.4)"
                 onclick="showWithdrawalModal()">
-          <i class="fas fa-arrow-up"></i> Withdraw Earnings
+          <i class="fas fa-paper-plane"></i> Withdraw
         </button>
       </div>
     </div>
 
+    <!-- Earnings Summary -->
     <div class="stats-grid" style="margin-bottom:16px">
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-coins" style="color:var(--success)"></i></div>
@@ -306,66 +306,6 @@ async function renderVendorDashboard() {
         <div class="stat-icon" style="background:${rejectedVendorPkgs.length ? '#fee2e2' : '#f3f4f6'}"><i class="fas fa-undo" style="color:${rejectedVendorPkgs.length ? 'var(--danger)' : '#9ca3af'}"></i></div>
         <div class="stat-value">GHS ${rejectedVendorPkgs.reduce((s,p)=>s+((parseFloat(p.gross_amount||p.total)||0)+(parseFloat(p.delivery_fee)||0)),0).toFixed(2)}</div>
         <div class="stat-label">Refunded (${rejectedVendorPkgs.length} Rejected)</div>
-      </div>
-    </div>
-
-    <!-- Commission reminder -->
-    <div class="card" style="margin-bottom:14px">
-      <div class="card-header"><h3>Commission Rates</h3></div>
-      <div class="card-body" style="padding:0">
-        <table class="commission-table">
-          <thead><tr><th>Price Range</th><th>Platform Takes</th><th>You Keep</th></tr></thead>
-          <tbody>
-            <tr><td>GHS 1–50</td><td>8%</td><td>92%</td></tr>
-            <tr><td>GHS 51–100</td><td>6%</td><td>94%</td></tr>
-            <tr><td>GHS 101–500</td><td>4%</td><td>96%</td></tr>
-            <tr><td>GHS 501–1000</td><td>3%</td><td>97%</td></tr>
-            <tr><td>GHS 1000+</td><td>2%</td><td>98%</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Analytics Chart -->
-    <div class="card">
-      <div class="card-header"><h3><i class="fas fa-chart-bar"></i> Sales This Month</h3></div>
-      <div class="card-body">
-        <div class="chart-container">
-          <canvas id="vendor-sales-chart"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Top Products -->
-    <div class="card" style="margin-top:14px">
-      <div class="card-header"><h3>🏆 Top Products</h3></div>
-      <div class="card-body" style="padding:0">
-        ${myProducts.sort((a,b)=>(b.sold_count||0)-(a.sold_count||0)).slice(0,5).map((p,i) => `
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
-          <span style="font-weight:700;color:var(--text-muted);width:16px">${i+1}</span>
-          <img src="${p.images?.[0]||'https://via.placeholder.com/40x40?text=P'}" style="width:36px;height:36px;border-radius:6px;object-fit:cover" onerror="this.src='https://via.placeholder.com/40x40?text=P'">
-          <div style="flex:1;font-size:.82rem"><strong>${escHtml(p.name)}</strong><br><span style="color:var(--text-muted)">${p.sold_count||0} sold · GHS ${p.price}</span></div>
-          <span style="font-weight:700;color:var(--primary)">GHS ${((p.sold_count||0)*p.price).toFixed(0)}</span>
-        </div>`).join('')}
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Wallet Tab -->
-<div class="tab-content" id="vendor-wallet">
-  <div class="dashboard-wrap">
-
-    <!-- Balance Header -->
-    <div style="background:linear-gradient(135deg,var(--secondary),#16213e);border-radius:var(--radius-md);padding:18px;color:#fff;margin-bottom:16px">
-      <div style="font-size:.78rem;opacity:.75;margin-bottom:4px">Wallet Balance</div>
-      <div style="font-size:2rem;font-weight:800;line-height:1">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
-      <div style="font-size:.73rem;opacity:.7;margin:4px 0 0">Your earnings from sales</div>
-      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1.5px solid rgba(255,255,255,.3)"
-                onclick="showWithdrawalModal()">
-          <i class="fas fa-paper-plane"></i> Withdraw
-        </button>
       </div>
     </div>
 
@@ -395,8 +335,50 @@ async function renderVendorDashboard() {
         </div>
       </div>
     </div>
+
+    <!-- Commission Rates -->
+    <div class="card" style="margin-top:14px">
+      <div class="card-header"><h3>Commission Rates</h3></div>
+      <div class="card-body" style="padding:0">
+        <table class="commission-table">
+          <thead><tr><th>Price Range</th><th>Platform Takes</th><th>You Keep</th></tr></thead>
+          <tbody>
+            <tr><td>GHS 1–50</td><td>8%</td><td>92%</td></tr>
+            <tr><td>GHS 51–100</td><td>6%</td><td>94%</td></tr>
+            <tr><td>GHS 101–500</td><td>4%</td><td>96%</td></tr>
+            <tr><td>GHS 501–1000</td><td>3%</td><td>97%</td></tr>
+            <tr><td>GHS 1000+</td><td>2%</td><td>98%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sales This Month -->
+    <div class="card" style="margin-top:14px">
+      <div class="card-header"><h3><i class="fas fa-chart-bar"></i> Sales This Month</h3></div>
+      <div class="card-body">
+        <div class="chart-container">
+          <canvas id="vendor-sales-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Products -->
+    <div class="card" style="margin-top:14px">
+      <div class="card-header"><h3>🏆 Top Products</h3></div>
+      <div class="card-body" style="padding:0">
+        ${myProducts.sort((a,b)=>(b.sold_count||0)-(a.sold_count||0)).slice(0,5).map((p,i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
+          <span style="font-weight:700;color:var(--text-muted);width:16px">${i+1}</span>
+          <img src="${p.images?.[0]||'https://via.placeholder.com/40x40?text=P'}" style="width:36px;height:36px;border-radius:6px;object-fit:cover" onerror="this.src='https://via.placeholder.com/40x40?text=P'">
+          <div style="flex:1;font-size:.82rem"><strong>${escHtml(p.name)}</strong><br><span style="color:var(--text-muted)">${p.sold_count||0} sold · GHS ${p.price}</span></div>
+          <span style="font-weight:700;color:var(--primary)">GHS ${((p.sold_count||0)*p.price).toFixed(0)}</span>
+        </div>`).join('')}
+      </div>
+    </div>
   </div>
 </div>
+
 
 <!-- ── Referral Tab ── -->
 <div class="tab-content" id="vendor-referral">
@@ -948,6 +930,7 @@ async function renderVendorDashboard() {
 </div>`;
 
   // Render chart and load referral history
+  window._vendorSalesPackages = myPackages;
   setTimeout(() => {
     renderVendorChart(myPackages);
     loadVendorReferralHistory(u.id);
@@ -1098,9 +1081,9 @@ function showAddProductModal(storeId, vendorId) {
   if (currentCount >= maxAllowed) {
     const planName = planKey.charAt(0).toUpperCase() + planKey.slice(1);
     showToast(`Your ${planName} plan allows up to ${maxAllowed} products (${currentCount}/${maxAllowed} used). Please upgrade your plan to upload more products.`, 'warning', 5000);
-    if (typeof window.showVendorStorefrontSubscriptionModal === 'function') {
+    if (typeof window.openStorefrontUpgradeModal === 'function') {
       const prices = { starter: 50, growth: 100, pro: 200 };
-      window.showVendorStorefrontSubscriptionModal(store.id, planKey, prices[planKey] || 50);
+      window.openStorefrontUpgradeModal(store.id, planKey, prices[planKey] || 50);
     }
     return;
   }
@@ -1113,11 +1096,6 @@ function showAddProductModal(storeId, vendorId) {
 }
 
 // ── Note prompt visibility toggle ───────────────────────────
-function _toggleNotePrompt(wrapperId, show) {
-  const wrap = document.getElementById(wrapperId);
-  if (wrap) wrap.style.display = show ? 'block' : 'none';
-}
-
 // ── Multi-image slot helpers (used in Add & Edit modals) ──
 function _addProductImgSlot(prefix) {
   const slots = document.getElementById(prefix + '-img-slots');
@@ -1168,195 +1146,6 @@ async function _onProductImgPick(input, prefix, idx) {
     showToast('Failed to process image', 'error');
     console.error(err);
   }
-}
-
-// ── AI Auto-Fill helper ─────────────────────────────────────
-// Called when a cover image (idx=0) is picked in Add or Edit modals.
-// prefix = 'new-p' (Add modal) or 'edit-p' (Edit modal)
-async function _aiAutoFill(prefix, base64Image) {
-  // Determine field IDs for this prefix
-  const nameId = prefix === 'new-p' ? 'new-p-name' : (prefix === 'edit-p' ? 'edit-p-name' : null);
-  const descId = prefix === 'new-p' ? 'new-p-desc' : (prefix === 'edit-p' ? 'edit-p-desc' : null);
-  const catId  = prefix === 'new-p' ? 'new-p-cat'  : (prefix === 'edit-p' ? 'edit-p-cat'  : null);
-
-  // Show spinner badge near the image slot
-  const spinId  = prefix + '-ai-spin';
-  let spinner   = document.getElementById(spinId);
-  if (!spinner) {
-    spinner = document.createElement('div');
-    spinner.id = spinId;
-    spinner.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--primary);font-weight:600;margin-top:6px;padding:5px 8px;background:#ffe4cc;border-radius:6px;border:1px solid var(--primary)';
-    spinner.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI is analysing your image…';
-    const slots = document.getElementById(prefix + '-img-slots');
-    if (slots && slots.parentNode) slots.parentNode.insertBefore(spinner, slots.nextSibling);
-  } else {
-    spinner.style.display = 'flex';
-    spinner.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI is analysing your image…';
-  }
-
-  // Pre-fill fields with loading text if it's the Add modal
-  const nameEl = nameId ? document.getElementById(nameId) : null;
-  const descEl = descId ? document.getElementById(descId) : null;
-  const catEl  = catId  ? document.getElementById(catId)  : null;
-  if (nameEl) nameEl.placeholder = '✨ Generating…';
-  if (descEl) descEl.placeholder = '✨ Generating description…';
-
-  try {
-    const result = await autoGenerateProductInfo(base64Image);
-
-    if (nameEl && result.name)        nameEl.value = result.name;
-    if (descEl && result.description) descEl.value = result.description;
-    if (catEl && result.category) {
-      const option = Array.from(catEl.options).find(opt => opt.value === result.category);
-      if (option) catEl.value = result.category;
-    }
-
-    spinner.innerHTML = '<i class="fas fa-check-circle" style="color:var(--success)"></i> AI filled name & description ✨';
-    spinner.style.background = '#dcfce7';
-    spinner.style.borderColor = 'var(--success)';
-    spinner.style.color = '#166534';
-    showToast('Product info generated! ✨', 'success');
-
-    setTimeout(() => { if (spinner) spinner.style.display = 'none'; }, 4000);
-  } catch (err) {
-    console.error('[AI AutoFill]', err);
-    if (nameEl) nameEl.placeholder = 'e.g. Nike Air Max 90';
-    if (descEl) descEl.placeholder = 'Describe your product…';
-    spinner.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:var(--danger)"></i> AI failed — fill manually';
-    spinner.style.background = '#fee2e2';
-    spinner.style.borderColor = 'var(--danger)';
-    spinner.style.color = '#991b1b';
-    setTimeout(() => { if (spinner) spinner.style.display = 'none'; }, 5000);
-  }
-}
-
-// ── Manual / auto-trigger autofill ───────────────────────
-function _localAutoFill(prefix, isManual = false) {
-  const nameId = prefix + '-name';
-  const descId = prefix + '-desc';
-  const catId  = prefix + '-cat';
-
-  const nameEl = document.getElementById(nameId);
-  const descEl = document.getElementById(descId);
-  const catEl  = document.getElementById(catId);
-
-  if (!nameEl) return;
-
-  const name = nameEl.value.trim();
-  if (!name || name.length < 2) {
-    if (isManual) showToast('Enter a product name first', 'warning');
-    return;
-  }
-
-  // Find the Autofill button for this prefix so we can lock it
-  const btn = nameEl.parentElement
-    ? nameEl.parentElement.querySelector('button[onclick*="_localAutoFill"]')
-    : null;
-
-  // Helper: set category on <select> using case-insensitive text/value matching
-  // Falls back to 'Other' if no option matches at all
-  function applyCategory(catEl, catStr) {
-    if (!catEl || !catStr) return false;
-    const target = catStr.trim().toLowerCase();
-    // Try exact value match first, then text content match
-    const option = Array.from(catEl.options).find(
-      o => o.value.toLowerCase() === target || o.text.toLowerCase() === target
-    ) || Array.from(catEl.options).find(
-      o => o.value.toLowerCase() === 'other'
-    );
-    if (option) {
-      catEl.value = option.value;
-      catEl.dataset.autoGenerated = 'true';
-      return true;
-    }
-    return false;
-  }
-
-  // Remove any existing feedback badge
-  const feedbackId = prefix + '-autofill-feedback';
-  const existing = document.getElementById(feedbackId);
-  if (existing) existing.remove();
-
-  const showFeedback = (success, msg) => {
-    const badge = document.createElement('div');
-    badge.id = feedbackId;
-    badge.style.cssText = `
-      display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;
-      margin-top:6px;padding:5px 10px;border-radius:6px;border:1px solid;
-      ${success
-        ? 'color:#166534;background:#dcfce7;border-color:#bbf7d0'
-        : 'color:#991b1b;background:#fee2e2;border-color:#fca5a5'}
-    `;
-    badge.innerHTML = success
-      ? `<i class="fas fa-check-circle" style="color:#16a34a"></i> ${msg}`
-      : `<i class="fas fa-exclamation-triangle" style="color:#dc2626"></i> ${msg}`;
-    nameEl.closest('.form-group')?.appendChild(badge);
-    setTimeout(() => badge.remove(), 4000);
-  };
-
-  const applyResult = (result) => {
-    let filledDesc = false;
-    let filledCat  = false;
-
-    if (catEl && result.category) {
-      if (isManual || !catEl.value || catEl.value === 'Other' || catEl.dataset.autoGenerated === 'true') {
-        filledCat = applyCategory(catEl, result.category);
-      }
-    }
-
-    if (descEl && result.description) {
-      if (isManual || !descEl.value.trim() || descEl.dataset.autoGenerated === 'true') {
-        descEl.value = result.description;
-        descEl.dataset.autoGenerated = 'true';
-        filledDesc = true;
-      }
-    }
-
-    if (isManual) {
-      if (filledDesc || filledCat) {
-        const parts = [];
-        if (filledCat)  parts.push(`category → <strong>${catEl.value}</strong>`);
-        if (filledDesc) parts.push('description');
-        showFeedback(true, `Filled: ${parts.join(' & ')}`);
-      } else {
-        showFeedback(false, 'Nothing to fill — already set manually');
-      }
-    }
-
-    // Re-enable button
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Autofill';
-    }
-  };
-
-  if (isManual) {
-    // Lock button, show spinner
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    }
-    // Run synchronously (localPredictAndGenerate is CPU-only, no async needed)
-    try {
-      applyResult(localPredictAndGenerate(name));
-    } catch(e) {
-      console.error('[Autofill]', e);
-      showFeedback(false, 'Autofill failed — fill manually');
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Autofill';
-      }
-    }
-  } else {
-    // Auto-trigger on keystroke: debounce, no button locking
-    localPredictDebounced(prefix, name, applyResult);
-  }
-}
-
-async function _aiRefill(prefix) {
-  const hid = document.getElementById(prefix + '-img-b64-0');
-  if (!hid || !hid.value) { showToast('Upload a cover image first', 'warning'); return; }
-  await _aiAutoFill(prefix, hid.value);
 }
 
 function _removeProductImgSlot(prefix, idx) {
@@ -1430,7 +1219,8 @@ async function submitAddProduct(e, storeId, vendorId) {
   const images   = _collectProductImages('new-p');
   const isFlash  = document.getElementById('new-p-flash')?.checked;
   const allowBuyerNote  = document.getElementById('new-p-allow-note')?.checked || false;
-  const buyerNotePrompt = (document.getElementById('new-p-note-prompt')?.value || '').trim() || 'Add a note (e.g. color, size)';
+  // The buyer writes the note themselves — there is no vendor-typed prompt.
+  const buyerNotePrompt = 'Add a note (e.g. color, size)';
   const store    = App.allStores.find(s => s.id === storeId) || {};
   const tags     = tagsStr ? tagsStr.split(',').map(t=>t.trim()).filter(Boolean) : [];
 
@@ -1461,7 +1251,9 @@ async function submitAddProduct(e, storeId, vendorId) {
   }
 
   const commission = getCommission(finalPrice);
-  const productName = name || cat || 'Product';
+  // Leave the name blank when the vendor didn't provide one — no fallback to
+  // the category or a placeholder.
+  const productName = (name || '').trim();
   const productData = {
     name: productName, description: desc, price: finalPrice, original_price: finalOrig,
     store_id: storeId, vendor_id: vendorId, category: cat,
@@ -1483,7 +1275,7 @@ async function submitAddProduct(e, storeId, vendorId) {
   const tempProduct = { ...productData, id: tempId, _isOptimistic: true, created_at: Date.now() };
   App.allProducts.push(tempProduct);
   closeModalForce();
-  showToast(`"${productName}" added! 🎉`, 'success', 2200);
+  showToast(productName ? `"${productName}" added! 🎉` : 'Product added! 🎉', 'success', 2200);
   if (App.currentPage === 'vendor-my-store') {
     renderVendorMyStorePage();
   } else {
@@ -1629,12 +1421,10 @@ function _addProductModalHTML(storeId, vendorId, prev) {
     </div>
     <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:var(--radius-md);padding:12px;margin-bottom:14px">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0">
-        <input type="checkbox" id="new-p-allow-note" ${prev.allowBuyerNote ? 'checked' : ''} onchange="_toggleNotePrompt('new-p-note-prompt-wrap',this.checked)">
+        <input type="checkbox" id="new-p-allow-note" ${prev.allowBuyerNote ? 'checked' : ''}>
         <span style="font-size:.875rem;font-weight:700;color:#166534">💬 Allow Buyer to Add a Note</span>
       </label>
-      <div id="new-p-note-prompt-wrap" style="display:${prev.allowBuyerNote ? 'block' : 'none'}">
-        <input class="form-control" id="new-p-note-prompt" placeholder="e.g. Specify your color and size" value="${escHtml(prev.buyerNotePrompt || '')}" style="font-size:.8rem">
-      </div>
+      <p style="font-size:.72rem;color:#166534;margin:6px 0 0 24px;line-height:1.5">When enabled, buyers can type a note (e.g. color, size) when ordering this item.</p>
     </div>
     <button class="btn btn-primary btn-block" type="submit">
       <i class="fas fa-plus-circle"></i> Add Product
@@ -1775,13 +1565,10 @@ async function showEditProductModal(productId) {
   <!-- Buyer Note Toggle -->
   <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:var(--radius-md);padding:12px;margin-bottom:12px">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0">
-      <input type="checkbox" id="edit-p-allow-note" ${p.allow_buyer_note?'checked':''} onchange="_toggleNotePrompt('edit-p-note-prompt-wrap',this.checked)">
+      <input type="checkbox" id="edit-p-allow-note" ${p.allow_buyer_note?'checked':''}>
       <span style="font-size:.875rem;font-weight:700;color:#166534">💬 Allow Buyer Note</span>
     </label>
-    <p style="font-size:.72rem;color:#166534;margin:4px 0 8px 24px;line-height:1.5">Let buyers specify color, size, or any preference before adding to cart.</p>
-    <div id="edit-p-note-prompt-wrap" style="display:${p.allow_buyer_note?'block':'none'}">
-      <input class="form-control" id="edit-p-note-prompt" value="${escHtml(p.buyer_note_prompt||'')}" placeholder="e.g. Specify your color and size" style="font-size:.8rem">
-    </div>
+    <p style="font-size:.72rem;color:#166534;margin:6px 0 0 24px;line-height:1.5">When enabled, buyers can type a note (e.g. color, size) when ordering this item.</p>
   </div>
   <button class="btn btn-primary btn-block" onclick="saveProductEdit('${productId}')">
     <i class="fas fa-save"></i> Save Changes
@@ -1798,7 +1585,8 @@ async function saveProductEdit(productId) {
   const flash           = document.getElementById('edit-p-flash')?.checked;
   const images          = _collectProductImages('edit-p');
   const allowBuyerNote  = document.getElementById('edit-p-allow-note')?.checked || false;
-  const buyerNotePrompt = (document.getElementById('edit-p-note-prompt')?.value || '').trim() || 'Add a note (e.g. color, size)';
+  // The buyer writes the note themselves — there is no vendor-typed prompt.
+  const buyerNotePrompt = 'Add a note (e.g. color, size)';
   const status = stock === 0 ? 'sold_out' : 'active';
   
   const p = App.allProducts.find(p => String(p.id) === String(productId));
@@ -2545,22 +2333,7 @@ async function _bapOnFilePick(input) {
       const base64 = await compressImage(file, 900, 0.72);
       _bap.drafts[idx].b64 = base64;
 
-      // ── AI Auto-Generation for bulk drafts ──────────────────
-      if (typeof autoGenerateProductInfo === 'function') {
-        autoGenerateProductInfo(base64).then(res => {
-          if (_bap.drafts[idx]) {
-            if (res.name)        _bap.drafts[idx].name = res.name;
-            if (res.description) _bap.drafts[idx].desc = res.description;
-            // If Step 2 is already rendered, fill the fields live
-            const nameEl = document.getElementById('bap-name-' + idx);
-            const descEl = document.getElementById('bap-desc-' + idx);
-            if (nameEl && res.name)        nameEl.value = res.name;
-            if (descEl && res.description) descEl.value = res.description;
-          }
-        }).catch(() => { /* silent — user can fill manually */ });
-      }
-
-      // Create thumbnail in strip
+            // Create thumbnail in strip
       const thumb = document.createElement('div');
       thumb.className = 'bap-thumb';
       thumb.id = 'bap-thumb-' + idx;
@@ -2674,12 +2447,10 @@ function _bapRenderStep2() {
     <!-- Buyer Note Toggle -->
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.78rem;font-weight:700;color:#166534;margin-bottom:0">
-        <input type="checkbox" id="bap-allow-note-${i}" onchange="_bapSyncDraft(${i},'allowNote',this.checked);_toggleNotePrompt('bap-note-prompt-wrap-${i}',this.checked)">
+        <input type="checkbox" id="bap-allow-note-${i}" onchange="_bapSyncDraft(${i},'allowNote',this.checked)">
         💬 Allow Buyer Note
       </label>
-      <div id="bap-note-prompt-wrap-${i}" style="display:none;margin-top:5px">
-        <input class="form-control" id="bap-note-prompt-${i}" placeholder="e.g. Specify color and size" style="font-size:.75rem" oninput="_bapSyncDraft(${i},'notePrompt',this.value)">
-      </div>
+      <p style="font-size:.68rem;color:#166534;margin:4px 0 0 20px;line-height:1.4">Buyers can add a note (e.g. color, size) when ordering.</p>
     </div>
   </div>
 </article>`).join('');
@@ -2923,9 +2694,9 @@ async function _bapSubmitAll() {
     if (remainingSlotCount <= 0) {
       const planName = planKey.charAt(0).toUpperCase() + planKey.slice(1);
       showToast(`Your ${planName} plan limit of ${maxAllowed} products is reached. Please upgrade to upload more.`, 'warning', 5000);
-      if (typeof window.showVendorStorefrontSubscriptionModal === 'function') {
+      if (typeof window.openStorefrontUpgradeModal === 'function') {
         const prices = { starter: 50, growth: 100, pro: 200 };
-        window.showVendorStorefrontSubscriptionModal(store.id, planKey, prices[planKey] || 50);
+        window.openStorefrontUpgradeModal(store.id, planKey, prices[planKey] || 50);
       }
       return;
     }
@@ -2972,10 +2743,13 @@ async function _bapSubmitAll() {
     const stock  = parseInt(document.getElementById('bap-stock-'  + i)?.value)   || 0;
     const weight = parseFloat(document.getElementById('bap-weight-' + i)?.value) || 0.5;
     const cat    = document.getElementById('bap-cat-'   + i)?.value || 'Other';
-    const finalName = name || cat || 'Product';
+    // Leave the name blank when the vendor didn't provide one — no fallback to
+    // the category or a placeholder.
+    const finalName = name;
     const flash        = document.getElementById('bap-flash-' + i)?.checked || false;
     const allowBuyerNote  = document.getElementById('bap-allow-note-' + i)?.checked || false;
-    const buyerNotePrompt = (document.getElementById('bap-note-prompt-' + i)?.value || '').trim() || 'Add a note (e.g. color, size)';
+    // The buyer writes the note themselves — there is no vendor-typed prompt.
+    const buyerNotePrompt = 'Add a note (e.g. color, size)';
     const images = _bapCollectCardImages(i);
 
     if (!images.length) {
@@ -3052,6 +2826,23 @@ async function _bapSubmitAll() {
 
 
 
+// Route plan-upgrade requests to the right modal: pending-payment storefronts get
+// the activation flow (which pays & goes live); already-active storefronts get the
+// renew/upgrade flow (which supports MoMo and wallet without any wallet-balance gate
+// on the MoMo path).
+window.openStorefrontUpgradeModal = function(storeId, planKey, price) {
+  const sfStatus = App.myStorefront?.status;
+  if (sfStatus === 'approved_pending_payment') {
+    if (typeof window.showVendorStorefrontSubscriptionModal === 'function') {
+      window.showVendorStorefrontSubscriptionModal(storeId, planKey, price);
+    }
+  } else if (typeof window.openStorefrontSubscribeModal === 'function') {
+    window.openStorefrontSubscribeModal(storeId, planKey, price);
+  } else if (typeof window.showVendorStorefrontSubscriptionModal === 'function') {
+    window.showVendorStorefrontSubscriptionModal(storeId, planKey, price);
+  }
+};
+
 window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthlyPrice) {
   const planNames = { starter: '🌱 Starter Plan', growth: '🚀 Growth Plan', pro: '💎 Pro Plan (Unlimited)' };
   const uploadLimits = { 
@@ -3090,6 +2881,27 @@ window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthl
           </select>
         </div>
 
+        <div style="margin-bottom:16px">
+          <label class="form-label" style="font-weight:700;font-size:.85rem">Payment Method</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label style="border:2px solid var(--primary);border-radius:8px;padding:10px;text-align:center;font-size:.78rem;font-weight:700;cursor:pointer;display:block">
+              <input type="radio" name="sf-sub-pay" value="momo" checked style="display:none" onchange="window.toggleSfSubPay()"/>
+              📱 Mobile Money
+            </label>
+            <label style="border:2px solid var(--border);border-radius:8px;padding:10px;text-align:center;font-size:.78rem;font-weight:700;cursor:pointer;display:block">
+              <input type="radio" name="sf-sub-pay" value="wallet" style="display:none" onchange="window.toggleSfSubPay()"/>
+              💰 HAPPA Wallet
+            </label>
+          </div>
+          <div id="sf-sub-momo-field" style="margin-top:8px">
+            <input id="sf-sub-momo-phone" type="tel" placeholder="MoMo number e.g. 024 000 0000" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;box-sizing:border-box"/>
+            <div style="font-size:.72rem;color:var(--text-muted);margin-top:4px">You'll receive a payment prompt on this number.</div>
+          </div>
+          <div id="sf-sub-wallet-field" style="margin-top:8px;display:none">
+            <div style="font-size:.75rem;color:var(--text-muted)">Payment is deducted from your HAPPA wallet balance.</div>
+          </div>
+        </div>
+
         <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;text-align:center;margin-bottom:20px">
           <div style="font-size:.78rem;color:#9a3412">Total Amount to Pay</div>
           <div style="font-size:1.8rem;font-weight:900;color:#c2410c" id="sf-sub-total-display">GH₵ ${monthlyPrice.toFixed(2)}</div>
@@ -3100,7 +2912,7 @@ window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthl
           <button class="btn btn-primary" onclick="
             const months = parseInt(document.getElementById('sf-sub-months-sel').value || '1');
             closeModal('modal-sf-sub-pay');
-            window.activateStorefrontPlan('${storeId}', '${planKey}', ${monthlyPrice}, months);
+            window.activateStorefrontPlan('${storeId}', '${planKey}', ${monthlyPrice}, months, (document.querySelector('[name=sf-sub-pay]:checked')||{}).value || 'momo');
           ">
             <i class="fas fa-lock"></i> Pay &amp; Activate Now
           </button>
@@ -3113,42 +2925,77 @@ window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthl
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 };
 
-window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, months = 1) {
+window.toggleSfSubPay = function() {
+  const m = (document.querySelector('[name=sf-sub-pay]:checked') || {}).value || 'momo';
+  const momoField = document.getElementById('sf-sub-momo-field');
+  const walletField = document.getElementById('sf-sub-wallet-field');
+  if (momoField) momoField.style.display = m === 'momo' ? '' : 'none';
+  if (walletField) walletField.style.display = m === 'wallet' ? '' : 'none';
+  document.querySelectorAll('[name=sf-sub-pay]').forEach(r => {
+    const lab = r.closest('label');
+    if (lab) lab.style.borderColor = r.checked ? 'var(--primary)' : 'var(--border)';
+  });
+};
+
+window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, months = 1, method = 'momo') {
   if (!App.myStorefront || App.myStorefront.status !== 'approved_pending_payment') return;
   
   const totalCost = monthlyPrice * months;
-  const userBal = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
   
-  // Check wallet balance — never auto-credit funds. Users must top up via a real deposit.
-  if (userBal < totalCost) {
-    showToast(`Insufficient balance. You need GH₵ ${totalCost.toFixed(2)} to activate this plan. Top up your wallet first.`, 'error');
-    return;
+  // Storefront subscriptions are paid by Mobile Money — never from the vendor's
+  // wallet — so an empty wallet must not block activation. Wallet remains an
+  // optional alternative for vendors who choose it.
+  if (method === 'momo') {
+    const phone = document.getElementById('sf-sub-momo-phone')?.value?.trim();
+    if (!phone || phone.replace(/\D/g,'').length < 9) {
+      showToast('Please enter a valid MoMo phone number.', 'error');
+      return;
+    }
+  } else if (method === 'wallet') {
+    const userBal = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
+    if (userBal < totalCost) {
+      showToast(`Insufficient wallet balance. You need GH₵ ${totalCost.toFixed(2)} to activate this plan. Top up your wallet first.`, 'error');
+      return;
+    }
   }
   
   if (!confirm(`Pay GH₵ ${totalCost.toFixed(2)} to activate ${months} month(s) of the ${planKey.toUpperCase()} plan?`)) return;
   
   showToast('Processing payment & activating storefront...', 'info');
   
-  // 1. Deduct balance — record a full ledger entry with before/after balances
-  const balBeforePlan = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
-  const balAfterPlan  = Math.max(0, balBeforePlan - totalCost);
-  await apiPost('wallet_transactions', {
-    user_id:        App.currentUser.id,
-    type:           'payment',
-    amount:         totalCost,
-    balance_before: balBeforePlan,
-    balance_after:  balAfterPlan,
-    payment_method: 'wallet',
-    status:         'completed',
-    note:           `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s))`
-  }).catch(() => {});
-  
-  const finalBal = Math.max(0, (parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? totalCost) - totalCost));
-  if (App.currentUser) App.currentUser.wallet_balance = finalBal;
-  App.walletBalance = finalBal;
-  await apiPatch('users', App.currentUser?.id, { wallet_balance: finalBal }).catch(() => {});
-  if (typeof saveSessions === 'function') saveSessions();
-  if (typeof updateWalletUI === 'function') updateWalletUI();
+  // 1. Payment: MoMo is recorded (no wallet deduction); wallet deducts with a full
+  //    ledger entry (before/after balances).
+  if (method === 'wallet') {
+    const balBeforePlan = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
+    const balAfterPlan  = Math.max(0, balBeforePlan - totalCost);
+    await apiPost('wallet_transactions', {
+      user_id:        App.currentUser.id,
+      type:           'payment',
+      amount:         totalCost,
+      balance_before: balBeforePlan,
+      balance_after:  balAfterPlan,
+      payment_method: 'wallet',
+      status:         'completed',
+      note:           `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — via wallet`
+    }).catch(() => {});
+    
+    const finalBal = Math.max(0, (parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? totalCost) - totalCost));
+    if (App.currentUser) App.currentUser.wallet_balance = finalBal;
+    App.walletBalance = finalBal;
+    await apiPatch('users', App.currentUser?.id, { wallet_balance: finalBal }).catch(() => {});
+    if (typeof saveSessions === 'function') saveSessions();
+    if (typeof updateWalletUI === 'function') updateWalletUI();
+  } else {
+    const phone = document.getElementById('sf-sub-momo-phone')?.value?.trim() || '';
+    await apiPost('wallet_transactions', {
+      user_id:        App.currentUser?.id || '',
+      type:           'payment',
+      amount:         totalCost,
+      payment_method: 'momo',
+      status:         'completed',
+      note:           `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — via MoMo (${phone})`
+    }).catch(() => {});
+  }
   
   // 2. Update storefront status to active
   App.myStorefront.status = 'active';

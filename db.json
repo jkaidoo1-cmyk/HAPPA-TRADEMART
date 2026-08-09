@@ -16,13 +16,52 @@
       "extra": {}
     }
   ],
-  "stores": [],
-  "products": [],
+  "stores": [
+    {
+      "name": "ImgTestStore",
+      "owner_name": "ImgTest",
+      "status": "active",
+      "storefront_status": "active",
+      "description": "test",
+      "created_at": "2026-08-09T14:30:19.236Z",
+      "id": "sto-1786285819406-958",
+      "updated_at": "2026-08-09T14:30:19.406Z"
+    }
+  ],
+  "products": [
+    {
+      "name": "Img Test",
+      "price": 50,
+      "stock_qty": 10,
+      "store_id": "sto-1786285819406-958",
+      "vendor_id": "v-imgtest",
+      "images": [
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+      ],
+      "status": "active",
+      "category": "Testing",
+      "created_at": "2026-08-09T14:30:19.425Z",
+      "id": "pro-1786285819436-402",
+      "updated_at": "2026-08-09T14:30:19.436Z"
+    }
+  ],
   "orders": [],
   "packages": [],
   "services": [],
   "wallet_transactions": [],
-  "notifications": [],
+  "notifications": [
+    {
+      "id": "n1786302325204dlnsj",
+      "user_id": "sfmomo-test-1786302086680",
+      "type": "system",
+      "title": "🚀 Storefront Activated & Live!",
+      "message": "Your storefront is active! Subscribed for 1 month(s) on the STARTER plan. Live URL: http://localhost:54321/#storefront/sf-momo-test-1786302086686",
+      "is_read": false,
+      "action_url": "#storefront/sf-momo-test-1786302086686",
+      "created_at": "2026-08-09T19:05:25.204Z",
+      "updated_at": "2026-08-09T19:05:25.212Z"
+    }
+  ],
   "ad_campaigns": [],
   "settings": [
     {
@@ -57,5 +96,7 @@
   ],
   "reviews": [],
   "service_orders": [],
-  "platform_revenue": []
+  "platform_revenue": [],
+  "support_tickets": [],
+  "storefronts": []
 }
