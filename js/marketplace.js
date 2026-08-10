@@ -872,24 +872,31 @@ async function shareProduct(productId) {
   const url = baseUrl + '?product=' + productId;
   const title = p.name || 'Product on HAPPA TRADEMART';
   const desc = p.description ? `${p.description}` : '';
-  const text = `${title}\n\n${desc ? desc + '\n\n' : ''}Check this out on HAPPA TRADEMART!\n${url}`;
+  const fullText = `${title}\n\n${desc ? desc + '\n\n' : ''}Check this out on HAPPA TRADEMART!\n${url}`;
 
-  const shareData = {
-    title: title,
-    text: text,
-    url: url
-  };
+  // Build a polished share-card image: the product photo with the name, price
+  // and link baked in as the caption — so it looks great in WhatsApp and other
+  // chat apps that only render the attached picture.
+  const cardFile = await buildProductShareCard(p, url).catch(() => null);
 
-  // Attach the product image so the shared link travels with a picture
-  // (Web Share API `files` — supported by mobile share sheets like WhatsApp).
-  let files = [];
-  try {
-    const img = p.images && p.images[0];
-    const file = await productImageToFile(img);
-    if (file) files.push(file);
-  } catch (e) {
-    console.warn('[Share] Could not attach image, sharing text + link only:', e);
+  const files = [];
+  if (cardFile) {
+    files.push(cardFile);
+  } else {
+    // Card unavailable (e.g. image blocked by CORS) — attach the raw photo and
+    // share the full text caption instead.
+    try {
+      const img = p.images && p.images[0];
+      const file = await productImageToFile(img);
+      if (file) files.push(file);
+    } catch (e) {}
   }
+
+  // The card carries the details; keep the message short so the link stays
+  // tappable in WhatsApp instead of duplicating the caption on the image.
+  const shareData = cardFile
+    ? { title, text: `${title}\n${url}`, url }
+    : { title, text: fullText, url };
 
   try {
     if (navigator.share) {
@@ -899,7 +906,7 @@ async function shareProduct(productId) {
         await navigator.share(shareData);
       }
     } else {
-      navigator.clipboard?.writeText(text);
+      navigator.clipboard?.writeText(cardFile ? `${title}\n${url}` : fullText);
       showToast('Product details copied! 📋', 'success');
     }
   } catch (err) {
@@ -930,6 +937,167 @@ async function productImageToFile(imgSrc) {
   } catch (e) {
     return null;
   }
+}
+
+// Render a share-card PNG: product photo on top with a caption strip containing
+// the product name, price and link. Returns a File, or null if the image can't
+// be fetched/decoded (e.g. cross-origin without CORS headers).
+async function buildProductShareCard(p, url) {
+  const imgSrc = (p.images && p.images[0]) || '';
+  if (!imgSrc) return null;
+  let src = imgSrc;
+  if (src.startsWith('/') && !src.startsWith('//')) {
+    src = window.location.origin + src;
+  }
+  if (!src.startsWith('data:') && !/^https?:/i.test(src)) return null;
+
+  let blob;
+  try {
+    const res = await fetch(src);
+    if (!res.ok) return null;
+    blob = await res.blob();
+  } catch (e) {
+    return null;
+  }
+  if (!blob || !blob.type || !blob.type.startsWith('image/')) return null;
+
+  // Load the blob via an object URL — blob: URLs never taint the canvas, so the
+  // card can be exported to PNG even for data-URL uploads.
+  const objectUrl = URL.createObjectURL(blob);
+  const img = new Image();
+  try {
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = objectUrl;
+    });
+  } catch (e) {
+    URL.revokeObjectURL(objectUrl);
+    return null;
+  }
+
+  const W = 1080;          // card width
+  const IMG_H = 1080;      // square product photo
+  const CAP_H = 430;       // caption strip
+  const H = IMG_H + CAP_H;
+  const PAD = 48;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // White base
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // Product photo — cover-fit into the top square
+  const iw = img.naturalWidth || 600;
+  const ih = img.naturalHeight || 600;
+  const scale = Math.max(W / iw, IMG_H / ih);
+  const dw = iw * scale, dh = ih * scale;
+  ctx.drawImage(img, (W - dw) / 2, (IMG_H - dh) / 2, dw, dh);
+  URL.revokeObjectURL(objectUrl);
+
+  const font = '"Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'left';
+
+  // Brand mark
+  ctx.fillStyle = '#9ca3af';
+  ctx.font = `700 30px ${font}`;
+  ctx.fillText('HAPPA TRADEMART', PAD, IMG_H + 50);
+
+  // Product name — bold, wrapped to 2 lines
+  ctx.fillStyle = '#111827';
+  ctx.font = `800 46px ${font}`;
+  const nameLines = wrapCanvasText(ctx, String(p.name || 'Check this out on HAPPA TRADEMART!'), W - PAD * 2, 2);
+  let y = IMG_H + 122;
+  nameLines.forEach(line => {
+    ctx.fillText(line, PAD, y);
+    y += 58;
+  });
+
+  // Price — prominent brand color; show the original price struck through
+  const priceNum = parseFloat(p.price) || 0;
+  const priceStr = 'GHS ' + (priceNum % 1 === 0 ? priceNum.toFixed(0) : priceNum.toFixed(2));
+  ctx.fillStyle = '#e85d04';
+  ctx.font = `800 62px ${font}`;
+  const priceY = y + 74;
+  ctx.fillText(priceStr, PAD, priceY);
+  if (p.original_price > p.price) {
+    const origStr = 'GHS ' + (parseFloat(p.original_price) || 0).toFixed(2);
+    ctx.font = `600 36px ${font}`;
+    ctx.fillStyle = '#9ca3af';
+    const origX = PAD + ctx.measureText(priceStr).width + 26;
+    ctx.fillText(origStr, origX, priceY - 4);
+    ctx.strokeStyle = '#9ca3af';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(origX, priceY - 12);
+    ctx.lineTo(origX + ctx.measureText(origStr).width, priceY - 12);
+    ctx.stroke();
+  }
+
+  // Link — muted, one line at the bottom of the strip
+  ctx.fillStyle = '#6b7280';
+  ctx.font = `500 28px ${font}`;
+  const urlLines = wrapCanvasText(ctx, url, W - PAD * 2, 1);
+  let urlY = H - 64;
+  for (let i = urlLines.length - 1; i >= 0; i--) {
+    ctx.fillText(urlLines[i], PAD, urlY);
+    urlY -= 42;
+  }
+
+  const file = await new Promise(resolve => {
+    canvas.toBlob(b => {
+      if (!b) return resolve(null);
+      resolve(new File([b], `share-${Date.now()}.png`, { type: 'image/png' }));
+    }, 'image/png');
+  });
+  return file;
+}
+
+// Wrap canvas text to a max line count, truncating the last line with '…' when
+// it overflows.
+function wrapCanvasText(ctx, text, maxWidth, maxLines) {
+  const words = String(text).trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [''];
+  if (maxLines <= 1) {
+    let line = words.join(' ');
+    if (ctx.measureText(line).width <= maxWidth) return [line];
+    while (ctx.measureText(line + '…').width > maxWidth && line.length > 1) line = line.slice(0, -1);
+    return [line + '…'];
+  }
+  const lines = [];
+  let line = '';
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const candidate = line ? line + ' ' + word : word;
+    if (!line || ctx.measureText(candidate).width <= maxWidth) {
+      line = candidate;
+      continue;
+    }
+    lines.push(line);
+    if (lines.length === maxLines - 1) {
+      // Last allowed line: absorb the remaining words, ellipsize if needed
+      let last = word;
+      const rest = words.slice(i + 1).join(' ');
+      if (rest) {
+        const withRest = last + ' ' + rest;
+        last = ctx.measureText(withRest).width <= maxWidth ? withRest : last;
+      }
+      if (ctx.measureText(last).width <= maxWidth) {
+        lines.push(last);
+      } else {
+        while (ctx.measureText(last + '…').width > maxWidth && last.length > 1) last = last.slice(0, -1);
+        lines.push(last + '…');
+      }
+      return lines;
+    }
+    line = word;
+  }
+  lines.push(line);
+  return lines;
 }
 
 
