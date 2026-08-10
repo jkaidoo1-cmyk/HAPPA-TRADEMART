@@ -667,38 +667,49 @@ app.get('/api/:table', async (req, res) => {
         stores = Array.from(storeMap.values());
       }
 
-      let rows = stores.map(st => ({
-        id: st.id,
-        store_id: st.id,
-        vendor_id: st.vendor_id,
-        name: st.name || '',
-        status: st.storefront_status || 'none',
-        location: st.location || '',
-        category: st.category || '',
-        url_slug: st.slug || '',
-        theme: st.theme || 'classic',
-        font_family: st.font_family || 'Outfit',
-        slogan: st.slogan || '',
-        about_us: st.description || st.about_us || '',
-        logo_url: st.logo_url || '',
-        banner_url: st.banner_url || '',
-        primary_color: st.primary_color || '#e85d04',
-        secondary_color: st.secondary_color || '#faf9f6',
-        tertiary_color: st.tertiary_color || '#e85d04',
-        business_hours: st.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
-        shipping_policy: st.shipping_policy || '',
-        return_policy: st.return_policy || '',
-        facebook_url: st.facebook || st.facebook_url || '',
-        instagram_url: st.instagram || st.instagram_url || '',
-        youtube_url: st.youtube_url || '',
-        meta_description: st.meta_description || '',
-        subscription_plan: st.subscription_plan || 'starter',
-        subscription_status: st.subscription_status || 'active',
-        plan_prices: st.plan_prices || null,
-        only_show_on_storefront: st.extra?.only_show_on_storefront === true || st.extra?.only_show_on_storefront === 'true',
-        created_at: st.created_at,
-        updated_at: st.updated_at
-      }));
+      // Merge the local `storefronts` collection (writes from PUT/PATCH
+      // storefronts can land there) so drafts and saved customizations are
+      // readable even though the storefront is a virtual view over `stores`.
+      dataStore.ensureTable('storefronts');
+      const localSFs = dataStore.getStore().storefronts || [];
+      const sfMap = new Map();
+      localSFs.forEach(sf => { if (sf) sfMap.set(String(sf.store_id || sf.id), sf); });
+
+      let rows = stores.map(st => {
+        const extraSf = sfMap.get(String(st.id)) || {};
+        return {
+          id: st.id,
+          store_id: st.id,
+          vendor_id: st.vendor_id,
+          name: extraSf.name || st.name || '',
+          status: extraSf.status || st.storefront_status || 'none',
+          location: st.location || '',
+          category: st.category || '',
+          url_slug: extraSf.url_slug || st.slug || '',
+          theme: extraSf.theme || st.theme || 'classic',
+          font_family: extraSf.font_family || st.font_family || 'Outfit',
+          slogan: extraSf.slogan || st.slogan || '',
+          about_us: extraSf.about_us || st.description || st.about_us || '',
+          logo_url: extraSf.logo_url || st.logo_url || '',
+          banner_url: extraSf.banner_url || st.banner_url || '',
+          primary_color: extraSf.primary_color || st.primary_color || '#e85d04',
+          secondary_color: extraSf.secondary_color || st.secondary_color || '#faf9f6',
+          tertiary_color: extraSf.tertiary_color || st.tertiary_color || '#e85d04',
+          business_hours: extraSf.business_hours || st.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
+          shipping_policy: extraSf.shipping_policy || st.shipping_policy || '',
+          return_policy: extraSf.return_policy || st.return_policy || '',
+          facebook_url: extraSf.facebook_url || st.facebook || st.facebook_url || '',
+          instagram_url: extraSf.instagram_url || st.instagram || st.instagram_url || '',
+          youtube_url: extraSf.youtube_url || st.youtube_url || '',
+          meta_description: extraSf.meta_description || st.meta_description || '',
+          subscription_plan: extraSf.subscription_plan || st.subscription_plan || 'starter',
+          subscription_status: extraSf.subscription_status || st.subscription_status || 'active',
+          plan_prices: extraSf.plan_prices || st.plan_prices || null,
+          only_show_on_storefront: st.extra?.only_show_on_storefront === true || st.extra?.only_show_on_storefront === 'true',
+          created_at: st.created_at,
+          updated_at: st.updated_at
+        };
+      });
 
       if (search) rows = applyClientFilters(rows, { search, limit, page });
       for (const [k, v] of Object.entries(filters)) {
@@ -908,13 +919,19 @@ app.post('/api/:table', async (req, res) => {
     if (table === 'storefronts') {
       const storeId = body.store_id || body.id;
       let st = null;
-      if (!supabase) {
-        dataStore.ensureTable('stores');
-        const store = dataStore.getStore();
-        st = store.stores.find(s => String(s.id) === String(storeId));
-      } else {
+      // Look in Supabase first, then fall back to the local db.json store so a
+      // store that lives only locally (e.g. created before Supabase was wired
+      // up) can still create a storefront. A Supabase-only lookup 404s for such
+      // stores, and the frontend swallows that error — the draft would silently
+      // never persist and the "Start Building" button would appear dead.
+      if (supabase) {
         const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).maybeSingle();
         if (!error && data) st = serializeRecord(data);
+      }
+      if (!st) {
+        dataStore.ensureTable('stores');
+        const store = dataStore.getStore();
+        st = store.stores.find(s => String(s.id) === String(storeId)) || null;
       }
 
       if (!st) {
@@ -947,17 +964,26 @@ app.post('/api/:table', async (req, res) => {
         updated_at: new Date().toISOString()
       };
 
-      if (!supabase) {
-        const store = dataStore.getStore();
-        const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
-        if (idx !== -1) {
-          store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
-          dataStore.saveToFile();
+      // Always persist locally (db.json is the source of truth and the GET list
+      // merges local over Supabase), and mirror the update to Supabase when the
+      // store lives there.
+      if (supabase) {
+        try {
+          const dbRecord = prepareRecordForDb('stores', storeUpdates);
+          await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        } catch (err) {
+          console.warn('[POST] Supabase storefront update failed:', err.message);
         }
-      } else {
-        const dbRecord = prepareRecordForDb('stores', storeUpdates);
-        await supabase.from('stores').update(dbRecord).eq('id', storeId);
       }
+      dataStore.ensureTable('stores');
+      const store = dataStore.getStore();
+      const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
+      if (idx !== -1) {
+        store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
+      } else {
+        store.stores.push({ id: storeId, vendor_id: st.vendor_id || body.vendor_id || '', ...storeUpdates });
+      }
+      dataStore.saveToFile();
 
       const sf = {
         id: storeId,
@@ -1059,6 +1085,106 @@ app.put('/api/:table/:id', async (req, res) => {
     }
 
     const record = serializeRecord(body);
+
+    // Storefront is a virtual view over `stores` — treat a PUT to it as an
+    // update of the store record (mirror of server.js), so saving storefront
+    // customizations persists even for stores that live only in db.json.
+    if (table === 'storefronts') {
+      const cleanId = String(id).replace(/^sft-/, '');
+      let st = null;
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('stores').select('*').eq('id', cleanId).maybeSingle();
+          if (!error && data) st = serializeRecord(data);
+        } catch (err) {}
+      }
+      if (!st) {
+        dataStore.ensureTable('stores');
+        st = dataStore.getStore().stores.find(s => String(s.id) === String(cleanId)) || null;
+      }
+      if (!st && supabase) {
+        try {
+          const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', cleanId).limit(1);
+          if (!error && data && data.length > 0) st = serializeRecord(data[0]);
+        } catch (err) {}
+      }
+      if (!st) {
+        dataStore.ensureTable('stores');
+        st = dataStore.getStore().stores.find(s => String(s.vendor_id) === String(cleanId)) || null;
+      }
+      if (!st) {
+        return res.status(404).json({ error: 'Store not found to update storefront' });
+      }
+
+      const storeId = st.id;
+      const storeUpdates = {};
+      if ('status' in body) storeUpdates.storefront_status = body.status;
+      if ('url_slug' in body) storeUpdates.slug = body.url_slug;
+      if ('theme' in body) storeUpdates.theme = body.theme;
+      if ('font_family' in body) storeUpdates.font_family = body.font_family;
+      if ('slogan' in body) storeUpdates.slogan = body.slogan;
+      if ('about_us' in body) storeUpdates.description = body.about_us;
+      if ('logo_url' in body) storeUpdates.logo_url = body.logo_url;
+      if ('banner_url' in body) storeUpdates.banner_url = body.banner_url;
+      if ('primary_color' in body) storeUpdates.primary_color = body.primary_color;
+      if ('secondary_color' in body) storeUpdates.secondary_color = body.secondary_color;
+      if ('tertiary_color' in body) storeUpdates.tertiary_color = body.tertiary_color;
+      if ('business_hours' in body) storeUpdates.business_hours = body.business_hours;
+      if ('return_policy' in body) storeUpdates.return_policy = body.return_policy;
+      if ('facebook_url' in body) storeUpdates.facebook = body.facebook_url;
+      if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
+      if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
+      if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+      if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
+      storeUpdates.updated_at = new Date().toISOString();
+
+      if (supabase) {
+        try {
+          const dbRecord = prepareRecordForDb('stores', storeUpdates);
+          await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        } catch (err) {}
+      }
+      dataStore.ensureTable('stores');
+      const store = dataStore.getStore();
+      const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
+      if (idx !== -1) {
+        store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
+      } else {
+        store.stores.push({ id: storeId, vendor_id: st.vendor_id, ...storeUpdates });
+      }
+      dataStore.saveToFile();
+
+      const updatedSt = { ...st, ...storeUpdates };
+      const sf = {
+        id: storeId,
+        store_id: storeId,
+        vendor_id: updatedSt.vendor_id,
+        status: updatedSt.storefront_status || 'draft',
+        url_slug: updatedSt.slug || '',
+        theme: updatedSt.theme || 'classic',
+        font_family: updatedSt.font_family || 'Outfit',
+        slogan: updatedSt.slogan || '',
+        about_us: updatedSt.description || updatedSt.about_us || '',
+        logo_url: updatedSt.logo_url || '',
+        banner_url: updatedSt.banner_url || '',
+        primary_color: updatedSt.primary_color || '#e85d04',
+        secondary_color: updatedSt.secondary_color || '#faf9f6',
+        tertiary_color: updatedSt.tertiary_color || '#e85d04',
+        business_hours: updatedSt.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
+        shipping_policy: updatedSt.return_policy || '',
+        return_policy: updatedSt.return_policy || '',
+        facebook_url: updatedSt.facebook || updatedSt.facebook_url || '',
+        instagram_url: updatedSt.instagram || updatedSt.instagram_url || '',
+        youtube_url: body.youtube_url || '',
+        meta_description: body.meta_description || '',
+        subscription_plan: updatedSt.subscription_plan || 'starter',
+        subscription_status: updatedSt.subscription_status || 'active',
+        plan_prices: updatedSt.plan_prices || body.plan_prices || null,
+        created_at: updatedSt.created_at,
+        updated_at: updatedSt.updated_at
+      };
+      return res.json(sf);
+    }
     
     if (!supabase) {
       dataStore.ensureTable(table);
@@ -1110,24 +1236,26 @@ app.patch('/api/:table/:id', async (req, res) => {
     const record = serializeRecord(body);
 
     if (table === 'storefronts') {
+      // The frontend PATCHes with id 'sft-<storeId>' — strip the prefix and
+      // fall back to the local db.json store so local-only stores can update
+      // their storefront (the GET list merges local stores over Supabase).
+      const cleanId = String(id).replace(/^sft-/, '');
       let st = null;
-      if (!supabase) {
-        dataStore.ensureTable('stores');
-        const store = dataStore.getStore();
-        st = store.stores.find(s => String(s.id) === String(id));
-      } else {
-        const { data, error } = await supabase.from('stores').select('*').eq('id', id).maybeSingle();
+      if (supabase) {
+        const { data, error } = await supabase.from('stores').select('*').eq('id', cleanId).maybeSingle();
         if (!error && data) st = serializeRecord(data);
       }
-
       if (!st) {
-        if (!supabase) {
-          const store = dataStore.getStore();
-          st = store.stores.find(s => String(s.vendor_id) === String(id));
-        } else {
-          const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', id).limit(1);
-          if (!error && data && data.length > 0) st = serializeRecord(data[0]);
-        }
+        dataStore.ensureTable('stores');
+        st = dataStore.getStore().stores.find(s => String(s.id) === String(cleanId)) || null;
+      }
+      if (!st && supabase) {
+        const { data, error } = await supabase.from('stores').select('*').eq('vendor_id', cleanId).limit(1);
+        if (!error && data && data.length > 0) st = serializeRecord(data[0]);
+      }
+      if (!st) {
+        dataStore.ensureTable('stores');
+        st = dataStore.getStore().stores.find(s => String(s.vendor_id) === String(cleanId)) || null;
       }
 
       if (!st) {
@@ -1169,17 +1297,23 @@ app.patch('/api/:table/:id', async (req, res) => {
 
       storeUpdates.updated_at = new Date().toISOString();
 
-      if (!supabase) {
-        const store = dataStore.getStore();
-        const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
-        if (idx !== -1) {
-          store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
-          dataStore.saveToFile();
+      if (supabase) {
+        try {
+          const dbRecord = prepareRecordForDb('stores', storeUpdates);
+          await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        } catch (err) {
+          console.warn('[PATCH] Supabase storefront update failed:', err.message);
         }
-      } else {
-        const dbRecord = prepareRecordForDb('stores', storeUpdates);
-        await supabase.from('stores').update(dbRecord).eq('id', storeId);
       }
+      dataStore.ensureTable('stores');
+      const store = dataStore.getStore();
+      const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
+      if (idx !== -1) {
+        store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
+      } else {
+        store.stores.push({ id: storeId, vendor_id: st.vendor_id || '', ...storeUpdates });
+      }
+      dataStore.saveToFile();
 
       let updatedSt = { ...st, ...storeUpdates };
       const sf = {
@@ -1214,16 +1348,30 @@ app.patch('/api/:table/:id', async (req, res) => {
     }
     
     let existingRecord = null;
+    let localOnlyRecord = false;
     if (!supabase) {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();
       existingRecord = store[table].find(r => String(r.id) === String(id));
+      localOnlyRecord = !!existingRecord;
     } else {
       const { data: dbData } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
       if (dbData) existingRecord = serializeRecord(dbData);
+      if (!dbData) {
+        // Record isn't in Supabase — it may live only in db.json (e.g. a store
+        // created before Supabase was wired up). Fall back to the local record
+        // and write locally so PATCHes like storefront_status still persist.
+        dataStore.ensureTable(table);
+        const store = dataStore.getStore();
+        const localRec = store[table].find(r => String(r.id) === String(id));
+        if (localRec) {
+          existingRecord = serializeRecord(localRec);
+          localOnlyRecord = true;
+        }
+      }
     }
 
-    if (!supabase) {
+    if (!supabase || localOnlyRecord) {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();
       const idx = store[table].findIndex(r => String(r.id) === String(id));
