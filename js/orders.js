@@ -58,6 +58,27 @@ function sanitizePackage(pkg) {
   return pkg;
 }
 
+// Resolve an order item's thumbnail image. Checks the stored item fields first,
+// then falls back to the product record (covers legacy orders created before
+// images were stored on package items, and any creation path that missed it).
+function itemImage(i) {
+  if (!i) return '';
+  const direct = i.image || i.img || '';
+  if (direct) return direct;
+  const pid = i.product_id || i.id;
+  let p = null;
+  if (pid && Array.isArray(App.allProducts)) {
+    p = App.allProducts.find(pr => String(pr.id) === String(pid));
+  }
+  if (p) {
+    if (Array.isArray(p.images) && p.images[0]) return p.images[0];
+    if (p.image) return p.image;
+    if (p.image_url) return p.image_url;
+  }
+  return '';
+}
+window.itemImage = itemImage;
+
 // Storefront orders are fully managed by the VENDOR — the admin never sees or
 // touches them. They are identified by order_source 'storefront' (set at checkout)
 // or the admin_status marker 'vendor_controlled' on older records.
@@ -132,7 +153,7 @@ function buyerPackageCard(rawPkg) {
     </div>
 
     <div style="font-size:.84rem;margin-bottom:8px;font-weight:500">
-      ${(pkg.items||[]).slice(0,2).map(i=>`<div style="display:flex;justify-content:space-between"><span>${escHtml(i.name||'')} × ${i.qty}</span><span>GHS ${(i.price*i.qty).toFixed(2)}</span></div>`).join('')}
+      ${(pkg.items||[]).slice(0,2).map(i=>{const im=itemImage(i);return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0"><span style="display:flex;align-items:center;gap:8px;min-width:0">${im ? `<img src="${im}" style="width:30px;height:30px;border-radius:6px;object-fit:cover;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">` : ''}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(i.name||'')} × ${i.qty}</span></span><span style="flex-shrink:0">GHS ${(i.price*i.qty).toFixed(2)}</span></div>`;}).join('')}
       ${(pkg.items||[]).length > 2 ? `<div style="color:var(--text-muted);font-size:.78rem">+${(pkg.items||[]).length-2} more items</div>` : ''}
     </div>
 
@@ -218,7 +239,7 @@ async function showPackageDetailModal(packageId) {
       <div style="font-weight:700;font-size:.85rem;margin-bottom:10px">Items in this Package</div>
       ${(pkg.items||[]).map(i=>{
         const title = i.name && i.name.trim() ? escHtml(i.name) : `Item #${i.id || 'unnamed'}`;
-        const img = i.image || i.img || 'https://via.placeholder.com/50x50?text=Item';
+        const img = itemImage(i) || 'https://via.placeholder.com/50x50?text=Item';
         return `
         <div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
           <img src="${img}" alt="${title}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://via.placeholder.com/50x50?text=Item'">
@@ -1192,7 +1213,7 @@ function packageDetailHTML(rawPkg) {
       </div>
       ${(pkg.items||[]).map(i=>{
         const itemTitle = i.name && i.name.trim() ? escHtml(i.name) : `Item #${i.id || 'unnamed'}`;
-        const itemImg = i.image || i.img || 'https://via.placeholder.com/60x60?text=Item';
+        const itemImg = itemImage(i) || 'https://via.placeholder.com/60x60?text=Item';
         return `
         <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:#fff">
           <img src="${itemImg}" alt="${itemTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://via.placeholder.com/60x60?text=Item'">

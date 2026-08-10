@@ -607,6 +607,28 @@ async function renderAdminDashboard() {
         </div>
       </div>
 
+      <!-- 3c. Rendor Subscription Prices -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header">
+          <h3>⭐ Rendor Subscription Prices</h3>
+        </div>
+        <div class="card-body">
+          <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:12px">Default subscription prices for all rendor accounts (used when quoting or activating a rendor's subscription). Individual quotes still override these per rendor.</p>
+          <div class="form-group">
+            <label class="form-label">Monthly (30 days) — GHS</label>
+            <input class="form-control" id="setting-rendor-sub-monthly" type="number" min="0" step="0.01" value="30">
+          </div>
+          <div class="form-group">
+            <label class="form-label">3 Months (90 days) — GHS</label>
+            <input class="form-control" id="setting-rendor-sub-quarterly" type="number" min="0" step="0.01" value="80">
+          </div>
+          <div class="form-group">
+            <label class="form-label">6 Months (180 days) — GHS</label>
+            <input class="form-control" id="setting-rendor-sub-biannual" type="number" min="0" step="0.01" value="150">
+          </div>
+        </div>
+      </div>
+
       <!-- 4. Referral Programme -->
       <div class="card" style="margin-bottom:14px">
         <div class="card-header">
@@ -1568,7 +1590,16 @@ async function rejectRendorApplication(userId, email) {
 }
 
 // ── Send a subscription price quote to a rendor (admin-side) ─
-function adminSendSubQuote(userId, displayName) {
+// Pre-fills with the global rendor subscription prices from admin Settings
+// (rendor_sub_monthly / _quarterly / _biannual) so quotes can be sent instantly;
+// the admin can still override per-rendor before sending.
+async function adminSendSubQuote(userId, displayName) {
+  const settingsRes = await apiGet('settings', 'limit=200').catch(() => null);
+  const rows = settingsRes?.data || [];
+  const getVal = (key, def) => parseFloat((rows.find(r => r.key === key) || {}).value) || def;
+  const defMonthly   = getVal('rendor_sub_monthly', 30);
+  const defQuarterly = getVal('rendor_sub_quarterly', 80);
+  const defBiannual  = getVal('rendor_sub_biannual', 150);
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
@@ -1578,19 +1609,19 @@ function adminSendSubQuote(userId, displayName) {
 <div class="modal-body">
   <p style="font-size:.85rem;color:var(--text-light);margin-bottom:16px;line-height:1.6">
     Set personalised subscription prices for <strong>${escHtml(displayName)}</strong>.
-    Only plans you fill in will be shown to the rendor.
+    Pre-filled with the global prices from Settings — only plans you fill in will be shown to the rendor.
   </p>
   <div class="form-group">
     <label class="form-label">Monthly Price (GHS) *</label>
-    <input class="form-control" type="number" min="0" step="0.01" id="quote-monthly" placeholder="e.g. 30">
+    <input class="form-control" type="number" min="0" step="0.01" id="quote-monthly" value="${defMonthly}">
   </div>
   <div class="form-group">
     <label class="form-label">3-Month Price (GHS)</label>
-    <input class="form-control" type="number" min="0" step="0.01" id="quote-quarterly" placeholder="e.g. 80">
+    <input class="form-control" type="number" min="0" step="0.01" id="quote-quarterly" value="${defQuarterly}">
   </div>
   <div class="form-group">
     <label class="form-label">6-Month Price (GHS)</label>
-    <input class="form-control" type="number" min="0" step="0.01" id="quote-biannual" placeholder="e.g. 150">
+    <input class="form-control" type="number" min="0" step="0.01" id="quote-biannual" value="${defBiannual}">
   </div>
   <button class="btn btn-block" id="send-quote-btn"
           style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:#f59e0b;margin-top:8px"
@@ -1634,12 +1665,16 @@ async function _doSendSubQuote(userId, displayName) {
 
 // ── Rendor subscription activation (admin-side) ───────────
 async function adminActivateRendorSub(userId, displayName) {
-  // Use the rendor's admin-quoted prices when available (falls back to defaults)
+  // Base prices: the global rendor subscription prices from admin Settings.
+  const settingsRes = await apiGet('settings', 'limit=200').catch(() => null);
+  const sRows = settingsRes?.data || [];
+  const sVal = (key, def) => parseFloat((sRows.find(r => r.key === key) || {}).value) || def;
   let PLANS = [
-    { id:'monthly',   label:'Monthly (30 days)',   days:30,  price:30  },
-    { id:'quarterly', label:'3 Months (90 days)',  days:90,  price:80  },
-    { id:'biannual',  label:'6 Months (180 days)', days:180, price:150 },
+    { id:'monthly',   label:'Monthly (30 days)',   days:30,  price: sVal('rendor_sub_monthly', 30) },
+    { id:'quarterly', label:'3 Months (90 days)',  days:90,  price: sVal('rendor_sub_quarterly', 80) },
+    { id:'biannual',  label:'6 Months (180 days)', days:180, price: sVal('rendor_sub_biannual', 150) },
   ];
+  // Use the rendor's individually admin-quoted prices when available (overrides globals)
   try {
     const u = await apiGet('users/' + userId);
     if (u) {
@@ -2725,6 +2760,15 @@ window.approveStorefrontWithModal = async function(sfId) {
     sf.plan_prices = plan_prices;
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
     
+    // Keep the store's storefront_status mirror in sync so the vendor dashboard's
+    // plan-selection UI shows and the storefront isn't stuck on an old status.
+    const sfStoreId = sf.store_id || (String(sfId).startsWith('sft-') ? String(sfId).replace('sft-', '') : null);
+    if (sfStoreId) {
+      await apiPatch('stores', sfStoreId, { storefront_status: 'approved_pending_payment' }).catch(() => {});
+      const st = (App.allStores || []).find(s2 => String(s2.id) === String(sfStoreId));
+      if (st) st.storefront_status = 'approved_pending_payment';
+    }
+
     if (typeof addNotification === 'function' && sf.vendor_id) {
       addNotification(sf.vendor_id, 'system', '🎉 Storefront Approved!',
         `Your storefront has been approved by admin! Choose your subscription plan to activate.`,

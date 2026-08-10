@@ -131,13 +131,20 @@ async function renderVendorDashboard() {
       return storeMatch || vendorMatch;
     }) || null;
 
-    // Ground truth: store's storefront_status directly on myStore
+    // The storefront RECORD's own status is authoritative — the admin sets it to
+    // 'approved_pending_payment' on approval and the payment flow sets it to
+    // 'active'. The store's storefront_status field is only a mirror of the
+    // vendor's own actions (draft/submit) and can lag behind admin changes, so it
+    // must NOT override the record's status (that made the payment UI never show
+    // and activateStorefrontPlan silently no-op).
     const storeStatus = myStore.storefront_status || 'none';
+    const recordStatus = fetchedSF?.status || '';
+    const effectiveStatus = (recordStatus && recordStatus !== 'none') ? recordStatus : storeStatus;
 
-    if (storeStatus === 'none') {
+    if (storeStatus === 'none' && !recordStatus) {
       myStorefront = null;
     } else {
-      myStorefront = fetchedSF ? Object.assign({}, fetchedSF, { status: storeStatus }) : { status: storeStatus, store_id: myStore.id, vendor_id: myStore.vendor_id };
+      myStorefront = fetchedSF ? Object.assign({}, fetchedSF, { status: effectiveStatus }) : { status: storeStatus, store_id: myStore.id, vendor_id: myStore.vendor_id };
     }
     if (myStorefront && typeof myStorefront.plan_prices === 'string') {
       try { myStorefront.plan_prices = JSON.parse(myStorefront.plan_prices); } catch(e){}
@@ -1045,10 +1052,14 @@ function vendorProductRowHTML(p) {
 
 function packageRowHTML(pkg) {
   const sourceLabel = pkg.order_source === 'storefront' ? 'Storefront Order' : 'Website Order';
+  const firstItem = (pkg.items||[])[0] || {};
+  const rowImg = typeof itemImage === 'function' ? itemImage(firstItem) : (firstItem.image || firstItem.img || '');
+  const rowTitle = (firstItem.name && firstItem.name.trim()) ? escHtml(firstItem.name) : `${(pkg.items||[]).length} item(s)`;
   return `
 <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+  ${rowImg ? `<img src="${rowImg}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">` : ''}
   <code style="background:var(--secondary);color:var(--accent);padding:3px 7px;border-radius:4px;font-size:.75rem;font-weight:700;flex-shrink:0">${pkg.package_code||'—'}</code>
-  <div style="flex:1;font-size:.8rem;color:var(--text-muted)">${(pkg.items||[]).length} item(s) · ${pkg.origin_location||''}<br><span style="color:var(--primary);font-weight:700">${sourceLabel}</span></div>
+  <div style="flex:1;font-size:.8rem;color:var(--text-muted);min-width:0">${rowTitle} · ${pkg.origin_location||''}<br><span style="color:var(--primary);font-weight:700">${sourceLabel}</span></div>
   <span class="status-badge status-${pkg.status}">${pkg.status}</span>
 </div>`;
 }
@@ -2911,8 +2922,10 @@ window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthl
           <button class="btn btn-ghost" onclick="closeModal('modal-sf-sub-pay')">Cancel</button>
           <button class="btn btn-primary" onclick="
             const months = parseInt(document.getElementById('sf-sub-months-sel').value || '1');
+            const payMethod = (document.querySelector('[name=sf-sub-pay]:checked')||{}).value || 'momo';
+            const payPhone = (document.getElementById('sf-sub-momo-phone')||{}).value || '';
             closeModal('modal-sf-sub-pay');
-            window.activateStorefrontPlan('${storeId}', '${planKey}', ${monthlyPrice}, months, (document.querySelector('[name=sf-sub-pay]:checked')||{}).value || 'momo');
+            window.activateStorefrontPlan('${storeId}', '${planKey}', ${monthlyPrice}, months, payMethod, payPhone);
           ">
             <i class="fas fa-lock"></i> Pay &amp; Activate Now
           </button>
@@ -2937,7 +2950,7 @@ window.toggleSfSubPay = function() {
   });
 };
 
-window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, months = 1, method = 'momo') {
+window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, months = 1, method = 'momo', momoPhone = '') {
   if (!App.myStorefront || App.myStorefront.status !== 'approved_pending_payment') return;
   
   const totalCost = monthlyPrice * months;
@@ -2946,7 +2959,10 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
   // wallet — so an empty wallet must not block activation. Wallet remains an
   // optional alternative for vendors who choose it.
   if (method === 'momo') {
-    const phone = document.getElementById('sf-sub-momo-phone')?.value?.trim();
+    // The Pay button closes the modal (removing its DOM) before calling this
+    // function, so the phone number must be passed in as an argument rather than
+    // read from the (now-gone) input — reading the input made payment always fail.
+    const phone = (momoPhone || document.getElementById('sf-sub-momo-phone')?.value || '').trim();
     if (!phone || phone.replace(/\D/g,'').length < 9) {
       showToast('Please enter a valid MoMo phone number.', 'error');
       return;
@@ -2986,7 +3002,7 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
     if (typeof saveSessions === 'function') saveSessions();
     if (typeof updateWalletUI === 'function') updateWalletUI();
   } else {
-    const phone = document.getElementById('sf-sub-momo-phone')?.value?.trim() || '';
+    const phone = (momoPhone || document.getElementById('sf-sub-momo-phone')?.value?.trim() || '');
     await apiPost('wallet_transactions', {
       user_id:        App.currentUser?.id || '',
       type:           'payment',
@@ -3020,8 +3036,10 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
       subscription_plan: planKey,
       subscription_status: 'active',
       subscription_start: now.toISOString(),
-      subscription_end: newEnd.toISOString()
+      subscription_end: newEnd.toISOString(),
+      storefront_status: 'active'
     }).catch(() => {});
+    if (App.myStore) App.myStore.storefront_status = 'active';
   }
   
   // 4. Record platform revenue for this subscription payment (reflects in admin revenue)

@@ -9,42 +9,42 @@
       "role": "admin",
       "status": "active",
       "location": "Accra",
-      "wallet_balance": 0,
+      "wallet_balance": 2,
       "referral_code": "ADMIN001",
       "registered_at": "2026-08-01T21:27:37.527Z",
-      "updated_at": "2026-08-08T18:00:00.000Z",
+      "updated_at": "2026-08-09T20:10:44.091Z",
       "extra": {}
     }
   ],
   "stores": [
     {
-      "name": "ImgTestStore",
-      "owner_name": "ImgTest",
+      "id": "store-msku253he58z",
+      "name": "MIMI'S COLLECTION",
+      "slug": "mimis-collection",
+      "description": "",
+      "logo_url": "",
+      "banner_url": "",
+      "location": "Tamale",
+      "category": "Fashion & Footwear",
+      "keywords": [],
+      "vendor_id": "msku253he58z",
+      "intended_vendor_email": "mummysaccount@gmail.com",
       "status": "active",
-      "storefront_status": "active",
-      "description": "test",
-      "created_at": "2026-08-09T14:30:19.236Z",
-      "id": "sto-1786285819406-958",
-      "updated_at": "2026-08-09T14:30:19.406Z"
+      "storefront_status": "none",
+      "avg_rating": 0,
+      "review_count": 0,
+      "total_sales": 0,
+      "total_orders": 0,
+      "location_prefix": "TM",
+      "store_price": 0,
+      "is_paid": false,
+      "acquired_by_referral": false,
+      "handover_date": "2026-08-09T19:20:23.500Z",
+      "created_at": "2026-08-09T19:20:41.226Z",
+      "updated_at": "2026-08-09T19:20:41.227Z"
     }
   ],
-  "products": [
-    {
-      "name": "Img Test",
-      "price": 50,
-      "stock_qty": 10,
-      "store_id": "sto-1786285819406-958",
-      "vendor_id": "v-imgtest",
-      "images": [
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-      ],
-      "status": "active",
-      "category": "Testing",
-      "created_at": "2026-08-09T14:30:19.425Z",
-      "id": "pro-1786285819436-402",
-      "updated_at": "2026-08-09T14:30:19.436Z"
-    }
-  ],
+  "products": [],
   "orders": [],
   "packages": [],
   "services": [],
@@ -60,6 +60,50 @@
       "action_url": "#storefront/sf-momo-test-1786302086686",
       "created_at": "2026-08-09T19:05:25.204Z",
       "updated_at": "2026-08-09T19:05:25.212Z"
+    },
+    {
+      "id": "n1786304709274wj1l9",
+      "user_id": "vreal-1786304149625",
+      "type": "system",
+      "title": "🚀 Storefront Activated & Live!",
+      "message": "Your storefront is active! Subscribed for 1 month(s) on the STARTER plan. Live URL: http://localhost:54321/#storefront/real-flow-1786304149625",
+      "is_read": false,
+      "action_url": "#storefront/real-flow-1786304149625",
+      "created_at": "2026-08-09T19:45:09.275Z",
+      "updated_at": "2026-08-09T19:45:09.289Z"
+    },
+    {
+      "id": "n1786304735173mragn",
+      "user_id": "vreal-1786304149625",
+      "type": "system",
+      "title": "🚀 Storefront Activated & Live!",
+      "message": "Your storefront is active! Subscribed for 1 month(s) on the STARTER plan. Live URL: http://localhost:54321/#storefront/real-flow-1786304149625",
+      "is_read": false,
+      "action_url": "#storefront/real-flow-1786304149625",
+      "created_at": "2026-08-09T19:45:35.173Z",
+      "updated_at": "2026-08-09T19:45:35.187Z"
+    },
+    {
+      "id": "n1786305094274eyw15",
+      "user_id": "fv-1786304971374",
+      "type": "order",
+      "title": "🛒 New Order!",
+      "message": "Package AC-53593: 1 item(s) ordered",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-09T19:51:34.274Z",
+      "updated_at": "2026-08-09T19:51:34.278Z"
+    },
+    {
+      "id": "n1786306938309sdyw7",
+      "user_id": "fv-1786304971374",
+      "type": "order",
+      "title": "🛒 New Order!",
+      "message": "Package AC-69729: 1 item(s) ordered",
+      "is_read": false,
+      "action_url": "",
+      "created_at": "2026-08-09T20:22:18.309Z",
+      "updated_at": "2026-08-09T20:22:18.313Z"
     }
   ],
   "ad_campaigns": [],
@@ -71,6 +115,33 @@
       "label": "Vendor Auto Approve",
       "type": "text",
       "updated_at": "2026-08-01T21:27:37.528Z"
+    },
+    {
+      "key": "rendor_sub_monthly",
+      "value": "30",
+      "label": "rendor_sub_monthly",
+      "type": "text",
+      "id": "set-1786307661690-849",
+      "created_at": "2026-08-09T20:34:21.690Z",
+      "updated_at": "2026-08-09T20:34:21.690Z"
+    },
+    {
+      "key": "rendor_sub_quarterly",
+      "value": "80",
+      "label": "rendor_sub_quarterly",
+      "type": "text",
+      "id": "set-1786307661700-200",
+      "created_at": "2026-08-09T20:34:21.700Z",
+      "updated_at": "2026-08-09T20:34:21.700Z"
+    },
+    {
+      "key": "rendor_sub_biannual",
+      "value": "150",
+      "label": "rendor_sub_biannual",
+      "type": "text",
+      "id": "set-1786307661715-316",
+      "created_at": "2026-08-09T20:34:21.715Z",
+      "updated_at": "2026-08-09T20:34:21.715Z"
     }
   ],
   "referrals": [],
@@ -96,7 +167,17 @@
   ],
   "reviews": [],
   "service_orders": [],
-  "platform_revenue": [],
+  "platform_revenue": [
+    {
+      "source": "platform_fee",
+      "amount": 1.5,
+      "reference": "ORD-ord-1786306938279-436-1786306938286",
+      "description": "Platform fee (1.5%) on order ord-1786306938279-436",
+      "created_at": "2026-08-09T20:22:18.286Z",
+      "id": "pla-1786306938289-576",
+      "updated_at": "2026-08-09T20:22:18.289Z"
+    }
+  ],
   "support_tickets": [],
   "storefronts": []
 }

@@ -417,6 +417,11 @@ async function placeOrder() {
   // Create packages with complete buyer and delivery metadata
   const storeGroups = groupByVendor(savedCart);
   const packages = [];
+  // The platform fee (1.5% charged to the buyer) is order-level; prorate it across
+  // the per-store packages so each package carries its share. At delivery, orders.js
+  // credits the admin wallet with commission + this fee (it reads pkg.platform_fee),
+  // so the fee must live on the package or the admin never receives it.
+  const orderSubtotal = Object.values(storeGroups).reduce((s, items) => s + items.reduce((x, i) => x + i.price * i.qty, 0), 0) || 1;
   for (const [storeId, items] of Object.entries(storeGroups)) {
     const itemLoc = items[0].location || 'Accra';
     const pCode = generatePackageCode(itemLoc);
@@ -424,6 +429,7 @@ async function placeOrder() {
     const commission = items.reduce((s,i) => s + i.price * i.qty * (i.commission_pct||8)/100, 0);
     const vendorAmt  = grossAmt - commission;
     const d = calcDelivery(itemLoc, dest, items.reduce((s,i) => s + i.weight_kg * i.qty, 0));
+    const pkgPlatformFee = Number(((totals.platformFee || 0) * grossAmt / orderSubtotal).toFixed(2));
     
     const pkg = await apiPost('packages', {
       id: pCode, package_code: pCode, code: pCode, order_id: order.id,
@@ -433,6 +439,7 @@ async function placeOrder() {
       delivery_location: dest, notes: address,
       items: items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price, image: i.image || '', buyer_note: i.buyer_note || '' })),
       vendor_amount: vendorAmt, commission_amount: commission, gross_amount: grossAmt, delivery_fee: d.rate,
+      platform_fee: pkgPlatformFee,
       status: 'pending',
       vendor_status: 'pending',
       admin_status: 'pending',
