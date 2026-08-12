@@ -571,12 +571,28 @@ async function _apSaveBuyerInfo(userId, form) {
   if (snap) Object.assign(App.allUsers[userIdx], data);
 
   try {
+    // Normalize the WhatsApp opt-in to a real boolean. The checkbox is only
+    // rendered for vendors; for everyone else drop the field entirely so a
+    // hidden input can never force it to false.
+    const waCheck = form.querySelector('[name="receive_order_notifications_on_whatsapp"][type="checkbox"]');
+    if (!waCheck) {
+      delete data.receive_order_notifications_on_whatsapp;
+    } else {
+      data.receive_order_notifications_on_whatsapp = waCheck.checked;
+    }
     await apiPatch('users', userId, data);
     setBtn('saved');
     showToast('Account info updated ✅', 'success', 2000);
     OptimisticUI.pulse(form);
-    // Re-open panel to refresh the content
-    await adminOpenBuyerProfile(userId);
+    // Re-open the correct profile panel to refresh the content (role-aware)
+    const role = (App.allUsers.find(uu => uu.id === userId)?.role) || 'buyer';
+    if (role === 'vendor' || role === 'seller') {
+      await adminOpenVendorProfile(userId);
+    } else if (role === 'rendor') {
+      await adminOpenRendorProfile(userId);
+    } else {
+      await adminOpenBuyerProfile(userId);
+    }
   } catch (err) {
     if (snap && userIdx > -1) {
       App.allUsers[userIdx] = snap;
@@ -1222,6 +1238,19 @@ async function adminOpenVendorProfile(userId) {
             ${LOCATIONS.map(l=>`<option value="${l}" ${l===u.location?'selected':''}>${l}</option>`).join('')}
           </select>
         </div>
+        ${(u.role === 'vendor' || u.role === 'seller') ? `
+        <div class="form-group">
+          <label class="form-label">WhatsApp Number (order notifications, e.g. +23320xxxxxxx)</label>
+          <input class="form-control" name="whatsapp_phone" placeholder="+23320xxxxxxx" value="${escHtml(u.whatsapp_phone||'')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="font-weight:600">
+            <input type="hidden" name="receive_order_notifications_on_whatsapp" value="false">
+            <input type="checkbox" name="receive_order_notifications_on_whatsapp" value="true" ${u.receive_order_notifications_on_whatsapp ? 'checked' : ''} style="width:16px;height:16px;margin-right:6px;vertical-align:middle">
+            Receive WhatsApp notifications when a customer places an order
+          </label>
+        </div>
+        ` : ''}
         <button class="btn btn-primary btn-block" type="submit" style="margin-bottom:20px"><i class="fas fa-save"></i> Save Changes</button>
       </form>
       <div style="height:1px;background:var(--border);margin:16px 0"></div>
@@ -1552,6 +1581,19 @@ async function adminOpenRendorProfile(userId) {
             ${LOCATIONS.map(l=>`<option value="${l}" ${l===u.location?'selected':''}>${l}</option>`).join('')}
           </select>
         </div>
+        ${(u.role === 'vendor' || u.role === 'seller') ? `
+        <div class="form-group">
+          <label class="form-label">WhatsApp Number (order notifications, e.g. +23320xxxxxxx)</label>
+          <input class="form-control" name="whatsapp_phone" placeholder="+23320xxxxxxx" value="${escHtml(u.whatsapp_phone||'')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="font-weight:600">
+            <input type="hidden" name="receive_order_notifications_on_whatsapp" value="false">
+            <input type="checkbox" name="receive_order_notifications_on_whatsapp" value="true" ${u.receive_order_notifications_on_whatsapp ? 'checked' : ''} style="width:16px;height:16px;margin-right:6px;vertical-align:middle">
+            Receive WhatsApp notifications when a customer places an order
+          </label>
+        </div>
+        ` : ''}
         <button class="btn btn-primary btn-block" type="submit" style="margin-bottom:20px"><i class="fas fa-save"></i> Save Changes</button>
       </form>
       <div style="height:1px;background:var(--border);margin:16px 0"></div>

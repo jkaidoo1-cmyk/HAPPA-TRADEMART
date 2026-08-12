@@ -1155,6 +1155,40 @@ function skipOTP(userId) {
 
 
 
+async function submitForgotPw() {
+  const contact = (document.getElementById('fp-contact')?.value || '').trim();
+  if (!contact) { showToast('Please enter your email or phone number', 'warning'); return; }
+
+  const u    = App.currentUser;
+  const now  = new Date().toISOString();
+  const who  = u ? (u.name || 'User') : 'Guest User';
+  const role = u ? (u.role || 'buyer') : 'guest';
+  const message = `User requested a password reset. Contact: ${contact}`;
+
+  const txn = await apiPost('support_tickets', {
+    user_id:    u ? u.id : 'guest',
+    user_name:  who,
+    user_email: (u && u.email) ? u.email : contact,
+    user_role:  role,
+    subject:    'Password Reset Request',
+    category:   'Account & Login',
+    priority:   'high',
+    status:     'open',
+    message,
+    messages: JSON.stringify([{ from: 'user', name: who, role, text: message, at: now }]),
+    created_at: now,
+    updated_at: now
+  });
+
+  if (!txn) { showToast('Could not submit your request. Please try again.', 'error'); return; }
+
+  // Notify the support team
+  try { addNotification('admin', 'support', '🔑 Password Reset Request', `${contact} — ${who}`); } catch (e) {}
+
+  closeModalForce();
+  showToast('Request sent! The admin will contact you to reset your password. 🔑', 'success', 3500);
+}
+
 function showForgotPw() {
 
   showModal(`
@@ -1171,17 +1205,17 @@ function showForgotPw() {
 
 <div class="modal-body">
 
-  <p style="font-size:.875rem;color:var(--text-light);margin-bottom:16px">Enter your email or phone and we'll send a reset link/OTP.</p>
+  <p style="font-size:.875rem;color:var(--text-light);margin-bottom:16px">Enter your email or phone number. Your request is sent to the admin, who will contact you to reset your password.</p>
 
   <div class="form-group">
 
-    <input class="form-control" type="text" placeholder="Email or phone">
+    <input class="form-control" id="fp-contact" type="text" placeholder="Email or phone">
 
   </div>
 
-  <button class="btn btn-primary btn-block" onclick="showToast('Password reset OTP sent! Check your phone or email.','success');closeModalForce()">
+  <button class="btn btn-primary btn-block" onclick="submitForgotPw()">
 
-    <i class="fas fa-paper-plane"></i> Send Reset Link
+    <i class="fas fa-paper-plane"></i> Send Request
 
   </button>
 

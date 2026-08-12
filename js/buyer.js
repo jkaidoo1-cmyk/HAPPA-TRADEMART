@@ -34,7 +34,6 @@ async function renderBuyerDashboard() {
   c.innerHTML = `
 <div class="tab-nav" id="buyer-tabs" style="display:flex;overflow-x:auto;white-space:nowrap;gap:8px;padding-bottom:8px">
   <div class="tab-btn ${activeTabId === 'buyer-overview' ? 'active' : ''}" id="nav-buyer-overview" onclick="switchTab(this,'buyer-overview')">Overview</div>
-  <div class="tab-btn ${activeTabId === 'buyer-wishlist' ? 'active' : ''}" id="nav-buyer-wishlist" onclick="switchTab(this,'buyer-wishlist');renderBuyerWishlist()">Wishlist</div>
   <div class="tab-btn ${activeTabId === 'buyer-addresses' ? 'active' : ''}" id="nav-buyer-addresses" onclick="switchTab(this,'buyer-addresses');renderBuyerAddresses()">Addresses</div>
   <div class="tab-btn ${activeTabId === 'buyer-reviews' ? 'active' : ''}" id="nav-buyer-reviews" onclick="switchTab(this,'buyer-reviews');renderBuyerReviews()">My Reviews</div>
   <div class="tab-btn" id="nav-buyer-settings" onclick="showPage('settings')">Settings</div>
@@ -105,6 +104,14 @@ async function renderBuyerDashboard() {
           <i class="fas fa-store"></i> Browse Marketplace
         </button>
       </div>`}
+
+    <!-- My Wishlist (moved from its own tab into the overview) -->
+    <div class="card" style="margin-top:18px">
+      <div class="card-header"><h3>💖 My Wishlist</h3></div>
+      <div class="card-body" id="wishlist-container" style="padding:14px">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
   </div>
 </div>
 
@@ -129,28 +136,6 @@ async function renderBuyerDashboard() {
 <div class="tab-content" id="buyer-referral">
   <div class="dashboard-wrap">
     
-    <!-- Personal Referral Coupon Card -->
-    <div class="referral-code-card" style="margin-bottom:16px; background: linear-gradient(135deg, #1d4ed8, #3b82f6)">
-      <div style="font-size:.78rem;opacity:.8;margin-bottom:4px;color:#fff">Your Personal Referral Coupon</div>
-      <div style="font-size:.85rem;font-weight:700;margin-bottom:12px;opacity:.9;color:#fff">Use this code at checkout to spend your referral earnings!</div>
-      
-      <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-        <div style="flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:12px;text-align:center">
-          <div style="font-size:1.4rem;font-weight:800;color:#fff;letter-spacing:1px">REF-${u.id}</div>
-        </div>
-        <div style="flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:12px;text-align:center">
-          <div style="font-size:.75rem;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:.5px">Available Balance</div>
-          <div style="font-size:1.4rem;font-weight:800;color:#fff">GHS ${refBalance.toFixed(2)}</div>
-        </div>
-      </div>
-      
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff;background:rgba(255,255,255,.1)" onclick="navigator.clipboard.writeText('REF-${u.id}'); showToast('Coupon code copied!', 'success')">
-          <i class="fas fa-copy"></i> Copy Coupon Code
-        </button>
-      </div>
-    </div>
-
     <!-- Referral Link Card -->
     <div class="referral-code-card" style="margin-bottom:16px">
       <div style="font-size:.78rem;opacity:.8;margin-bottom:4px">Your Referral Link</div>
@@ -174,6 +159,16 @@ async function renderBuyerDashboard() {
           <i class="fab fa-whatsapp"></i> WhatsApp
         </button>
       </div>
+    </div>
+
+    <!-- Personal Referral Coupon (compact strip) -->
+    <div class="referral-code-card" style="margin-bottom:16px; background: linear-gradient(135deg, #1d4ed8, #3b82f6); padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+      <div style="font-size:.8rem;font-weight:700;color:#fff;flex-shrink:0">Your Coupon: <span style="font-size:.92rem;letter-spacing:1px">REF-${u.id}</span></div>
+      <div style="font-size:.78rem;color:rgba(255,255,255,.85);flex-shrink:0">Balance: <strong style="color:#fff">GHS ${refBalance.toFixed(2)}</strong></div>
+      <div style="flex:1"></div>
+      <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff;background:rgba(255,255,255,.1);flex-shrink:0" onclick="navigator.clipboard.writeText('REF-${u.id}'); showToast('Coupon code copied!', 'success')">
+        <i class="fas fa-copy"></i> Copy Code
+      </button>
     </div>
 
     <!-- How it works -->
@@ -251,18 +246,6 @@ async function renderBuyerDashboard() {
 
 
 
-<!-- ── Wishlist Tab ── -->
-<div class="tab-content" id="buyer-wishlist">
-  <div class="dashboard-wrap">
-    <div class="card">
-      <div class="card-header"><h3>💖 My Wishlist</h3></div>
-      <div class="card-body" id="wishlist-container" style="padding:16px">
-        <!-- Rendered dynamically -->
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- ── Addresses Tab ── -->
 <div class="tab-content" id="buyer-addresses">
   <div class="dashboard-wrap">
@@ -297,6 +280,9 @@ async function renderBuyerDashboard() {
     </div>
   </div>
 </div>`;
+
+  // Populate the wishlist card on the overview page (after the DOM above is in place)
+  renderBuyerWishlist();
 }
 
 // NOTE: buyerPackageCard, showPackageDetailModal, filterBuyerOrders,
@@ -360,19 +346,43 @@ async function saveProfileSettings(userId) {
   const phone  = document.getElementById('set-phone')?.value.trim();
   const loc    = document.getElementById('set-loc')?.value;
 
+  // WhatsApp order-notification settings (vendors only — the inputs only exist
+  // on the settings page when the user is a vendor/seller).
+  const waPhoneEl   = document.getElementById('set-wa-phone');
+  const waEnabledEl = document.getElementById('set-wa-enabled');
+  const waPhone    = waPhoneEl ? waPhoneEl.value.trim() : '';
+  const waEnabled  = waEnabledEl ? waEnabledEl.checked : false;
+
+  // Validation: WhatsApp number must start with + and contain only digits;
+  // enabling notifications requires a number.
+  if (waEnabled && waPhone && !/^\+[0-9]{7,15}$/.test(waPhone)) {
+    showToast('WhatsApp number must start with + and contain only digits (e.g. +23320xxxxxxx)', 'error', 4000);
+    setBtn('idle');
+    return;
+  }
+  if (waEnabled && !waPhone) {
+    showToast('Enter your WhatsApp number to enable order notifications', 'warning');
+    setBtn('idle');
+    return;
+  }
+
   // Snapshot for rollback
   const u = App.currentUser;
-  const snap = u ? { name: u.name, phone: u.phone, location: u.location } : null;
+  const snap = u ? { name: u.name, phone: u.phone, location: u.location, whatsapp_phone: u.whatsapp_phone, receive_order_notifications_on_whatsapp: u.receive_order_notifications_on_whatsapp } : null;
 
   // Optimistic local update
   if (u) {
     u.name = name; u.phone = phone; u.location = loc;
+    if (waPhoneEl) { u.whatsapp_phone = waPhone; u.receive_order_notifications_on_whatsapp = waEnabled ? true : false; }
     saveSessions();
     OptimisticUI.pulse(btn);
   }
 
   try {
-    await apiPatch('users', userId, { name, phone, location: loc });
+    const patch = { name, phone, location: loc };
+    if (waPhoneEl) patch.whatsapp_phone = waPhone;
+    if (waPhoneEl) patch.receive_order_notifications_on_whatsapp = waEnabled ? true : false;
+    await apiPatch('users', userId, patch);
     setBtn('saved');
     showToast('Profile updated ✅', 'success', 2000);
   } catch (err) {

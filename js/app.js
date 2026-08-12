@@ -1152,6 +1152,28 @@ function renderSettingsPage() {
         </div>
       </div>
 
+      ${(u.role === 'vendor' || u.role === 'seller') ? `
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><h3>📲 WhatsApp Order Notifications</h3></div>
+        <div class="card-body">
+          <p style="font-size:.78rem;color:var(--text-muted);margin:0 0 12px">
+            When a customer places an order in your store, we'll send you a WhatsApp message with the order details.
+          </p>
+          <div class="form-group">
+            <label class="form-label">WhatsApp Number (E.164 format, e.g. +23320xxxxxxx)</label>
+            <input class="form-control" id="set-wa-phone" placeholder="+23320xxxxxxx" value="${escHtml(u.whatsapp_phone || '')}">
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:10px">
+            <input type="checkbox" id="set-wa-enabled" ${u.receive_order_notifications_on_whatsapp ? 'checked' : ''} style="width:18px;height:18px">
+            <label for="set-wa-enabled" style="margin:0;font-size:.82rem">Receive WhatsApp notifications when a customer places an order</label>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveProfileSettings('${u.id}')">
+            <i class="fas fa-save"></i> Save Changes
+          </button>
+        </div>
+      </div>
+      ` : ''}
+
       <div class="card" style="margin-bottom:14px">
         <div class="card-header"><h3>📱 App Installation</h3></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:10px">

@@ -49,63 +49,7 @@
   "packages": [],
   "services": [],
   "wallet_transactions": [],
-  "notifications": [
-    {
-      "id": "n1786302325204dlnsj",
-      "user_id": "sfmomo-test-1786302086680",
-      "type": "system",
-      "title": "🚀 Storefront Activated & Live!",
-      "message": "Your storefront is active! Subscribed for 1 month(s) on the STARTER plan. Live URL: http://localhost:54321/#storefront/sf-momo-test-1786302086686",
-      "is_read": false,
-      "action_url": "#storefront/sf-momo-test-1786302086686",
-      "created_at": "2026-08-09T19:05:25.204Z",
-      "updated_at": "2026-08-09T19:05:25.212Z"
-    },
-    {
-      "id": "n1786304709274wj1l9",
-      "user_id": "vreal-1786304149625",
-      "type": "system",
-      "title": "🚀 Storefront Activated & Live!",
-      "message": "Your storefront is active! Subscribed for 1 month(s) on the STARTER plan. Live URL: http://localhost:54321/#storefront/real-flow-1786304149625",
-      "is_read": false,
-      "action_url": "#storefront/real-flow-1786304149625",
-      "created_at": "2026-08-09T19:45:09.275Z",
-      "updated_at": "2026-08-09T19:45:09.289Z"
-    },
-    {
-      "id": "n1786304735173mragn",
-      "user_id": "vreal-1786304149625",
-      "type": "system",
-      "title": "🚀 Storefront Activated & Live!",
-      "message": "Your storefront is active! Subscribed for 1 month(s) on the STARTER plan. Live URL: http://localhost:54321/#storefront/real-flow-1786304149625",
-      "is_read": false,
-      "action_url": "#storefront/real-flow-1786304149625",
-      "created_at": "2026-08-09T19:45:35.173Z",
-      "updated_at": "2026-08-09T19:45:35.187Z"
-    },
-    {
-      "id": "n1786305094274eyw15",
-      "user_id": "fv-1786304971374",
-      "type": "order",
-      "title": "🛒 New Order!",
-      "message": "Package AC-53593: 1 item(s) ordered",
-      "is_read": false,
-      "action_url": "",
-      "created_at": "2026-08-09T19:51:34.274Z",
-      "updated_at": "2026-08-09T19:51:34.278Z"
-    },
-    {
-      "id": "n1786306938309sdyw7",
-      "user_id": "fv-1786304971374",
-      "type": "order",
-      "title": "🛒 New Order!",
-      "message": "Package AC-69729: 1 item(s) ordered",
-      "is_read": false,
-      "action_url": "",
-      "created_at": "2026-08-09T20:22:18.309Z",
-      "updated_at": "2026-08-09T20:22:18.313Z"
-    }
-  ],
+  "notifications": [],
   "ad_campaigns": [],
   "settings": [
     {
@@ -167,17 +111,8 @@
   ],
   "reviews": [],
   "service_orders": [],
-  "platform_revenue": [
-    {
-      "source": "platform_fee",
-      "amount": 1.5,
-      "reference": "ORD-ord-1786306938279-436-1786306938286",
-      "description": "Platform fee (1.5%) on order ord-1786306938279-436",
-      "created_at": "2026-08-09T20:22:18.286Z",
-      "id": "pla-1786306938289-576",
-      "updated_at": "2026-08-09T20:22:18.289Z"
-    }
-  ],
+  "platform_revenue": [],
   "support_tickets": [],
-  "storefronts": []
+  "storefronts": [],
+  "order_notifications": []
 }

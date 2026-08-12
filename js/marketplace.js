@@ -1804,6 +1804,7 @@ function adminProductCardHTML(p) {
 
       <select class="form-control form-select" name="category" style="font-size:.8rem">
 
+        <option value=""${!p.category?' selected':''}>Select category (optional)</option>
         ${PROD_CATS.map(c=>`<option value="${c}"${c===p.category?' selected':''}>${c}</option>`).join('')}
 
       </select>

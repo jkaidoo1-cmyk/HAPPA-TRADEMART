@@ -31,6 +31,7 @@ function loadMemoryStore() {
       services: [],
       wallet_transactions: [],
       notifications: [],
+      order_notifications: [],
       ad_campaigns: [],
       settings: [],
       referrals: [],

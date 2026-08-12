@@ -1000,6 +1000,9 @@ async function refreshAdminOrdersList() {
   listEl.innerHTML = allPkgs.length
     ? allPkgs.map(pkg => adminPackageRowHTML(pkg, allUsers)).join('')
     : '<div class="empty-state"><i class="fas fa-inbox"></i><h3>No packages yet</h3></div>';
+
+  // Load the WhatsApp notification status for each package row
+  allPkgs.forEach(p => loadVendorNotifs(p.id));
 }
 
 // ── Admin: package row card ───────────────────────────────
@@ -1097,9 +1100,62 @@ function adminPackageRowHTML(rawPkg, allUsers) {
         </button>` : ''}
       `}
     </div>
+
+    <!-- Vendor WhatsApp notification log (loaded async) -->
+    <div id="wa-notifs-${pkg.id}" style="margin-top:12px"></div>
   </div>
 </div>`;
 }
+
+// ── Admin: vendor WhatsApp notification status + manual resend ──
+async function loadVendorNotifs(pkgId) {
+  const box = document.getElementById('wa-notifs-' + pkgId);
+  if (!box) return;
+  const res = await apiGet('order_notifications', 'limit=50').catch(() => null);
+  const all = (res?.data || []);
+  const list = all
+    .filter(n => String(n.package_id) === String(pkgId))
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+  if (!list.length) {
+    box.innerHTML = '';
+    return;
+  }
+
+  const rows = list.map(n => {
+    const s = String(n.status || '');
+    if (s === 'sent') {
+      return `<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--success)"><i class="fas fa-check-circle"></i></span> WhatsApp — <strong>Sent</strong> ${n.sent_at ? 'at ' + formatDateTime(n.sent_at) : ''}</div>`;
+    }
+    if (s === 'skipped') {
+      return `<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--text-muted)"><i class="fas fa-pause-circle"></i></span> WhatsApp — <strong>Skipped</strong> (dev/test mode) ${n.created_at ? '· ' + formatDateTime(n.created_at) : ''}</div>`;
+    }
+    return `<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--danger)"><i class="fas fa-times-circle"></i></span> WhatsApp — <strong>Failed</strong>${n.error_message ? ': ' + escHtml(n.error_message) : ''} ${n.created_at ? '· ' + formatDateTime(n.created_at) : ''}</div>`;
+  });
+
+  box.innerHTML = `
+    <div style="padding:8px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm)">
+      <div style="font-size:.7rem;font-weight:800;color:#166534;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">
+        <i class="fab fa-whatsapp" style="color:#16a34a"></i> Vendor WhatsApp Notifications
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:.75rem;color:var(--text-light)">${rows.join('')}</div>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="resendVendorWhatsApp('${pkgId}')">
+        <i class="fab fa-whatsapp" style="color:#16a34a"></i> Resend WhatsApp Notification
+      </button>
+    </div>`;
+}
+
+window.resendVendorWhatsApp = async function(pkgId) {
+  const res = await apiFetch('packages/' + pkgId + '/notify-vendor', { method: 'POST' }).catch(() => null);
+  if (!res || res.error) {
+    showToast('Resend failed: ' + (res?.error || 'network error'), 'error', 4000);
+  } else {
+    showToast('WhatsApp notification processed (' + (res.status || 'sent') + ')', 'success', 2500);
+  }
+  // Bypass the 30s client-side GET cache so the freshly written log row shows up
+  if (typeof invalidateAppState === 'function') invalidateAppState('order_notifications');
+  loadVendorNotifs(pkgId);
+};
 
 // ── Vendor: package detail card ───────────────────────────
 function packageDetailHTML(rawPkg) {

@@ -6,6 +6,9 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
+// Meta WhatsApp Cloud API helper (env-driven, server-side only)
+const { notifyVendorOfPackage } = require('./lib/whatsapp');
+
 // Load environment variables from .env if present
 const dotenvPath = path.join(__dirname, '.env');
 if (fs.existsSync(dotenvPath)) {
@@ -198,7 +201,7 @@ app.use((req, res, next) => {
       // Catalog data must revalidate on every request: max-age/SWR kept a
       // product the admin just deleted visible in the browser for minutes.
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    } else if (['packages', 'orders', 'wallet_transactions', 'notifications', 'referrals', 'platform_revenue', 'support_tickets', 'reviews', 'delivery_rates'].includes(table)) {
+    } else if (['packages', 'orders', 'wallet_transactions', 'notifications', 'referrals', 'platform_revenue', 'support_tickets', 'reviews', 'delivery_rates', 'order_notifications'].includes(table)) {
       // Order/wallet/notification data changes constantly and is fetched fresh on
       // every page view — never let the browser HTTP cache serve a stale empty
       // list (that made storefront orders look missing right after checkout).
@@ -375,7 +378,7 @@ function serializeRecord(record) {
 }
 
 const TABLE_COLUMNS = {
-  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'avatar', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual'],
+  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'avatar', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual', 'whatsapp_phone', 'receive_order_notifications_on_whatsapp'],
   notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
   stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'plan_prices', 'created_at', 'updated_at', 'extra'],
   orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
@@ -391,6 +394,7 @@ const TABLE_COLUMNS = {
   wallet_transactions: ['id', 'user_id', 'type', 'amount', 'balance_before', 'balance_after', 'description', 'reference', 'payment_method', 'status', 'note', 'created_at', 'extra'],
   platform_revenue: ['id', 'source', 'amount', 'reference', 'description', 'created_at', 'extra'],
   support_tickets: ['id', 'user_id', 'user_name', 'user_email', 'user_role', 'subject', 'category', 'priority', 'status', 'message', 'messages', 'assigned_to', 'created_at', 'updated_at', 'extra'],
+  order_notifications: ['id', 'order_id', 'package_id', 'package_code', 'vendor_id', 'channel', 'status', 'error_message', 'sent_at', 'created_at', 'updated_at', 'extra'],
   storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'plan_prices', 'created_at', 'updated_at', 'extra']
 };
 
@@ -818,6 +822,79 @@ app.get('/api/:table/:id', async (req, res) => {
   res.json(serializeRecord(item));
 });
 
+// ── WhatsApp vendor notifications (Meta Cloud API) ──────────────
+async function getVendorForNotify(vendorId) {
+  const db = loadDb();
+  let vendor = getTable(db, 'users').find(u => String(u.id) === String(vendorId)) || null;
+  if (!vendor && supabase) {
+    try {
+      const { data, error } = await supabase.from('users').select('*').eq('id', vendorId).maybeSingle();
+      if (!error && data) vendor = serializeRecord(data);
+    } catch (err) {}
+  }
+  return vendor;
+}
+
+async function getStoreForNotify(storeId) {
+  const db = loadDb();
+  let store = getTable(db, 'stores').find(s => String(s.id) === String(storeId)) || null;
+  if (!store && supabase) {
+    try {
+      const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).maybeSingle();
+      if (!error && data) store = serializeRecord(data);
+    } catch (err) {}
+  }
+  return store;
+}
+
+async function logOrderNotification(rec) {
+  const db = loadDb();
+  getTable(db, 'order_notifications').push(rec);
+  saveDb(db);
+  if (supabase) {
+    try {
+      const dbRecord = prepareRecordForDb('order_notifications', serializeRecord(rec));
+      const { data, error } = await withSupaTimeout(supabase.from('order_notifications').insert(dbRecord).select().single(), 2000);
+      if (!error && data) return serializeRecord(data);
+    } catch (err) {
+      console.warn('[Supabase] order_notifications insert fallback to db.json:', err.message);
+    }
+  }
+  return rec;
+}
+
+async function notifyVendorForPackage(pkg) {
+  return notifyVendorOfPackage(pkg, {
+    getVendor: getVendorForNotify,
+    getStore: getStoreForNotify,
+    log: logOrderNotification
+  });
+}
+
+// Manually re-send the WhatsApp order notification to a package's vendor (admin UI).
+app.post('/api/packages/:id/notify-vendor', async (req, res) => {
+  try {
+    const db = loadDb();
+    let pkg = getTable(db, 'packages').find(p => String(p.id) === String(req.params.id)) || null;
+    if (!pkg && supabase) {
+      try {
+        const { data, error } = await supabase.from('packages').select('*').eq('id', req.params.id).maybeSingle();
+        if (!error && data) pkg = serializeRecord(data);
+      } catch (err) {}
+    }
+    if (!pkg) return res.status(404).json({ error: 'Package not found' });
+
+    const result = await notifyVendorForPackage(pkg);
+    if (!result) {
+      return res.status(400).json({ error: 'Vendor has not opted in to WhatsApp notifications or has no valid WhatsApp number' });
+    }
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('[WhatsApp] Resend failed:', err && err.message || err);
+    res.status(500).json({ error: err && err.message || 'Resend failed' });
+  }
+});
+
 app.post('/api/:table', async (req, res) => {
   let table = req.params.table;
   const body = req.body || {};
@@ -931,6 +1008,12 @@ app.post('/api/:table', async (req, res) => {
   const record = normalizeRecord(table, body);
   rows.push(record);
   saveDb(db);
+
+  // Notify opted-in vendors via WhatsApp when a new order (package) is placed.
+  // Fire-and-forget — a slow or failing WhatsApp call must never block checkout.
+  if (table === 'packages') {
+    notifyVendorForPackage(record).catch(err => console.warn('[WhatsApp] vendor notification failed:', err && err.message || err));
+  }
 
   if (supabase) {
     try {
@@ -1467,6 +1550,7 @@ function seedDb() {
     ],
     wallet_transactions: [],
     notifications: [],
+    order_notifications: [],
     ad_campaigns: [],
     settings: [
       {
