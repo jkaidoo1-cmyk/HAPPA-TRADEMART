@@ -43,14 +43,15 @@ test('buildOrderMessage omits the link when no admin base URL is configured', ()
   assert.ok(!body.includes('View order'));
 });
 
-test('notifyVendorOfPackage skips vendors that have not opted in (no log)', async () => {
+test('notifyVendorOfPackage logs skipped (with reason) when the vendor has not opted in', async () => {
   const logs = [];
   const result = await notifyVendorOfPackage(PKG, {
     getVendor: async () => ({ id: 'vendor-1', name: 'Ama', whatsapp_phone: '+233201234567', receive_order_notifications_on_whatsapp: false }),
     log: async (rec) => { logs.push(rec); return rec; }
   });
-  assert.equal(result, null);
-  assert.equal(logs.length, 0);
+  assert.equal(result.status, 'skipped');
+  assert.match(result.error_message, /has not enabled WhatsApp order notifications/);
+  assert.equal(logs.length, 1);
 });
 
 test('notifyVendorOfPackage logs failed when the number is invalid', async () => {
@@ -64,14 +65,40 @@ test('notifyVendorOfPackage logs failed when the number is invalid', async () =>
   assert.equal(logs.length, 1);
 });
 
-test('notifyVendorOfPackage returns null when no vendor record exists', async () => {
+test('notifyVendorOfPackage logs failed when no vendor record exists', async () => {
   const logs = [];
   const result = await notifyVendorOfPackage(PKG, {
     getVendor: async () => null,
     log: async (rec) => { logs.push(rec); return rec; }
   });
-  assert.equal(result, null);
-  assert.equal(logs.length, 0);
+  assert.equal(result.status, 'failed');
+  assert.match(result.error_message, /Vendor account not found/);
+  assert.equal(logs.length, 1);
+});
+
+test('notifyVendorOfPackage resolves the vendor by store email when the store vendor_id is a placeholder', async () => {
+  process.env.WHATSAPP_ENABLED = 'false';
+  try {
+    const logs = [];
+    const store = { id: 'store-1', vendor_id: 'placeholder-id', intended_vendor_email: 'mimi@example.com' };
+    const result = await notifyVendorOfPackage(
+      { ...PKG, vendor_id: 'placeholder-id', store_id: 'store-1' },
+      {
+        getVendor: async () => null, // phantom id — not found
+        getVendorByEmail: async (email) => email === 'mimi@example.com'
+          ? { id: 'real-vendor', name: 'Mimi', whatsapp_phone: '+233201234567', receive_order_notifications_on_whatsapp: true }
+          : null,
+        getStore: async () => store,
+        log: async (rec) => { logs.push(rec); return rec; }
+      }
+    );
+    // Email fallback worked: the send proceeded and logged the test-mode skip.
+    assert.equal(result.status, 'skipped');
+    assert.equal(result.vendor_id, 'real-vendor');
+    assert.equal(logs.length, 1);
+  } finally {
+    delete process.env.WHATSAPP_ENABLED;
+  }
 });
 
 test('notifyVendorOfPackage logs skipped when WHATSAPP_ENABLED=false (dev/test mode)', async () => {

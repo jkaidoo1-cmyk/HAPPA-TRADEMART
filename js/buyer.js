@@ -28,6 +28,7 @@ async function renderBuyerDashboard() {
 
   // Saved stores
   const savedStoresList = App.allStores.filter(s => App.savedStores.includes(s.id));
+  const wishlistCount = (JSON.parse(localStorage.getItem('happa_wishlist') || '[]')).length;
 
   const activeTabId = (App.activeTab && App.activeTab['buyer-dashboard']) || 'buyer-overview';
 
@@ -83,6 +84,12 @@ async function renderBuyerDashboard() {
         <div class="stat-icon" style="background:#fef3c7"><i class="fas fa-bookmark" style="color:#d97706"></i></div>
         <div class="stat-value">${App.savedStores.length}</div>
         <div class="stat-label">Saved Stores</div>
+      </div>
+
+      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('wishlist-container').scrollIntoView({behavior:'smooth',block:'center'})">
+        <div class="stat-icon" style="background:#fce7f3"><i class="fas fa-heart" style="color:#db2777"></i></div>
+        <div class="stat-value" id="wishlist-stat-count">${wishlistCount}</div>
+        <div class="stat-label">Wishlist</div>
       </div>
     </div>
 
@@ -401,6 +408,8 @@ window.renderBuyerWishlist = function() {
   const container = document.getElementById('wishlist-container');
   if (!container) return;
   const wish = JSON.parse(localStorage.getItem('happa_wishlist') || '[]');
+  const statCount = document.getElementById('wishlist-stat-count');
+  if (statCount) statCount.textContent = wish.length;
   const items = App.allProducts.filter(p => wish.includes(p.id));
   if (!items.length) {
     container.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:.85rem">Your wishlist is empty. Save products here!</p>';

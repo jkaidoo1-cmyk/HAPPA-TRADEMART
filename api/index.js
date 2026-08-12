@@ -933,6 +933,21 @@ async function getStoreForNotify(storeId) {
   return store;
 }
 
+async function getVendorByEmailForNotify(email) {
+  const supabase = getSupabase();
+  const needle = String(email || '').trim().toLowerCase();
+  if (!needle) return null;
+  dataStore.ensureTable('users');
+  let vendor = dataStore.getStore().users.find(u => String(u.email || '').toLowerCase() === needle && String(u.role) === 'vendor') || null;
+  if (!vendor && supabase) {
+    try {
+      const { data, error } = await supabase.from('users').select('*').eq('email', needle).eq('role', 'vendor').maybeSingle();
+      if (!error && data) vendor = serializeRecord(data);
+    } catch (err) {}
+  }
+  return vendor;
+}
+
 async function logOrderNotification(rec) {
   const supabase = getSupabase();
   try {
@@ -953,6 +968,7 @@ async function logOrderNotification(rec) {
 async function notifyVendorForPackage(pkg) {
   return notifyVendorOfPackage(pkg, {
     getVendor: getVendorForNotify,
+    getVendorByEmail: getVendorByEmailForNotify,
     getStore: getStoreForNotify,
     log: logOrderNotification
   });

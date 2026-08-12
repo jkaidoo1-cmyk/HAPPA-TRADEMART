@@ -510,48 +510,23 @@ function loadSession() {
   updateCartBadge();
 }
 
-let _lastSessionCrossCheck = 0; // throttle the heavy full-list cross-check
 async function verifySessionUser() {
   if (!App.currentUser || !App.currentUser.id) return true;
   const uid = String(App.currentUser.id);
 
-  // Verify by the account's own id — NOT by scanning the paginated
-  // `users?limit=500` list. That list truncated/merged badly (e.g. >500
-  // accounts, or a Supabase + local merge gap) and made existing accounts
-  // look "deleted", so the 5s heartbeat abruptly logged users out.
+  // Verify by the account's own id — NEVER by scanning the `users` list.
+  // On the deployed backend that list comes from an ephemeral in-memory store
+  // merged with Supabase: it can be incomplete, served from a different
+  // serverless instance, or miss accounts written to another instance's
+  // memory. Treating "missing from the list" as proof of deletion made valid
+  // accounts get logged out minutes after login. Only an explicit status on
+  // the account's own record counts as revocation.
   let me = null;
   try {
     me = await apiGet('users/' + encodeURIComponent(uid)).catch(() => null);
   } catch (e) { me = null; }
 
-  if (!me || !me.id) {
-    // Unresolvable by id (404 on both backends, or a transient server/network
-    // hiccup). Never log out on ambiguity: only a confirmed, NON-EMPTY full
-    // list that lacks this account counts as a deletion. Throttle the heavy
-    // list fetch so a persistent 404 can't hammer the server every 5s.
-    const now = Date.now();
-    if (now - _lastSessionCrossCheck < 30000) return true;
-    _lastSessionCrossCheck = now;
-    try {
-      const usersRes = await apiFetch('users').catch(() => null);
-      const userList = usersRes?.data || [];
-      if (!userList || !userList.length) return true; // transient/empty — keep session
-      me = userList.find(u => String(u.id) === uid) || null;
-      if (!me) {
-        console.warn(`[Session Revoked] Account "${uid}" was deleted. Logging out.`);
-        if (typeof stopNotifPolling === 'function') stopNotifPolling();
-        if (typeof stopDashboardSyncPolling === 'function') stopDashboardSyncPolling();
-        logout(true);
-        showToast('Your account has been deleted.', 'warning');
-        try { localStorage.setItem('happa_logout_user_id', uid); } catch(e){}
-        return false;
-      }
-    } catch (e) {
-      return true; // cross-check failed — keep the session
-    }
-  }
-
-  if (me.status === 'deleted' || me.status === 'suspended') {
+  if (me && (me.status === 'deleted' || me.status === 'suspended')) {
     console.warn(`[Session Revoked] Account "${uid}" status is ${me.status}. Logging out.`);
     if (typeof stopNotifPolling === 'function') stopNotifPolling();
     if (typeof stopDashboardSyncPolling === 'function') stopDashboardSyncPolling();
@@ -560,6 +535,8 @@ async function verifySessionUser() {
     try { localStorage.setItem('happa_logout_user_id', uid); } catch(e){}
     return false;
   }
+
+  if (!me || !me.id) return true; // 404 or transient hiccup — keep the session
 
   const prevStatus = App.currentUser.status;
   const prevRole   = App.currentUser.role;
@@ -680,6 +657,8 @@ function logout(skipConfirm = false) {
     localStorage.removeItem('happa_notifs');
     localStorage.removeItem('happa_saved');
     localStorage.removeItem('happa_wishlist');
+    // Clear any stale cross-tab deletion flag so it can't linger forever
+    localStorage.removeItem('happa_logout_user_id');
   } catch(e){}
   if (typeof stopNotifPolling === 'function') stopNotifPolling();
   if (typeof stopDashboardSyncPolling === 'function') stopDashboardSyncPolling();
