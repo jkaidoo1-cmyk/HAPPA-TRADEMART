@@ -60,7 +60,12 @@
       "updated_at": "2026-08-12T08:18:17.645Z"
     }
   ],
-  "products": [],
+  "products": [
+    {
+      "id": "msl4akbon3xa",
+      "updated_at": "2026-08-12T23:07:25.381Z"
+    }
+  ],
   "orders": [],
   "packages": [],
   "services": [],

@@ -13,7 +13,7 @@ const bcrypt = require('bcryptjs');
 const dataStore = require('./data-store');
 
 // Meta WhatsApp Cloud API helper (env-driven, server-side only)
-const { notifyVendorOfPackage } = require('../lib/whatsapp');
+const { notifyVendorOfPackage, sendWhatsAppText, isValidWhatsappNumber, getConfigStatus } = require('../lib/whatsapp');
 
 const app = express();
 app.use(express.json({ limit: '15mb' }));
@@ -996,6 +996,45 @@ app.post('/api/packages/:id/notify-vendor', async (req, res) => {
   } catch (err) {
     console.error('[WhatsApp] Resend failed:', err && err.message || err);
     res.status(500).json({ error: err && err.message || 'Resend failed' });
+  }
+});
+
+// Send a test WhatsApp message (admin UI) — verifies the Meta Cloud API
+// credentials + delivery path without needing a real order.
+app.post('/api/whatsapp/test', async (req, res) => {
+  try {
+    const config = getConfigStatus();
+    const to = String((req.body && req.body.to) || '').trim();
+    const body = String((req.body && req.body.body) || '').trim() || 'Hi from Happa Trademart! This is a test WhatsApp message sent from the admin panel.';
+
+    if (!config.enabled) {
+      return res.json({
+        ok: false, skipped: true, config,
+        message: 'WHATSAPP_ENABLED is false — the server is in test mode, so no real message was sent. Set WHATSAPP_ENABLED=true to send real messages.'
+      });
+    }
+    if (!config.phoneNumberIdConfigured || !config.accessTokenConfigured) {
+      return res.json({
+        ok: false, config,
+        message: 'WhatsApp is not configured on the server. Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN as environment variables (see .env).'
+      });
+    }
+    if (!isValidWhatsappNumber(to)) {
+      return res.json({
+        ok: false, config,
+        message: 'Invalid recipient number. Use international format with + and digits only (e.g. +23320xxxxxxx).'
+      });
+    }
+
+    const result = await sendWhatsAppText({ to, body });
+    res.json({ ok: true, config, to, message: 'Test message sent! Check the recipient\'s WhatsApp.', result });
+  } catch (err) {
+    console.error('[WhatsApp] Test send failed:', err && err.message || err);
+    res.json({
+      ok: false,
+      config: getConfigStatus(),
+      message: 'Meta API error: ' + String((err && err.message) || err)
+    });
   }
 });
 

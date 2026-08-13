@@ -2,6 +2,65 @@
    HAPPA TRADEMART — Admin Dashboard
    ============================================================ */
 
+// ── WhatsApp connection tester ──────────────────────────────
+async function loadWhatsAppTestStatus() {
+  const el = document.getElementById('wa-test-status');
+  if (!el) return;
+  try {
+    const res = await apiFetch('whatsapp/test', { method: 'POST', body: JSON.stringify({}), headers: { 'Content-Type': 'application/json' } });
+    if (res && res.config) {
+      const c = res.config;
+      const parts = [];
+      if (c.enabled) {
+        parts.push('<span style="color:var(--success)"><i class="fas fa-check-circle"></i> Enabled</span>');
+      } else {
+        parts.push('<span style="color:var(--text-muted)"><i class="fas fa-pause-circle"></i> Test mode (WHATSAPP_ENABLED=false)</span>');
+      }
+      if (c.phoneNumberIdConfigured) {
+        parts.push('<span style="color:var(--success)"><i class="fas fa-check-circle"></i> Phone Number ID set</span>');
+      } else {
+        parts.push('<span style="color:var(--danger)"><i class="fas fa-times-circle"></i> Phone Number ID missing</span>');
+      }
+      if (c.accessTokenConfigured) {
+        parts.push('<span style="color:var(--success)"><i class="fas fa-check-circle"></i> Access token set</span>');
+      } else {
+        parts.push('<span style="color:var(--danger)"><i class="fas fa-times-circle"></i> Access token missing</span>');
+      }
+      parts.push('API ' + (c.apiVersion || 'v23.0'));
+      el.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+    } else {
+      el.innerHTML = '<span style="color:var(--text-muted)">Could not reach the WhatsApp test endpoint.</span>';
+    }
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--danger)"><i class="fas fa-exclamation-circle"></i> Could not reach server: ' + escHtml((e && e.message) || e) + '</span>';
+  }
+}
+
+window.sendWhatsAppTest = async function() {
+  const input = document.getElementById('wa-test-number');
+  const result = document.getElementById('wa-test-result');
+  const btn = document.getElementById('wa-test-send-btn');
+  const to = (input && input.value || '').trim();
+  if (!to) { if (result) result.innerHTML = '<span style="color:var(--danger)">Enter a phone number first.</span>'; return; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…'; }
+  if (result) result.innerHTML = '<span style="color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Sending test message…</span>';
+  try {
+    const res = await apiFetch('whatsapp/test', { method: 'POST', body: JSON.stringify({ to }), headers: { 'Content-Type': 'application/json' } });
+    if (res && res.ok) {
+      if (result) result.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check-circle"></i> ' + escHtml(res.message || 'Test message sent!') + '</span>';
+    } else {
+      const msg = (res && res.message) || 'Test failed';
+      const skipped = !!(res && res.skipped);
+      if (result) result.innerHTML = '<span style="color:' + (skipped ? 'var(--text-muted)' : 'var(--danger)') + '"><i class="fas ' + (skipped ? 'fa-pause-circle' : 'fa-times-circle') + '"></i> ' + escHtml(msg) + '</span>';
+    }
+    loadWhatsAppTestStatus();
+  } catch (e) {
+    if (result) result.innerHTML = '<span style="color:var(--danger)"><i class="fas fa-exclamation-circle"></i> ' + escHtml((e && e.message) || e) + '</span>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fab fa-whatsapp"></i> Send Test Message'; }
+  }
+};
+
 async function renderAdminDashboard() {
   const c = document.getElementById('admin-dashboard-content');
   if (!c) return;
@@ -208,6 +267,29 @@ async function renderAdminDashboard() {
       </div>
       <div class="admin-action-btn" onclick="switchTab(null,'admin-wallet');renderAdminTransactions('admin-txn-wrap')">
         <i class="fas fa-money-bill-wave"></i><span>Withdrawals</span>
+      </div>
+    </div>
+
+    <!-- WhatsApp connection tester -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <h3><i class="fab fa-whatsapp" style="color:#16a34a;margin-right:6px"></i>WhatsApp Connection Test</h3>
+      </div>
+      <div class="card-body">
+        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">
+          Verify the Meta Cloud API credentials and delivery path. Enter any WhatsApp number in international format and send a test message.
+        </p>
+        <div id="wa-test-status" style="font-size:.75rem;margin-bottom:10px;color:var(--text-muted)">
+          <i class="fas fa-spinner fa-spin"></i> Checking connection…
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input class="form-control" id="wa-test-number" placeholder="e.g. +23320xxxxxxx"
+                 style="max-width:220px;flex:1" value="">
+          <button class="btn btn-primary btn-sm" id="wa-test-send-btn" onclick="sendWhatsAppTest()">
+            <i class="fab fa-whatsapp"></i> Send Test Message
+          </button>
+        </div>
+        <div id="wa-test-result" style="margin-top:10px;font-size:.78rem"></div>
       </div>
     </div>
 
@@ -831,6 +913,7 @@ async function renderAdminDashboard() {
     if (activeTabId === 'admin-overview') {
       renderAdminRevenueChart(allPkgs, platformRevenue);
       renderAdminLocationChart(allOrders);
+      loadWhatsAppTestStatus();
     } else if (activeTabId === 'admin-orders' && typeof refreshAdminOrdersList === 'function') {
       refreshAdminOrdersList();
     } else if (activeTabId === 'admin-rendors' && typeof loadAdminRendors === 'function') {

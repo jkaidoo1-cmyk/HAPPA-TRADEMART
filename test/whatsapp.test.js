@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const {
   isValidWhatsappNumber,
   buildOrderMessage,
-  notifyVendorOfPackage
+  notifyVendorOfPackage,
+  getConfigStatus
 } = require('../lib/whatsapp');
 
 const PKG = {
@@ -136,5 +137,25 @@ test('notifyVendorOfPackage logs failed when credentials are missing', async () 
     assert.equal(logs.length, 1);
   } finally {
     delete process.env.WHATSAPP_ENABLED;
+  }
+});
+
+test('getConfigStatus reports configuration without leaking secrets', () => {
+  process.env.WHATSAPP_ENABLED = 'true';
+  process.env.WHATSAPP_PHONE_NUMBER_ID = '1234567890';
+  process.env.WHATSAPP_ACCESS_TOKEN = 'EAAG-secret-token';
+  try {
+    const status = getConfigStatus();
+    assert.equal(status.enabled, true);
+    assert.equal(status.phoneNumberIdConfigured, true);
+    assert.equal(status.accessTokenConfigured, true);
+    assert.equal(status.apiVersion, 'v23.0');
+    // secrets must never be exposed
+    assert.ok(!JSON.stringify(status).includes('EAAG'));
+    assert.ok(!JSON.stringify(status).includes('1234567890'));
+  } finally {
+    delete process.env.WHATSAPP_ENABLED;
+    delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+    delete process.env.WHATSAPP_ACCESS_TOKEN;
   }
 });
