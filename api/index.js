@@ -10,7 +10,13 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const dataStore = require('./data-store');
+
+// Shared session/auth module (HMAC-signed tokens via SESSION_SECRET, or
+// in-memory fallback) and the shared API access-control layer.
+const { createSessionToken, getSessionUser, requireAuth, requireAdmin, revokeToken } = require('../lib/session');
+const access = require('../lib/access');
 
 // Meta WhatsApp Cloud API helper (env-driven, server-side only)
 const { notifyVendorOfPackage, sendWhatsAppText, isValidWhatsappNumber, getConfigStatus } = require('../lib/whatsapp');
@@ -42,12 +48,17 @@ app.response.json = function (body) {
   return _origResJson.call(this, scrubSensitive(body));
 };
 
-// ── CORS ──────────────────────────────────────────────────────
+// ── CORS + security headers ────────────────────────────────────
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Service-Worker-Allowed', '/');
+  // Security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -72,6 +83,15 @@ function getSupabase() {
 // ── Helpers ───────────────────────────────────────────────────
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// Best-effort audit log for privileged actions (dataStore + Supabase mirror).
+function auditLog(entry) {
+  access.writeAuditLog({
+    saveLocal: (e) => { dataStore.ensureTable('audit_logs'); dataStore.getStore().audit_logs.push(e); dataStore.saveToFile(); },
+    mirrorSupa: (e) => { const sb = getSupabase(); return sb ? sb.from('audit_logs').insert(e).catch(() => {}) : null; },
+    ...entry
+  });
 }
 
 // Columns that are stored as JSON arrays/objects in Postgres (jsonb)
@@ -458,36 +478,35 @@ app.get('/api', (req, res) => {
   });
 });
 
-// ── Session Token Store (30-day TTL) ──────────────────────────
-const activeSessions = new Map(); // token -> { userId, role, expiresAt }
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-const crypto = require('crypto');
-
-function createSessionToken(userId, role) {
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + THIRTY_DAYS_MS;
-  activeSessions.set(token, { userId: String(userId), role, expiresAt });
-  return token;
-}
-
-function getSessionUser(req) {
-  const authHeader = req.headers['authorization'] || '';
-  if (!authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.substring(7).trim();
-  if (!token) return null;
-  const session = activeSessions.get(token);
-  if (!session) return null;
-  if (Date.now() > session.expiresAt) {
-    activeSessions.delete(token);
-    return null;
-  }
-  return session;
-}
+// ── Rate limiters ──────────────────────────────────────────────
+// Login: 5 attempts / 15 min. Writes: 600 / 15 min (throttles signup/order
+// abuse without blocking bulk catalog adds). WhatsApp test: 5 / 15 min.
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+const writeRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+const whatsappTestRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many test messages. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // ── Auth Endpoints ─────────────────────────────────────────────
 
 // POST /api/auth/login
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
@@ -535,20 +554,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (dbHash.startsWith('$2a$') || dbHash.startsWith('$2b$')) {
       isValidPassword = await bcrypt.compare(password, dbHash);
-    } else {
-      // Plaintext fallback + auto-migrate to bcrypt
-      if (dbHash === password) {
-        isValidPassword = true;
-        try {
-          const newHash = await bcrypt.hash(password, 10);
-          // Update local store
-          const uIdx = store.users.findIndex(u => String(u.id) === String(user.id));
-          if (uIdx !== -1) { store.users[uIdx].password_hash = newHash; dataStore.saveToFile(); }
-          // Update Supabase if active
-          if (supabase) await supabase.from('users').update({ password_hash: newHash }).eq('id', user.id).catch(() => {});
-        } catch (e) {}
-      }
     }
+    // Plaintext fallback removed: only bcrypt-hashed passwords are accepted.
 
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid email or password.' });
@@ -570,12 +577,38 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/check-email — boolean existence check for signup.
+// Returns only { exists: true|false } so registration can detect duplicates
+// without leaking account details.
+app.post('/api/auth/check-email', async (req, res) => {
+  try {
+    const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+    let supaUsers = [];
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('users').select('email,status');
+        if (!error && data) supaUsers = data;
+      } catch (err) {}
+    }
+    dataStore.ensureTable('users');
+    const store = dataStore.getStore();
+    const localUsers = store.users || [];
+    const exists = [...supaUsers, ...localUsers].some(u =>
+      String(u.email || '').toLowerCase() === email && String(u.status) !== 'deleted'
+    );
+    return res.json({ exists });
+  } catch (err) {
+    return res.status(500).json({ error: 'Check failed. Please try again.' });
+  }
+});
+
 // POST /api/auth/logout
 app.post('/api/auth/logout', (req, res) => {
   const authHeader = req.headers['authorization'] || '';
   if (authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7).trim();
-    activeSessions.delete(token);
+    revokeToken(authHeader.substring(7).trim());
   }
   return res.json({ success: true });
 });
@@ -587,8 +620,9 @@ app.get('/api/auth/verify', (req, res) => {
   return res.json({ valid: true, userId: session.userId, role: session.role });
 });
 
-app.post('/api/clean-temp-database-records', async (req, res) => {
+app.post('/api/clean-temp-database-records', requireAdmin, async (req, res) => {
   try {
+    auditLog({ actorId: req.userSession && req.userSession.userId, actorRole: req.userSession && req.userSession.role, action: 'clean_temp_records', detail: 'bulk purge of temp store/user records' });
     const supabase = getSupabase();
     
     // 1. Delete Kumasi Fashion Hub & Northern Trends
@@ -632,6 +666,7 @@ app.get('/api/:table', async (req, res) => {
   try {
     const supabase = getSupabase();
     const table = req.params.table;
+    const viewer = access.getAccessContext(req);
     const { search, limit, page, sort, ...filters } = req.query;
 
     // Order/wallet/notification data must never be served from the browser HTTP
@@ -720,7 +755,7 @@ app.get('/api/:table', async (req, res) => {
         if (!v) continue;
         rows = rows.filter(r => String(r[k] ?? '').toLowerCase() === String(v).toLowerCase());
       }
-      return res.json({ data: rows });
+      return res.json({ data: access.applyReadPolicy(table, rows, viewer) });
     }
 
     if (!supabase) {
@@ -738,7 +773,7 @@ app.get('/api/:table', async (req, res) => {
       // Apply sorting
       if (sort) rows.sort((a,b) => (b[sort]||0) - (a[sort]||0));
       
-      res.json({ data: rows });
+      res.json({ data: access.applyReadPolicy(table, rows, viewer) });
       return;
     }
 
@@ -808,7 +843,7 @@ app.get('/api/:table', async (req, res) => {
       // to localStorage, so records that exist locally look "missing".
       console.error('[GET] Supabase error on', table + ':', supaError.message, '— returning local rows (' + rows.length + ')');
     }
-    res.json({ data: rows });
+    res.json({ data: access.applyReadPolicy(table, rows, viewer) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -882,16 +917,28 @@ app.get('/api/:table/:id', async (req, res) => {
       return res.json(sf);
     }
 
+    // Apply read policy: owners/admins see the record in full; others get a
+    // scrubbed copy or a 404 (we don't reveal that restricted records exist).
+    const viewer = access.getAccessContext(req);
+    const visible = (rec) => {
+      const arr = access.applyReadPolicy(table, [serializeRecord(rec)], viewer);
+      return arr.length === 0 ? null : arr[0];
+    };
+
     if (!supabase) {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();
       const found = store[table].find(r => String(r.id) === String(id));
       if (!found) return res.status(404).json({ error: 'Record not found' });
-      return res.json(serializeRecord(found));
+      const out = visible(found);
+      return out ? res.json(out) : res.status(404).json({ error: 'Record not found' });
     }
     
     const { data, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
-    if (!error && data) return res.json(serializeRecord(data));
+    if (!error && data) {
+      const out = visible(data);
+      return out ? res.json(out) : res.status(404).json({ error: 'Record not found' });
+    }
     if (error) console.error('[GET] Supabase error on', table + '/' + id + ':', error.message, '— falling back to local store');
     // Fall back to the local store so records written during a Supabase outage
     // (or in tables Supabase doesn't have) are still resolvable.
@@ -899,7 +946,8 @@ app.get('/api/:table/:id', async (req, res) => {
     const store = dataStore.getStore();
     const found = store[table].find(r => String(r.id) === String(id));
     if (!found) return res.status(404).json({ error: 'Record not found' });
-    res.json(serializeRecord(found));
+    const out = visible(found);
+    return out ? res.json(out) : res.status(404).json({ error: 'Record not found' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -975,7 +1023,7 @@ async function notifyVendorForPackage(pkg) {
 }
 
 // Manually re-send the WhatsApp order notification to a package's vendor (admin UI).
-app.post('/api/packages/:id/notify-vendor', async (req, res) => {
+app.post('/api/packages/:id/notify-vendor', requireAdmin, async (req, res) => {
   try {
     const supabase = getSupabase();
     dataStore.ensureTable('packages');
@@ -992,6 +1040,7 @@ app.post('/api/packages/:id/notify-vendor', async (req, res) => {
     if (!result) {
       return res.status(400).json({ error: 'Vendor has not opted in to WhatsApp notifications or has no valid WhatsApp number' });
     }
+    auditLog({ actorId: req.userSession && req.userSession.userId, actorRole: req.userSession && req.userSession.role, action: 'whatsapp_resend', table: 'packages', targetId: pkg.id, detail: JSON.stringify(result).slice(0, 200) });
     res.status(200).json(result);
   } catch (err) {
     console.error('[WhatsApp] Resend failed:', err && err.message || err);
@@ -1001,7 +1050,7 @@ app.post('/api/packages/:id/notify-vendor', async (req, res) => {
 
 // Send a test WhatsApp message (admin UI) — verifies the Meta Cloud API
 // credentials + delivery path without needing a real order.
-app.post('/api/whatsapp/test', async (req, res) => {
+app.post('/api/whatsapp/test', whatsappTestRateLimiter, requireAdmin, async (req, res) => {
   try {
     const config = getConfigStatus();
     const to = String((req.body && req.body.to) || '').trim();
@@ -1027,6 +1076,7 @@ app.post('/api/whatsapp/test', async (req, res) => {
     }
 
     const result = await sendWhatsAppText({ to, body });
+    auditLog({ actorId: req.userSession && req.userSession.userId, actorRole: req.userSession && req.userSession.role, action: 'whatsapp_test_send', targetId: to, detail: (result && result.messages && result.messages[0] && result.messages[0].id) ? 'message id ' + result.messages[0].id : 'sent' });
     res.json({ ok: true, config, to, message: 'Test message sent! Check the recipient\'s WhatsApp.', result });
   } catch (err) {
     console.error('[WhatsApp] Test send failed:', err && err.message || err);
@@ -1038,11 +1088,21 @@ app.post('/api/whatsapp/test', async (req, res) => {
   }
 });
 
-app.post('/api/:table', async (req, res) => {
+app.post('/api/:table', writeRateLimiter, async (req, res) => {
   try {
     const supabase = getSupabase();
     let table = req.params.table;
     const body = req.body || {};
+
+    // ── Access control ─────────────────────────────────────────────
+    const viewer = access.getAccessContext(req);
+    const allowed = access.assertPostAllowed(table, viewer, body);
+    if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+    // Anonymous signup must never mint an admin, set a wallet balance, or
+    // self-verify. Admins creating users via the panel keep full control.
+    if (table === 'users' && !access.isAdmin(viewer)) {
+      Object.assign(body, access.sanitizeUserCreate(body));
+    }
 
     // Hash user passwords server-side (admin reset sends password/password_hash)
     if (table === 'users') {
@@ -1072,6 +1132,11 @@ app.post('/api/:table', async (req, res) => {
 
       if (!st) {
         return res.status(404).json({ error: 'Store not found to attach storefront' });
+      }
+
+      // ── Access control: only the store owner or an admin ──
+      if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer && viewer.userId)) {
+        return res.status(403).json({ error: 'You can only manage your own store.' });
       }
 
       const storeUpdates = {
@@ -1218,6 +1283,14 @@ app.put('/api/:table/:id', async (req, res) => {
     if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
     const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
 
+    // ── Access control (storefronts are checked in their branch after the
+    // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──
+    if (table !== 'storefronts') {
+      const viewer = access.getAccessContext(req);
+      const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : null, body);
+      if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+    }
+
     // Hash user passwords server-side
     if (table === 'users') {
       if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
@@ -1256,6 +1329,14 @@ app.put('/api/:table/:id', async (req, res) => {
       }
       if (!st) {
         return res.status(404).json({ error: 'Store not found to update storefront' });
+      }
+
+      // ── Access control: only the store owner or an admin ──
+      {
+        const viewer = access.getAccessContext(req);
+        if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer && viewer.userId)) {
+          return res.status(403).json({ error: 'You can only manage your own store.' });
+        }
       }
 
       const storeId = st.id;
@@ -1367,6 +1448,14 @@ app.patch('/api/:table/:id', async (req, res) => {
     if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
     const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
 
+    // ── Access control (storefronts are checked in their branch after the
+    // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──
+    if (table !== 'storefronts') {
+      const viewer = access.getAccessContext(req);
+      const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : null, body);
+      if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+    }
+
     // Hash user passwords server-side
     if (table === 'users') {
       if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
@@ -1402,6 +1491,14 @@ app.patch('/api/:table/:id', async (req, res) => {
 
       if (!st) {
         return res.status(404).json({ error: 'Store not found to update storefront' });
+      }
+
+      // ── Access control: only the store owner or an admin ──
+      {
+        const viewer = access.getAccessContext(req);
+        if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer && viewer.userId)) {
+          return res.status(403).json({ error: 'You can only manage your own store.' });
+        }
       }
 
       const storeId = st.id;
@@ -1563,7 +1660,35 @@ app.delete('/api/:table/:id', async (req, res) => {
     const supabase = getSupabase();
     const table = req.params.table;
     const id = req.params.id;
-    
+
+    // ── Access control ─────────────────────────────────────────────
+    const viewer = access.getAccessContext(req);
+    if (table === 'users') {
+      if (!access.isAdmin(viewer)) return res.status(403).json({ error: 'Admin access required.' });
+    } else {
+      let existing = null;
+      if (table === 'storefronts') {
+        dataStore.ensureTable('storefronts');
+        existing = (dataStore.getStore().storefronts || []).find(r => r && (String(r.id) === String(id) || String(r.store_id) === String(id))) || null;
+        if (!existing) {
+          dataStore.ensureTable('stores');
+          existing = dataStore.getStore().stores.find(s => String(s.id) === String(id).replace(/^sft-/, '')) || null;
+        }
+      } else {
+        dataStore.ensureTable(table);
+        existing = dataStore.getStore()[table].find(r => String(r.id) === String(id)) || null;
+      }
+      if (!existing && supabase) {
+        try {
+          const { data } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+          if (data) existing = serializeRecord(data);
+        } catch (err) {}
+      }
+      const allowed = access.assertMutateAllowed(table, viewer, existing, {});
+      if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+    }
+    auditLog({ actorId: viewer && viewer.userId, actorRole: viewer && viewer.role, action: 'delete_record', table, targetId: id });
+
     if (table === 'users') {
       if (!supabase) {
         dataStore.ensureTable('users');

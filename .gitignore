@@ -2,3 +2,9 @@ node_modules/
 .DS_Store
 npm-debug.log*
 .env
+
+# Sensitive / local-only data — never commit these
+db.json
+scratch/
+supabase_proxy.py
+supabase_schema.json

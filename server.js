@@ -6,6 +6,12 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
+// Shared session/auth module (HMAC-signed tokens or in-memory fallback)
+const { createSessionToken, getSessionUser, requireAuth, requireAdmin, revokeToken } = require('./lib/session');
+
+// Shared API access-control (read scrubbing, ownership rules, audit log)
+const access = require('./lib/access');
+
 // Meta WhatsApp Cloud API helper (env-driven, server-side only)
 const { notifyVendorOfPackage, sendWhatsAppText, isValidWhatsappNumber, getConfigStatus } = require('./lib/whatsapp');
 
@@ -29,45 +35,30 @@ const PORT = process.env.PORT || 9000;
 const DB_FILE = path.join(__dirname, 'db.json');
 const app = express();
 
-// Session Token Memory Store (30 Days TTL as requested)
-const activeSessions = new Map(); // token -> { userId, role, expiresAt }
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
-function createSessionToken(userId, role) {
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + THIRTY_DAYS_MS;
-  activeSessions.set(token, { userId: String(userId), role, expiresAt });
-  return token;
-}
-
-function getSessionUser(req) {
-  const authHeader = req.headers['authorization'] || '';
-  if (!authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.substring(7).trim();
-  if (!token) return null;
-  const session = activeSessions.get(token);
-  if (!session) return null;
-  if (Date.now() > session.expiresAt) {
-    activeSessions.delete(token);
-    return null;
-  }
-  return session;
-}
-
-function requireAuth(req, res, next) {
-  const session = getSessionUser(req);
-  if (!session) {
-    return res.status(401).json({ error: 'Unauthorized. Invalid or expired session token.' });
-  }
-  req.userSession = session;
-  next();
-}
-
 // Rate Limiter for Login Endpoint (5 attempts / 15 mins)
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Rate limiter for write endpoints (600 writes / 15 mins) — throttles anonymous
+// abuse (signup spam, guest orders) without blocking legitimate bulk catalog adds.
+const writeRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Rate limiter for the WhatsApp test endpoint (5 / 15 mins)
+const whatsappTestRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many test messages. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -141,7 +132,7 @@ function invalidateApiCache(table) {
   }
 }
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 // ── Response security: never leak password hashes to clients ──────────
 // Deep-copies the payload, dropping `password_hash` at any depth. Applied at
@@ -173,13 +164,25 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:9000,h
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
+    // Reflect the origin ONLY if it's allowlisted (default: local dev origins,
+    // override with ALLOWED_ORIGINS env). Non-allowlisted origins get no CORS
+    // header, so browsers block cross-origin reads/writes.
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+    }
   } else {
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Service-Worker-Allowed', '/');
+
+  // ── Security headers ──
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
   if (req.method === 'OPTIONS') return res.sendStatus(204);
 
@@ -252,6 +255,16 @@ function loadDb() {
 
 function saveDb(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+}
+
+// Best-effort audit log for privileged actions (db.json + Supabase mirror).
+// Never throws — logging failure must not break the action itself.
+function auditLog(entry) {
+  access.writeAuditLog({
+    saveLocal: (e) => { const db = loadDb(); getTable(db, 'audit_logs').push(e); saveDb(db); },
+    mirrorSupa: (e) => supabase ? supabase.from('audit_logs').insert(e).catch(() => {}) : null,
+    ...entry
+  });
 }
 
 function generateId(table) {
@@ -582,35 +595,10 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   let isValidPassword = false;
   const dbHash = user.password_hash || '';
 
-  // Handle both hashed passwords and legacy plaintext migration
+  // Only bcrypt-hashed passwords are accepted. Plaintext fallback removed:
+  // accounts with plaintext hashes must be reset by an admin.
   if (dbHash.startsWith('$2a$') || dbHash.startsWith('$2b$')) {
     isValidPassword = await bcrypt.compare(password, dbHash);
-  } else {
-    // Plaintext fallback check
-    if (dbHash === password) {
-      isValidPassword = true;
-      // Auto-migrate plaintext password to bcrypt hash
-      try {
-        const newHash = await bcrypt.hash(password, 10);
-        user.password_hash = newHash;
-        
-        // Update Local DB
-        const db = loadDb();
-        const uIdx = db.users.findIndex(u => String(u.id) === String(user.id));
-        if (uIdx !== -1) {
-          db.users[uIdx].password_hash = newHash;
-          saveDb(db);
-        }
-        
-        // Update Supabase if active
-        if (supabase) {
-          await supabase.from('users').update({ password_hash: newHash }).eq('id', user.id).catch(() => {});
-        }
-        console.log(`[Auth Migration] Auto-migrated password for user "${user.id}" to bcrypt hash.`);
-      } catch (err) {
-        console.warn('[Auth Migration Error]', err.message);
-      }
-    }
   }
 
   if (!isValidPassword) {
@@ -631,11 +619,31 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   return res.json({ token, user: userSafe });
 });
 
+// POST /api/auth/check-email — boolean existence check for signup.
+// Returns only { exists: true|false } so registration can detect duplicates
+// without leaking any account details (no emails/phones in list responses).
+app.post('/api/auth/check-email', async (req, res) => {
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: 'Email is required.' });
+  let supaUsers = [];
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('users').select('email,status');
+      if (!error && data) supaUsers = data;
+    } catch (err) {}
+  }
+  const db = loadDb();
+  const localUsers = getTable(db, 'users');
+  const exists = [...supaUsers, ...localUsers].some(u =>
+    String(u.email || '').toLowerCase() === email && String(u.status) !== 'deleted'
+  );
+  return res.json({ exists });
+});
+
 app.post('/api/auth/logout', (req, res) => {
   const authHeader = req.headers['authorization'] || '';
   if (authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7).trim();
-    activeSessions.delete(token);
+    revokeToken(authHeader.substring(7).trim());
   }
   return res.json({ success: true });
 });
@@ -650,10 +658,11 @@ app.get('/api/auth/verify', (req, res) => {
 
 app.get('/api/:table', async (req, res) => {
   const table = req.params.table;
+  const viewer = access.getAccessContext(req);
   const cacheKey = `${table}:${JSON.stringify(req.query)}`;
   const cachedResponse = getCachedApiResponse(cacheKey);
   if (cachedResponse) {
-    return res.json(cachedResponse);
+    return res.json({ data: access.applyReadPolicy(table, cachedResponse.data || [], viewer) });
   }
 
   if (table === 'storefronts') {
@@ -716,9 +725,8 @@ app.get('/api/:table', async (req, res) => {
 
     const params = parseQueryParams(req.query);
     const filtered = applyFilters(rows, params);
-    const resultObj = { data: filtered };
-    setCachedApiResponse(cacheKey, resultObj);
-    return res.json(resultObj);
+    setCachedApiResponse(cacheKey, { data: filtered });
+    return res.json({ data: access.applyReadPolicy(table, filtered, viewer) });
   }
   
   let supaRows = [];
@@ -740,9 +748,8 @@ app.get('/api/:table', async (req, res) => {
   const rows = Array.from(rowMap.values());
   const params = parseQueryParams(req.query);
   const filtered = applyFilters(rows, params);
-  const resultObj = { data: filtered };
-  setCachedApiResponse(cacheKey, resultObj);
-  return res.json(resultObj);
+  setCachedApiResponse(cacheKey, { data: filtered });
+  return res.json({ data: access.applyReadPolicy(table, filtered, viewer) });
 });
 
 app.get('/api/:table/:id', async (req, res) => {
@@ -808,10 +815,21 @@ app.get('/api/:table/:id', async (req, res) => {
     return res.json(sf);
   }
 
+  // Apply read policy: owners/admins see the record in full; others get a
+  // scrubbed copy or a 404 (we don't reveal that restricted records exist).
+  const viewer = access.getAccessContext(req);
+  const visible = (rec) => {
+    const arr = access.applyReadPolicy(table, [serializeRecord(rec)], viewer);
+    return arr.length === 0 ? null : arr[0];
+  };
+
   if (supabase) {
     try {
       const { data, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
-      if (!error && data) return res.json(serializeRecord(data));
+      if (!error && data) {
+        const out = visible(data);
+        return out ? res.json(out) : sendNotFound(res);
+      }
     } catch (err) {}
   }
 
@@ -819,7 +837,8 @@ app.get('/api/:table/:id', async (req, res) => {
   const rows = getTable(db, table);
   const item = rows.find(record => String(record.id) === String(id));
   if (!item) return sendNotFound(res);
-  res.json(serializeRecord(item));
+  const out = visible(item);
+  return out ? res.json(out) : sendNotFound(res);
 });
 
 // ── WhatsApp vendor notifications (Meta Cloud API) ──────────────
@@ -887,7 +906,7 @@ async function notifyVendorForPackage(pkg) {
 }
 
 // Manually re-send the WhatsApp order notification to a package's vendor (admin UI).
-app.post('/api/packages/:id/notify-vendor', async (req, res) => {
+app.post('/api/packages/:id/notify-vendor', requireAdmin, async (req, res) => {
   try {
     const db = loadDb();
     let pkg = getTable(db, 'packages').find(p => String(p.id) === String(req.params.id)) || null;
@@ -903,6 +922,7 @@ app.post('/api/packages/:id/notify-vendor', async (req, res) => {
     if (!result) {
       return res.status(400).json({ error: 'Vendor has not opted in to WhatsApp notifications or has no valid WhatsApp number' });
     }
+    auditLog({ actorId: req.userSession && req.userSession.userId, actorRole: req.userSession && req.userSession.role, action: 'whatsapp_resend', table: 'packages', targetId: pkg.id, detail: JSON.stringify(result).slice(0, 200) });
     res.status(200).json(result);
   } catch (err) {
     console.error('[WhatsApp] Resend failed:', err && err.message || err);
@@ -912,7 +932,7 @@ app.post('/api/packages/:id/notify-vendor', async (req, res) => {
 
 // Send a test WhatsApp message (admin UI) — verifies the Meta Cloud API
 // credentials + delivery path without needing a real order.
-app.post('/api/whatsapp/test', async (req, res) => {
+app.post('/api/whatsapp/test', whatsappTestRateLimiter, requireAdmin, async (req, res) => {
   try {
     const config = getConfigStatus();
     const to = String((req.body && req.body.to) || '').trim();
@@ -938,6 +958,7 @@ app.post('/api/whatsapp/test', async (req, res) => {
     }
 
     const result = await sendWhatsAppText({ to, body });
+    auditLog({ actorId: req.userSession && req.userSession.userId, actorRole: req.userSession && req.userSession.role, action: 'whatsapp_test_send', targetId: to, detail: (result && result.messages && result.messages[0] && result.messages[0].id) ? 'message id ' + result.messages[0].id : 'sent' });
     res.json({ ok: true, config, to, message: 'Test message sent! Check the recipient\'s WhatsApp.', result });
   } catch (err) {
     console.error('[WhatsApp] Test send failed:', err && err.message || err);
@@ -968,6 +989,14 @@ app.post('/api/:table', async (req, res) => {
     const dbLookup = loadDb();
     const localSt = getTable(dbLookup, 'stores').find(s => String(s.id) === String(storeId));
     let st = supaSt || localSt || { id: storeId, vendor_id: body.vendor_id || '', created_at: new Date().toISOString() };
+
+    // ── Access control: only the store owner or an admin may create/edit a
+    // storefront (the storefront editor runs as a logged-in vendor). ──
+    const viewer = access.getAccessContext(req);
+    if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer.userId)) {
+      return res.status(403).json({ error: 'You can only manage your own store.' });
+    }
 
     const storeUpdates = {
       storefront_status: body.status || 'draft',
@@ -1044,6 +1073,17 @@ app.post('/api/:table', async (req, res) => {
   // Legacy alias: old code posted adjustments to a `transactions` table nobody ever reads.
   // Route those writes into the visible wallet ledger so every balance change is traceable.
   if (table === 'transactions') table = 'wallet_transactions';
+
+  // ── Access control ─────────────────────────────────────────────
+  const viewer = access.getAccessContext(req);
+  const allowed = access.assertPostAllowed(table, viewer, body);
+  if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+  // Anonymous signup must never mint an admin, set a wallet balance, or
+  // self-verify. Admins (creating users via the panel) keep full control.
+  if (table === 'users' && !access.isAdmin(viewer)) {
+    Object.assign(body, access.sanitizeUserCreate(body));
+  }
+
   if (!body.id) body.id = `${table.slice(0, 3)}-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
   body.id = String(body.id);
   if (!body.created_at) body.created_at = new Date().toISOString();
@@ -1062,6 +1102,10 @@ app.post('/api/:table', async (req, res) => {
   const record = normalizeRecord(table, body);
   rows.push(record);
   saveDb(db);
+
+  if (table === 'settings') {
+    auditLog({ actorId: viewer && viewer.userId, actorRole: viewer && viewer.role, action: 'settings_write', table: 'settings', targetId: record.id });
+  }
 
   // Notify opted-in vendors via WhatsApp when a new order (package) is placed.
   // Fire-and-forget — a slow or failing WhatsApp call must never block checkout.
@@ -1090,6 +1134,14 @@ app.put('/api/:table/:id', async (req, res) => {
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
   invalidateApiCache(table); // Clear server GET cache so next read reflects update
   if (table === 'storefronts') invalidateApiCache('stores');
+
+  // ── Access control (storefronts are checked inside their branch after the
+  // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──
+  if (table !== 'storefronts') {
+    const viewer = access.getAccessContext(req);
+    const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : null, body);
+    if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+  }
 
   // Hash user passwords server-side (admin reset sends password/password_hash)
   if (table === 'users') {
@@ -1128,6 +1180,13 @@ app.put('/api/:table/:id', async (req, res) => {
 
     if (!st) {
       return sendNotFound(res);
+    }
+
+    // ── Access control: only the store owner or an admin ──
+    const viewer = access.getAccessContext(req);
+    if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer.userId)) {
+      return res.status(403).json({ error: 'You can only manage your own store.' });
     }
 
     const storeId = st.id;
@@ -1232,6 +1291,14 @@ app.patch('/api/:table/:id', async (req, res) => {
   invalidateApiCache(table); // Clear server GET cache so next read reflects patch
   if (table === 'storefronts') invalidateApiCache('stores');
 
+  // ── Access control (storefronts are checked inside their branch after the
+  // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──
+  if (table !== 'storefronts') {
+    const viewer = access.getAccessContext(req);
+    const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : null, body);
+    if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+  }
+
   // Hash password if being updated
   if (table === 'users' && body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
   if (table === 'users' && body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
@@ -1269,6 +1336,13 @@ app.patch('/api/:table/:id', async (req, res) => {
 
     if (!st) {
       return sendNotFound(res);
+    }
+
+    // ── Access control: only the store owner or an admin ──
+    const viewer = access.getAccessContext(req);
+    if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer.userId)) {
+      return res.status(403).json({ error: 'You can only manage your own store.' });
     }
 
     const storeId = st.id;
@@ -1398,6 +1472,30 @@ app.delete('/api/:table/:id', async (req, res) => {
   invalidateApiCache(table); // Clear server GET cache so next read excludes deleted record
   if (table === 'storefronts') invalidateApiCache('stores');
 
+  // ── Access control ─────────────────────────────────────────────
+  const viewer = access.getAccessContext(req);
+  if (table === 'users') {
+    // Deleting accounts is a destructive admin-only action.
+    if (!access.isAdmin(viewer)) return res.status(403).json({ error: 'Admin access required.' });
+  } else {
+    let existing = null;
+    const dbCheck = loadDb();
+    if (table === 'storefronts') {
+      existing = (getTable(dbCheck, 'storefronts') || []).find(r => r && (String(r.id) === String(id) || String(r.store_id) === String(id))) || null;
+      if (!existing) existing = getTable(dbCheck, 'stores').find(s => String(s.id) === String(id).replace(/^sft-/, '')) || null;
+    } else {
+      existing = getTable(dbCheck, table).find(r => String(r.id) === String(id)) || null;
+    }
+    if (!existing && supabase) {
+      try {
+        const { data } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+        if (data) existing = serializeRecord(data);
+      } catch (err) {}
+    }
+    const allowed = access.assertMutateAllowed(table, viewer, existing, {});
+    if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+  }
+
   if (table === 'users') {
     if (supabase) {
       try {
@@ -1462,6 +1560,7 @@ app.delete('/api/:table/:id', async (req, res) => {
     db.users = getTable(db, 'users').filter(r => String(r.id) !== String(id));
 
     saveDb(db);
+    auditLog({ actorId: viewer && viewer.userId, actorRole: viewer && viewer.role, action: 'delete_user', table: 'users', targetId: id, detail: 'account deleted' });
     return res.status(204).send();
   }
 
@@ -1481,7 +1580,25 @@ app.delete('/api/:table/:id', async (req, res) => {
     db[table] = db[table].filter(record => String(record.id) !== String(id));
   }
   saveDb(db);
+  auditLog({ actorId: viewer && viewer.userId, actorRole: viewer && viewer.role, action: 'delete_record', table, targetId: id });
   return res.status(204).send();
+});
+
+// ── Static file exposure guard ──────────────────────────────────
+// The dev server must never serve sensitive files (db.json, .env,
+// package.json, server source, lib/, api/, test/, scratch/, supabase
+// credentials/schema dumps, git internals…). Blocklist them before static.
+const SENSITIVE_STATIC_PATTERNS = [
+  /(^|\/)\.git(\/|$)/, /(^|\/)\.env(\..*)?$/, /(^|\/)db\.json$/, /(^|\/)package(-lock)?\.json$/,
+  /(^|\/)supabase_schema\.json$/, /(^|\/)supabase-migration\.sql$/, /(^|\/)supabase_proxy\.py$/,
+  /(^|\/)vercel\.json$/, /(^|\/)server\.js$/, /(^|\/)api\//, /(^|\/)lib\//, /(^|\/)test\//,
+  /(^|\/)scratch\//, /(^|\/)node_modules\//, /(^|\/)\.freebuff\//, /\.(pem|key|p12|pfx)$/
+];
+app.use((req, res, next) => {
+  if (SENSITIVE_STATIC_PATTERNS.some(re => re.test(req.path))) {
+    return res.status(404).send('Not found');
+  }
+  next();
 });
 
 app.use(express.static(path.join(__dirname)));
@@ -1502,7 +1619,7 @@ function seedDb() {
         name: 'Admin User',
         email: 'admin@happatrademart.com',
         phone: '0000000000',
-        password_hash: 'admin123',
+        password_hash: bcrypt.hashSync('admin123', 10),
         role: 'admin',
         status: 'active',
         location: 'Accra',
@@ -1515,7 +1632,7 @@ function seedDb() {
         name: 'Nana Ama',
         email: 'nana@test.com',
         phone: '0200000000',
-        password_hash: 'rendor123',
+        password_hash: bcrypt.hashSync('rendor123', 10),
         role: 'rendor',
         status: 'active',
         location: 'Accra',

@@ -659,6 +659,9 @@ function logout(skipConfirm = false) {
     localStorage.removeItem('happa_wishlist');
     // Clear any stale cross-tab deletion flag so it can't linger forever
     localStorage.removeItem('happa_logout_user_id');
+    // Purge cached PII on logout (shared devices must not retain account data)
+    ['happa_all_users', 'happa_all_stores', 'happa_all_storefronts'].forEach(k => localStorage.removeItem(k));
+    ['users', 'packages', 'orders', 'wallet_transactions', 'support_tickets', 'notifications', 'referrals', 'order_notifications', 'audit_logs'].forEach(t => localStorage.removeItem('happa_db_' + t));
   } catch(e){}
   if (typeof stopNotifPolling === 'function') stopNotifPolling();
   if (typeof stopDashboardSyncPolling === 'function') stopDashboardSyncPolling();
@@ -1737,6 +1740,11 @@ function applyFilters(data, params) {
 }
 function localTablesApi(table, opts = {}) {
   let [path, queryString = ''] = table.split('?');
+  // Server-only helper endpoint (used by signup): offline mode has no
+  // authoritative data — report non-existence so signup proceeds locally.
+  if (path === 'auth/check-email') {
+    return (opts.method || 'GET').toUpperCase() === 'POST' ? { exists: false } : null;
+  }
   // Legacy alias: old code wrote to a `transactions` table nothing reads — route
   // those writes into the visible wallet ledger here too (mirrors the server shim).
   if (path === 'transactions' || path.startsWith('transactions/')) {

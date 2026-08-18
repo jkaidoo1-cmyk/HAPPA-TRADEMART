@@ -660,11 +660,18 @@ async function doRegister(e) {
 
 
 
-  // Check email uniqueness
-  const check = await apiGet('users', `limit=500`);
-  const existing = (check?.data || []).find(u => u.email?.toLowerCase() === email && u.status !== 'deleted');
+  // Check email uniqueness (server-side check — never fetches the PII user list)
+  let exists = false;
+  try {
+    const chk = await apiFetch('auth/check-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    exists = !!(chk && chk.exists);
+  } catch (e) {}
 
-  if (existing) {
+  if (exists) {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = `<i class="fas fa-user-plus"></i> Create ${authRole === 'vendor' ? 'Vendor' : authRole === 'rendor' ? 'Rendor' : 'Buyer'} Account`; }
     showToast('Email already registered. Please sign in.', 'error');
     return;
