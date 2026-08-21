@@ -1,3 +1,0 @@
-# Python standard library only
-# Run with:
-# python simple-server.py

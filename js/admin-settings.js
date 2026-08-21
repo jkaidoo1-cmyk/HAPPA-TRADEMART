@@ -62,8 +62,6 @@ async function loadAdminSettings() {
     else el.value = val;
   }
 
-  // (AI provider cards now live on their own admin-ai tab — see loadAISettings)
-
   // Also load commission tiers
   loadCommissionTiersFromRows(rows);
 
@@ -81,10 +79,6 @@ async function loadAdminSettings() {
   } catch(e) { _coupons = []; }
   if (typeof renderCouponsEditor === 'function') renderCouponsEditor();
 
-  // Refresh the sidebar "AI Keys" badge
-  if (typeof window.refreshAIBadge === 'function') {
-    try { await window.refreshAIBadge(); } catch (_) {}
-  }
 }
 
 // ── Save all settings to DB ───────────────────────────────

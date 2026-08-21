@@ -217,12 +217,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   initSearch();
   renderNotifBadge();
-  // Pre-warm AI config (used by vendor product auto-fill) so the first
-  // upload isn't blocked on a network round-trip
-  if (typeof window.loadAIConfig === 'function') {
-    window.loadAIConfig().catch(err => console.warn('[AI] preload failed:', err.message));
-  }
-
+  showCookieConsentBanner();
   // Cross-Tab Session & Wallet Balance Synchronization
   window.addEventListener('storage', (e) => {
     if (e.key === 'happa_user') {
@@ -864,7 +859,7 @@ async function runPageInit(pageId) {
       case 'vendor-orders':     await renderVendorOrdersPage(); break;
       case 'rendor-dashboard':  await renderRendorDashboard(); break;
       case 'rendor-profile':    await renderRendorProfilePublic(); break;
-      case 'admin-dashboard':   await renderAdminDashboard(); if (typeof window.refreshAIBadge==='function') window.refreshAIBadge(); break;
+      case 'admin-dashboard':   await renderAdminDashboard(); break;
       case 'notifications':     await renderNotifications(); break;
       case 'privacy':          renderPrivacyPage(); break;
       case 'product':          await renderProductDetail(App.currentProductId); break;
@@ -1155,6 +1150,52 @@ function renderSettingsPage() {
         </div>
       </div>
       ` : ''}
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><h3>🔔 Notification Preferences</h3></div>
+        <div class="card-body">
+          <p style="font-size:.8rem;color:var(--text-muted);margin:0 0 12px">Control what notifications you receive from HAPPA TRADEMART.</p>
+          <div class="form-group" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <input type="checkbox" id="set-notif-orders" ${u.notify_orders !== false ? 'checked' : ''} style="width:18px;height:18px">
+            <label for="set-notif-orders" style="margin:0;font-size:.82rem">Order updates (status changes, delivery)</label>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <input type="checkbox" id="set-notif-marketing" ${u.notify_marketing === true ? 'checked' : ''} style="width:18px;height:18px">
+            <label for="set-notif-marketing" style="margin:0;font-size:.82rem">Promotional emails and offers</label>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <input type="checkbox" id="set-notif-support" ${u.notify_support !== false ? 'checked' : ''} style="width:18px;height:18px">
+            <label for="set-notif-support" style="margin:0;font-size:.82rem">Support ticket replies</label>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveNotificationPrefs('${u.id}')">
+            <i class="fas fa-save"></i> Save Preferences
+          </button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><h3>🍪 Cookie Preferences</h3></div>
+        <div class="card-body">
+          <p style="font-size:.8rem;color:var(--text-muted);margin:0 0 12px">Manage how HAPPA TRADEMART uses cookies on your device.</p>
+          <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:8px">
+            <div style="flex:1">
+              <div style="font-size:.82rem;font-weight:700;color:var(--text)">Essential Cookies</div>
+              <div style="font-size:.73rem;color:var(--text-muted)">Required for login, cart, security</div>
+            </div>
+            <div style="padding:3px 8px;background:#dcfce7;color:#166534;border-radius:100px;font-size:.7rem;font-weight:700">Always On</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:12px">
+            <div style="flex:1">
+              <div style="font-size:.82rem;font-weight:700;color:var(--text)">Functional &amp; Analytics</div>
+              <div style="font-size:.73rem;color:var(--text-muted)">Language, theme, usage stats</div>
+            </div>
+            <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer">
+              <input type="checkbox" id="cookie-analytics-toggle" ${localStorage.getItem('happa_cookie_consent') === 'all' ? 'checked' : ''} onchange="acceptCookieConsent(this.checked ? 'all' : 'essential')" style="opacity:0;width:0;height:0">
+              <span style="position:absolute;inset:0;background:${localStorage.getItem('happa_cookie_consent') === 'all' ? 'var(--primary)' : '#ccc'};border-radius:24px;transition:.3s"><span style="position:absolute;height:18px;width:18px;left:${localStorage.getItem('happa_cookie_consent') === 'all' ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s"></span></span>
+            </label>
+          </div>
+        </div>
+      </div>
 
       <div class="card" style="margin-bottom:14px">
         <div class="card-header"><h3>📱 App Installation</h3></div>
@@ -2909,40 +2950,44 @@ function renderPrivacyPage() {
     <i class="fas fa-shield-alt" style="color:var(--primary);font-size:1.1rem"></i>
   </div>
   <div>
-    <div style="font-weight:800;font-size:1rem;line-height:1.2">Privacy &amp; Data Protection</div>
-    <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">Updated ${new Date().toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'})} · Ghana DPA 2012 (Act 843)</div>
+    <div style="font-weight:800;font-size:1rem;line-height:1.2">Privacy &amp; Data Protection Policy</div>
+    <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">Last updated: ${new Date().toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'})} · Compliant with Ghana Data Protection Act, 2012 (Act 843)</div>
   </div>
 </div>
 
 <!-- Intro -->
-<p style="font-size:.84rem;color:var(--text-light);line-height:1.65;padding:0 16px;margin-bottom:20px">
-  This policy explains how <strong style="color:var(--text)">HAPPA TRADEMART</strong> collects, uses, stores,
-  shares, and protects your personal information. By creating an account or using the Service,
-  you acknowledge that you have read and understood this policy.
-</p>
+<div style="padding:0 16px;margin-bottom:20px">
+  <p style="font-size:.84rem;color:var(--text-light);line-height:1.65;margin-bottom:10px">
+    <strong style="color:var(--text)">HAPPA TRADEMART</strong> ("we", "us", or "the Platform") is a Ghanaian online marketplace connecting buyers with vendors and service providers. This Privacy Policy explains in plain language how we handle your personal information.
+  </p>
+  <p style="font-size:.84rem;color:var(--text-light);line-height:1.65">
+    By creating an account, placing an order, or simply browsing our website, you agree to the practices described here. If you do not agree, please do not use the Service.
+  </p>
+</div>
 
 <!-- 1. Scope -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">1. Scope &amp; who this applies to</h3>
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">1. Who we are &amp; what this covers</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
-    <p>This policy applies to every person who uses HAPPA TRADEMART, including buyers, vendors, rendors (service providers), administrators, and anyone who simply browses the Service. It covers information collected through our website, mobile apps, and any official communication channel we operate (email, SMS, push, in-app messaging).</p>
-    <p style="margin-top:8px">It does <strong style="color:var(--text)">not</strong> cover third-party websites or services that we link to (for example, an external payment processor or courier). Those services have their own privacy policies, which we encourage you to read.</p>
+    <p>This policy applies to everyone who interacts with HAPPA TRADEMART — whether you are buying, selling, providing services, or just visiting the site. It covers our website, mobile app, and all official communication channels (email, SMS, WhatsApp, push notifications).</p>
+    <p style="margin-top:8px">We are a <strong style="color:var(--text)">marketplace platform</strong>, not a party to transactions between buyers and vendors. We facilitate connections but do not manufacture, store, or ship products unless explicitly stated. Each vendor operates independently and is responsible for their own products, services, and business practices.</p>
+    <p style="margin-top:8px">This policy does <strong style="color:var(--text)">not</strong> apply to third-party websites, payment processors, or delivery services linked from our platform. Those entities have their own privacy policies — review them before sharing your information with them.</p>
   </div>
 </div>
 
 <!-- 2. Information we collect -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">2. Information we collect</h3>
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">2. What information we collect</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="padding:0">
-    <p style="font-size:.84rem;color:var(--text-light);line-height:1.65;padding:12px 14px 8px">We collect three broad categories of information:</p>
+    <p style="font-size:.84rem;color:var(--text-light);line-height:1.65;padding:12px 14px 8px">We collect only what is necessary to operate the marketplace:</p>
     ${[
-      ['Account data',       'Name, email, phone, password (hashed), role',                                                        'You, on signup'],
-      ['Profile data',       'Avatar, location, bio, display name, ID verification files',                                 'You, in settings'],
-      ['Transaction data',   'Orders, packages, payment references, delivery addresses, ratings &amp; reviews',                    'Generated by your use'],
-      ['Wallet data',        'Wallet balance, deposits, withdrawals, top-ups, transaction history',                                'Generated by your use'],
-      ['Device &amp; usage', 'IP address, browser type, OS, screen size, app version, crash reports, pages visited',              'Automatic'],
-      ['Communications',     'Support messages, in-app chats, notifications, marketing preferences',                               'You, when you contact us'],
-      ['Product content',    'Product images, descriptions, prices, and any AI-generated text associated with them',               'Vendors / Rendors'],
+      ['Account data',       'Name, email, phone number, hashed password, role (buyer/vendor/rendor/admin)',    'When you register'],
+      ['Profile data',       'Profile photo, location, bio, ID verification documents (for vendors/rendors)',   'When you complete your profile'],
+      ['Transaction data',   'Order details, delivery addresses, payment references, ratings &amp; reviews',     'When you buy or sell'],
+      ['Wallet data',        'Balance, deposits, withdrawals, transaction history',                            'When you use the wallet'],
+      ['Device information', 'IP address, browser type, device model, app version, pages visited',             'Automatically collected'],
+      ['Communications',     'Support tickets, messages, notification preferences',                           'When you contact us'],
+      ['Vendor content',     'Product images, descriptions, prices, store branding',                          'Provided by vendors'],
     ].map(([cat, ex, src]) => `
     <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-top:1px solid var(--border)">
       <div style="flex:1;min-width:0">
@@ -2953,20 +2998,20 @@ function renderPrivacyPage() {
     </div>`).join('')}
     <p style="font-size:.8rem;color:var(--text-muted);padding:10px 14px;border-top:1px solid var(--border);line-height:1.55">
       <i class="fas fa-lock" style="color:var(--primary);margin-right:4px"></i>
-      <strong style="color:var(--text)">Sensitive data:</strong> We do <em>not</em> knowingly collect government ID numbers, biometric data, or health data except where strictly required for KYC verification of vendors and rendors, in which case it is encrypted at rest.
+      <strong style="color:var(--text)">Sensitive data:</strong> We only collect government-issued ID documents for vendor/KYC verification. These are encrypted at rest and access is restricted to authorized admin staff.
     </p>
   </div>
 </div>
 
-<!-- 3. Lawful basis -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">3. Why we collect it (lawful basis)</h3>
+<!-- 3. Why we collect it -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">3. Why we collect your information</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="padding:0">
     ${[
-      ['fa-file-contract',  '#dbeafe', '#1d4ed8', 'Performance of a contract',  'To process and deliver orders, pay vendors/rendors, and manage your wallet.'],
-      ['fa-balance-scale',  '#dcfce7', '#15803d', 'Legitimate interests',        'To keep the platform safe, prevent fraud, enforce our Terms of Service, and improve features.'],
-      ['fa-hand-paper',     '#fef3c7', '#b45309', 'Your consent',                'For marketing communications, optional analytics, and non-essential cookies. Withdraw at any time.'],
-      ['fa-gavel',          '#f3e8ff', '#7c3aed', 'Legal obligation',            'To comply with tax, anti-money-laundering, and law-enforcement requests as required by Ghanaian law.'],
+      ['fa-file-contract',  '#dbeafe', '#1d4ed8', 'To provide the Service',           'Process orders, deliver packages, pay vendors, manage your wallet — the basics of running a marketplace.'],
+      ['fa-balance-scale',  '#dcfce7', '#15803d', 'To keep the platform safe',        'Prevent fraud, enforce our Terms, resolve disputes between buyers and vendors.'],
+      ['fa-hand-paper',     '#fef3c7', '#b45309', 'With your consent',                'Marketing emails, promotional notifications, analytics — you can opt out at any time.'],
+      ['fa-gavel',          '#f3e8ff', '#7c3aed', 'Legal requirements',               'Tax records, anti-money-laundering compliance, responding to valid court orders under Ghanaian law.'],
     ].map(([icon, bg, col, title, desc], i) => `
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;${i > 0 ? 'border-top:1px solid var(--border)' : ''}">
       <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:${bg};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">
@@ -2977,46 +3022,43 @@ function renderPrivacyPage() {
         <div style="font-size:.8rem;color:var(--text-light);line-height:1.55">${desc}</div>
       </div>
     </div>`).join('')}
-    <p style="font-size:.8rem;color:var(--text-muted);padding:10px 14px;border-top:1px solid var(--border)">If we ever need to use your data for a purpose not described here, we will ask for your consent first.</p>
   </div>
 </div>
 
 <!-- 4. Cookies -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">4. Cookies, local storage &amp; tracking</h3>
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">4. Cookies &amp; local storage</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="padding:0">
-    <p style="font-size:.84rem;color:var(--text-light);line-height:1.65;padding:12px 14px 10px">We use cookies, <code style="background:var(--bg);border:1px solid var(--border);padding:1px 5px;border-radius:4px;font-size:.78rem">localStorage</code>, and similar technologies to keep you signed in, remember your preferences, measure usage, and show relevant banners.</p>
+    <p style="font-size:.84rem;color:var(--text-light);line-height:1.65;padding:12px 14px 10px">We use cookies and browser storage to keep you signed in, remember your cart, and understand how the site is used.</p>
     ${[
-      ['ESSENTIAL',  '#fee2e2', '#991b1b', 'Session token, auth cookie, cart, app cache',         'Required — Service won\'t work without these', 'No'],
-      ['FUNCTIONAL', '#dbeafe', '#1e40af', 'Location filter, language, theme, recently viewed',    'Optional — disabling reduces convenience',       'Yes, in your browser'],
-      ['ANALYTICS',  '#ede9fe', '#5b21b6', 'Anonymised page views, error reports, performance',   'Optional',                                        'Yes, via "Do Not Track"'],
-      ['MARKETING',  '#fef3c7', '#92400e', 'Personalised banners, re-engagement emails',           'Optional',                                        'Yes, in account settings'],
+      ['ESSENTIAL',  '#fee2e2', '#991b1b', 'Login session, shopping cart, security tokens',         'Required — the site will not work without these', 'Cannot be disabled'],
+      ['FUNCTIONAL', '#dbeafe', '#1e40af', 'Language, theme, recently viewed items',                'Optional — improves your experience',              'Disable in browser settings'],
+      ['ANALYTICS',  '#ede9fe', '#5b21b6', 'Anonymous usage stats, error reporting',               'Optional',                                         'Respect "Do Not Track"'],
     ].map(([label, bg, col, ex, req, dis], i) => `
     <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-top:1px solid var(--border)">
       <span style="display:inline-block;padding:3px 8px;border-radius:var(--radius-full);background:${bg};color:${col};font-size:.67rem;font-weight:800;letter-spacing:.3px;white-space:nowrap;margin-top:1px">${label}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:.79rem;color:var(--text-light);line-height:1.5;margin-bottom:3px">${ex}</div>
-        <div style="font-size:.73rem;color:var(--text-muted)">${req} · Disable: ${dis}</div>
+        <div style="font-size:.73rem;color:var(--text-muted)">${req} · ${dis}</div>
       </div>
     </div>`).join('')}
   </div>
 </div>
 
 <!-- 5. Sharing -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">5. How we share your information</h3>
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">5. Who we share your information with</h3>
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-md);padding:10px 14px;margin:0 16px 10px;display:flex;align-items:center;gap:10px">
   <i class="fas fa-ban" style="color:#15803d;font-size:1rem;flex-shrink:0"></i>
-  <span style="font-size:.83rem;color:#14532d;font-weight:600">We never sell your personal data.</span>
+  <span style="font-size:.83rem;color:#14532d;font-weight:600">We do not sell, rent, or trade your personal data to third parties for their marketing purposes.</span>
 </div>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="padding:0">
     ${[
-      ['Other users on the platform',      'When strictly necessary — e.g. a vendor sees your delivery city; a buyer sees a vendor\'s public profile.'],
-      ['Payment processors',               'Mobile-money aggregators receive only the data needed to process deposits, withdrawals, and order payments.'],
-      ['Couriers &amp; delivery partners', 'Name, phone, and delivery address required to complete the handover.'],
-      ['Cloud infrastructure providers',   'Hosting, email, push notifications — all bound by data-processing agreements.'],
-      ['Law-enforcement &amp; regulators', 'When we receive a valid legal request or are required to do so by Ghanaian law.'],
-      ['Auditors &amp; advisors',          'Under strict confidentiality.'],
+      ['Other users',                    'Vendors see your delivery city and contact details only after you place an order. Buyers see a vendor\'s public profile (name, store, ratings).'],
+      ['Payment processors',             'Mobile-money and card processors receive only the data needed to complete your payment.'],
+      ['Delivery partners',              'Your name, phone, and delivery address are shared with the courier to complete handover.'],
+      ['Cloud &amp; hosting providers', 'Our servers are hosted by vetted providers who are contractually bound to protect your data.'],
+      ['Law enforcement',                'Only when we receive a valid court order or legal request under Ghanaian law.'],
     ].map(([who, why], i) => `
     <div style="padding:10px 14px;${i > 0 ? 'border-top:1px solid var(--border)' : ''}">
       <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:2px">${who}</div>
@@ -3024,7 +3066,7 @@ function renderPrivacyPage() {
     </div>`).join('')}
     <div style="background:#fffbeb;border-top:1px solid var(--border);padding:10px 14px;display:flex;gap:8px;align-items:flex-start">
       <i class="fas fa-exclamation-triangle" style="color:#b45309;margin-top:2px;flex-shrink:0;font-size:.85rem"></i>
-      <p style="font-size:.8rem;color:#78350f;line-height:1.55;margin:0"><strong>Public content:</strong> Anything you post publicly (store description, product photos, rendor bio, reviews) is visible to everyone. Don't post personal data you don't want shared.</p>
+      <p style="font-size:.8rem;color:#78350f;line-height:1.55;margin:0"><strong>Public content:</strong> Product listings, store descriptions, reviews, and rendor profiles are visible to everyone. Do not include personal information in public content that you do not want shared.</p>
     </div>
   </div>
 </div>
@@ -3033,15 +3075,14 @@ function renderPrivacyPage() {
 <h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">6. How long we keep your data</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="padding:0">
-    <p style="font-size:.84rem;color:var(--text-light);padding:12px 14px 8px;line-height:1.55">We keep your data only as long as necessary, then delete or anonymise it.</p>
+    <p style="font-size:.84rem;color:var(--text-light);padding:12px 14px 8px;line-height:1.55">We retain your data only as long as needed to provide the Service and comply with legal obligations.</p>
     ${[
-      ['Account profile',          'Until deleted + 30 days',                          'Cooling-off period'],
-      ['Orders &amp; invoices',    '7 years after order date',                          'Tax &amp; accounting law'],
-      ['Wallet transactions',      '7 years after transaction date',                    'Tax &amp; accounting law'],
-      ['Support messages',         '3 years after last contact',                        'Service quality &amp; disputes'],
-      ['ID verification files',    'Until expired or 5 years, whichever is sooner',     'KYC &amp; AML'],
-      ['Server logs (IP, etc.)',   '90 days',                                           'Security &amp; abuse prevention'],
-      ['Marketing consent record', 'Until consent withdrawn + 3 years',                 'Proof of consent'],
+      ['Account profile',          'Until you delete your account + 30 days',          'Allows recovery if you change your mind'],
+      ['Orders &amp; invoices',    '7 years after the order date',                      'Required by Ghanaian tax law'],
+      ['Wallet transactions',      '7 years after the transaction date',                'Required by Ghanaian tax law'],
+      ['Support tickets',          '3 years after resolution',                          'For quality assurance and dispute reference'],
+      ['ID verification files',    'Until document expires or 5 years (whichever is first)', 'KYC compliance'],
+      ['Server logs',              '90 days',                                           'Security monitoring and abuse prevention'],
     ].map(([data, period, reason], i) => `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:9px 14px;border-top:1px solid var(--border)">
       <div style="font-size:.81rem;font-weight:600;color:var(--text);flex:1">${data}</div>
@@ -3058,34 +3099,39 @@ function renderPrivacyPage() {
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="padding:0">
     ${[
-      'TLS 1.2+ encryption for all data in transit',
-      'Passwords hashed with bcrypt (never stored in plain text)',
-      'Role-based access controls and least-privilege principles for staff',
-      'Two-factor authentication available to all accounts',
-      'Regular vulnerability scanning and penetration testing',
-      'Encrypted backups stored in geographically separate locations',
-      '24/7 incident-response team',
+      'All data transmitted between your device and our servers is encrypted (HTTPS/TLS)',
+      'Passwords are hashed using bcrypt and never stored in plain text',
+      'Access to user data is restricted to authorized staff on a need-to-know basis',
+      'Database backups are stored securely',
     ].map((item, i) => `
     <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;${i > 0 ? 'border-top:1px solid var(--border)' : ''}">
       <i class="fas fa-check-circle" style="color:var(--success);flex-shrink:0"></i>
       <span style="font-size:.83rem;color:var(--text-light)">${item}</span>
     </div>`).join('')}
     <p style="font-size:.78rem;color:var(--text-muted);padding:10px 14px;border-top:1px solid var(--border);line-height:1.55">
-      <i class="fas fa-info-circle" style="margin-right:4px"></i>No system is 100% secure. If we discover a breach affecting your data, we will notify you and the Data Protection Commission within 72 hours, as required by Act 843.
+      <i class="fas fa-info-circle" style="margin-right:4px"></i>No online system is completely secure. If we discover a data breach affecting your information, we will notify you and the Data Protection Commission within 72 hours as required by Act 843.
     </p>
   </div>
 </div>
 
+<!-- 7b. DPC Registration -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">7b. Data controller registration</h3>
+<div class="card" style="margin:0 16px 16px">
+  <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
+    HAPPA TRADEMART is registered as a data controller with the Data Protection Commission of Ghana as required by the Data Protection Act, 2012 (Act 843). Our registration is subject to periodic renewal and compliance audits.
+  </div>
+</div>
+
 <!-- 8. Your rights -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">8. Your rights &amp; how to exercise them</h3>
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">8. Your rights</h3>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px;margin-bottom:16px">
   ${[
-    ['🔍', 'Access',        'View the personal data we hold about you'],
-    ['✏️', 'Rectification', 'Correct inaccurate or incomplete data'],
-    ['🗑️', 'Erasure',       'Right to be forgotten in certain cases'],
-    ['⛔',  'Restriction',  'Object to certain processing activities'],
-    ['↩️', 'Withdraw',      'Withdraw consent at any time'],
-    ['📞', 'Complain',      'Lodge a complaint with the DPC Ghana'],
+    ['🔍', 'Access',        'View all personal data we hold about you'],
+    ['✏️', 'Correction',    'Fix any inaccurate or incomplete information'],
+    ['🗑️', 'Deletion',      'Request deletion of your account and data (subject to legal retention requirements)'],
+    ['⛔', 'Object',        'Object to certain uses of your data, including marketing'],
+    ['↩️', 'Withdraw',      'Withdraw your consent at any time'],
+    ['📞', 'Complain',      'File a complaint with the Data Protection Commission of Ghana'],
   ].map(([emoji, label, desc]) => `
   <div class="card">
     <div class="card-body" style="padding:10px 12px">
@@ -3096,53 +3142,81 @@ function renderPrivacyPage() {
   </div>`).join('')}
 </div>
 <p style="font-size:.82rem;color:var(--text-light);padding:0 16px;margin-bottom:20px;line-height:1.55">
-  You can exercise most of these rights directly from your account settings. For anything else, contact our DPO below. We respond to all valid requests within <strong style="color:var(--text)">30 days</strong>.
+  Most of these rights can be exercised from your account settings. For anything else, contact our Data Protection Officer. We respond to all valid requests within <strong style="color:var(--text)">30 days</strong>.
 </p>
 
 <!-- 9. Children -->
 <h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">9. Children's privacy</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
-    HAPPA TRADEMART is not intended for children under 18. We do not knowingly collect personal data from children. If you believe a child has created an account, please contact our DPO and we will delete the account within 7 days.
+    HAPPA TRADEMART is not directed at children under 18. We do not intentionally collect data from minors. If you believe a minor has created an account, contact us and we will delete it promptly.
+  </div>
+</div>
+
+<!-- 9b. DPO Registration -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">9b. Data Protection Officer</h3>
+<div class="card" style="margin:0 16px 16px">
+  <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
+    We have appointed a Data Protection Officer responsible for overseeing compliance with this policy and the Data Protection Act. You may contact our DPO using the details provided in Section 14 below.
   </div>
 </div>
 
 <!-- 10. Cross-border -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">10. Cross-border transfers</h3>
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">10. Data storage location</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
-    Your data is primarily stored and processed in Ghana. Where we use a sub-processor located outside Ghana (for example, a global cloud provider), we ensure an equivalent level of protection through contractual safeguards, encryption, and (where required) explicit consent.
+    Your data is primarily stored in Ghana. Where we use cloud providers outside Ghana, we ensure they apply equivalent data protection standards through contractual agreements.
   </div>
 </div>
 
-<!-- 11. AI -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">11. AI-generated content</h3>
+<!-- 11. Off-Platform Disclaimer -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">11. Off-platform transactions &amp; liability</h3>
+<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius-md);padding:12px 14px;margin:0 16px 12px;display:flex;gap:10px;align-items:flex-start">
+  <i class="fas fa-exclamation-circle" style="color:#dc2626;font-size:1rem;flex-shrink:0;margin-top:2px"></i>
+  <div>
+    <div style="font-size:.84rem;font-weight:700;color:#991b1b;margin-bottom:4px">Important: HAPPA TRADEMART is not responsible for off-platform activity</div>
+    <p style="font-size:.82rem;color:#7f1d1d;line-height:1.55;margin:0">HAPPA TRADEMART facilitates connections between buyers, vendors, and service providers <strong>within the Platform</strong>. We are not a party to, and bear no responsibility or liability for, any transactions, agreements, communications, disputes, losses, or interactions that occur <strong>outside the scope of the Platform</strong>, including but not limited to:</p>
+  </div>
+</div>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="padding:0">
-    <p style="font-size:.84rem;color:var(--text-light);line-height:1.65;padding:12px 14px 8px">To help vendors list products faster, our optional "AI Auto-Generation" feature suggests a name and description for a product image.</p>
     ${[
-      'The product image is sent to a third-party AI provider (e.g. Google Gemini, OpenAI) whose API keys are managed by the platform administrator.',
-      'AI providers are contractually prohibited from using your images to train their models.',
-      'No personal data is sent with the image — only the image itself.',
-      'You are never required to use AI-generated content; you can always edit or replace it before publishing.',
+      'Meetups, cash transactions, or deliveries arranged directly between buyers and vendors without using the Platform\'s order system',
+      'Payments made outside the Platform (e.g. direct mobile money transfers, cash on hand, bank transfers not processed through HAPPA TRADEMART)',
+      'Communications via personal phone numbers, WhatsApp, social media, or other channels outside the Platform',
+      'Products, services, or promises made by vendors that are not listed or transacted through HAPPA TRADEMART',
+      'Disputes, fraud, or quality issues arising from off-platform dealings',
+      'Any loss of money, data, or personal information resulting from sharing details with third parties outside the Platform',
     ].map((item, i) => `
-    <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border-top:1px solid var(--border)">
-      <i class="fas fa-microchip" style="color:var(--primary);flex-shrink:0;margin-top:2px;font-size:.8rem"></i>
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;${i > 0 ? 'border-top:1px solid var(--border)' : ''}">
+      <i class="fas fa-times-circle" style="color:#dc2626;flex-shrink:0;margin-top:2px;font-size:.8rem"></i>
       <span style="font-size:.82rem;color:var(--text-light);line-height:1.55">${item}</span>
     </div>`).join('')}
+    <div style="background:#fff7ed;border-top:1px solid var(--border);padding:12px 14px;display:flex;gap:8px;align-items:flex-start">
+      <i class="fas fa-shield-alt" style="color:#ea580c;margin-top:2px;flex-shrink:0;font-size:.85rem"></i>
+      <p style="font-size:.82rem;color:#9a3412;line-height:1.55;margin:0"><strong>For your protection:</strong> Always complete transactions through the Platform. This ensures you are covered by our buyer protection policies, order tracking, dispute resolution, and refund processes. Off-platform transactions are entirely at your own risk.</p>
+    </div>
   </div>
 </div>
 
-<!-- 12. Changes -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">12. Changes to this policy</h3>
+<!-- 12. AI -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">12. AI-generated content</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
-    We may update this policy from time to time. When we do, we will change the "Last updated" date at the top and, for material changes, notify you via in-app banner and/or email at least <strong style="color:var(--text)">14 days</strong> before the new policy takes effect. Your continued use of the Service after that date constitutes acceptance of the changes.
+    <p>Our optional AI feature helps vendors generate product names and descriptions from uploaded images. When used, the image is sent to a third-party AI provider — no personal data is included. You can always edit or remove AI-generated content before publishing.</p>
   </div>
 </div>
 
-<!-- 13. Contact DPO -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">13. Contact our Data Protection Officer</h3>
+<!-- 13. Changes -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">13. Changes to this policy</h3>
+<div class="card" style="margin:0 16px 16px">
+  <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
+    We may update this policy occasionally. When we make significant changes, we will notify you through the Platform or by email at least <strong style="color:var(--text)">14 days</strong> before they take effect. Your continued use of HAPPA TRADEMART after that date means you accept the updated policy.
+  </div>
+</div>
+
+<!-- 14. Contact -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">14. Contact us</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="display:flex;align-items:center;gap:14px">
     <div style="width:46px;height:46px;border-radius:var(--radius-md);background:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0">
@@ -3169,7 +3243,100 @@ function renderPrivacyPage() {
 <p style="font-size:.76rem;color:var(--text-muted);text-align:center;padding:4px 16px 8px;line-height:1.6">
   You also have the right to lodge a complaint with the
   <a href="https://dataprotection.org.gh/" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600">Data Protection Commission of Ghana</a>.
-</p>`;
+</p>
+
+<!-- 15. Governing Law -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">15. Governing law</h3>
+<div class="card" style="margin:0 16px 16px">
+  <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
+    This Privacy Policy is governed by the laws of the Republic of Ghana. Any disputes arising from this policy shall be subject to the exclusive jurisdiction of the courts of Ghana.
+  </div>
+</div>`;
+}
+
+// ── Cookie Consent Banner (Ghana DPA 2012 Act 843 compliance) ──
+function showCookieConsentBanner() {
+  // Don't show if user already consented or is on a storefront page
+  if (localStorage.getItem('happa_cookie_consent') || document.body.classList.contains('is-storefront-view')) return;
+  
+  const banner = document.createElement('div');
+  banner.id = 'cookie-consent-banner';
+  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#1a1a2e;color:#fff;padding:16px;box-shadow:0 -4px 20px rgba(0,0,0,.3);font-family:inherit;';
+  banner.innerHTML = `
+    <div style="max-width:600px;margin:0 auto">
+      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px">
+        <i class="fas fa-cookie-bite" style="color:#f97316;font-size:1.2rem;margin-top:2px;flex-shrink:0"></i>
+        <div>
+          <div style="font-weight:800;font-size:.9rem;margin-bottom:4px">We use cookies</div>
+          <p style="font-size:.78rem;color:rgba(255,255,255,.75);line-height:1.5;margin:0">We use essential cookies to keep you signed in and remember your cart. Optional cookies help us improve the site. You can manage your preferences in Settings.</p>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="acceptCookieConsent('essential')" style="flex:1;min-width:120px;padding:10px 14px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer">Essential Only</button>
+        <button onclick="acceptCookieConsent('all')" style="flex:1;min-width:120px;padding:10px 14px;border:none;background:linear-gradient(135deg,#e85d04,#f97316);color:#fff;border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer">Accept All</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(banner);
+}
+
+function acceptCookieConsent(level) {
+  localStorage.setItem('happa_cookie_consent', level);
+  localStorage.setItem('happa_cookie_consent_date', new Date().toISOString());
+  const banner = document.getElementById('cookie-consent-banner');
+  if (banner) banner.remove();
+  showToast(level === 'all' ? 'Cookies accepted ✓' : 'Essential cookies only ✓', 'success', 2000);
+}
+
+async function saveNotificationPrefs(userId) {
+  const data = {
+    notify_orders: document.getElementById('set-notif-orders')?.checked ?? true,
+    notify_marketing: document.getElementById('set-notif-marketing')?.checked ?? false,
+    notify_support: document.getElementById('set-notif-support')?.checked ?? true,
+  };
+  try {
+    await apiPatch('users', userId, data);
+    if (App.currentUser) Object.assign(App.currentUser, data);
+    showToast('Notification preferences saved ✓', 'success');
+  } catch (err) {
+    console.error('Failed to save notification prefs:', err);
+    showToast('Failed to save preferences', 'error');
+  }
+}
+
+function showCookieSettings() {
+  const current = localStorage.getItem('happa_cookie_consent') || 'none';
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">Cookie Preferences</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body">
+  <p style="font-size:.82rem;color:var(--text-light);line-height:1.55;margin-bottom:14px">Manage how HAPPA TRADEMART uses cookies on your device.</p>
+  
+  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:10px">
+    <div style="flex:1">
+      <div style="font-size:.82rem;font-weight:700;color:var(--text)">Essential Cookies</div>
+      <div style="font-size:.75rem;color:var(--text-muted)">Required for login, cart, security</div>
+    </div>
+    <div style="padding:4px 10px;background:#dcfce7;color:#166534;border-radius:100px;font-size:.72rem;font-weight:700">Always On</div>
+  </div>
+  
+  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:14px">
+    <div style="flex:1">
+      <div style="font-size:.82rem;font-weight:700;color:var(--text)">Functional &amp; Analytics</div>
+      <div style="font-size:.75rem;color:var(--text-muted)">Language, theme, usage stats</div>
+    </div>
+    <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer">
+      <input type="checkbox" id="cookie-analytics-toggle" ${current === 'all' ? 'checked' : ''} onchange="acceptCookieConsent(this.checked ? 'all' : 'essential')" style="opacity:0;width:0;height:0">
+      <span style="position:absolute;inset:0;background:${current === 'all' ? 'var(--primary)' : '#ccc'};border-radius:24px;transition:.3s"><span style="position:absolute;height:18px;width:18px;left:${current === 'all' ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s"></span></span>
+    </label>
+  </div>
+  
+  <p style="font-size:.75rem;color:var(--text-muted);line-height:1.5;margin-bottom:12px">You can also clear cookies from your browser settings. Essential cookies cannot be disabled while you are logged in.</p>
+  <button class="btn btn-primary btn-block" onclick="closeModalForce()">Done</button>
+</div>`);
 }
 
 async function requestAccountDeletion() {

@@ -489,7 +489,7 @@ async function renderVendorDashboard() {
             ${u.id_verified ? '✅ Verified' : (u.id_image ? '⏳ Awaiting Admin Approval' : 'Upload ID, sales proofs, and status sharing screenshots')}
           </div>
           ${!u.id_verified ? `
-            <button class="btn btn-warning btn-sm" style="margin-top:8px" onclick="simulateIdUpload('${u.id}')">
+            <button class="btn btn-warning btn-sm" style="margin-top:8px" onclick="showVerificationUploadModal('${u.id}')">
               <i class="fas fa-cloud-upload-alt"></i> ${u.id_image ? 'Update / Re-upload Documents' : 'Upload Documents'}
             </button>
           ` : ''}
@@ -1787,7 +1787,7 @@ function resendOTP() {
 </div>`);
 }
 
-function simulateIdUpload(userId) {
+function showVerificationUploadModal(userId) {
   const u = App.currentUser || {};
   showModal(`
 <div class="modal-handle"></div>

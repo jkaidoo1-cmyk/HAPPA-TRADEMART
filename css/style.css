@@ -1331,7 +1331,7 @@ html.is-storefront-root body #main-content {
 .zone-days { font-size: 0.75rem; color: var(--text-muted); }
 
 /* ----- Floating Action Button ----- */
-.fab {
+.action-btn {
   position: fixed;
   bottom: calc(var(--bottom-h) + 16px);
   right: 16px;
@@ -1346,7 +1346,7 @@ html.is-storefront-root body #main-content {
   cursor: pointer;
   transition: background var(--transition);
 }
-.fab:hover { background: var(--primary-dark); }
+.action-btn:hover { background: var(--primary-dark); }
 
 /* ----- Empty States ----- */
 .empty-state {

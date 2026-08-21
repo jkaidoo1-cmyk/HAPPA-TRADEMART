@@ -8,3 +8,17 @@ db.json
 scratch/
 supabase_proxy.py
 supabase_schema.json
+__pycache__/
+*.pyc
+product/
+# Debug / test output files
+html_out.txt
+scratch_imgtest.json
+ws_output.bin
+# One-off utility scripts (not part of the app)
+simple-server.py
+simple-server.ps1
+static-server.py
+supabase-migration.sql
+test_blank_page.py
+test_cdp.py
