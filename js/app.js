@@ -217,7 +217,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
   initSearch();
   renderNotifBadge();
-  showCookieConsentBanner();
   // Cross-Tab Session & Wallet Balance Synchronization
   window.addEventListener('storage', (e) => {
     if (e.key === 'happa_user') {
@@ -766,11 +765,9 @@ function updatePWAManifest(name, logoUrl, themeColor) {
                            currentSearch.includes('store=');
 
   if (isStorefrontView) {
-    // Completely suppress PWA manifest and remove install prompts on storefront views
+    // Completely suppress PWA manifest on storefront views
     const manifestLink = document.querySelector('link[rel="manifest"]');
     if (manifestLink) manifestLink.remove();
-    const pwaBanner = document.getElementById('pwa-install-banner');
-    if (pwaBanner) pwaBanner.remove();
     if (name) document.title = name;
     return;
   }
@@ -1169,40 +1166,6 @@ function renderSettingsPage() {
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveNotificationPrefs('${u.id}')">
             <i class="fas fa-save"></i> Save Preferences
-          </button>
-        </div>
-      </div>
-
-      <div class="card" style="margin-bottom:14px">
-        <div class="card-header"><h3>🍪 Cookie Preferences</h3></div>
-        <div class="card-body">
-          <p style="font-size:.8rem;color:var(--text-muted);margin:0 0 12px">Manage how HAPPA TRADEMART uses cookies on your device.</p>
-          <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:8px">
-            <div style="flex:1">
-              <div style="font-size:.82rem;font-weight:700;color:var(--text)">Essential Cookies</div>
-              <div style="font-size:.73rem;color:var(--text-muted)">Required for login, cart, security</div>
-            </div>
-            <div style="padding:3px 8px;background:#dcfce7;color:#166534;border-radius:100px;font-size:.7rem;font-weight:700">Always On</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:12px">
-            <div style="flex:1">
-              <div style="font-size:.82rem;font-weight:700;color:var(--text)">Functional &amp; Analytics</div>
-              <div style="font-size:.73rem;color:var(--text-muted)">Language, theme, usage stats</div>
-            </div>
-            <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer">
-              <input type="checkbox" id="cookie-analytics-toggle" ${localStorage.getItem('happa_cookie_consent') === 'all' ? 'checked' : ''} onchange="acceptCookieConsent(this.checked ? 'all' : 'essential')" style="opacity:0;width:0;height:0">
-              <span style="position:absolute;inset:0;background:${localStorage.getItem('happa_cookie_consent') === 'all' ? 'var(--primary)' : '#ccc'};border-radius:24px;transition:.3s"><span style="position:absolute;height:18px;width:18px;left:${localStorage.getItem('happa_cookie_consent') === 'all' ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s"></span></span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" style="margin-bottom:14px">
-        <div class="card-header"><h3>📱 App Installation</h3></div>
-        <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
-          <p style="font-size:.8rem;color:var(--text-muted);margin:0">Add HAPPA TRADEMART to your device home screen for a faster, offline-enabled app experience.</p>
-          <button class="btn btn-primary btn-sm btn-block" onclick="window.triggerPWAInstall()">
-            <i class="fas fa-download"></i> Install HAPPA PWA App
           </button>
         </div>
       </div>
@@ -3199,24 +3162,16 @@ function renderPrivacyPage() {
   </div>
 </div>
 
-<!-- 12. AI -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">12. AI-generated content</h3>
-<div class="card" style="margin:0 16px 16px">
-  <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
-    <p>Our optional AI feature helps vendors generate product names and descriptions from uploaded images. When used, the image is sent to a third-party AI provider — no personal data is included. You can always edit or remove AI-generated content before publishing.</p>
-  </div>
-</div>
-
-<!-- 13. Changes -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">13. Changes to this policy</h3>
+<!-- 12. Changes -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">12. Changes to this policy</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
     We may update this policy occasionally. When we make significant changes, we will notify you through the Platform or by email at least <strong style="color:var(--text)">14 days</strong> before they take effect. Your continued use of HAPPA TRADEMART after that date means you accept the updated policy.
   </div>
 </div>
 
-<!-- 14. Contact -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">14. Contact us</h3>
+<!-- 13. Contact -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">13. Contact us</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="display:flex;align-items:center;gap:14px">
     <div style="width:46px;height:46px;border-radius:var(--radius-md);background:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0">
@@ -3245,47 +3200,13 @@ function renderPrivacyPage() {
   <a href="https://dataprotection.org.gh/" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600">Data Protection Commission of Ghana</a>.
 </p>
 
-<!-- 15. Governing Law -->
-<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">15. Governing law</h3>
+<!-- 14. Governing Law -->
+<h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">14. Governing law</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="font-size:.84rem;color:var(--text-light);line-height:1.65">
     This Privacy Policy is governed by the laws of the Republic of Ghana. Any disputes arising from this policy shall be subject to the exclusive jurisdiction of the courts of Ghana.
   </div>
 </div>`;
-}
-
-// ── Cookie Consent Banner (Ghana DPA 2012 Act 843 compliance) ──
-function showCookieConsentBanner() {
-  // Don't show if user already consented or is on a storefront page
-  if (localStorage.getItem('happa_cookie_consent') || document.body.classList.contains('is-storefront-view')) return;
-  
-  const banner = document.createElement('div');
-  banner.id = 'cookie-consent-banner';
-  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#1a1a2e;color:#fff;padding:16px;box-shadow:0 -4px 20px rgba(0,0,0,.3);font-family:inherit;';
-  banner.innerHTML = `
-    <div style="max-width:600px;margin:0 auto">
-      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px">
-        <i class="fas fa-cookie-bite" style="color:#f97316;font-size:1.2rem;margin-top:2px;flex-shrink:0"></i>
-        <div>
-          <div style="font-weight:800;font-size:.9rem;margin-bottom:4px">We use cookies</div>
-          <p style="font-size:.78rem;color:rgba(255,255,255,.75);line-height:1.5;margin:0">We use essential cookies to keep you signed in and remember your cart. Optional cookies help us improve the site. You can manage your preferences in Settings.</p>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button onclick="acceptCookieConsent('essential')" style="flex:1;min-width:120px;padding:10px 14px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer">Essential Only</button>
-        <button onclick="acceptCookieConsent('all')" style="flex:1;min-width:120px;padding:10px 14px;border:none;background:linear-gradient(135deg,#e85d04,#f97316);color:#fff;border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer">Accept All</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(banner);
-}
-
-function acceptCookieConsent(level) {
-  localStorage.setItem('happa_cookie_consent', level);
-  localStorage.setItem('happa_cookie_consent_date', new Date().toISOString());
-  const banner = document.getElementById('cookie-consent-banner');
-  if (banner) banner.remove();
-  showToast(level === 'all' ? 'Cookies accepted ✓' : 'Essential cookies only ✓', 'success', 2000);
 }
 
 async function saveNotificationPrefs(userId) {
@@ -3302,41 +3223,6 @@ async function saveNotificationPrefs(userId) {
     console.error('Failed to save notification prefs:', err);
     showToast('Failed to save preferences', 'error');
   }
-}
-
-function showCookieSettings() {
-  const current = localStorage.getItem('happa_cookie_consent') || 'none';
-  showModal(`
-<div class="modal-handle"></div>
-<div class="modal-header">
-  <span class="modal-title">Cookie Preferences</span>
-  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
-</div>
-<div class="modal-body">
-  <p style="font-size:.82rem;color:var(--text-light);line-height:1.55;margin-bottom:14px">Manage how HAPPA TRADEMART uses cookies on your device.</p>
-  
-  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:10px">
-    <div style="flex:1">
-      <div style="font-size:.82rem;font-weight:700;color:var(--text)">Essential Cookies</div>
-      <div style="font-size:.75rem;color:var(--text-muted)">Required for login, cart, security</div>
-    </div>
-    <div style="padding:4px 10px;background:#dcfce7;color:#166534;border-radius:100px;font-size:.72rem;font-weight:700">Always On</div>
-  </div>
-  
-  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:14px">
-    <div style="flex:1">
-      <div style="font-size:.82rem;font-weight:700;color:var(--text)">Functional &amp; Analytics</div>
-      <div style="font-size:.75rem;color:var(--text-muted)">Language, theme, usage stats</div>
-    </div>
-    <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer">
-      <input type="checkbox" id="cookie-analytics-toggle" ${current === 'all' ? 'checked' : ''} onchange="acceptCookieConsent(this.checked ? 'all' : 'essential')" style="opacity:0;width:0;height:0">
-      <span style="position:absolute;inset:0;background:${current === 'all' ? 'var(--primary)' : '#ccc'};border-radius:24px;transition:.3s"><span style="position:absolute;height:18px;width:18px;left:${current === 'all' ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s"></span></span>
-    </label>
-  </div>
-  
-  <p style="font-size:.75rem;color:var(--text-muted);line-height:1.5;margin-bottom:12px">You can also clear cookies from your browser settings. Essential cookies cannot be disabled while you are logged in.</p>
-  <button class="btn btn-primary btn-block" onclick="closeModalForce()">Done</button>
-</div>`);
 }
 
 async function requestAccountDeletion() {

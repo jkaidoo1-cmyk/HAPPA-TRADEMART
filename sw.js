@@ -5,7 +5,7 @@
  *            Offline fallback page for navigation requests.
  */
 
-const CACHE_NAME      = 'happa-v62';
+const CACHE_NAME      = 'happa-v65';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install

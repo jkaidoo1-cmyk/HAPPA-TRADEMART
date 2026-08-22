@@ -243,9 +243,6 @@ async function renderVendorDashboard() {
         <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=vendor-wallet]'),'vendor-wallet');renderWalletHistory('vendor-txn-list');if(typeof renderVendorChart==='function'&&window._vendorSalesPackages)renderVendorChart(window._vendorSalesPackages)">
           <i class="fas fa-chart-line"></i><span>Analytics</span>
         </div>
-        <div class="admin-action-btn" onclick="window.triggerPWAInstall()" style="background:rgba(232,93,4,0.06);border:1px solid rgba(232,93,4,0.15);">
-          <i class="fas fa-download" style="color:var(--primary)"></i><span style="color:var(--primary);font-weight:700">Install App</span>
-        </div>
         <div class="admin-action-btn" onclick="showPage('support')">
           <i class="fas fa-headset"></i><span>Help &amp; Support</span>
         </div>

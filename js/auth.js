@@ -883,6 +883,14 @@ async function doRegister(e) {
   if (typeof startDashboardSyncPolling === 'function') startDashboardSyncPolling();
   if (typeof startNotifPolling === 'function') startNotifPolling();
 
+  // Notify admin of new signup
+  const roleLabel = authRole === 'vendor' ? 'Vendor' : authRole === 'rendor' ? 'Rendor' : 'Buyer';
+  const statusLabel = needsApproval ? ' (pending approval)' : '';
+  try {
+    addNotification('admin', 'system', `👤 New ${roleLabel} Signup${statusLabel}`,
+      `${name} (${email}) registered as a ${roleLabel}${statusLabel}. Location: ${loc}.`);
+  } catch (e) {}
+
   if (authRole === 'vendor' && initialStatus === 'active') {
     await window.autoCreateStoreForVendor(created);
   }

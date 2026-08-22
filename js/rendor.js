@@ -91,10 +91,6 @@ async function renderRendorDashboard() {
             onclick="showEditRendorProfileModal()">
       <i class="fas fa-edit"></i> Edit
     </button>
-    <button class="btn btn-outline btn-sm" style="border-color:var(--primary);color:var(--primary);padding:3px 8px;font-size:0.7rem;display:inline-flex;align-items:center;gap:4px"
-            onclick="window.triggerPWAInstall()">
-      <i class="fas fa-download"></i> Install App
-    </button>
   </div>
 </div>
 
