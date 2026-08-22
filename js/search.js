@@ -91,11 +91,10 @@ async function showSearchSuggestions(q) {
     )
   ).slice(0, 5);
 
-  // Search stores by name + keywords
+  // Search stores by name + category
   const matchedStores = App.allStores.filter(s =>
     isStoreVisibleOnMain(s) && shouldShowStoreOnMainWebsite(s) && (
       s.name?.toLowerCase().includes(ql) ||
-      s.keywords?.some(k => k.toLowerCase().includes(ql)) ||
       s.category?.toLowerCase().includes(ql)
     )
   ).slice(0, 3);
@@ -178,7 +177,6 @@ async function performSearch(query) {
   const stores = App.allStores.filter(s =>
     isStoreVisibleOnMain(s) && shouldShowStoreOnMainWebsite(s) && (
       s.name?.toLowerCase().includes(q) ||
-      s.keywords?.some(k => k.toLowerCase().includes(q)) ||
       s.category?.toLowerCase().includes(q) ||
       s.description?.toLowerCase().includes(q)
     )

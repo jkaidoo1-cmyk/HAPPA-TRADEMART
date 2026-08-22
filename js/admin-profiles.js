@@ -607,10 +607,6 @@ async function _apSaveStore(storeId, form) {
   new FormData(form).forEach((v,k)=>{ data[k]=v; });
   data.is_paid = !!form.querySelector('[name=is_paid]')?.checked;
   if (data.store_price) data.store_price = parseFloat(data.store_price);
-  // Parse keywords into array if not already
-  if (typeof data.keywords === 'string' && data.keywords.trim()) {
-    data.keywords = data.keywords.split(',').map(s => s.trim()).filter(Boolean);
-  }
 
   const btn = form.querySelector('[type=submit]');
   const setBtn = OptimisticUI.button(btn, '<i class="fas fa-save"></i> Save');
@@ -1347,10 +1343,6 @@ async function adminOpenVendorProfile(userId) {
             <select class="form-control form-select" name="location">
               ${LOCATIONS.map(l=>`<option value="${l}" ${l===store.location?'selected':''}>${l}</option>`).join('')}
             </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Keywords / Tags <span style="font-size:.72rem;color:var(--text-muted)">(comma-separated)</span></label>
-            <input class="form-control" name="keywords" value="${escHtml((store.keywords||[]).join(', '))}" placeholder="e.g., shoes, fashion, accessories">
           </div>
           <div class="form-group">
             <label class="form-label">Logo Image URL</label>

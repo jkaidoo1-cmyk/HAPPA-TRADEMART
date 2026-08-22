@@ -463,10 +463,6 @@ async function renderAdminDashboard() {
             <input class="form-control" id="a-store-price" type="number" value="500" min="0">
             <div class="form-hint">Set to 0 for a free store.</div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Keywords <span style="color:var(--text-muted)">(comma separated)</span></label>
-            <input class="form-control" id="a-store-kws" placeholder="e.g. shoes, sneakers, footwear">
-          </div>
 
           <!-- ── Store Logo ── -->
           <div class="form-group">
@@ -1247,7 +1243,6 @@ async function adminCreateStore(e) {
   const loc     = document.getElementById('a-store-loc')?.value;
   const cat     = document.getElementById('a-store-cat')?.value;
   const price   = parseFloat(document.getElementById('a-store-price')?.value) || 0;
-  const kwsStr  = document.getElementById('a-store-kws')?.value || '';
   const vendorQ = (document.getElementById('a-store-vendor')?.value || '').trim();
 
   // New vendor creation fields
@@ -1256,7 +1251,6 @@ async function adminCreateStore(e) {
   const newVendorPhone = (document.getElementById('a-new-vendor-phone')?.value || '').trim();
   const newVendorPass  = (document.getElementById('a-new-vendor-pass')?.value || '').trim();
 
-  const kws     = kwsStr.split(',').map(k => k.trim()).filter(Boolean);
   const prefix  = (typeof LOCATION_PREFIXES !== 'undefined' ? LOCATION_PREFIXES[loc] : null) || 'XX';
   const slug    = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   const logoB64   = document.getElementById('a-logo-b64')?.value.trim()   || '';
@@ -1353,7 +1347,6 @@ async function adminCreateStore(e) {
     banner_url:            bannerB64,
     location:              loc,
     category:              cat || '',
-    keywords:              kws,
     vendor_id:             vendorId,
     intended_vendor_email: (!vendorId && vendorQ) ? vendorQ : (newVendorEmail || ''),
     status:                vendorId ? 'active' : 'pending',
@@ -2012,7 +2005,6 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
     const loc = u.location || 'Accra';
     const prefix = (typeof LOCATION_PREFIXES !== 'undefined' ? LOCATION_PREFIXES[loc] : null) || 'XX';
     const slug = storeName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const kws = (u.preferred_store_kws || '').split(',').map(k => k.trim()).filter(Boolean);
 
     store = {
       id: 'store-' + u.id,
@@ -2023,7 +2015,6 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
       status: 'active',
       location: loc,
       category: u.preferred_store_cat || 'General',
-      keywords: kws,
       location_prefix: prefix,
       total_sales: 0,
       total_orders: 0

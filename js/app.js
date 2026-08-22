@@ -10,7 +10,15 @@ const LOCATIONS = ['Accra','Kumasi','Takoradi','Tamale','Cape Coast','Tema','Sun
 const CATEGORIES = [
   'Fashion & Footwear','Electronics','Beauty & Skincare','Food & Groceries',
   'Health & Wellness','Sports & Fitness','Home & Living','Books & Stationery',
-  'Toys & Games','Art & Crafts','Automotive','Pet Supplies'
+  'Toys & Games','Art & Crafts','Automotive','Pet Supplies',
+  'Phones & Accessories','Computing','Jewelry & Watches','Baby & Kids',
+  'Kitchen & Dining','Garden & Outdoor','Office Supplies','Musical Instruments',
+  'Industrial & Scientific','Real Estate','Vehicle Parts','Bags & Luggage',
+  'Phones Repair','Fashion Accessories','Hair & Wigs','Spices & Seasonings',
+  'Beverages','Frozen Foods','Building Materials','Printing & Branding',
+  'Farm Produce','Livestock & Poultry','Furniture','Lighting & Electrical',
+  'Security & Surveillance','Cleaning Supplies','Packaging & Shipping','Digital Services',
+  'Events & Party Supplies','Fabric & Textiles','Tailoring & Sewing','Other'
 ];
 const SERVICE_CATEGORIES = [
   'Writing & Content','Graphic Design','Social Media','Web & Tech',
@@ -1375,22 +1383,10 @@ async function renderVendorMyStorePage() {
       <button class="btn btn-primary btn-sm" onclick="editStoreInfo('${freshStore.id}')">
         <i class="fas fa-edit"></i> Edit Store
       </button>
-      <button class="btn btn-outline btn-sm" onclick="editKeywords('${freshStore.id}')">
-        <i class="fas fa-tags"></i> Keywords
-      </button>
       <button class="btn btn-outline btn-sm" onclick="showPage('vendor-dashboard')">
         <i class="fas fa-tachometer-alt"></i> Dashboard
       </button>
     </div>
-
-    <!-- Keywords -->
-    ${(freshStore.keywords||[]).length ? `
-    <div style="margin-bottom:16px">
-      <div style="font-size:.8rem;font-weight:700;margin-bottom:6px;color:var(--text-muted)">TAGS</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${(freshStore.keywords||[]).map(k=>`<span class="tag">${escHtml(k)}</span>`).join('')}
-      </div>
-    </div>` : ''}
 
     <!-- Products section -->
     <div>
@@ -3265,7 +3261,6 @@ window.autoCreateStoreForVendor = async function(vendor) {
   const loc = vendor.location || 'Accra';
   const prefix = (typeof LOCATION_PREFIXES !== 'undefined' ? LOCATION_PREFIXES[loc] : null) || 'XX';
   const slug = storeName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  const kws = (vendor.preferred_store_kws || '').split(',').map(k => k.trim()).filter(Boolean);
 
   const newStore = {
     id:                    'store-' + vendor.id,
@@ -3276,7 +3271,6 @@ window.autoCreateStoreForVendor = async function(vendor) {
     banner_url:            '',
     location:              loc,
     category:              vendor.preferred_store_cat || 'General',
-    keywords:              kws,
     vendor_id:             vendor.id,
     intended_vendor_email: vendor.email,
     status:                'active',

@@ -297,15 +297,6 @@ ${authRole === 'rendor' ? `
       <textarea class="form-control" id="reg-store-desc" rows="2" placeholder="What do you sell? Who are your customers?"></textarea>
 
     </div>
-
-    <div class="form-group" style="margin-bottom:0">
-
-      <label class="form-label" style="font-size:.82rem">Keywords <span style="color:var(--text-muted)">(comma separated, optional)</span></label>
-
-      <input class="form-control" id="reg-store-kws" placeholder="e.g. sneakers, shoes, footwear">
-
-    </div>
-
   </div>` : ''}
 
   ${authRole === 'rendor' ? `
@@ -584,8 +575,6 @@ async function doRegister(e) {
 
   const storeDesc = authRole === 'vendor' ? (document.getElementById('reg-store-desc')?.value.trim() || '') : '';
 
-  const storeKws  = authRole === 'vendor' ? (document.getElementById('reg-store-kws')?.value || '') : '';
-
 
 
   // Rendor-specific service profile details
@@ -705,8 +694,6 @@ async function doRegister(e) {
     preferred_store_cat:  storeCat  || '',
 
     preferred_store_desc: storeDesc || '',
-
-    preferred_store_kws:  storeKws  || '',
 
     // Rendor service profile fields
 

@@ -1664,37 +1664,6 @@ async function deleteVendorProduct(productId) {
   }
 }
 
-function editKeywords(storeId) {
-  const store = App.allStores.find(s => s.id === storeId);
-  if (!store) return;
-  showModal(`
-<div class="modal-handle"></div>
-<div class="modal-header">
-  <span class="modal-title">Edit Store Keywords</span>
-  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
-</div>
-<div class="modal-body">
-  <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:12px">Add searchable words so buyers find your store. Separate with commas.</p>
-  <div class="form-group">
-    <textarea class="form-control" id="kw-input" rows="3">${(store.keywords||[]).join(', ')}</textarea>
-  </div>
-  <button class="btn btn-primary btn-block" onclick="saveKeywords('${storeId}')">
-    <i class="fas fa-save"></i> Save Keywords
-  </button>
-</div>`);
-}
-
-async function saveKeywords(storeId) {
-  const val = document.getElementById('kw-input')?.value;
-  const kws = val.split(',').map(k=>k.trim()).filter(Boolean);
-  await apiPatch('stores', storeId, { keywords: kws });
-  const s = App.allStores.find(s => s.id === storeId);
-  if (s) s.keywords = kws;
-  closeModalForce();
-  showToast('Keywords updated!', 'success');
-  renderVendorDashboard();
-}
-
 function editStoreInfo(storeId) {
   const s = App.allStores.find(s => s.id === storeId);
   if (!s) return;
