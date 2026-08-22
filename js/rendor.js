@@ -1044,10 +1044,26 @@ async function confirmRendorOTP(expected) {
 
 // ── ID upload (demo) ──────────────────────────────────────
 async function handleRendorIdUpload(input) {
-  if (!input.files || !input.files[0]) return;
-  await apiPatch('users', App.currentUser.id, { id_verified: true });
-  App.currentUser.id_verified = true;
-  saveSessions();
-  showToast('ID document uploaded — awaiting admin review ✅', 'success');
-  renderRendorVerify();
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('File too large. Max 10MB.', 'warning');
+    input.value = '';
+    return;
+  }
+  try {
+    const base64 = await compressImage(file, 1200, 0.8);
+    await apiPatch('users', App.currentUser.id, {
+      id_image: base64,
+      id_verified: false
+    });
+    App.currentUser.id_image = base64;
+    App.currentUser.id_verified = false;
+    saveSessions();
+    showToast('ID document uploaded — awaiting admin review ✅', 'success');
+    renderRendorVerify();
+  } catch (e) {
+    console.error('Failed to process ID image:', e);
+    showToast('Failed to process image.', 'error');
+  }
 }

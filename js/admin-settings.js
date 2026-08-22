@@ -331,15 +331,17 @@ function renderHeroBannersEditor() {
   `).join('');
 }
 
-window.uploadHeroBanner = function(event) {
+window.uploadHeroBanner = async function(event) {
   const file = event.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    _heroBanners.push(e.target.result);
+  try {
+    const base64 = await compressImage(file, 1200, 0.75);
+    _heroBanners.push(base64);
     renderHeroBannersEditor();
-  };
-  reader.readAsDataURL(file);
+  } catch (e) {
+    console.error('Failed to compress hero banner:', e);
+    showToast('Failed to process image.', 'error');
+  }
 };
 
 window.removeHeroBanner = function(index) {
