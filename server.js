@@ -340,6 +340,29 @@ function unpackWalletTxnMeta(record) {
   return out;
 }
 
+function looksLikeStoreRecord(out) {
+  return !!(out && (
+    'slug' in out || 'logo_url' in out || 'banner_url' in out ||
+    'store_price' in out || 'storefront_status' in out ||
+    'business_hours' in out || 'plan_prices' in out ||
+    'subscription_plan' in out
+  ));
+}
+
+const STORE_UNPACK_COLS = ['logo_url', 'banner_url', 'slogan', 'name'];
+
+function unpackStoreMeta(record) {
+  if (!record || !looksLikeStoreRecord(record)) return record;
+  const out = { ...record };
+  const extra = parseExtraObject(out.extra);
+  for (const key of STORE_UNPACK_COLS) {
+    if ((out[key] === undefined || out[key] === null || out[key] === '') && key in extra) {
+      out[key] = extra[key];
+    }
+  }
+  return out;
+}
+
 function serializeRecord(record) {
   let out = { ...record };
 
@@ -351,6 +374,7 @@ function serializeRecord(record) {
   }
 
   out = unpackUserMeta(out);
+  out = unpackStoreMeta(out);
   if (out.extra && typeof out.extra === 'object') {
     out = unpackWalletTxnMeta(out);
   }

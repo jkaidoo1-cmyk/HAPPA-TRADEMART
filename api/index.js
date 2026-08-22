@@ -246,6 +246,20 @@ function unpackProductMeta(record) {
   return out;
 }
 
+const STORE_UNPACK_COLS = ['logo_url', 'banner_url', 'slogan', 'name'];
+
+function unpackStoreMeta(record) {
+  if (!record || !looksLikeStoreRecord(record)) return record;
+  const out = { ...record };
+  const extra = parseExtraObject(out.extra);
+  for (const key of STORE_UNPACK_COLS) {
+    if ((out[key] === undefined || out[key] === null || out[key] === '') && key in extra) {
+      out[key] = extra[key];
+    }
+  }
+  return out;
+}
+
 function serializeRecord(record) {
   let out = { ...record };
 
@@ -259,6 +273,7 @@ function serializeRecord(record) {
   out = unpackPackageMeta(out);
   out = unpackUserMeta(out);
   out = unpackProductMeta(out);
+  out = unpackStoreMeta(out);
 
   if (out.extra && typeof out.extra === 'object') {
     out = unpackWalletTxnMeta(out);
