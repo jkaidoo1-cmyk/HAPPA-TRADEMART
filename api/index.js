@@ -1178,13 +1178,16 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
 
       // Always persist locally (db.json is the source of truth and the GET list
       // merges local over Supabase), and mirror the update to Supabase when the
-      // store lives there.
+      // store lives there. Use writeWithCandidates to handle missing columns.
       if (supabase) {
         try {
           const dbRecord = prepareRecordForDb('stores', storeUpdates);
-          await supabase.from('stores').update(dbRecord).eq('id', storeId);
+          const { data: written, error: writeErr } = await writeWithCandidates(supabase, 'stores', 'update', dbRecord, st, storeId);
+          if (writeErr) {
+            console.warn('[POST] Supabase storefront update failed:', writeErr.message);
+          }
         } catch (err) {
-          console.warn('[POST] Supabase storefront update failed:', err.message);
+          console.warn('[POST] Supabase storefront update exception:', err.message);
         }
       }
       dataStore.ensureTable('stores');
@@ -1386,9 +1389,10 @@ app.put('/api/:table/:id', async (req, res) => {
       if (supabase) {
         try {
           const dbRecord = prepareRecordForDb('stores', storeUpdates);
-          await supabase.from('stores').update(dbRecord).eq('id', storeId);
+          const { error: writeErr } = await writeWithCandidates(supabase, 'stores', 'update', dbRecord, st, storeId);
+          if (writeErr) console.warn('[PUT] Supabase storefront update failed:', writeErr.message);
         } catch (err) {
-          console.warn('[PUT] Supabase storefront update failed:', err.message);
+          console.warn('[PUT] Supabase storefront update exception:', err.message);
         }
       }
       dataStore.ensureTable('stores');
@@ -1567,9 +1571,10 @@ app.patch('/api/:table/:id', async (req, res) => {
       if (supabase) {
         try {
           const dbRecord = prepareRecordForDb('stores', storeUpdates);
-          await supabase.from('stores').update(dbRecord).eq('id', storeId);
+          const { error: writeErr } = await writeWithCandidates(supabase, 'stores', 'update', dbRecord, st, storeId);
+          if (writeErr) console.warn('[PATCH] Supabase storefront update failed:', writeErr.message);
         } catch (err) {
-          console.warn('[PATCH] Supabase storefront update failed:', err.message);
+          console.warn('[PATCH] Supabase storefront update exception:', err.message);
         }
       }
       dataStore.ensureTable('stores');
@@ -1828,12 +1833,17 @@ app.delete('/api/:table/:id', async (req, res) => {
 
 function getRecordCandidatesForTable(table, record, existingRecord) {
   const primary = prepareRecordForDb(table, record, existingRecord);
-  if (table !== 'products') return [primary];
+  if (table !== 'products' && table !== 'stores') return [primary];
+
+  // For stores, logo_url/banner_url/slogan/name may not exist as columns —
+  // move them into the extra JSONB field so a second attempt can succeed.
+  const STORE_OPTIONAL_COLS = ['logo_url', 'banner_url', 'slogan', 'name'];
+  const optionalCols = table === 'products' ? PRODUCT_OPTIONAL_COLS : STORE_OPTIONAL_COLS;
 
   const slim = { ...primary };
   const extra = { ...parseExtraObject(slim.extra) };
-  for (const key of PRODUCT_OPTIONAL_COLS) {
-    if (key in slim) {
+  for (const key of optionalCols) {
+    if (key in slim && slim[key] !== undefined && slim[key] !== null && slim[key] !== '') {
       extra[key] = slim[key];
       delete slim[key];
     }
