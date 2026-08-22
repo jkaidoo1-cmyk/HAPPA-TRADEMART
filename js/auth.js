@@ -916,8 +916,6 @@ function showOTPModal(user) {
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  console.log('[DEMO] OTP for', user.phone, ':', otp); // In real app, SMS is sent
-
   showModal(`
 
 <div class="modal-handle"></div>
@@ -994,6 +992,7 @@ async function verifyOTP(userId, expectedOtp) {
 
 async function skipOTP(userId) {
   closeModalForce();
+  showToast(`Welcome to HAPPA TRADEMART! Please verify your phone later.`, 'warning');
   if ((App.currentUser?.role === 'vendor' || App.currentUser?.role === 'rendor') &&
        App.currentUser?.status === 'pending_approval') {
     showPendingScreen();
@@ -1001,8 +1000,6 @@ async function skipOTP(userId) {
   }
   showPage('dashboard');
 }
-
-
 
 // Keep old name as alias for backwards compatibility
 
@@ -1148,25 +1145,6 @@ function showPendingScreen() {
 
 
 
-function skipOTP(userId) {
-
-  closeModalForce();
-
-  showToast(`Welcome to HAPPA TRADEMART! Please verify your phone later.`, 'warning');
-
-  if ((App.currentUser?.role === 'vendor' || App.currentUser?.role === 'rendor') &&
-
-       App.currentUser?.status === 'pending_approval') {
-
-    showPendingScreen();
-
-    return;
-
-  }
-
-  showPage('dashboard');
-
-}
 
 
 
@@ -1240,133 +1218,9 @@ function showForgotPw() {
 
 
 
-// Demo quick-login helper
-
-async function quickLogin(role) {
-
-  showToast('Signing in…', 'info');
-
-
-
-  // Hardcoded demo users (works without a backend!
-
-  const demoUsers = {
-
-    buyer: {
-
-      id: 'u-buyer-001',
-
-      name: 'Ama Asante',
-
-      email: 'ama@test.com',
-
-      phone: '024 123 4567',
-
-      role: 'buyer',
-
-      location: 'Accra',
-
-      status: 'active',
-
-      password_hash: 'buyer123',
-
-      wallet_balance: 150,
-
-      is_verified: true,
-
-      id_verified: false,
-
-      referral_code: 'AMA123'
-
-    },
-
-    vendor: {
-
-      id: 'u-vendor-001',
-
-      name: 'Kwame Mensah',
-
-      email: 'kwame@test.com',
-
-      phone: '024 987 6543',
-
-      role: 'vendor',
-
-      location: 'Accra',
-
-      status: 'active',
-
-      password_hash: 'vendor123',
-
-      wallet_balance: 420,
-
-      is_verified: true,
-
-      id_verified: true,
-
-      referral_code: 'KWA456'
-
-    },
-
-    admin: {
-
-      id: 'u-admin-001',
-
-      name: 'Admin User',
-
-      email: 'admin@happatrademart.com',
-
-      phone: '020 000 0000',
-
-      role: 'admin',
-
-      location: 'Accra',
-
-      status: 'active',
-
-      password_hash: 'admin123',
-
-      wallet_balance: 0,
-
-      is_verified: true,
-
-      id_verified: true,
-
-      referral_code: 'ADM789'
-
-    }
-
-  };
-
-
-
-  const user = demoUsers[role];
-
-  App.currentUser = user;
-
-  saveSessions();
-
-  showToast(`Welcome, ${user.name}! 🎉`, 'success');
-
-  showToast(`Welcome back, ${user.name}! 🎉`, 'success');
-
-  showPage('dashboard');
-
-}
-
-
-
 function generateRefCode(name) {
-
   const base = name.replace(/\s+/,'').substring(0,3).toUpperCase();
-
   const num  = Math.floor(100 + Math.random() * 900);
-
   return `${base}${num}`;
-
 }
-
-
-
-
 

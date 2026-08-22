@@ -729,8 +729,8 @@ app.get('/api/:table', async (req, res) => {
           font_family: extraSf.font_family || st.font_family || 'Outfit',
           slogan: extraSf.slogan || st.slogan || '',
           about_us: extraSf.about_us || st.description || st.about_us || '',
-          logo_url: extraSf.logo_url || st.logo_url || '',
-          banner_url: extraSf.banner_url || st.banner_url || '',
+          logo_url: extraSf.logo_url || st.logo_url || st.extra?.logo_url || '',
+          banner_url: extraSf.banner_url || st.banner_url || st.extra?.banner_url || '',
           primary_color: extraSf.primary_color || st.primary_color || '#e85d04',
           secondary_color: extraSf.secondary_color || st.secondary_color || '#faf9f6',
           tertiary_color: extraSf.tertiary_color || st.tertiary_color || '#e85d04',
@@ -1165,6 +1165,17 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         updated_at: new Date().toISOString()
       };
 
+      // Persist logo/banner in the `extra` JSONB field as a fallback —
+      // if the Supabase stores table lacks these columns, the direct update
+      // fails silently but `extra` always exists.
+      let extraSf = {};
+      try { extraSf = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {}); } catch(e) {}
+      if (storeUpdates.logo_url) extraSf.logo_url = storeUpdates.logo_url;
+      if (storeUpdates.banner_url) extraSf.banner_url = storeUpdates.banner_url;
+      if (storeUpdates.name) extraSf.name = storeUpdates.name;
+      if (storeUpdates.slogan) extraSf.slogan = storeUpdates.slogan;
+      storeUpdates.extra = extraSf;
+
       // Always persist locally (db.json is the source of truth and the GET list
       // merges local over Supabase), and mirror the update to Supabase when the
       // store lives there.
@@ -1361,11 +1372,24 @@ app.put('/api/:table/:id', async (req, res) => {
       if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
       storeUpdates.updated_at = new Date().toISOString();
 
+      // Persist logo/banner in the `extra` JSONB field as a fallback —
+      // if the Supabase stores table lacks `logo_url`/`banner_url` columns,
+      // the direct column update fails silently but `extra` always exists.
+      let extraSf = {};
+      try { extraSf = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {}); } catch(e) {}
+      if ('logo_url' in storeUpdates) extraSf.logo_url = storeUpdates.logo_url;
+      if ('banner_url' in storeUpdates) extraSf.banner_url = storeUpdates.banner_url;
+      if ('name' in storeUpdates) extraSf.name = storeUpdates.name;
+      if ('slogan' in storeUpdates) extraSf.slogan = storeUpdates.slogan;
+      storeUpdates.extra = extraSf;
+
       if (supabase) {
         try {
           const dbRecord = prepareRecordForDb('stores', storeUpdates);
           await supabase.from('stores').update(dbRecord).eq('id', storeId);
-        } catch (err) {}
+        } catch (err) {
+          console.warn('[PUT] Supabase storefront update failed:', err.message);
+        }
       }
       dataStore.ensureTable('stores');
       const store = dataStore.getStore();
@@ -1525,14 +1549,18 @@ app.patch('/api/:table/:id', async (req, res) => {
       try {
         extra = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {});
       } catch(e) {}
+      // Persist logo/banner in extra JSONB as a fallback for Supabase column absence
+      if ('logo_url' in storeUpdates) extra.logo_url = storeUpdates.logo_url;
+      if ('banner_url' in storeUpdates) extra.banner_url = storeUpdates.banner_url;
+      if ('name' in storeUpdates) extra.name = storeUpdates.name;
+      if ('slogan' in storeUpdates) extra.slogan = storeUpdates.slogan;
       if ('only_show_on_storefront' in body) {
         extra.only_show_on_storefront = body.only_show_on_storefront === true || body.only_show_on_storefront === 'true';
-        storeUpdates.extra = extra;
       }
       if ('plan_prices' in body) {
         extra.plan_prices = body.plan_prices;
-        storeUpdates.extra = extra;
       }
+      storeUpdates.extra = extra;
 
       storeUpdates.updated_at = new Date().toISOString();
 

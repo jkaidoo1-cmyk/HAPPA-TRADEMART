@@ -858,7 +858,7 @@ async function runPageInit(pageId) {
       case 'rendor-profile':    await renderRendorProfilePublic(); break;
       case 'admin-dashboard':   await renderAdminDashboard(); break;
       case 'notifications':     await renderNotifications(); break;
-      case 'privacy':          renderPrivacyPage(); break;
+      case 'privacy':          await renderPrivacyPage(); break;
       case 'product':          await renderProductDetail(App.currentProductId); break;
       case 'store-detail':     await renderStoreDetail(App.currentStoreId); break;
       case 'storefront':       await renderStorefront(App.currentStoreId); break;
@@ -2902,9 +2902,22 @@ function calcDelivery(originLoc, destLoc, weightKg = 0.5) {
 }
 
 // ── Privacy Page ───────────────────────────────────────────
-function renderPrivacyPage() {
+async function renderPrivacyPage() {
   const c = document.getElementById('privacy-content');
   if (!c) return;
+
+  // Fetch admin's real contact info for the DPO section
+  let adminEmail = 'privacy@happatrademart.com';
+  let adminPhone = '+233 000 000 000';
+  try {
+    const adminRes = await apiGet('users', 'limit=50');
+    const admin = (adminRes?.data || []).find(u => u.role === 'admin');
+    if (admin) {
+      if (admin.email) adminEmail = admin.email;
+      if (admin.phone) adminPhone = admin.phone;
+    }
+  } catch (e) {}
+
   c.innerHTML = `
 
 <!-- Header -->
@@ -3181,11 +3194,11 @@ function renderPrivacyPage() {
       <div style="font-weight:800;font-size:.9rem;margin-bottom:6px">Data Protection Officer</div>
       <div style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--text-muted);margin-bottom:4px">
         <i class="fas fa-envelope" style="width:12px;color:var(--primary)"></i>
-        <a href="mailto:privacy@happatrademart.com" style="color:var(--primary);font-weight:600">privacy@happatrademart.com</a>
+        <a href="mailto:${adminEmail}" style="color:var(--primary);font-weight:600">${escHtml(adminEmail)}</a>
       </div>
       <div style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--text-muted);margin-bottom:4px">
         <i class="fas fa-phone" style="width:12px;color:var(--primary)"></i>
-        <a href="tel:+233000000000" style="color:var(--primary);font-weight:600">+233 (0) 000 000 000</a>
+        <a href="tel:${adminPhone.replace(/[^+\d]/g, '')}" style="color:var(--primary);font-weight:600">${escHtml(adminPhone)}</a>
       </div>
       <div style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--text-muted)">
         <i class="fas fa-building" style="width:12px;color:var(--primary)"></i>

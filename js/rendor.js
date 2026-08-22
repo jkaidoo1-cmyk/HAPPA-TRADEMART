@@ -1010,7 +1010,6 @@ async function saveRendorProfile() {
 function startRendorPhoneVerify() {
   const u = App.currentUser;
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  console.log('[DEMO] Rendor Phone OTP:', otp);
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">

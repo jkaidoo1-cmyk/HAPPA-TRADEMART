@@ -1768,7 +1768,6 @@ async function saveStoreInfo(storeId) {
 
 function resendOTP() {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  console.log('[DEMO] OTP:', otp);
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header"><span class="modal-title">📱 Verify Phone</span></div>
@@ -3077,7 +3076,18 @@ window.handleImageUpload = async function(type) {
   try {
     const base64 = await compressImage(fileInput.files[0], 1200, 0.8);
     hiddenInput.value = base64;
+    // Show visual preview below the file input so the vendor can confirm upload
+    const previewId = `store-${type}-preview`;
+    let previewEl = document.getElementById(previewId);
+    if (!previewEl) {
+      previewEl = document.createElement('div');
+      previewEl.id = previewId;
+      previewEl.style.cssText = 'margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid var(--border)';
+      fileInput.parentNode.appendChild(previewEl);
+    }
+    previewEl.innerHTML = `<img src="${base64}" style="width:100%;max-height:${type === 'banner' ? '80px' : '60px'};object-fit:cover;display:block">`;
     window.updateStorefrontPreview();
+    showToast(`${type === 'logo' ? 'Logo' : 'Banner'} image loaded! Save to apply.`, 'success');
   } catch (err) {
     console.error('Failed to compress image:', err);
     showToast('Failed to process image.', 'error');
@@ -3106,23 +3116,7 @@ window.setPreviewTab = function(tab) {
   window.updateStorefrontPreview();
 };
 
-window.updateStoreTheme = function(theme) {
-  window.previewTheme = theme;
-  // Update selection UI border and background highlights
-  ['classic', 'bold', 'modern', 'neumorphic'].forEach(t => {
-    const el = document.getElementById(`theme-label-${t}`);
-    if (el) {
-      if (t === theme) {
-        el.style.borderColor = 'var(--primary)';
-        el.style.background = 'var(--primary-light)';
-      } else {
-        el.style.borderColor = 'var(--border)';
-        el.style.background = 'transparent';
-      }
-    }
-  });
-  window.updateStorefrontPreview();
-};
+
 
 window.updateStorefrontPreview = function() {
   const storeName = document.getElementById('store-name')?.value || 'Preview Store';
@@ -3493,21 +3487,7 @@ window.updateStoreTheme = function(themeName) {
   window.updateStorefrontPreview();
 };
 
-window.handleImageUpload = function(type) {
-  const fileInput = document.getElementById(type === 'logo' ? 'store-logo-file' : 'store-banner-file');
-  const urlInput = document.getElementById(type === 'logo' ? 'store-logo-url' : 'store-banner-url');
-  if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
 
-  const file = fileInput.files[0];
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const dataUrl = e.target.result;
-    if (urlInput) urlInput.value = dataUrl;
-    window.updateStorefrontPreview();
-    showToast(`${type === 'logo' ? 'Logo' : 'Banner'} image loaded!`, 'success');
-  };
-  reader.readAsDataURL(file);
-};
 
 window.createStorefrontDraft = async function(storeId) {
   const store = (App.allStores || []).find(s => s && String(s.id) === String(storeId)) || App.myStore;
@@ -3601,20 +3581,31 @@ window.saveVendorStoreSettings = async function(storeId) {
     App.myStorefront.status = 'draft';
   }
 
-  await apiPut('storefronts', 'sft-' + store.id, App.myStorefront).catch(() => null);
-  await apiPatch('stores', store.id, {
-    name: sfName,
-    slug: sfSlug,
-    theme: theme,
-    font_family: fontFamily,
-    primary_color: primaryColor,
-    secondary_color: secondaryColor,
-    slogan: slogan,
-    description: aboutUs,
-    banner_url: bannerUrl,
-    logo_url: logoUrl,
-    storefront_status: App.myStorefront.status
-  }).catch(() => null);
+  try {
+    await apiPut('storefronts', 'sft-' + store.id, App.myStorefront);
+  } catch (err) {
+    console.error('[Storefront] PUT failed:', err);
+    showToast('Failed to save storefront settings. Please try again.', 'error');
+    return;
+  }
+  try {
+    await apiPatch('stores', store.id, {
+      name: sfName,
+      slug: sfSlug,
+      theme: theme,
+      font_family: fontFamily,
+      primary_color: primaryColor,
+      secondary_color: secondaryColor,
+      slogan: slogan,
+      description: aboutUs,
+      banner_url: bannerUrl,
+      logo_url: logoUrl,
+      storefront_status: App.myStorefront.status
+    });
+  } catch (err) {
+    console.error('[Storefront] PATCH store failed:', err);
+    showToast('Store settings partially saved. Some changes may not persist.', 'warning');
+  }
 
   showToast('Storefront customization saved ✅', 'success');
   renderVendorDashboard();
