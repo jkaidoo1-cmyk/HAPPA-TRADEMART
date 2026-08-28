@@ -25,6 +25,18 @@ function addToCart(product, qty = 1, buyerNote = '') {
     if (buyerNote) existing.buyer_note = buyerNote;
     showToast(`Cart updated: ${product.name} ×${newQty}`, 'success');
   } else {
+    // Product-share referral attribution:
+    // 1. Read referrer from cookie (set when user opened a ?ref= link)
+    // 2. Lock on first add-to-cart so later share links don't overwrite
+    // 3. Never attribute to self
+    const refCookie = (document.cookie || '').split('; ')
+      .find(c => c.startsWith('happa_ref='));
+    const freshRef = refCookie ? decodeURIComponent(refCookie.split('=')[1]) : '';
+    const isSelfRef = App.currentUser && freshRef === App.currentUser.referral_code;
+    // Lock: use existing cart referrer if cart is not empty, otherwise use cookie
+    const lockedRef = isSelfRef ? ''
+      : (App.cart.length > 0 ? (App.cart[0].product_referrer || '') : freshRef);
+
     App.cart.push({
       id: product.id, name: product.name, price: product.price,
       image: product.images?.[0] || '', qty,
@@ -34,7 +46,8 @@ function addToCart(product, qty = 1, buyerNote = '') {
       weight_kg: product.weight_kg || 0.5,
       commission_pct: getCommission(product.price),
       buyer_note: buyerNote || '',
-      allow_buyer_note: product.allow_buyer_note || false
+      allow_buyer_note: product.allow_buyer_note || false,
+      product_referrer: lockedRef
     });
     showToast(`Added to cart: ${product.name} 🛒`, 'success');
   }

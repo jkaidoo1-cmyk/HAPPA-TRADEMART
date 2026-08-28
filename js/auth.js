@@ -563,7 +563,13 @@ async function doRegister(e) {
 
   const refFromSession = (sessionStorage.getItem('pending_ref') || '').toUpperCase();
 
-  const ref = refFromField || refFromSession;
+  // Fallback: check cookie (set by product-share referral links)
+  const refFromCookie = (() => {
+    const c = (document.cookie || '').split('; ').find(c => c.startsWith('happa_ref='));
+    return c ? decodeURIComponent(c.split('=')[1]).toUpperCase() : '';
+  })();
+
+  const ref = refFromField || refFromSession || refFromCookie;
 
 
 

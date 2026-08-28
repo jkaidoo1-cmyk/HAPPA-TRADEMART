@@ -580,6 +580,50 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
       return res.status(403).json({ error: 'Your account has been suspended. Contact support.' });
     }
 
+    // Auto-deactivate expired rendor subscriptions on login
+    if (user.role === 'rendor' && user.rendor_sub_status === 'active' && user.rendor_sub_expiry) {
+      const expiryMs = Number(user.rendor_sub_expiry);
+      if (expiryMs && expiryMs < Date.now()) {
+        user.rendor_sub_status = 'inactive';
+        if (supabase) {
+          supabase.from('users').update({ rendor_sub_status: 'inactive' }).eq('id', user.id).then(() => {}).catch(() => {});
+        }
+        try {
+          const store = dataStore.getStore();
+          const localUser = (store.users || []).find(u => String(u.id) === String(user.id));
+          if (localUser) { localUser.rendor_sub_status = 'inactive'; dataStore.save(store); }
+        } catch (e) {}
+      }
+    }
+
+    // Auto-deactivate expired storefront subscriptions on vendor login
+    if (user.role === 'vendor') {
+      try {
+        const supabase = getSupabase();
+        let vendorStores = [];
+        if (supabase) {
+          const { data } = await supabase.from('stores').select('id,subscription_status,subscription_end').eq('vendor_id', user.id);
+          if (data) vendorStores = data;
+        }
+        dataStore.ensureTable('stores');
+        const localStores = (dataStore.getStore().stores || []).filter(s => String(s.vendor_id) === String(user.id));
+        const allVendorStores = [...vendorStores, ...localStores];
+        for (const store of allVendorStores) {
+          if (store.subscription_status === 'active' && store.subscription_end) {
+            const endMs = new Date(store.subscription_end).getTime();
+            if (endMs && endMs < Date.now()) {
+              if (supabase) {
+                supabase.from('stores').update({ subscription_status: 'inactive' }).eq('id', store.id).then(() => {}).catch(() => {});
+              }
+              const localStore = localStores.find(s => String(s.id) === String(store.id));
+              if (localStore) localStore.subscription_status = 'inactive';
+            }
+          }
+        }
+        dataStore.save(dataStore.getStore());
+      } catch (e) {}
+    }
+
     // Issue 30-day session token
     const token = createSessionToken(user.id, user.role);
     const userSafe = { ...user };

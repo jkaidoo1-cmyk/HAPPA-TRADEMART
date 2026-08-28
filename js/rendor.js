@@ -377,12 +377,8 @@ function renderRendorSubscription() {
   const subActive = subStatus === 'active' && subExpiry && subExpiry > new Date();
   const reqStatus = u.sub_request_status || null; // 'pending_quote' | 'quoted' | null
 
-  // Build quoted plans from admin-set prices
-  const quotedPlans = reqStatus === 'quoted' ? [
-    { id:'monthly',   label:'Monthly',  price: parseFloat(u.sub_quote_monthly   || 0), desc:'30 days',  icon:'📅' },
-    { id:'quarterly', label:'3 Months', price: parseFloat(u.sub_quote_quarterly || 0), desc:'90 days',  icon:'📆' },
-    { id:'biannual',  label:'6 Months', price: parseFloat(u.sub_quote_biannual  || 0), desc:'180 days', icon:'🗓️' },
-  ].filter(p => p.price > 0) : [];
+  // Get monthly rate from admin quote
+  const monthlyRate = reqStatus === 'quoted' ? parseFloat(u.sub_quote_monthly || 0) : 0;
 
   el.innerHTML = `
 <!-- Current status -->
@@ -428,30 +424,35 @@ ${reqStatus === 'pending_quote' ? `
   <div style="font-weight:800;font-size:.95rem;color:#92400e;margin-bottom:6px">Quote Request Sent</div>
   <div style="font-size:.8rem;color:#78350f;line-height:1.7">Your request is with admin. You'll receive a notification with your subscription pricing options shortly.</div>
 </div>
-` : reqStatus === 'quoted' && quotedPlans.length > 0 ? `
+` : reqStatus === 'quoted' && monthlyRate > 0 ? `
 <!-- Admin-quoted plans -->
 <div style="display:inline-flex;align-items:center;gap:6px;background:#dbeafe;color:#1e40af;border-radius:20px;padding:4px 12px;font-size:.75rem;font-weight:700;margin-bottom:14px">
-  <i class="fas fa-tag"></i> Prices set by admin for your account
+  <i class="fas fa-tag"></i> Monthly rate set by admin
 </div>
-<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
-  ${quotedPlans.map(pl => `
-  <div class="card" style="border:2px solid var(--border);transition:border-color .2s"
-       onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='var(--border)'">
-    <div class="card-body" style="display:flex;align-items:center;gap:12px">
-      <div style="font-size:1.6rem;flex-shrink:0">${pl.icon}</div>
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:.9rem">${pl.label}</div>
-        <div style="font-size:.75rem;color:var(--text-muted)">${pl.desc}</div>
-      </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div style="font-weight:800;font-size:1.05rem;color:var(--primary)">GHS ${pl.price.toFixed(2)}</div>
-        <button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.72rem;margin-top:4px"
-                onclick="requestSubscription('${pl.id}',${pl.price},'${pl.label}')">
-          ${subActive ? 'Renew' : 'Subscribe'}
-        </button>
-      </div>
+<div class="card" style="margin-bottom:20px;border:2px solid var(--border)">
+  <div class="card-body">
+    <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-size:.82rem;color:var(--text-muted)">Monthly Rate: <strong>GHS ${monthlyRate.toFixed(2)}</strong></div>
     </div>
-  </div>`).join('')}
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label" style="font-weight:700;font-size:.85rem">Select Number of Months</label>
+      <select class="form-control form-select" id="rendor-sub-months-sel" onchange="
+        const m = parseInt(this.value);
+        const total = m * ${monthlyRate};
+        document.getElementById('rendor-sub-total-display').textContent = 'GHS ' + total.toFixed(2);
+      ">
+        ${Array.from({length:12}, (_, i) => i+1).map(n => `<option value="${n}">${n} Month${n>1?'s':''} — GHS ${(monthlyRate * n).toFixed(2)}</option>`).join('')}
+      </select>
+    </div>
+    <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;text-align:center;margin-bottom:16px">
+      <div style="font-size:.78rem;color:#9a3412">Total Amount to Pay</div>
+      <div style="font-size:1.8rem;font-weight:900;color:#c2410c" id="rendor-sub-total-display">GHS ${monthlyRate.toFixed(2)}</div>
+    </div>
+    <button class="btn" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed"
+            onclick="requestRendorSubscription()">
+      ${subActive ? '🔄 Renew Subscription' : '⭐ Subscribe Now'}
+    </button>
+  </div>
 </div>
 ` : !subActive ? `
 <!-- No request yet -->
@@ -504,9 +505,14 @@ async function requestSubQuote() {
   renderRendorSubscription();
 }
 
-// ── Step 2: Vendor picks a quoted plan and sees payment info ─
-async function requestSubscription(planId, price, planLabel) {
+// ── Step 2: Rendor picks months and sees payment info ──
+function requestRendorSubscription() {
   const u = App.currentUser;
+  const months = parseInt(document.getElementById('rendor-sub-months-sel')?.value || '1');
+  const monthlyRate = parseFloat(u.sub_quote_monthly || 0);
+  const total = monthlyRate * months;
+  const planLabel = `${months} Month${months > 1 ? 's' : ''}`;
+
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
@@ -516,14 +522,14 @@ async function requestSubscription(planId, price, planLabel) {
 <div class="modal-body">
   <div style="background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-radius:var(--radius-md);padding:18px;margin-bottom:18px;text-align:center">
     <div style="font-size:.75rem;opacity:.8">Amount to Pay</div>
-    <div style="font-size:2rem;font-weight:900">GHS ${parseFloat(price).toFixed(2)}</div>
-    <div style="font-size:.78rem;opacity:.8;margin-top:4px">${planLabel} plan</div>
+    <div style="font-size:2rem;font-weight:900">GHS ${total.toFixed(2)}</div>
+    <div style="font-size:.78rem;opacity:.8;margin-top:4px">${planLabel} — GHS ${monthlyRate.toFixed(2)}/month</div>
   </div>
   <div class="card" style="margin-bottom:16px">
     <div class="card-body">
       <div style="font-weight:700;font-size:.85rem;margin-bottom:10px">📱 Payment Instructions</div>
       <ol style="font-size:.82rem;color:var(--text-light);padding-left:16px;line-height:2;margin:0">
-        <li>Send <strong>GHS ${parseFloat(price).toFixed(2)}</strong> via Mobile Money to admin</li>
+        <li>Send <strong>GHS ${total.toFixed(2)}</strong> via Mobile Money to admin</li>
         <li>Use your registered phone <strong>${escHtml(u.phone||'')}</strong> as reference</li>
         <li>Take a screenshot of your payment confirmation</li>
         <li>Click <strong>"I've Paid — Notify Admin"</strong> below to alert admin to activate your account</li>
@@ -532,7 +538,7 @@ async function requestSubscription(planId, price, planLabel) {
   </div>
   <button class="btn btn-block" id="sub-notify-btn"
           style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed"
-          onclick="notifyAdminSubscription('${planId}',${price},'${planLabel}')">
+          onclick="notifyAdminSubscription('monthly',${total},'${planLabel}')">
     <i class="fas fa-bell"></i> I've Paid — Notify Admin
   </button>
   <button class="btn btn-ghost btn-block" onclick="closeModalForce()" style="margin-top:6px;color:var(--text-muted)">

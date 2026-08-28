@@ -53,6 +53,12 @@ window.addEventListener('DOMContentLoaded', () => {
     // SPA navigation without re-reading the URL bar each time.
     sessionStorage.setItem('pending_ref', ref);
 
+    // Also store in a 30-day cookie for product-share attribution.
+    // This survives page refreshes and navigation unlike sessionStorage.
+    // Last-referrer-wins: overwrite any existing cookie.
+    document.cookie = 'happa_ref=' + encodeURIComponent(ref) +
+      '; path=/; max-age=' + (30 * 24 * 60 * 60) + '; SameSite=Lax';
+
     // Also auto-fill the hidden field if the register form is already
     // rendered (older path kept for safety).
     const regRefEl = document.getElementById('reg-ref');

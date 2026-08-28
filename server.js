@@ -633,6 +633,46 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     return res.status(403).json({ error: 'Your account has been suspended. Contact support.' });
   }
 
+  // Auto-deactivate expired rendor subscriptions on login
+  if (user.role === 'rendor' && user.rendor_sub_status === 'active' && user.rendor_sub_expiry) {
+    const expiryMs = Number(user.rendor_sub_expiry);
+    if (expiryMs && expiryMs < Date.now()) {
+      user.rendor_sub_status = 'inactive';
+      // Update in Supabase if available
+      if (supabase) {
+        supabase.from('users').update({ rendor_sub_status: 'inactive' }).eq('id', user.id).then(() => {}).catch(() => {});
+      }
+      // Update local db
+      try {
+        const db = loadDb();
+        const localUser = getTable(db, 'users').find(u => String(u.id) === String(user.id));
+        if (localUser) { localUser.rendor_sub_status = 'inactive'; saveDb(db); }
+      } catch (e) {}
+    }
+  }
+
+  // Auto-deactivate expired storefront subscriptions on vendor login
+  if (user.role === 'vendor') {
+    try {
+      const db = loadDb();
+      const stores = getTable(db, 'stores');
+      const vendorStores = stores.filter(s => String(s.vendor_id) === String(user.id));
+      for (const store of vendorStores) {
+        if (store.subscription_status === 'active' && store.subscription_end) {
+          const endMs = new Date(store.subscription_end).getTime();
+          if (endMs && endMs < Date.now()) {
+            store.subscription_status = 'inactive';
+            // Update in Supabase if available
+            if (supabase) {
+              supabase.from('stores').update({ subscription_status: 'inactive' }).eq('id', store.id).then(() => {}).catch(() => {});
+            }
+          }
+        }
+      }
+      saveDb(db);
+    } catch (e) {}
+  }
+
   // Generate 30-Day Session Token
   const token = createSessionToken(user.id, user.role);
 

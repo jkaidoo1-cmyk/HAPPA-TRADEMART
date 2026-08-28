@@ -19,6 +19,13 @@ function toStorefrontProduct(p) {
 }
 window.toStorefrontProduct = toStorefrontProduct;
 
+// Helper: check if a rendor's subscription is still active
+function isRendorSubActive(r) {
+  if (r.rendor_sub_status !== 'active') return false;
+  if (!r.rendor_sub_expiry) return false;
+  return new Date(Number(r.rendor_sub_expiry)) > new Date();
+}
+
 let currentMarketFilter = 'all';
 
 
@@ -186,7 +193,7 @@ async function renderRendorServices(grid, empty, counter) {
 
   const allPosts   = (postsRes?.data || []).filter(s => s.status === 'active' && !s.deleted);
 
-  const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && u.status === 'active');
+  const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && u.status === 'active' && (!u.rendor_sub_expiry || isRendorSubActive(u)));
 
 
 
@@ -869,7 +876,11 @@ async function shareProduct(productId) {
   }
 
   const baseUrl = window.location.origin + window.location.pathname;
-  const url = baseUrl + '?product=' + productId;
+  let url = baseUrl + '?product=' + productId;
+  // Append referral code if user is logged in — enables product-share attribution
+  if (App.currentUser?.referral_code) {
+    url += '&ref=' + encodeURIComponent(App.currentUser.referral_code);
+  }
   const title = p.name || 'Product on HAPPA TRADEMART';
   const priceVal = parseFloat(p.price);
   const price = isNaN(priceVal) ? '' : 'GHS ' + (priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2));
@@ -1238,6 +1249,21 @@ async function renderStorefront(id) {
           <h3 style="font-size: 1.25rem; font-weight: 800;">Storefront Under Construction</h3>
           <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 6px; max-width: 450px; margin-left: auto; margin-right: auto; line-height: 1.6;">
             This storefront is currently not active. Once the vendor completes setup and receives admin approval, this page will go live.
+          </p>
+        </div>`;
+      return;
+    }
+
+    // If storefront subscription expired, show unavailable page to visitors (owner/admin still see it)
+    const subExpired = s.subscription_end && new Date(s.subscription_end) < new Date();
+    if (subExpired && !isOwner && !isAdmin) {
+      if (storefrontPageIsRendered(c)) return;
+      c.innerHTML = `
+        <div class="empty-state" style="padding: 60px 20px; text-align: center;">
+          <div style="font-size: 3.5rem; margin-bottom: 16px;">⏰</div>
+          <h3 style="font-size: 1.25rem; font-weight: 800;">Storefront Unavailable</h3>
+          <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 6px; max-width: 450px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+            This storefront's subscription has expired. The vendor needs to renew to restore access. In the meantime, you can still find this store's products on the main website.
           </p>
         </div>`;
       return;
@@ -2587,7 +2613,7 @@ async function renderHomeServices() {
 
   const allPosts   = (postsRes?.data || []).filter(s => s.status === 'active' && !s.deleted);
 
-  const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && u.status === 'active');
+  const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && u.status === 'active' && (!u.rendor_sub_expiry || isRendorSubActive(u)));
 
 
 

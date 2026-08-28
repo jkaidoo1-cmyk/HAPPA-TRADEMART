@@ -326,6 +326,13 @@ async function placeOrder() {
     }
   }
 
+  // Determine product-share referrer: last valid referrer from cart items,
+  // locked on first add-to-cart so later share links don't overwrite it.
+  // Don't let a user refer themselves.
+  const productShareRef = (App.cart.find(i => i.product_referrer)?.product_referrer || '').trim();
+  const isSelfRef = App.currentUser && productShareRef === App.currentUser.referral_code;
+  const effectiveProductRef = isSelfRef ? '' : productShareRef;
+
   const orderData = {
     buyer_id: buyerId,
     buyer_name: buyerName,
@@ -336,7 +343,8 @@ async function placeOrder() {
     delivery_fee: totals.deliveryFee, total: totals.total,
     payment_method: selectedPayment, payment_ref: 'REF' + Date.now(),
     status: 'paid', delivery_address: address, ship_date: sat.toISOString(),
-    referral_code: App.currentUser ? (App.currentUser.referred_by || '') : '', 
+    referral_code: App.currentUser ? (App.currentUser.referred_by || '') : '',
+    product_share_referrer: effectiveProductRef,
     discount: totals.discount || 0,
     coupon_code: App.appliedCoupon ? App.appliedCoupon.code : '',
     buyer_location: dest
