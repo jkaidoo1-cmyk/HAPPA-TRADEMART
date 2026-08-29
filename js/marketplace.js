@@ -881,14 +881,17 @@ async function shareProduct(productId) {
   if (App.currentUser?.referral_code) {
     url += '&ref=' + encodeURIComponent(App.currentUser.referral_code);
   }
-  const title = p.name || 'Product on HAPPA TRADEMART';
+  const title = (p.name || '').trim();
   const priceVal = parseFloat(p.price);
   const price = isNaN(priceVal) ? '' : 'GHS ' + (priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2));
   const desc = p.description ? `${p.description}` : '';
 
   // Caption shown with the photo in the SAME bubble (like WhatsApp's own
-  // image + caption): name, price, then the link.
-  const caption = `${title}\n${price}${desc ? '\n\n' + desc : ''}\n\nCheck this out on HAPPA TRADEMART!\n${url}`;
+  // image + caption): price, description, then the link.  Only include the
+  // name line when the vendor actually entered a product name — leave it
+  // blank otherwise so the caption does not show a category like "Other".
+  const nameLine = title ? `${title}\n` : '';
+  const caption = `${nameLine}${price}${desc ? '\n\n' + desc : ''}\n\nCheck this out on HAPPA TRADEMART!\n${url}`;
 
   // Attach the product photo itself (no text baked onto it) — the text is
   // sent as the caption so WhatsApp renders one message: image on top, name /

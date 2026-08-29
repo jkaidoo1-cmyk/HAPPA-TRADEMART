@@ -222,13 +222,7 @@ ${authRole === 'rendor' ? `
 
     <label class="form-label">Location (City)</label>
 
-    <select class="form-control form-select" id="reg-location" required>
-
-      <option value="">Select your city…</option>
-
-      ${LOCATIONS.map(l => `<option value="${l}">${l}</option>`).join('')}
-
-    </select>
+    <input class="form-control" id="reg-location" type="text" placeholder="Start typing your city…">
 
   </div>
 
@@ -427,6 +421,11 @@ ${authRole === 'rendor' ? `
 
       if (refInput)  refInput.value = pendingRef.toUpperCase();
 
+    }
+
+    // Init location autocomplete
+    if (typeof initLocationAutocomplete === 'function' && typeof LOCATIONS !== 'undefined') {
+      initLocationAutocomplete('reg-location', LOCATIONS);
     }
 
   }, 0);

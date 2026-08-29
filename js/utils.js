@@ -266,4 +266,57 @@ window.shouldShowStoreOnMainWebsite = function(store) {
   return true;
 };
 
+// ── Location Autocomplete ─────────────────────────────────
+// Turns a text input into a type-ahead autocomplete field.
+// Call: initLocationAutocomplete('input-id', ['Accra','Kumasi',...])
+function initLocationAutocomplete(inputId, options) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  // Create the suggestions container
+  let list = document.getElementById(inputId + '-suggestions');
+  if (!list) {
+    list = document.createElement('div');
+    list.id = inputId + '-suggestions';
+    list.className = 'autocomplete-list';
+    list.style.cssText = 'position:absolute;top:100%;left:0;right:0;z-index:9999;max-height:200px;overflow-y:auto;background:#fff;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;box-shadow:0 4px 12px rgba(0,0,0,.12);display:none;';
+    input.parentNode.style.position = 'relative';
+    input.parentNode.appendChild(list);
+  }
+
+  function show(matches) {
+    if (!matches.length) { list.style.display = 'none'; return; }
+    list.innerHTML = matches.slice(0, 15).map(m =>
+      '<div class="autocomplete-item" style="padding:8px 12px;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--border,#eee)" '
+      + 'onmouseover="this.style.background=\'var(--bg-secondary,#f5f5f5)\'" '
+      + 'onmouseout="this.style.background=\'\'" '
+      + 'onmousedown="event.preventDefault();this.closest(\'.form-group,.input-group\').querySelector(\'input\').value=\'' + m.replace(/'/g, "\\'") + '\';this.parentNode.style.display=\'none\'">'
+      + escHtml(m) + '</div>'
+    ).join('');
+    list.style.display = 'block';
+  }
+
+  input.addEventListener('input', function() {
+    const val = this.value.trim().toLowerCase();
+    if (!val) { list.style.display = 'none'; return; }
+    const matches = options.filter(o => o.toLowerCase().includes(val));
+    show(matches);
+  });
+
+  input.addEventListener('focus', function() {
+    const val = this.value.trim().toLowerCase();
+    if (val) {
+      const matches = options.filter(o => o.toLowerCase().includes(val));
+      show(matches);
+    }
+  });
+
+  // Close on outside click
+  document.addEventListener('click', function(e) {
+    if (!input.contains(e.target) && !list.contains(e.target)) {
+      list.style.display = 'none';
+    }
+  });
+}
+
 

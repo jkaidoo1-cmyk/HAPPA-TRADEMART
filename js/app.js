@@ -6,7 +6,29 @@
 
 // ── Constants ──────────────────────────────────────────────
 const API = '/api/';
-const LOCATIONS = ['Accra','Kumasi','Takoradi','Tamale','Cape Coast','Tema','Sunyani','Koforidua'];
+const LOCATIONS = [
+  'Accra','Kumasi','Takoradi','Tamale','Cape Coast','Tema','Sunyani','Koforidua',
+  'Ashaiman','Obuasi','Teshie','Madina','Kasoa','Ho','Bolgatanga','Wa',
+  'Techiman','Tarkwa','Nungua','Dodowa','Nsawam','Achimota','Osu',
+  'Labadi','East Legon','Spintex','Tema Community 1','Tema Community 25',
+  'Spintex Road','Ashongman','Adenta','Madina Zongo','Pantang',
+  'Haatso','Oyarifa','Abelemkpe','Roman Ridge','Airport Residential',
+  'Cantonments','Labone','Dansoman','Kaneshie','Osu Oxford Street',
+  'Madina Market','Legon','UPC','Near University of Ghana',
+  'Kumasi Adum','Kumasi Asafo','Kumasi Ahodwo','Kumasi Bantama',
+  'Kumasi Kejetia','Kumasi Suame','Kumasi Asokwa','Ejisu',
+  'New Juaben','Nkawkaw','Berekum','Bechi','Wenchi',
+  'Nkoranza','Drobo','Goaso','Sekondi','Axim',
+  'Saltpond','Mankessim','Anomabu','Winneba','Elmina',
+  'Shama','Agona Swedru','Biriwa','Kumasi Subin',
+  'Oforikrom','Ahinsan','Patase','Nhyiaeso',
+  'Ejisu Besease','Ahenkuro','Boankra','Mampong',
+  'Ejura','Konongo','Jamasi','Agona',
+  'Obuasi Town','Obuasi Adaawam','Obuasi Dunkwa',
+  'Tarkwa Nsuaem','Takoradi Market','Sekondi-Takoradi',
+  'Ekyem Aduana','Insuam',
+  'Other'
+];
 const CATEGORIES = [
   'Fashion & Footwear','Electronics','Beauty & Skincare','Food & Groceries',
   'Health & Wellness','Sports & Fitness','Home & Living','Books & Stationery',
@@ -1124,9 +1146,7 @@ function renderSettingsPage() {
           </div>
           <div class="form-group">
             <label class="form-label">Location</label>
-            <select class="form-control form-select" id="set-loc">
-              ${LOCATIONS.map(l => `<option value="${l}"${l === u.location ? ' selected' : ''}>${l}</option>`).join('')}
-            </select>
+            <input class="form-control" id="set-loc" type="text" value="${escHtml(u.location || '')}" placeholder="Start typing your city…" onfocus="if(typeof initLocationAutocomplete==='function')initLocationAutocomplete('set-loc',LOCATIONS)">
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveProfileSettings('${u.id}')">
             <i class="fas fa-save"></i> Save Changes
