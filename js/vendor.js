@@ -187,11 +187,11 @@ async function renderVendorDashboard() {
   c.innerHTML = `
 <div class="tab-nav" id="vendor-tabs">
   <div class="tab-btn ${activeTabId === 'vendor-overview' ? 'active' : ''}" onclick="switchTab(this,'vendor-overview')">Overview</div>
+  <div class="tab-btn ${activeTabId === 'vendor-storefront' ? 'active' : ''}" onclick="switchTab(this,'vendor-storefront')">Storefront</div>
   <div class="tab-btn ${activeTabId === 'vendor-products' ? 'active' : ''}" onclick="switchTab(this,'vendor-products')">Products</div>
   <div class="tab-btn ${activeTabId === 'vendor-wallet' ? 'active' : ''}" onclick="switchTab(this,'vendor-wallet');renderWalletHistory('vendor-txn-list');if(typeof renderVendorChart==='function'&&window._vendorSalesPackages)renderVendorChart(window._vendorSalesPackages)">Wallet</div>
   <div class="tab-btn ${activeTabId === 'vendor-referral' ? 'active' : ''}" onclick="switchTab(this,'vendor-referral')">Referrals</div>
   <div class="tab-btn ${activeTabId === 'vendor-verify' ? 'active' : ''}" onclick="switchTab(this,'vendor-verify')">Verify</div>
-  <div class="tab-btn ${activeTabId === 'vendor-storefront' ? 'active' : ''}" onclick="switchTab(this,'vendor-storefront')">Storefront</div>
 </div>
 
 <!-- ── Overview Tab ── -->

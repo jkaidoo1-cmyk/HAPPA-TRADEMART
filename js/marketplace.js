@@ -881,7 +881,7 @@ async function shareProduct(productId) {
   if (App.currentUser?.referral_code) {
     url += '&ref=' + encodeURIComponent(App.currentUser.referral_code);
   }
-  const title = (p.name || '').trim();
+  const title = ((p.name || '').trim() === 'Other') ? '' : (p.name || '').trim();
   const priceVal = parseFloat(p.price);
   const price = isNaN(priceVal) ? '' : 'GHS ' + (priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2));
   const desc = p.description ? `${p.description}` : '';
