@@ -1030,6 +1030,8 @@ function showPage(pageId, entityId = null) {
     }
   } else {
     document.body.classList.remove('is-storefront-view');
+    document.documentElement.classList.remove('is-storefront-root');
+    App.isStandaloneStorefront = false;
     if (topNavEl) topNavEl.style.display = '';
     if (bNavEl) bNavEl.style.display = '';
     if (mainContent) {
