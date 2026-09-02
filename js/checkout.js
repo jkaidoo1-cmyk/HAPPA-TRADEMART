@@ -539,31 +539,80 @@ function renderOrderConfirmation(order, packages) {
   const c = document.getElementById('order-confirmed-content');
   if (!c) return;
 
+  // Build package tracking cards
+  const pkgs = Array.isArray(packages) ? packages : [];
+  const pkgCards = pkgs.map(pkg => {
+    const vs = pkg.vendor_status || 'pending';
+    const as = pkg.admin_status  || 'pending';
+    const items = Array.isArray(pkg.items) ? pkg.items : [];
+    const storeName = pkg.store_name || pkg.store_id || 'Store';
+    const itemNames = items.slice(0, 3).map(i => i.name || 'Item').join(', ');
+    const moreItems = items.length > 3 ? ` +${items.length - 3} more` : '';
+    return `
+    <div class="card" style="margin-top:12px;text-align:left">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
+        <span style="font-size:.82rem;font-weight:700"><i class="fas fa-cube" style="margin-right:4px;color:var(--primary)"></i>${pkg.package_code || pkg.id || ''}</span>
+        <span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:12px;font-weight:600">Processing</span>
+      </div>
+      <div style="padding:12px 14px">
+        <div class="order-tracking-bar" style="margin-bottom:10px">
+          <div class="tracking-step ${vs !== 'pending' && vs !== 'rejected' ? 'done' : 'active'}">
+            <div class="tracking-dot"></div><div class="tracking-label">Vendor</div>
+          </div>
+          <div class="tracking-line ${vs === 'processed' || as !== 'pending' ? 'done' : ''}"></div>
+          <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : vs === 'processed' ? 'active' : ''}">
+            <div class="tracking-dot"></div><div class="tracking-label">In Transit</div>
+          </div>
+          <div class="tracking-line ${as === 'delivered' ? 'done' : ''}"></div>
+          <div class="tracking-step ${as === 'delivered' ? 'done' : ''}">
+            <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
+          </div>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:4px"><i class="fas fa-store" style="margin-right:3px"></i>${escHtml(storeName)}</div>
+        <div style="font-size:.8rem;font-weight:500">${escHtml(itemNames)}${moreItems}</div>
+        <div style="font-size:.82rem;font-weight:700;color:var(--primary);margin-top:4px">GHS ${(parseFloat(pkg.gross_amount || pkg.total) || 0).toFixed(2)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
   c.innerHTML = `
     <div style="padding:24px;text-align:center">
       <div style="font-size:4rem;color:#10b981;margin-bottom:12px"><i class="fas fa-check-circle"></i></div>
       <h2 style="font-size:1.5rem;font-weight:900">Order Confirmed!</h2>
       <p style="color:var(--text-muted);font-size:.85rem;margin-top:6px">Your order has been successfully placed. Order ID: <strong>${order.id}</strong></p>
-      
-      <div class="card" style="margin-top:20px;text-align:left">
-        <div class="card-header"><h3>📦 Delivery Details</h3></div>
+
+      <!-- Order Summary -->
+      <div class="card" style="margin-top:16px;text-align:left">
+        <div class="card-header"><h3>📦 Order Summary</h3></div>
         <div class="card-body" style="font-size:.85rem;display:grid;gap:6px">
           <div><strong>Recipient:</strong> ${escHtml(order.buyer_name)}</div>
           <div><strong>Phone:</strong> ${escHtml(order.buyer_phone)}</div>
-          <div><strong>Email:</strong> ${escHtml(order.buyer_email)}</div>
           <div><strong>Address:</strong> ${escHtml(order.delivery_address || 'Home delivery')}</div>
-          <div><strong>Payment Method:</strong> ${escHtml(order.payment_method)}</div>
-          <div><strong>Grand Total:</strong> GHS ${order.total.toFixed(2)}</div>
+          <div><strong>Payment:</strong> ${escHtml(order.payment_method)}</div>
+          <div style="font-weight:700;color:var(--primary);font-size:.95rem;margin-top:4px">Total: GHS ${(order.total || 0).toFixed(2)}</div>
         </div>
       </div>
 
-      <div style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-top:16px;font-size:.78rem">
-        <i class="fas fa-info-circle"></i> An order confirmation receipt and tracking link have been sent to you via <strong>Email, SMS &amp; WhatsApp</strong>.
+      <!-- Package Tracking -->
+      ${pkgs.length ? `
+      <div style="margin-top:16px;text-align:left">
+        <h3 style="font-size:.9rem;font-weight:800;margin-bottom:4px;text-align:center"><i class="fas fa-truck" style="color:var(--primary)"></i> Package Tracking</h3>
+        <p style="font-size:.75rem;color:var(--text-muted);text-align:center;margin-bottom:8px">Each vendor ships separately. Track each package below.</p>
+        ${pkgCards}
+      </div>` : ''}
+
+      <div style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin-top:16px;font-size:.78rem;text-align:left">
+        <i class="fas fa-check-circle"></i> You can track your order status anytime from your <strong>Orders</strong> page or the <strong>Cart</strong> page.
       </div>
 
-      <button class="btn btn-primary btn-block" onclick="showPage('home')" style="margin-top:24px">
-        Continue Shopping
-      </button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px">
+        <button class="btn btn-primary" onclick="showPage('buyer')">
+          <i class="fas fa-truck"></i> Track Orders
+        </button>
+        <button class="btn btn-outline" onclick="showPage('home')">
+          <i class="fas fa-shopping-bag"></i> Continue Shopping
+        </button>
+      </div>
     </div>
   `;
 }

@@ -730,6 +730,40 @@ try {
   webpush.setVapidDetails(VAPID_CLAIMS.subject, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 } catch(e) { console.warn('[Push] VAPID setup failed:', e.message); }
 
+// Auto-create push_subscriptions table if it doesn't exist
+(async () => {
+  try {
+    const supabase = getSupabase();
+    if (supabase) {
+      // Try a lightweight query — if the table doesn't exist, create it
+      const { error } = await supabase.from('push_subscriptions').select('endpoint').limit(1);
+      if (error && error.message && error.message.includes('does not exist')) {
+        console.log('[Push] Creating push_subscriptions table...');
+        const { error: createErr } = await supabase.rpc('exec_sql', {
+          query: `CREATE TABLE IF NOT EXISTS push_subscriptions (
+            endpoint TEXT PRIMARY KEY,
+            keys JSONB DEFAULT '{}',
+            user_id TEXT DEFAULT 'anonymous',
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
+          ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+          CREATE POLICY IF NOT EXISTS "Service role full access" ON push_subscriptions FOR ALL USING (true) WITH CHECK (true);`
+        }).catch(() => null);
+        if (createErr) {
+          console.warn('[Push] Auto-create table failed. Run migrations/001_push_subscriptions.sql in Supabase SQL Editor.');
+        } else {
+          console.log('[Push] push_subscriptions table created successfully.');
+        }
+      } else {
+        console.log('[Push] push_subscriptions table exists.');
+      }
+    }
+  } catch(e) {
+    console.warn('[Push] Table check skipped:', e.message);
+  }
+})();
+
 // GET /api/push/vapid-key — return public VAPID key for client subscription
 app.get('/api/push/vapid-key', (req, res) => {
   res.json({ publicKey: VAPID_PUBLIC_KEY });
