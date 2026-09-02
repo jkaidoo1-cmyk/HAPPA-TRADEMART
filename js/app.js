@@ -927,7 +927,7 @@ function showPage(pageId, entityId = null) {
 
   // Block any attempts to navigate away to main marketplace pages when viewing a standalone storefront
   if (document.body.classList.contains('is-storefront-view')) {
-    if (pageId !== 'storefront' && pageId !== 'store-admin' && pageId !== 'auth') {
+    if (pageId !== 'storefront' && pageId !== 'store-admin' && pageId !== 'auth' && pageId !== 'cart') {
       console.warn(`[Standalone Storefront] Blocked navigation to main site page "${pageId}".`);
       return;
     }

@@ -40,7 +40,7 @@ async function renderBuyerDashboard() {
   <div class="tab-btn" id="nav-buyer-settings" onclick="showPage('settings')">Settings</div>
   
   <!-- Hidden tabs for programmatic switching -->
-  <div class="tab-btn ${activeTabId === 'buyer-orders' ? 'active' : ''}" id="nav-buyer-orders" style="display:none" onclick="switchTab(this,'buyer-orders')">Orders</div>
+
   <div class="tab-btn ${activeTabId === 'buyer-referral' ? 'active' : ''}" id="nav-buyer-referral" style="display:none" onclick="switchTab(this,'buyer-referral')">Referrals</div>
   <div class="tab-btn ${activeTabId === 'buyer-saved' ? 'active' : ''}" id="nav-buyer-saved" style="display:none" onclick="switchTab(this,'buyer-saved')">Saved Stores</div>
 </div>
@@ -66,7 +66,7 @@ async function renderBuyerDashboard() {
     </div>
 
     <div class="stats-grid">
-      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('nav-buyer-orders').click()">
+      <div class="stat-card" style="cursor:pointer" onclick="showPage('cart')">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-shopping-bag" style="color:#1d4ed8"></i></div>
         <div class="stat-value">${totalOrderCount}</div>
         <div class="stat-label">Total Orders</div>
@@ -119,22 +119,7 @@ async function renderBuyerDashboard() {
   </div>
 </div>
 
-<!-- ── Orders Tab ── -->
-<div class="tab-content" id="buyer-orders">
-  <div class="dashboard-wrap">
-    <div class="tab-nav" id="order-filter-tabs" style="margin-bottom:14px">
-      <div class="tab-btn active" onclick="filterBuyerOrders('all',this)">All</div>
-      <div class="tab-btn" onclick="filterBuyerOrders('pending',this)">Processing</div>
-      <div class="tab-btn" onclick="filterBuyerOrders('on_delivery',this)">In Transit</div>
-      <div class="tab-btn" onclick="filterBuyerOrders('delivered',this)">Delivered</div>
-      <div class="tab-btn" onclick="filterBuyerOrders('rejected',this)">Rejected</div>
-    </div>
-    <div id="buyer-orders-list">
-      ${myPackages.length ? myPackages.map(pkg => buyerPackageCard(pkg)).join('') :
-        '<div class="empty-state" style="padding:30px"><i class="fas fa-inbox"></i><h3>No orders yet</h3><p>Your orders will appear here after checkout</p></div>'}
-    </div>
-  </div>
-</div>
+
 
 <!-- ── Referral Tab ── -->
 <div class="tab-content" id="buyer-referral">
