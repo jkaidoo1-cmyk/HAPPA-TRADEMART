@@ -166,7 +166,7 @@ async function renderCartOrders() {
     const myPkgs = allPkgs.filter(p => {
       if (typeof buyerOwnsPackage === 'function') return buyerOwnsPackage(p, App.currentUser);
       return String(p.buyer_id) === String(App.currentUser.id);
-    }).sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0)).slice(0, 5);
+    }).sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0)).slice(0, 10);
     if (!myPkgs.length) {
       container.innerHTML = '';
       return;

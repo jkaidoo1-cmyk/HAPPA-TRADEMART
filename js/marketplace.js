@@ -1574,9 +1574,6 @@ async function renderStorefront(id) {
           <i class="fas fa-shopping-cart"></i>
           <span id="store-cart-badge-${s.id}" style="position: absolute; top: -4px; right: -4px; background: #ef4444; color: #ffffff; border-radius: 10px; padding: 1px 5px; font-size: 0.6rem; font-weight: 900; display: none; min-width: 16px; text-align: center; border: 1.5px solid #ffffff;">0</span>
         </button>
-        <button class="btn store-cart-btn" onclick="switchStorefrontTab('orders','${s.id}')" style="width: 38px; height: 38px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; cursor: pointer; position: relative; flex-shrink: 0; border-radius: 50%; background: ${primaryColor}; color: #ffffff; border: none; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent);" title="My Orders">
-          <i class="fas fa-truck"></i>
-        </button>
       </div>
 
       <!-- Main Content Area -->
@@ -2809,9 +2806,6 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   } else if (tabName === 'checkout') {
     window.renderStorefrontCheckout(storeId);
 
-  } else if (tabName === 'orders') {
-    window.renderStorefrontOrders(storeId);
-
   } else if (tabName === 'admin') {
     window.renderStorefrontAdminPortal(storeId);
   }
@@ -3489,157 +3483,20 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
           <div style="font-weight:700;font-size:.82rem;flex-shrink:0">GHS ${((parseFloat(item.price)||0)*(parseInt(item.qty)||1)).toFixed(2)}</div>
         </div>`;
     }).join('');
+    // Show brief confirmation then redirect to cart page for order tracking
     contentEl.innerHTML = `
-      <div style="padding:24px 16px;max-width:440px;margin:0 auto;text-align:center">
+      <div style="padding:40px 16px;max-width:440px;margin:0 auto;text-align:center">
         <i class="fas fa-check-circle" style="font-size:3rem;color:var(--success)"></i>
         <h3 style="margin:10px 0 4px">Order Confirmed!</h3>
-        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:4px">Package Code: <strong>${pCode}</strong></p>
-
-        <!-- Tracking Bar -->
-        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0;text-align:left">
-          <div style="font-size:.78rem;font-weight:700;margin-bottom:8px;color:var(--text-light)"><i class="fas fa-truck" style="margin-right:4px"></i>Order Status</div>
-          <div class="order-tracking-bar">
-            <div class="tracking-step done">
-              <div class="tracking-dot"></div><div class="tracking-label">Confirmed</div>
-            </div>
-            <div class="tracking-line"></div>
-            <div class="tracking-step active">
-              <div class="tracking-dot"></div><div class="tracking-label">Processing</div>
-            </div>
-            <div class="tracking-line"></div>
-            <div class="tracking-step">
-              <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
-            </div>
-          </div>
-          <div style="font-size:.72rem;color:var(--text-muted);margin-top:8px">The vendor will process your order shortly.</div>
-        </div>
-
-        <!-- Items -->
-        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;text-align:left;margin-bottom:16px">${confItems}</div>
-
-        <!-- Buttons -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button class="btn store-theme-btn btn-sm" onclick="switchStorefrontTab('orders', '${storeId}')" style="display:flex;align-items:center;justify-content:center;gap:6px">
-            <i class="fas fa-truck"></i> Track Order
-          </button>
-          <button class="btn btn-ghost btn-sm" onclick="switchStorefrontTab('home', '${storeId}')" style="display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--border)">
-            <i class="fas fa-store"></i> Back to Store
-          </button>
-        </div>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:8px">Package Code: <strong>${pCode}</strong></p>
+        <p style="font-size:.78rem;color:var(--text-muted)">Taking you to your orders...</p>
+        <i class="fas fa-spinner fa-spin" style="font-size:1.5rem;color:var(--primary);margin-top:12px"></i>
       </div>
     `;
-  }
-};
-
-window.renderStorefrontOrders = async function(storeId) {
-  const contentEl = getStoreTabContentEl();
-  if (!contentEl) return;
-
-  contentEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading orders...</div>';
-
-  const user = App.currentUser;
-  if (!user || !user.id) {
-    contentEl.innerHTML = `
-      <div style="text-align:center;padding:40px 16px">
-        <i class="fas fa-sign-in-alt" style="font-size:2rem;color:var(--text-muted);margin-bottom:12px;display:block"></i>
-        <h3 style="font-size:.95rem;margin-bottom:8px">Sign in to view orders</h3>
-        <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:16px">You need an account to track your orders from this store.</p>
-        <button class="btn store-theme-btn btn-sm" onclick="showPage('auth')">Sign In</button>
-      </div>`;
-    return;
-  }
-
-  try {
-    const pkgsRes = await apiGet('packages', 'limit=50');
-    const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
-    // Filter to this store and this buyer
-    const myPkgs = allPkgs.filter(p => {
-      const isThisStore = String(p.store_id) === String(storeId);
-      const isMine = typeof buyerOwnsPackage === 'function'
-        ? buyerOwnsPackage(p, user)
-        : String(p.buyer_id) === String(user.id);
-      return isThisStore && isMine;
-    }).sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0));
-
-    if (!myPkgs.length) {
-      contentEl.innerHTML = `
-        <div style="text-align:center;padding:40px 16px">
-          <i class="fas fa-box-open" style="font-size:2rem;color:var(--text-muted);margin-bottom:12px;display:block"></i>
-          <h3 style="font-size:.95rem;margin-bottom:8px">No orders from this store</h3>
-          <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:16px">Orders you place from this store will appear here.</p>
-          <button class="btn store-theme-btn btn-sm" onclick="switchStorefrontTab('home', '${storeId}')">Start Shopping</button>
-        </div>`;
-      return;
-    }
-
-    const statusLabels = {
-      pending: { text: 'Processing', css: 'pending', icon: 'fa-clock' },
-      accepted: { text: 'Accepted', css: 'received', icon: 'fa-check' },
-      received: { text: 'Received', css: 'received', icon: 'fa-store' },
-      processed: { text: 'Ready', css: 'processed', icon: 'fa-box' },
-      on_delivery: { text: 'On Delivery', css: 'on_delivery', icon: 'fa-truck' },
-      delivered: { text: 'Delivered', css: 'delivered', icon: 'fa-check-double' },
-      rejected: { text: 'Rejected', css: 'rejected', icon: 'fa-times-circle' }
-    };
-
-    const pkgCards = myPkgs.map(pkg => {
-      const vs = pkg.vendor_status || 'pending';
-      const as = pkg.admin_status  || 'pending';
-      let st;
-      if (vs === 'rejected') st = statusLabels.rejected;
-      else if (as === 'delivered') st = statusLabels.delivered;
-      else if (as === 'on_delivery') st = statusLabels.on_delivery;
-      else if (vs === 'processed') st = statusLabels.processed;
-      else if (vs === 'received' || vs === 'accepted') st = statusLabels.received;
-      else st = statusLabels.pending;
-
-      const items = Array.isArray(pkg.items) ? pkg.items : [];
-      const itemNames = items.slice(0, 2).map(i => i.name || 'Item').join(', ');
-      const moreItems = items.length > 2 ? ` +${items.length - 2} more` : '';
-      const dateStr = pkg.created_at ? new Date(pkg.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '';
-      const total = parseFloat(pkg.total_amount || pkg.total || pkg.gross_amount) || 0;
-
-      return `
-      <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-size:.78rem;font-weight:700"><i class="fas fa-cube" style="margin-right:3px;color:var(--primary)"></i>${pkg.package_code || pkg.id || ''}</span>
-          <span class="status-badge status-${st.css}" style="font-size:.68rem;padding:2px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
-        </div>
-        <div class="order-tracking-bar" style="margin-bottom:8px">
-          <div class="tracking-step ${vs !== 'pending' && vs !== 'rejected' ? 'done' : 'active'}">
-            <div class="tracking-dot"></div><div class="tracking-label">Vendor</div>
-          </div>
-          <div class="tracking-line ${vs === 'processed' || as !== 'pending' ? 'done' : ''}"></div>
-          <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : vs === 'processed' ? 'active' : ''}">
-            <div class="tracking-dot"></div><div class="tracking-label">In Transit</div>
-          </div>
-          <div class="tracking-line ${as === 'delivered' ? 'done' : ''}"></div>
-          <div class="tracking-step ${as === 'delivered' ? 'done' : ''}">
-            <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
-          </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="font-size:.75rem;color:var(--text-muted)">${escHtml(itemNames)}${moreItems}</div>
-          <div style="font-size:.75rem;color:var(--text-muted)">${dateStr}</div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-          <div style="font-size:.82rem;font-weight:700;color:var(--primary)">GHS ${total.toFixed(2)}</div>
-          ${vs === 'rejected' ? '<div style="font-size:.7rem;color:var(--danger)">Refund issued to wallet</div>' : ''}
-        </div>
-      </div>`;
-    }).join('');
-
-    contentEl.innerHTML = `
-      <div style="padding:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <h3 style="font-size:.95rem;font-weight:800;margin:0"><i class="fas fa-truck" style="color:var(--primary);margin-right:6px"></i>My Orders</h3>
-          <button class="btn btn-ghost btn-sm" onclick="showPage('buyer')" style="font-size:.73rem;padding:4px 10px">View All Orders</button>
-        </div>
-        ${pkgCards}
-      </div>
-    `;
-  } catch(e) {
-    contentEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-exclamation-circle"></i> Failed to load orders</div>';
+    // Redirect to cart page where order tracking lives
+    setTimeout(() => {
+      showPage('cart');
+    }, 1500);
   }
 };
 

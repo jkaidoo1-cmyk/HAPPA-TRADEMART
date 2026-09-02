@@ -519,9 +519,8 @@ async function placeOrder() {
     }
   }
 
-  showPage('order-confirmed');
-  renderOrderConfirmation(order, packages);
-  showToast('Order placed successfully! 🎉', 'success', 2000);
+  showPage('cart');
+  showToast('Order placed successfully! 🎉 Tracking available below.', 'success', 3000);
   if (setBtn) setBtn('saved');
   _placingOrder = false;
 
