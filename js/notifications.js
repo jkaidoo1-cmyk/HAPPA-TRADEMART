@@ -55,6 +55,11 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
   } catch (err) {
     console.warn('Failed to upload notification to server:', err);
   }
+
+  // Trigger browser push notification (fire-and-forget, non-blocking)
+  if (typeof sendPushToUser === 'function' && targetId && String(targetId) !== 'all' && String(targetId) !== 'global') {
+    sendPushToUser(targetId, title, message, actionUrl || './');
+  }
 }
 window.addNotification = addNotification;
 
@@ -173,7 +178,34 @@ async function renderNotifications() {
     .filter(n => String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global')
     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
-  c.innerHTML = _buildNotifListHTML(userNotifs);
+  const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window;
+  let pushStatus = '';
+  if (pushSupported) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      const isSubscribed = !!sub;
+      pushStatus = `
+<div style="margin:0 0 12px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);display:flex;justify-content:space-between;align-items:center">
+  <div style="display:flex;align-items:center;gap:8px;font-size:.82rem">
+    <i class="fas fa-bell" style="color:${isSubscribed ? 'var(--success)' : 'var(--text-muted)'}"></i>
+    <span>${isSubscribed ? 'Push notifications are <strong>on</strong>' : 'Push notifications are <strong>off</strong>'}</span>
+  </div>
+  <button class="btn btn-sm ${isSubscribed ? 'btn-outline' : 'btn-primary'}" onclick="${isSubscribed ? 'unsubscribeFromPush()' : 'subscribeToPush()'}" style="font-size:.75rem;padding:4px 12px">
+    ${isSubscribed ? 'Disable' : 'Enable'}
+  </button>
+</div>`;
+    } catch(e) {}
+  }
+
+  const hasNotifs = userNotifs.length > 0;
+  const actionBar = hasNotifs ? `
+<div style="margin:0 0 8px;display:flex;gap:8px">
+  <button class="btn btn-ghost btn-sm" onclick="markAllRead()" style="font-size:.73rem;padding:4px 10px"><i class="fas fa-check-double"></i> Mark all read</button>
+  <button class="btn btn-ghost btn-sm" onclick="clearAllNotifications()" style="font-size:.73rem;padding:4px 10px;color:var(--danger)"><i class="fas fa-trash"></i> Clear all</button>
+</div>` : '';
+
+  c.innerHTML = pushStatus + actionBar + _buildNotifListHTML(userNotifs);
 }
 
 // ── Quick local-only render — used after mark-read / clear ───
@@ -416,3 +448,135 @@ const NotifTemplates = {
     addNotification(userId, 'system', '👋 Welcome back!',
       `Hello ${name}! Check out today's flash deals.`)
 };
+
+// ── Push Notifications (Browser Push API) ───────────────────
+// Stores subscription server-side; shows real browser notifications
+// even when the tab is in the background or the app is closed.
+
+async function initPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.log('[Push] Push API not supported in this browser');
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    // Check if already subscribed
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) {
+      // Re-sync with server in case it was lost
+      await _syncSubscription(existing);
+      return;
+    }
+    // Auto-request permission on user interaction (browser requires gesture)
+    // Don't auto-prompt — wait for user to click enable button
+  } catch(e) {
+    console.warn('[Push] init error:', e);
+  }
+}
+
+async function subscribeToPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    showToast('Push notifications are not supported in this browser', 'info');
+    return false;
+  }
+  try {
+    // Request permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      showToast('Notification permission denied', 'warning');
+      return false;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    // Get VAPID key from server
+    const res = await apiFetch('push/vapid-key');
+    const vapidKey = res?.publicKey;
+    if (!vapidKey) {
+      showToast('Push notifications not configured', 'error');
+      return false;
+    }
+    // Convert VAPID key to Uint8Array
+    const appServerKey = _urlBase64ToUint8Array(vapidKey);
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: appServerKey
+    });
+    // Store subscription on server
+    await apiPost('push/subscribe', {
+      subscription: {
+        endpoint: subscription.endpoint,
+        keys: subscription.toJSON().keys
+      },
+      user_id: App.currentUser?.id || 'anonymous'
+    });
+    showToast('Push notifications enabled 🔔', 'success');
+    return true;
+  } catch(e) {
+    console.error('[Push] Subscribe failed:', e);
+    showToast('Failed to enable push notifications', 'error');
+    return false;
+  }
+}
+
+async function unsubscribeFromPush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await apiPost('push/unsubscribe', { endpoint: sub.endpoint });
+      await sub.unsubscribe();
+    }
+    showToast('Push notifications disabled', 'info');
+  } catch(e) {
+    console.warn('[Push] Unsubscribe error:', e);
+  }
+}
+
+async function _syncSubscription(subscription) {
+  try {
+    await apiPost('push/subscribe', {
+      subscription: {
+        endpoint: subscription.endpoint,
+        keys: subscription.toJSON().keys
+      },
+      user_id: App.currentUser?.id || 'anonymous'
+    });
+  } catch(e) {
+    console.warn('[Push] Sync failed:', e);
+  }
+}
+
+// Helper: convert VAPID public key to Uint8Array
+function _urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+// ── Send push from client (calls server endpoint) ───────────
+async function sendPushToUser(userId, title, body, url) {
+  try {
+    await apiPost('push/send', { user_id: userId, title, body, url });
+  } catch(e) {
+    console.warn('[Push] sendPushToUser failed:', e);
+  }
+}
+
+// Auto-init push when user logs in
+function _hookPushInit() {
+  if (App.currentUser && App.currentUser.id) {
+    // Delay to avoid blocking page load
+    setTimeout(() => initPushNotifications(), 3000);
+  }
+}
+// Hook into existing auth flow
+if (typeof window !== 'undefined') {
+  window._hookPushInit = _hookPushInit;
+  window.subscribeToPush = subscribeToPush;
+  window.unsubscribeFromPush = unsubscribeFromPush;
+  window.sendPushToUser = sendPushToUser;
+}

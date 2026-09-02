@@ -5,7 +5,7 @@
  *            Offline fallback page for navigation requests.
  */
 
-const CACHE_NAME      = 'happa-v85';
+const CACHE_NAME      = 'happa-v87';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install
@@ -165,7 +165,7 @@ self.addEventListener('sync', event => {
   }
 });
 
-// ── Push notifications (future-ready) ────────────────────────
+// ── Push notifications ────────────────────────────────────
 self.addEventListener('push', event => {
   if (!event.data) return;
   let payload = { title: 'HAPPA TRADEMART', body: 'You have a new notification' };
@@ -174,19 +174,34 @@ self.addEventListener('push', event => {
   } catch (e) {
     try { payload.body = event.data.text() || payload.body; } catch(err) {}
   }
+  const options = {
+    body:  payload.body  || '',
+    icon:  './images/icon-192.png',
+    badge: './images/icon-192.png',
+    vibrate: [100, 50, 100],
+    data:  { url: payload.url || './' },
+    tag:   payload.tag || 'happa-notif',
+    renotify: true
+  };
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'HAPPA TRADEMART', {
-      body:  payload.body  || '',
-      icon:  './images/icon-192.png',
-      badge: './images/icon-192.png',
-      data:  { url: payload.url || './' }
-    })
+    self.registration.showNotification(payload.title || 'HAPPA TRADEMART', options)
   );
 });
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
+  const targetUrl = event.notification.data?.url || './';
   event.waitUntil(
-    clients.openWindow(event.notification.data?.url || '/')
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      // Focus existing window if open, otherwise open new one
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.focus();
+          if (targetUrl && targetUrl !== './') client.navigate(targetUrl);
+          return;
+        }
+      }
+      return clients.openWindow(targetUrl);
+    })
   );
 });

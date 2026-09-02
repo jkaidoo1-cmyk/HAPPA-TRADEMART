@@ -527,6 +527,7 @@ async function doLogin(e) {
   saveSessions();
   if (typeof startDashboardSyncPolling === 'function') startDashboardSyncPolling();
   if (typeof startNotifPolling === 'function') startNotifPolling();
+  if (typeof _hookPushInit === 'function') _hookPushInit();
   showToast(`Welcome back, ${user.name}! 🎉`, 'success');
   
   if (App.postLoginRedirect && App.postLoginRedirect.page) {
@@ -874,6 +875,7 @@ async function doRegister(e) {
   saveSessions();
   if (typeof startDashboardSyncPolling === 'function') startDashboardSyncPolling();
   if (typeof startNotifPolling === 'function') startNotifPolling();
+  if (typeof _hookPushInit === 'function') _hookPushInit();
 
   // Notify admin of new signup
   const roleLabel = authRole === 'vendor' ? 'Vendor' : authRole === 'rendor' ? 'Rendor' : 'Buyer';

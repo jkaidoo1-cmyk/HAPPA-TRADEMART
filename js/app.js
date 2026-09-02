@@ -267,6 +267,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // Start polling for notifications and dashboard sync
     setTimeout(() => startNotifPolling(), 3000);
     setTimeout(() => startDashboardSyncPolling(), 4000);
+    setTimeout(() => { if (typeof _hookPushInit === 'function') _hookPushInit(); }, 5000);
   }
   
   if (startupHash === '#register-vendor' || startupHash === '#auth-vendor') {

@@ -153,19 +153,99 @@ function getCartTotals(overrideDest) {
   return { subtotal, commissionTotal, platformFee, deliveryFee, discount, total };
 }
 
+async function renderCartOrders() {
+  const container = document.getElementById('cart-recent-orders');
+  if (!container) return;
+  if (!App.currentUser || !App.currentUser.id) {
+    container.innerHTML = '';
+    return;
+  }
+  try {
+    const pkgsRes = await apiGet('packages', 'limit=20');
+    const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
+    const myPkgs = allPkgs.filter(p => {
+      if (typeof buyerOwnsPackage === 'function') return buyerOwnsPackage(p, App.currentUser);
+      return String(p.buyer_id) === String(App.currentUser.id);
+    }).sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0)).slice(0, 5);
+    if (!myPkgs.length) {
+      container.innerHTML = '';
+      return;
+    }
+    const statusLabels = {
+      pending: { text: 'Processing', css: 'pending', icon: 'fa-clock' },
+      received: { text: 'Vendor Received', css: 'received', icon: 'fa-store' },
+      processed: { text: 'Ready', css: 'processed', icon: 'fa-box' },
+      on_delivery: { text: 'On Delivery', css: 'on_delivery', icon: 'fa-truck' },
+      delivered: { text: 'Delivered', css: 'delivered', icon: 'fa-check-double' },
+      rejected: { text: 'Rejected', css: 'rejected', icon: 'fa-times-circle' }
+    };
+    container.innerHTML = `
+<div style="margin:0 16px 12px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h3 style="font-size:.9rem;font-weight:800;margin:0"><i class="fas fa-truck" style="color:var(--primary);margin-right:6px"></i>Recent Orders</h3>
+    <button class="btn btn-ghost btn-sm" onclick="showPage('buyer')" style="font-size:.75rem;padding:4px 10px">View All</button>
+  </div>
+  ${myPkgs.map(pkg => {
+    const vs = pkg.vendor_status || 'pending';
+    const as = pkg.admin_status || 'pending';
+    let st;
+    if (vs === 'rejected') st = statusLabels.rejected;
+    else if (as === 'delivered') st = statusLabels.delivered;
+    else if (as === 'on_delivery') st = statusLabels.on_delivery;
+    else if (vs === 'processed') st = statusLabels.processed;
+    else if (vs === 'received') st = statusLabels.received;
+    else st = statusLabels.pending;
+    const items = (pkg.items || []).slice(0, 2);
+    const dateStr = pkg.created_at ? new Date(pkg.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '';
+    return `
+<div class="package-card" style="margin-bottom:8px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
+  <div class="package-header" style="padding:10px 12px">
+    <span class="package-code" style="font-size:.78rem"><i class="fas fa-cube" style="margin-right:3px"></i>${pkg.package_code || pkg.id || ''}</span>
+    <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
+  </div>
+  <div style="padding:8px 12px 10px">
+    <div class="order-tracking-bar" style="margin-bottom:6px">
+      <div class="tracking-step ${vs !== 'pending' && vs !== 'rejected' ? 'done' : vs === 'rejected' ? 'fail' : 'active'}">
+        <div class="tracking-dot"></div><div class="tracking-label">Vendor</div>
+      </div>
+      <div class="tracking-line ${vs === 'processed' || as !== 'pending' ? 'done' : ''}"></div>
+      <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : vs === 'processed' ? 'active' : ''}">
+        <div class="tracking-dot"></div><div class="tracking-label">In Transit</div>
+      </div>
+      <div class="tracking-line ${as === 'delivered' ? 'done' : ''}"></div>
+      <div class="tracking-step ${as === 'delivered' ? 'done' : ''}">
+        <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:.75rem;color:var(--text-muted)">${items.map(i => i.name || 'Item').join(', ')}${(pkg.items||[]).length > 2 ? ' +' + ((pkg.items||[]).length-2) : ''}</div>
+      <div style="font-size:.75rem;color:var(--text-muted)">${dateStr}</div>
+    </div>
+    <div style="font-size:.82rem;font-weight:700;color:var(--primary);margin-top:4px">GHS ${(parseFloat(pkg.total || pkg.gross_amount) || 0).toFixed(2)}</div>
+  </div>
+</div>`; }).join('')}
+</div>`;
+  } catch(e) {
+    container.innerHTML = '';
+  }
+}
+window.renderCartOrders = renderCartOrders;
+
 function renderCart() {
   const c = document.getElementById('cart-content');
   if (!c) return;
   if (!App.cart.length) {
     c.innerHTML = `
-<div class="empty-state" style="padding:60px 20px">
+<div class="empty-state" style="padding:40px 20px 16px">
   <i class="fas fa-shopping-bag"></i>
   <h3>Your cart is empty</h3>
   <p>Add items from our marketplace</p>
   <button class="btn btn-primary" style="margin-top:16px" onclick="showPage('marketplace')">
     <i class="fas fa-store"></i> Start Shopping
   </button>
-</div>`;
+</div>
+<div id="cart-recent-orders"></div>`;
+    if (App.currentUser) renderCartOrders();
     return;
   }
 
@@ -240,7 +320,11 @@ ${Object.values(storeGroups).map(sg => `
   </div>
 </div>
 
-<!-- Shipping Notice removed — banner now lives statically above #cart-content in index.html -->`;
+<!-- Shipping Notice removed — banner now lives statically above #cart-content in index.html -->
+
+<!-- Recent Orders -->
+<div id="cart-recent-orders"></div>`;
+  if (App.currentUser) renderCartOrders();
 }
 
 function proceedToCheckout() {

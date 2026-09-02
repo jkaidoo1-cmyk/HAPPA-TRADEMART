@@ -38,7 +38,8 @@ function loadMemoryStore() {
       delivery_rates: [],
       reviews: [],
       service_orders: [],
-      audit_logs: []
+      audit_logs: [],
+      push_subscriptions: []
     };
     console.log('[DataStore] Initialized empty store (db.json not found or invalid)');
   }

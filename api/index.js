@@ -720,6 +720,126 @@ app.post('/api/clean-temp-database-records', requireAdmin, async (req, res) => {
   }
 });
 
+// ── Push Notification Endpoints ────────────────────────────
+const webpush = require('web-push');
+const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || 'BCLetiiU33SFCYX5amNxlNS02FVIL8CUiydQuMyaJRe1-QbklQj-PC0snLIAw7Yf719pdIPMZB3zWUrQvlK4eGw';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'd2MrJaDxfw8f7iyqx4gWsMYP8Lnh_dm7iMV6po049S8';
+const VAPID_CLAIMS = { subject: 'mailto:support@happamart.com' };
+
+try {
+  webpush.setVapidDetails(VAPID_CLAIMS.subject, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} catch(e) { console.warn('[Push] VAPID setup failed:', e.message); }
+
+// GET /api/push/vapid-key — return public VAPID key for client subscription
+app.get('/api/push/vapid-key', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+// POST /api/push/subscribe — store a push subscription
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const { subscription, user_id } = req.body || {};
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ error: 'Invalid subscription' });
+    }
+    const supabase = getSupabase();
+    const subRecord = {
+      endpoint: subscription.endpoint,
+      keys: subscription.keys || {},
+      user_id: user_id || 'anonymous',
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      // Upsert: delete existing for this endpoint, then insert
+      await supabase.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+      const { error } = await supabase.from('push_subscriptions').insert(subRecord);
+      if (error) console.warn('[Push] Supabase insert failed:', error.message);
+    } else {
+      const ds = require('./data-store');
+      const subs = ds.get('push_subscriptions') || [];
+      const filtered = subs.filter(s => s.endpoint !== subscription.endpoint);
+      filtered.push(subRecord);
+      ds.set('push_subscriptions', filtered);
+    }
+    res.json({ success: true });
+  } catch(err) {
+    console.error('[Push] Subscribe error:', err.message);
+    res.status(500).json({ error: 'Failed to store subscription' });
+  }
+});
+
+// POST /api/push/unsubscribe — remove a push subscription
+app.post('/api/push/unsubscribe', async (req, res) => {
+  try {
+    const { endpoint } = req.body || {};
+    if (!endpoint) return res.status(400).json({ error: 'Missing endpoint' });
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    } else {
+      const ds = require('./data-store');
+      const subs = ds.get('push_subscriptions') || [];
+      ds.set('push_subscriptions', subs.filter(s => s.endpoint !== endpoint));
+    }
+    res.json({ success: true });
+  } catch(err) {
+    res.status(500).json({ error: 'Failed to remove subscription' });
+  }
+});
+
+// POST /api/push/send — send push notification to a user (internal use)
+app.post('/api/push/send', async (req, res) => {
+  try {
+    const { user_id, title, body, url } = req.body || {};
+    if (!user_id || !title) return res.status(400).json({ error: 'Missing user_id or title' });
+    const supabase = getSupabase();
+    let subs = [];
+    if (supabase) {
+      const { data } = await supabase.from('push_subscriptions').select('*').eq('user_id', String(user_id));
+      subs = data || [];
+    } else {
+      const ds = require('./data-store');
+      subs = (ds.get('push_subscriptions') || []).filter(s => String(s.user_id) === String(user_id));
+    }
+    if (!subs.length) return res.json({ sent: 0, message: 'No subscriptions for this user' });
+    const payload = JSON.stringify({ title, body: body || '', url: url || './' });
+    let sent = 0, failed = 0;
+    const failedEndpoints = [];
+    for (const sub of subs) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: sub.keys },
+          payload
+        );
+        sent++;
+      } catch(err) {
+        failed++;
+        // 404 or 410 = subscription expired — remove it
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          failedEndpoints.push(sub.endpoint);
+        }
+        console.warn(`[Push] Send failed for ${sub.endpoint?.substring(0,50)}...: ${err.statusCode || err.message}`);
+      }
+    }
+    // Clean up expired subscriptions
+    if (failedEndpoints.length) {
+      if (supabase) {
+        for (const ep of failedEndpoints) {
+          await supabase.from('push_subscriptions').delete().eq('endpoint', ep);
+        }
+      } else {
+        const ds = require('./data-store');
+        const all = ds.get('push_subscriptions') || [];
+        ds.set('push_subscriptions', all.filter(s => !failedEndpoints.includes(s.endpoint)));
+      }
+    }
+    res.json({ sent, failed, total: subs.length });
+  } catch(err) {
+    console.error('[Push] Send error:', err.message);
+    res.status(500).json({ error: 'Failed to send push notification' });
+  }
+});
+
 // GET /api/:table  — list with optional filters
 app.get('/api/:table', async (req, res) => {
   try {
