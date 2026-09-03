@@ -3295,6 +3295,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   const vendorShare = Number(grossAmt.toFixed(2));
   const adminShare = Number(platformFee.toFixed(2));
   const storeName = storeObj.name || 'Vendor Storefront';
+  const primaryColor = storeObj.primary_color || '#e85d04';
   const storefrontSource = `Storefront order from ${storeName}`;
 
   // Mark the submission as pending ONLY after payment succeeded — a cancelled MoMo
@@ -3470,6 +3471,9 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   window.updateStorefrontCartBadge(storeId, 0);
 
   // Show confirmation tab content — with the purchased items (and their images)
+  // Wrapped in try/catch: a render error must never freeze the page on a
+  // disabled "Place Order" button after the order was already saved.
+  try {
   const contentEl = getStoreTabContentEl();
   if (contentEl) {
     const confItems = (storeCart || []).map(item => {
@@ -3502,6 +3506,13 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     // Store goToCart function globally so the onclick can call it
     window._sfGoToCart = function() { showPage('cart'); };
   }
+  } catch (err) {
+    console.error('[Storefront] Confirmation render failed:', err && err.message || err);
+    // Fallback so the user can still reach order tracking even if the
+    // confirmation view broke for any reason.
+    window._sfGoToCart = function() { showPage('cart'); };
+  }
+  _placingStorefrontOrder = false;
 };
 
 window.renderStorefrontAdminPortal = function(storeId) {
