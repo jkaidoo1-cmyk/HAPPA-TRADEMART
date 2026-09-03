@@ -2603,7 +2603,7 @@ function productCardHTML(p) {
   ${soldOut}
   ${imageBlock}
   <div class="product-body">
-    <div class="product-name">${escHtml(p.name)}</div>
+    <div class="product-name">${escHtml(itemDisplayName(p.name))}</div>
     <div style="display:flex;align-items:center;flex-wrap:wrap">
       <span class="product-price">GHS ${p.price}</span>${discount}
     </div>
@@ -2640,7 +2640,7 @@ function vendorProductCardHTML(p) {
   ${soldOut}
   ${imageBlock}
   <div class="product-body">
-    <div class="product-name">${escHtml(p.name)}</div>
+    <div class="product-name">${escHtml(itemDisplayName(p.name))}</div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
       <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="product-price">GHS ${p.price}</span>${discount}</span>
       ${stockBadge}
@@ -2669,7 +2669,7 @@ function productCardSmall(p) {
   ${flash}${soldOut}
   ${imageBlock}
   <div class="product-body">
-    <div class="product-name">${escHtml(p.name)}</div>
+    <div class="product-name">${escHtml(itemDisplayName(p.name))}</div>
     <span class="product-price">GHS ${p.price}</span>
   </div>
 </div>`;
@@ -2770,6 +2770,28 @@ function setLocationFilter(loc) {
 // ── Escape HTML ───────────────────────────────────────────
 function escHtml(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Item names that were never entered fall back to the category "Other" in old
+// records — always display them as blank instead (matches the share caption fix).
+function itemDisplayName(name) {
+  const n = String(name || '').trim();
+  return (n === 'Other') ? '' : n;
+}
+
+// Build a row of small item thumbnails for order cards. Items without an image
+// are skipped; a "+N" chip shows how many more items the order contains.
+function buildItemThumbsHTML(items, max = 3) {
+  const all = items || [];
+  if (!all.length) return '';
+  const thumbs = all.slice(0, max).map(i => {
+    const img = String(i.image || (i.images && i.images[0]) || '').trim();
+    if (!img) return '';
+    return `<img src="${escHtml(img)}" alt="" loading="lazy" style="width:30px;height:30px;border-radius:6px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;background:var(--bg)" onerror="this.onerror=null;this.style.display='none'">`;
+  }).filter(Boolean);
+  if (!thumbs.length) return '';
+  const extra = all.length > max ? `<span style="font-size:.68rem;font-weight:700;color:var(--text-muted);flex-shrink:0">+${all.length - max}</span>` : '';
+  return `<span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0">${thumbs.join('')}${extra}</span>`;
 }
 
 // ── Format Date ───────────────────────────────────────────

@@ -551,7 +551,7 @@ function renderOrderConfirmation(order, packages) {
     const as = pkg.admin_status  || 'pending';
     const items = Array.isArray(pkg.items) ? pkg.items : [];
     const storeName = pkg.store_name || pkg.store_id || 'Store';
-    const itemNames = items.slice(0, 3).map(i => i.name || 'Item').join(', ');
+    const itemNames = items.slice(0, 3).map(i => itemDisplayName(i.name)).filter(Boolean).join(', ');
     const moreItems = items.length > 3 ? ` +${items.length - 3} more` : '';
     return `
     <div class="card" style="margin-top:12px;text-align:left">

@@ -249,8 +249,11 @@ async function renderCartOrders() {
         <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
       </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div style="font-size:.75rem;color:var(--text-muted)">${items.map(i => i.name || 'Item').join(', ')}${(pkg.items||[]).length > 2 ? ' +' + ((pkg.items||[]).length-2) : ''}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+        ${buildItemThumbsHTML(pkg.items, 2)}
+        <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => itemDisplayName(i.name)).filter(Boolean).join(', ')}</div>
+      </div>
       <div style="font-size:.75rem;color:var(--text-muted)">${dateStr}</div>
     </div>
     <div style="font-size:.82rem;font-weight:700;color:var(--primary);margin-top:4px">GHS ${(parseFloat(pkg.total || pkg.gross_amount) || 0).toFixed(2)}</div>
@@ -323,7 +326,10 @@ async function trackPackageByCode() {
       <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
     </div>
   </div>
-  <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">${items.map(i => i.name || 'Item').join(', ')}${(pkg.items||[]).length > 3 ? ' +' + ((pkg.items||[]).length-3) : ''}</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    ${buildItemThumbsHTML(pkg.items, 3)}
+    <div style="font-size:.75rem;color:var(--text-muted);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => itemDisplayName(i.name)).filter(Boolean).join(', ')}</div>
+  </div>
   <div style="display:flex;justify-content:space-between;align-items:center">
     <div style="font-size:.82rem;font-weight:700;color:var(--primary)">GHS ${total.toFixed(2)}</div>
     <div style="font-size:.72rem;color:var(--text-muted)">${dateStr}</div>
@@ -376,7 +382,7 @@ ${Object.values(storeGroups).map(sg => `
     <img class="cart-item-img" src="${item.image||'https://via.placeholder.com/80x80?text=P'}"
          alt="${escHtml(item.name)}" onerror="this.src='https://via.placeholder.com/80x80?text=P'">
     <div class="cart-item-info">
-      <div class="cart-item-name">${escHtml(item.name)}</div>
+      <div class="cart-item-name">${escHtml(itemDisplayName(item.name))}</div>
       <div class="cart-item-store"><i class="fas fa-store"></i> ${escHtml(item.store_name)}</div>
       ${item.buyer_note ? `<div style="font-size:.72rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:3px 7px;margin:3px 0;display:flex;align-items:flex-start;gap:4px"><i class="fas fa-comment-dots" style="margin-top:1px;flex-shrink:0"></i><span>${escHtml(item.buyer_note)}</span></div>` : ''}
       <div class="cart-item-price">GHS ${item.price}</div>

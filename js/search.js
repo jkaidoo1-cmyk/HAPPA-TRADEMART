@@ -337,7 +337,10 @@ function buildPackageTrackCard(pkg) {
           <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
         </div>
       </div>
-      <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">${items.map(i => escHtml(i.name || 'Item')).join(', ')}${(pkg.items||[]).length > 3 ? ' +' + ((pkg.items||[]).length - 3) : ''}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        ${buildItemThumbsHTML(pkg.items, 3)}
+        <div style="font-size:.75rem;color:var(--text-muted);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => escHtml(itemDisplayName(i.name))).filter(Boolean).join(', ')}</div>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:.82rem;font-weight:700;color:var(--primary)">GHS ${total.toFixed(2)}</div>
         <div style="font-size:.72rem;color:var(--text-muted)">${dateStr}</div>

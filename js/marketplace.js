@@ -519,7 +519,7 @@ async function renderProductDetail(id) {
 
   <button class="back-btn" onclick="goBack()"><i class="fas fa-arrow-left"></i></button>
 
-  <h2 class="truncate">${escHtml(p.name)}</h2>
+  <h2 class="truncate">${escHtml(itemDisplayName(p.name))}</h2>
 
   <button class="nav-icon-btn" onclick="shareProduct('${p.id}')" style="margin-left:auto">
 
@@ -561,7 +561,7 @@ async function renderProductDetail(id) {
 
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
 
-    <h1 style="font-size:1.1rem;font-weight:700;line-height:1.3">${escHtml(p.name)}</h1>
+    <h1 style="font-size:1.1rem;font-weight:700;line-height:1.3">${escHtml(itemDisplayName(p.name))}</h1>
 
     <button onclick="toggleWishlist('${p.id}')" id="wish-btn-${p.id}"
 
@@ -1761,7 +1761,7 @@ function adminProductCardHTML(p) {
 
   <div style="padding:8px 8px 4px">
 
-    <div style="font-weight:700;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.name)}</div>
+    <div style="font-weight:700;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
 
     <div style="font-size:.75rem;color:var(--text-muted)">${p.category||'—'} · Stock: <strong>${p.stock_qty??0}</strong>${isSoldOut?' ⚠️':''}</div>
 
@@ -2931,7 +2931,7 @@ window.openStorefrontProductModal = async function(productId) {
         <img src="${img}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://via.placeholder.com/400x300?text=Product'">
       </div>
       <div style="padding:20px; display:grid; gap:12px">
-        <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(p.name)}</h3>
+        <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name))}</h3>
         <div style="display:flex; justify-content:space-between; align-items:center">
           <span style="font-size:1.25rem; font-weight:900; color:${primaryColor}">GHS ${p.price}</span>
           <span style="font-size:0.75rem; background:#f3f4f6; padding:3px 8px; border-radius:12px; color:var(--text-muted)">In Stock: ${p.stock_qty || 0}</span>
@@ -3037,7 +3037,7 @@ window.renderStorefrontCart = async function(storeId) {
         <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border)">
           <img src="${img}" style="width:50px; height:50px; border-radius:8px; object-fit:cover; background:#f8f9fa">
           <div style="flex:1">
-            <div style="font-weight:800; font-size:0.85rem">${escHtml(item.name)}</div>
+            <div style="font-weight:800; font-size:0.85rem">${escHtml(itemDisplayName(item.name))}</div>
             <div style="font-size:0.8rem; color:var(--text-muted)">GHS ${item.price}</div>
           </div>
           <div style="display:flex; align-items:center; border:1px solid var(--border); border-radius:6px; overflow:hidden">
@@ -3179,8 +3179,11 @@ async function renderStorefrontOrders(storeId, container, primaryColor) {
                 <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
               </div>
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div style="font-size:.75rem;color:var(--text-muted)">${items.map(i => i.name || 'Item').join(', ')}${(pkg.items||[]).length > 2 ? ' +' + ((pkg.items||[]).length-2) : ''}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                ${buildItemThumbsHTML(pkg.items, 2)}
+                <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => itemDisplayName(i.name)).filter(Boolean).join(', ')}</div>
+              </div>
               <div style="font-size:.75rem;color:var(--text-muted)">${dateStr}</div>
             </div>
             <div style="font-size:.82rem;font-weight:700;color:${primaryColor};margin-top:4px">GHS ${total.toFixed(2)}</div>
@@ -3593,7 +3596,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   if (contentEl) {
     const confItems = (storeCart || []).map(item => {
       const confImg = item.image || (item.images && item.images[0]) || '';
-      const confTitle = item.name && item.name.trim() ? escHtml(item.name) : 'Item';
+      const confTitle = itemDisplayName(item.name) ? escHtml(itemDisplayName(item.name)) : '';
       return `
         <div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
           ${confImg ? `<img src="${confImg}" alt="${confTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">` : `<div style="width:42px;height:42px;border-radius:6px;background:var(--bg);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:.7rem"><i class="fas fa-box"></i></div>`}

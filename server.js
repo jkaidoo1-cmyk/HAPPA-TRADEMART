@@ -272,10 +272,17 @@ function generateId(table) {
 }
 
 function normalizeRecord(table, record) {
-  return {
+  const normalized = {
     ...record,
     id: record.id != null ? String(record.id) : generateId(table)
   };
+  // A product name is never the literal "Other" — old upload flows (removed
+  // image AI-autofill / category fallback) could store the category as the
+  // name. Blank it out server-side so no client can ever persist it again.
+  if (table === 'products' && String(normalized.name || '').trim() === 'Other') {
+    normalized.name = '';
+  }
+  return normalized;
 }
 
 const JSONB_COLS = new Set([
@@ -1547,6 +1554,8 @@ app.patch('/api/:table/:id', async (req, res) => {
 
   const db = loadDb();
   const rows = getTable(db, table);
+  // Same product-name guard as POST/PATCH: never store the category as a name.
+  if (table === 'products' && String(body.name || '').trim() === 'Other') body.name = '';
   const idx = rows.findIndex(record => String(record.id) === String(id));
   if (idx !== -1) {
     const record = serializeRecord({ ...rows[idx], ...body, id: String(id) });
