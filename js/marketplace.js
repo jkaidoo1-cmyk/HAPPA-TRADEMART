@@ -3007,7 +3007,7 @@ window.addStorefrontCartItem = async function(storeId, productId) {
   if (modal) modal.remove();
 };
 
-window.renderStorefrontCart = function(storeId) {
+window.renderStorefrontCart = async function(storeId) {
   const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
@@ -3015,71 +3015,183 @@ window.renderStorefrontCart = function(storeId) {
   const primaryColor = s.primary_color || '#e85d04';
   const key = 'happa_store_cart_' + storeId;
   const storeCart = JSON.parse(localStorage.getItem(key) || '[]');
+  const ordersBoxId = 'sf-recent-orders-box';
 
+  let cartHTML = '';
   if (!storeCart.length) {
-    contentEl.innerHTML = `
-      <div class="empty-state" style="padding:60px 20px">
+    cartHTML = `
+      <div class="empty-state" style="padding:40px 20px 12px">
         <i class="fas fa-shopping-basket" style="font-size:2.5rem;color:var(--text-muted)"></i>
         <h3>Your shopping cart is empty</h3>
         <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Browse products and add them to your cart to check out.</p>
         <button class="btn store-theme-btn btn-sm" onclick="switchStorefrontTab('products', '${storeId}')">Shop Products</button>
       </div>
     `;
-    return;
-  }
+  } else {
+    let subtotal = 0;
+    const listHTML = storeCart.map(item => {
+      const total = item.price * item.qty;
+      subtotal += total;
+      const img = item.images && item.images[0] ? item.images[0] : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+      return `
+        <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border)">
+          <img src="${img}" style="width:50px; height:50px; border-radius:8px; object-fit:cover; background:#f8f9fa">
+          <div style="flex:1">
+            <div style="font-weight:800; font-size:0.85rem">${escHtml(item.name)}</div>
+            <div style="font-size:0.8rem; color:var(--text-muted)">GHS ${item.price}</div>
+          </div>
+          <div style="display:flex; align-items:center; border:1px solid var(--border); border-radius:6px; overflow:hidden">
+            <button onclick="window.updateStorefrontCartItemQty('${storeId}', '${item.id}', -1)" style="padding:2px 8px; border:none; background:#fff; cursor:pointer">-</button>
+            <span style="padding:0 8px; font-size:0.8rem; font-weight:700">${item.qty}</span>
+            <button onclick="window.updateStorefrontCartItemQty('${storeId}', '${item.id}', 1)" style="padding:2px 8px; border:none; background:#fff; cursor:pointer">+</button>
+          </div>
+          <div style="font-weight:800; font-size:0.85rem; width:70px; text-align:right">GHS ${total}</div>
+          <button onclick="window.removeStorefrontCartItem('${storeId}', '${item.id}')" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:0.9rem; padding:6px">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      `;
+    }).join('');
 
-  let subtotal = 0;
-  const listHTML = storeCart.map(item => {
-    const total = item.price * item.qty;
-    subtotal += total;
-    const img = item.images && item.images[0] ? item.images[0] : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
-    return `
-      <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border)">
-        <img src="${img}" style="width:50px; height:50px; border-radius:8px; object-fit:cover; background:#f8f9fa">
-        <div style="flex:1">
-          <div style="font-weight:800; font-size:0.85rem">${escHtml(item.name)}</div>
-          <div style="font-size:0.8rem; color:var(--text-muted)">GHS ${item.price}</div>
+    cartHTML = `
+      <div style="padding:16px; display:grid; gap:16px">
+        <div style="display:flex; align-items:center; justify-content:space-between">
+          <button class="btn btn-ghost btn-sm" onclick="switchStorefrontTab('home', '${storeId}')" style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.85rem">
+            <i class="fas fa-arrow-left"></i> Back to Store
+          </button>
+          <div style="font-weight:800; font-size:0.9rem">Cart (${storeCart.length} items)</div>
         </div>
-        <div style="display:flex; align-items:center; border:1px solid var(--border); border-radius:6px; overflow:hidden">
-          <button onclick="window.updateStorefrontCartItemQty('${storeId}', '${item.id}', -1)" style="padding:2px 8px; border:none; background:#fff; cursor:pointer">-</button>
-          <span style="padding:0 8px; font-size:0.8rem; font-weight:700">${item.qty}</span>
-          <button onclick="window.updateStorefrontCartItemQty('${storeId}', '${item.id}', 1)" style="padding:2px 8px; border:none; background:#fff; cursor:pointer">+</button>
+        <div class="card">
+          <div class="card-header"><h3>🛍️ Shopping Cart</h3></div>
+          <div class="card-body" style="padding:12px 16px">
+            ${listHTML}
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-top:16px; font-weight:800; font-size:1rem">
+              <span>Subtotal:</span>
+              <span style="color:${primaryColor}">GHS ${subtotal}</span>
+            </div>
+          </div>
         </div>
-        <div style="font-weight:800; font-size:0.85rem; width:70px; text-align:right">GHS ${total}</div>
-        <button onclick="window.removeStorefrontCartItem('${storeId}', '${item.id}')" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:0.9rem; padding:6px">
-          <i class="fas fa-trash"></i>
+        <button onclick="switchStorefrontTab('checkout', '${storeId}')" style="background:${primaryColor}; color:#fff; border:none; padding:12px; border-radius:10px; font-weight:800; font-size:0.9rem; width:100%; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px">
+          Proceed to Checkout <i class="fas fa-arrow-right"></i>
+        </button>
+        <button onclick="switchStorefrontTab('home', '${storeId}')" style="background:transparent; color:var(--text); border:1px solid var(--border); padding:10px; border-radius:10px; font-weight:700; font-size:0.85rem; width:100%; cursor:pointer">
+          Continue Shopping
         </button>
       </div>
     `;
-  }).join('');
+  }
 
   contentEl.innerHTML = `
-    <div style="padding:16px; display:grid; gap:16px">
-      <div style="display:flex; align-items:center; justify-content:space-between">
-        <button class="btn btn-ghost btn-sm" onclick="switchStorefrontTab('home', '${storeId}')" style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.85rem">
-          <i class="fas fa-arrow-left"></i> Back to Store
-        </button>
-        <div style="font-weight:800; font-size:0.9rem">Cart (${storeCart.length} items)</div>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>🛍️ Shopping Cart</h3></div>
-        <div class="card-body" style="padding:12px 16px">
-          ${listHTML}
-          <div style="display:flex; justify-content:space-between; align-items:center; padding-top:16px; font-weight:800; font-size:1rem">
-            <span>Subtotal:</span>
-            <span style="color:${primaryColor}">GHS ${subtotal}</span>
-          </div>
-        </div>
-      </div>
-      <button onclick="switchStorefrontTab('checkout', '${storeId}')" style="background:${primaryColor}; color:#fff; border:none; padding:12px; border-radius:10px; font-weight:800; font-size:0.9rem; width:100%; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px">
-        Proceed to Checkout <i class="fas fa-arrow-right"></i>
-      </button>
-      <button onclick="switchStorefrontTab('home', '${storeId}')" style="background:transparent; color:var(--text); border:1px solid var(--border); padding:10px; border-radius:10px; font-weight:700; font-size:0.85rem; width:100%; cursor:pointer">
-        Continue Shopping
-      </button>
+    ${cartHTML}
+    <div id="${ordersBoxId}">
+      <div style="padding:20px 16px;text-align:center;font-size:.82rem;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading your orders...</div>
     </div>
   `;
+
+  await renderStorefrontOrders(storeId, document.getElementById(ordersBoxId), primaryColor);
 };
+
+// Show the visitor's orders from THIS store inside the storefront's own cart
+// page, so buyers can track their order without leaving the store. Orders are
+// matched by: the package code just placed, the logged-in user, or the phone
+// number used at checkout (guests).
+async function renderStorefrontOrders(storeId, container, primaryColor) {
+  if (!container) return;
+  const lastCode = localStorage.getItem('happa_last_package_code') || '';
+  const lastPhone = localStorage.getItem('happa_last_package_phone') || '';
+  try {
+    const pkgsRes = await apiGet('packages', 'limit=200');
+    const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
+    const norm = v => String(v || '').replace(/\D/g, '');
+    const u = App.currentUser;
+    const userId = u ? String(u.id) : '';
+
+    const myPkgs = allPkgs
+      .filter(p => String(p.store_id) === String(storeId) || String(p.storefront_id) === String(storeId))
+      .filter(p => {
+        if (lastCode && String(p.package_code || p.code || '') === lastCode) return true;
+        if (userId && String(p.buyer_id) === userId) return true;
+        const pkgPhone = norm(p.buyer_phone || p.delivery_phone);
+        if (lastPhone && pkgPhone && pkgPhone === norm(lastPhone)) return true;
+        if (u) {
+          if (norm(u.phone) && pkgPhone === norm(u.phone)) return true;
+          if (String(p.buyer_email || '').toLowerCase().trim() === String(u.email || '').toLowerCase().trim()) return true;
+        }
+        return false;
+      })
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 10);
+
+    if (!myPkgs.length) {
+      container.innerHTML = `
+        <div style="padding:4px 16px 18px;text-align:center;font-size:.8rem;color:var(--text-muted)">
+          <i class="fas fa-truck" style="margin-right:4px;opacity:.6"></i>No orders yet — your order tracking will appear here.
+        </div>`;
+      return;
+    }
+
+    const statusLabels = {
+      pending: { text: 'Processing', css: 'pending', icon: 'fa-clock' },
+      accepted: { text: 'Accepted', css: 'received', icon: 'fa-check' },
+      received: { text: 'Vendor Received', css: 'received', icon: 'fa-store' },
+      processed: { text: 'Ready', css: 'processed', icon: 'fa-box' },
+      on_delivery: { text: 'On Delivery', css: 'on_delivery', icon: 'fa-truck' },
+      delivered: { text: 'Delivered', css: 'delivered', icon: 'fa-check-double' },
+      rejected: { text: 'Rejected', css: 'rejected', icon: 'fa-times-circle' }
+    };
+
+    container.innerHTML = `
+      <div style="padding:0 16px 20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="font-size:.9rem;font-weight:800;margin:0"><i class="fas fa-truck" style="color:${primaryColor};margin-right:6px"></i>Your Recent Orders</h3>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('cart')" style="font-size:.72rem;padding:4px 10px">View All</button>
+        </div>
+        ${myPkgs.map(pkg => {
+          const vs = pkg.vendor_status || 'pending';
+          const as = pkg.admin_status || 'pending';
+          let st;
+          if (vs === 'rejected') st = statusLabels.rejected;
+          else if (as === 'delivered') st = statusLabels.delivered;
+          else if (as === 'on_delivery') st = statusLabels.on_delivery;
+          else if (vs === 'processed') st = statusLabels.processed;
+          else if (vs === 'received' || vs === 'accepted') st = statusLabels.received;
+          else st = statusLabels.pending;
+          const items = (pkg.items || []).slice(0, 2);
+          const dateStr = pkg.created_at ? new Date(pkg.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '';
+          const total = parseFloat(pkg.total_amount || pkg.total || pkg.gross_amount) || 0;
+          return `
+        <div class="package-card" style="margin-bottom:8px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
+          <div class="package-header" style="padding:10px 12px">
+            <span class="package-code" style="font-size:.78rem"><i class="fas fa-cube" style="margin-right:3px"></i>${pkg.package_code || pkg.id || ''}</span>
+            <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
+          </div>
+          <div style="padding:8px 12px 10px">
+            <div class="order-tracking-bar" style="margin-bottom:6px">
+              <div class="tracking-step ${vs !== 'pending' && vs !== 'rejected' ? 'done' : vs === 'rejected' ? 'fail' : 'active'} ">
+                <div class="tracking-dot"></div><div class="tracking-label">Vendor</div>
+              </div>
+              <div class="tracking-line ${vs === 'processed' || as !== 'pending' ? 'done' : ''}"></div>
+              <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : vs === 'processed' ? 'active' : ''} ">
+                <div class="tracking-dot"></div><div class="tracking-label">In Transit</div>
+              </div>
+              <div class="tracking-line ${as === 'delivered' ? 'done' : ''}"></div>
+              <div class="tracking-step ${as === 'delivered' ? 'done' : ''}">
+                <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-size:.75rem;color:var(--text-muted)">${items.map(i => i.name || 'Item').join(', ')}${(pkg.items||[]).length > 2 ? ' +' + ((pkg.items||[]).length-2) : ''}</div>
+              <div style="font-size:.75rem;color:var(--text-muted)">${dateStr}</div>
+            </div>
+            <div style="font-size:.82rem;font-weight:700;color:${primaryColor};margin-top:4px">GHS ${total.toFixed(2)}</div>
+          </div>
+        </div>`;
+        }).join('')}
+      </div>`;
+  } catch (e) {
+    container.innerHTML = '';
+  }
+}
 
 window.updateStorefrontCartItemQty = function(storeId, productId, delta) {
   const key = 'happa_store_cart_' + storeId;
@@ -3464,8 +3576,9 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   showToast('Order placed successfully! 🎉', 'success');
   localStorage.removeItem(key);
   try { localStorage.removeItem(pendKey); } catch (e) {}
-  // Store package code so cart page can auto-track it
+  // Store package code + buyer phone so the storefront cart page can auto-track it
   try { localStorage.setItem('happa_last_package_code', pCode); } catch (e) {}
+  try { localStorage.setItem('happa_last_package_phone', phone); } catch (e) {}
 
   // Reset badge
   window.updateStorefrontCartBadge(storeId, 0);
@@ -3503,14 +3616,15 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
         </button>
       </div>
     `;
-    // Store goToCart function globally so the onclick can call it
-    window._sfGoToCart = function() { showPage('cart'); };
+    // Store goToCart function globally so the onclick can call it — stays inside
+    // the storefront: switches to the cart tab, which now shows order tracking.
+    window._sfGoToCart = function() { switchStorefrontTab('cart', `${storeId}`); };
   }
   } catch (err) {
     console.error('[Storefront] Confirmation render failed:', err && err.message || err);
     // Fallback so the user can still reach order tracking even if the
-    // confirmation view broke for any reason.
-    window._sfGoToCart = function() { showPage('cart'); };
+    // confirmation view broke for any reason (stays inside the storefront).
+    window._sfGoToCart = function() { switchStorefrontTab('cart', `${storeId}`); };
   }
   _placingStorefrontOrder = false;
 };
