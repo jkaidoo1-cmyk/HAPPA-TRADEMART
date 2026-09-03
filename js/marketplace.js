@@ -3463,6 +3463,8 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   showToast('Order placed successfully! 🎉', 'success');
   localStorage.removeItem(key);
   try { localStorage.removeItem(pendKey); } catch (e) {}
+  // Store package code so cart page can auto-track it
+  try { localStorage.setItem('happa_last_package_code', pCode); } catch (e) {}
 
   // Reset badge
   window.updateStorefrontCartBadge(storeId, 0);
@@ -3483,20 +3485,22 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
           <div style="font-weight:700;font-size:.82rem;flex-shrink:0">GHS ${((parseFloat(item.price)||0)*(parseInt(item.qty)||1)).toFixed(2)}</div>
         </div>`;
     }).join('');
-    // Show brief confirmation then redirect to cart page for order tracking
+    // Show confirmation with button to go to cart page for order tracking
     contentEl.innerHTML = `
       <div style="padding:40px 16px;max-width:440px;margin:0 auto;text-align:center">
         <i class="fas fa-check-circle" style="font-size:3rem;color:var(--success)"></i>
         <h3 style="margin:10px 0 4px">Order Confirmed!</h3>
-        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:8px">Package Code: <strong>${pCode}</strong></p>
-        <p style="font-size:.78rem;color:var(--text-muted)">Taking you to your orders...</p>
-        <i class="fas fa-spinner fa-spin" style="font-size:1.5rem;color:var(--primary);margin-top:12px"></i>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:16px">Package Code: <strong>${pCode}</strong></p>
+        <button onclick="window._sfGoToCart()" style="background:${primaryColor};color:#fff;border:none;padding:12px 24px;border-radius:10px;font-weight:800;font-size:.9rem;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+          <i class="fas fa-truck"></i> View My Orders
+        </button>
+        <button onclick="switchStorefrontTab('home','${storeId}')" style="background:transparent;color:var(--text);border:1px solid var(--border);padding:10px;border-radius:10px;font-weight:700;font-size:.85rem;width:100%;cursor:pointer;margin-top:8px">
+          Back to Store
+        </button>
       </div>
     `;
-    // Redirect to cart page where order tracking lives
-    setTimeout(() => {
-      showPage('cart');
-    }, 1500);
+    // Store goToCart function globally so the onclick can call it
+    window._sfGoToCart = function() { showPage('cart'); };
   }
 };
 

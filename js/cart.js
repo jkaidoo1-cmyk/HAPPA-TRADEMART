@@ -156,19 +156,51 @@ function getCartTotals(overrideDest) {
 async function renderCartOrders() {
   const container = document.getElementById('cart-recent-orders');
   if (!container) return;
-  if (!App.currentUser || !App.currentUser.id) {
-    container.innerHTML = '';
-    return;
-  }
+
+  // Gather orders: logged-in user orders + any recently placed via localStorage code
+  const lastCode = localStorage.getItem('happa_last_package_code') || '';
   try {
-    const pkgsRes = await apiGet('packages', 'limit=20');
+    const pkgsRes = await apiGet('packages', 'limit=50');
     const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
+
+    // Match orders for this user (by id, phone, email) OR by last placed package code
+    const norm = v => String(v || '').replace(/\D/g, '');
+    const u = App.currentUser;
+    const userPhone = u ? norm(u.phone) : '';
+    const userEmail = u ? String(u.email || '').toLowerCase().trim() : '';
+    const userId = u ? String(u.id) : '';
+
     const myPkgs = allPkgs.filter(p => {
-      if (typeof buyerOwnsPackage === 'function') return buyerOwnsPackage(p, App.currentUser);
-      return String(p.buyer_id) === String(App.currentUser.id);
+      // Match by last placed package code
+      if (lastCode && String(p.package_code || p.code || '') === lastCode) return true;
+      if (!u) return false;
+      // Match by buyer id
+      if (String(p.buyer_id) === userId) return true;
+      // Match by phone
+      if (userPhone && norm(p.buyer_phone || p.delivery_phone) === userPhone) return true;
+      // Match by email
+      if (userEmail && String(p.buyer_email || '').toLowerCase().trim() === userEmail) return true;
+      return false;
     }).sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0)).slice(0, 10);
     if (!myPkgs.length) {
-      container.innerHTML = '';
+      // Show package code tracker for guests or when no orders found
+      container.innerHTML = `
+<div style="margin:0 16px 12px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md)">
+  <div style="font-size:.85rem;font-weight:700;margin-bottom:8px"><i class="fas fa-search" style="color:var(--primary);margin-right:6px"></i>Track an Order</div>
+  <div style="display:flex;gap:8px">
+    <input type="text" id="track-pkg-input" class="form-control" placeholder="Enter package code (e.g. PK-12345)" style="font-size:.82rem;flex:1">
+    <button class="btn btn-primary btn-sm" onclick="trackPackageByCode()" style="white-space:nowrap">Track</button>
+  </div>
+  <div id="track-pkg-result" style="margin-top:8px"></div>
+</div>`;
+      // Pre-fill if we have a last code
+      if (lastCode) {
+        setTimeout(() => {
+          const inp = document.getElementById('track-pkg-input');
+          if (inp) inp.value = lastCode;
+          trackPackageByCode();
+        }, 100);
+      }
       return;
     }
     const statusLabels = {
@@ -231,6 +263,78 @@ async function renderCartOrders() {
 }
 window.renderCartOrders = renderCartOrders;
 
+// Track a single package by code (for guests or manual lookup)
+async function trackPackageByCode() {
+  const input = document.getElementById('track-pkg-input');
+  const result = document.getElementById('track-pkg-result');
+  if (!input || !result) return;
+  const code = input.value.trim();
+  if (!code) { result.innerHTML = '<div style="font-size:.8rem;color:var(--danger)">Enter a package code</div>'; return; }
+
+  result.innerHTML = '<div style="font-size:.8rem;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Looking up...</div>';
+  try {
+    const pkgsRes = await apiGet('packages', 'limit=200');
+    const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
+    const pkg = allPkgs.find(p => String(p.package_code || p.code || '').toUpperCase() === code.toUpperCase());
+    if (!pkg) {
+      result.innerHTML = '<div style="font-size:.8rem;color:var(--danger)">Package not found. Check the code and try again.</div>';
+      return;
+    }
+    // Render the single package with tracking
+    const vs = pkg.vendor_status || 'pending';
+    const as = pkg.admin_status || 'pending';
+    const stMap = {
+      pending: { text: 'Processing', css: 'pending', icon: 'fa-clock' },
+      accepted: { text: 'Accepted', css: 'received', icon: 'fa-check' },
+      received: { text: 'Received', css: 'received', icon: 'fa-store' },
+      processed: { text: 'Ready', css: 'processed', icon: 'fa-box' },
+      on_delivery: { text: 'On Delivery', css: 'on_delivery', icon: 'fa-truck' },
+      delivered: { text: 'Delivered', css: 'delivered', icon: 'fa-check-double' },
+      rejected: { text: 'Rejected', css: 'rejected', icon: 'fa-times-circle' }
+    };
+    let st;
+    if (vs === 'rejected') st = stMap.rejected;
+    else if (as === 'delivered') st = stMap.delivered;
+    else if (as === 'on_delivery') st = stMap.on_delivery;
+    else if (vs === 'processed') st = stMap.processed;
+    else if (vs === 'received' || vs === 'accepted') st = stMap.received;
+    else st = stMap.pending;
+
+    const items = (pkg.items || []).slice(0, 3);
+    const dateStr = pkg.created_at ? new Date(pkg.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '';
+    const total = parseFloat(pkg.total_amount || pkg.total || pkg.gross_amount) || 0;
+
+    result.innerHTML = `
+<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-size:.78rem;font-weight:700"><i class="fas fa-cube" style="margin-right:3px;color:var(--primary)"></i>${pkg.package_code || pkg.id || ''}</span>
+    <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
+  </div>
+  <div class="order-tracking-bar" style="margin-bottom:6px">
+    <div class="tracking-step ${vs !== 'pending' && vs !== 'rejected' ? 'done' : vs === 'rejected' ? 'fail' : 'active'}">
+      <div class="tracking-dot"></div><div class="tracking-label">Vendor</div>
+    </div>
+    <div class="tracking-line ${vs === 'processed' || as !== 'pending' ? 'done' : ''}"></div>
+    <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : vs === 'processed' ? 'active' : ''}">
+      <div class="tracking-dot"></div><div class="tracking-label">In Transit</div>
+    </div>
+    <div class="tracking-line ${as === 'delivered' ? 'done' : ''}"></div>
+    <div class="tracking-step ${as === 'delivered' ? 'done' : ''}">
+      <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
+    </div>
+  </div>
+  <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">${items.map(i => i.name || 'Item').join(', ')}${(pkg.items||[]).length > 3 ? ' +' + ((pkg.items||[]).length-3) : ''}</div>
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:.82rem;font-weight:700;color:var(--primary)">GHS ${total.toFixed(2)}</div>
+    <div style="font-size:.72rem;color:var(--text-muted)">${dateStr}</div>
+  </div>
+</div>`;
+  } catch(e) {
+    result.innerHTML = '<div style="font-size:.8rem;color:var(--danger)">Failed to look up package. Try again.</div>';
+  }
+}
+window.trackPackageByCode = trackPackageByCode;
+
 function renderCart() {
   const c = document.getElementById('cart-content');
   if (!c) return;
@@ -245,7 +349,7 @@ function renderCart() {
   </button>
 </div>
 <div id="cart-recent-orders"></div>`;
-    if (App.currentUser) renderCartOrders();
+    renderCartOrders();
     return;
   }
 
@@ -324,7 +428,7 @@ ${Object.values(storeGroups).map(sg => `
 
 <!-- Recent Orders -->
 <div id="cart-recent-orders"></div>`;
-  if (App.currentUser) renderCartOrders();
+  renderCartOrders();
 }
 
 function proceedToCheckout() {

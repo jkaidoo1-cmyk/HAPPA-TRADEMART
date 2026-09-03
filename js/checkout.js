@@ -519,6 +519,10 @@ async function placeOrder() {
     }
   }
 
+  // Store first package code so cart page can auto-track it
+  if (packages.length) {
+    try { localStorage.setItem('happa_last_package_code', packages[0].package_code || packages[0].id || ''); } catch (e) {}
+  }
   showPage('cart');
   showToast('Order placed successfully! 🎉 Tracking available below.', 'success', 3000);
   if (setBtn) setBtn('saved');
