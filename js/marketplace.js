@@ -3579,6 +3579,8 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   // Store package code + buyer phone so the storefront cart page can auto-track it
   try { localStorage.setItem('happa_last_package_code', pCode); } catch (e) {}
   try { localStorage.setItem('happa_last_package_phone', phone); } catch (e) {}
+  // Make the new order instantly searchable in the header search-bar tracker.
+  try { if (window.invalidatePackageSearchCache) window.invalidatePackageSearchCache(); } catch (e) {}
 
   // Reset badge
   window.updateStorefrontCartBadge(storeId, 0);

@@ -246,6 +246,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   initSearch();
+  if (window.updateHeaderSearchForPage) window.updateHeaderSearchForPage();
   renderNotifBadge();
   // Cross-Tab Session & Wallet Balance Synchronization
   window.addEventListener('storage', (e) => {
@@ -977,6 +978,9 @@ function showPage(pageId, entityId = null) {
 
   App.prevPage = App.currentPage;
   App.currentPage = pageId;
+
+  // The header search bar doubles as an order tracker on the cart page.
+  if (window.updateHeaderSearchForPage) window.updateHeaderSearchForPage();
 
   // Push a browser-history entry so the mobile back button works.
   // Skip when we're already handling a popstate (browser-back) event.

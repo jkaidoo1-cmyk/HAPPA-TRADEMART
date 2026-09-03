@@ -13,8 +13,11 @@ function initSearch() {
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => {
       const q = input.value.trim();
-      if (q.length >= 2) showSearchSuggestions(q);
-      else hideSearchDropdown();
+      if (q.length >= 2) {
+        // On the cart page the search bar is repurposed for order tracking.
+        if (App.currentPage === 'cart') showPackageTrackSuggestions(q);
+        else showSearchSuggestions(q);
+      } else hideSearchDropdown();
     }, 280);
   });
 
@@ -22,7 +25,10 @@ function initSearch() {
     if (e.key === 'Enter') {
       e.preventDefault();
       const q = input.value.trim();
-      if (q) {
+      if (!q) return;
+      if (App.currentPage === 'cart') {
+        trackFromSearchBar(q);
+      } else {
         performSearch(q);
         window.hideHeaderSearchBar();
       }
@@ -228,3 +234,166 @@ function highlight(text, query) {
   return escHtml(text).replace(new RegExp(`(${escaped})`, 'gi'),
     '<mark style="background:var(--accent);padding:0 2px;border-radius:2px">$1</mark>');
 }
+
+// ── Order tracking via the header search bar (used on the cart page) ─────
+// On the cart page the global search bar does product/store search, which is
+// useless there. It becomes an order tracker: type a package code (PK-…)
+// and get the live tracking card right in the dropdown.
+let pkgSearchCache = null;
+let pkgSearchCacheAt = 0;
+
+async function fetchPkgSearchCache() {
+  const now = Date.now();
+  if (!pkgSearchCache || now - pkgSearchCacheAt > 30000) {
+    const res = await apiGet('packages', 'limit=200');
+    pkgSearchCache = res?.data || (Array.isArray(res) ? res : []);
+    pkgSearchCacheAt = now;
+  }
+  return pkgSearchCache;
+}
+
+// Invalidate the cached package list right after a new order is placed, so a
+// just-created package is findable immediately.
+window.invalidatePackageSearchCache = function() {
+  pkgSearchCache = null;
+  pkgSearchCacheAt = 0;
+};
+
+function pkgStatusInfo(pkg) {
+  const vs = pkg.vendor_status || 'pending';
+  const as = pkg.admin_status || 'pending';
+  const map = {
+    pending: { text: 'Processing', css: 'pending', icon: 'fa-clock' },
+    accepted: { text: 'Accepted', css: 'received', icon: 'fa-check' },
+    received: { text: 'Received', css: 'received', icon: 'fa-store' },
+    processed: { text: 'Ready', css: 'processed', icon: 'fa-box' },
+    on_delivery: { text: 'On Delivery', css: 'on_delivery', icon: 'fa-truck' },
+    delivered: { text: 'Delivered', css: 'delivered', icon: 'fa-check-double' },
+    rejected: { text: 'Rejected', css: 'rejected', icon: 'fa-times-circle' }
+  };
+  if (vs === 'rejected') return map.rejected;
+  if (as === 'delivered') return map.delivered;
+  if (as === 'on_delivery') return map.on_delivery;
+  if (vs === 'processed') return map.processed;
+  if (vs === 'received' || vs === 'accepted') return map.received;
+  return map.pending;
+}
+
+async function showPackageTrackSuggestions(q) {
+  const dd = document.getElementById('search-dropdown');
+  if (!dd) return;
+  let pkgs = [];
+  try { pkgs = await fetchPkgSearchCache(); } catch (e) {}
+  const ql = q.toLowerCase();
+  const matches = pkgs.filter(p => String(p.package_code || p.code || '').toLowerCase().includes(ql)).slice(0, 5);
+
+  dd.classList.remove('hidden');
+  if (!matches.length) {
+    dd.innerHTML = `<div style="padding:12px 14px;font-size:.82rem;color:var(--text-muted)"><i class="fas fa-search" style="margin-right:6px"></i>No package matches "${escHtml(q)}". Enter the full code, e.g. <strong>PK-12345</strong>.</div>`;
+    return;
+  }
+  dd.innerHTML = `
+    <div style="padding:8px 14px;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Track Your Orders</div>
+    ${matches.map(p => {
+      const st = pkgStatusInfo(p);
+      const dateStr = p.created_at ? new Date(p.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+      const code = String(p.package_code || p.id || '').replace(/'/g, "\\'");
+      return `
+      <div class="search-suggestion" onclick="trackPackageFromSearch('${code}')">
+        <div style="font-size:1rem;color:var(--primary);width:30px;text-align:center"><i class="fas fa-cube"></i></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:.85rem">${p.package_code || p.id}</div>
+          <div style="font-size:.72rem;color:var(--text-muted)"><span class="status-badge status-${st.css}" style="font-size:.62rem;padding:2px 6px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span> · ${dateStr}</div>
+        </div>
+      </div>`;
+    }).join('')}
+    <div style="padding:8px 14px;font-size:.72rem;color:var(--text-muted);border-top:1px solid var(--border)">Press Enter or click a code to see the full tracking.</div>`;
+}
+
+function buildPackageTrackCard(pkg) {
+  const st = pkgStatusInfo(pkg);
+  const vs = pkg.vendor_status || 'pending';
+  const as = pkg.admin_status || 'pending';
+  const items = (pkg.items || []).slice(0, 3);
+  const dateStr = pkg.created_at ? new Date(pkg.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const total = parseFloat(pkg.total_amount || pkg.total || pkg.gross_amount) || 0;
+  return `
+  <div style="padding:12px 14px">
+    <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:.78rem;font-weight:700"><i class="fas fa-cube" style="margin-right:3px;color:var(--primary)"></i>${pkg.package_code || pkg.id || ''}</span>
+        <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
+      </div>
+      <div class="order-tracking-bar" style="margin-bottom:6px">
+        <div class="tracking-step ${vs !== 'pending' && vs !== 'rejected' ? 'done' : vs === 'rejected' ? 'fail' : 'active'}">
+          <div class="tracking-dot"></div><div class="tracking-label">Vendor</div>
+        </div>
+        <div class="tracking-line ${vs === 'processed' || as !== 'pending' ? 'done' : ''}"></div>
+        <div class="tracking-step ${as === 'on_delivery' || as === 'delivered' ? 'done' : vs === 'processed' ? 'active' : ''}">
+          <div class="tracking-dot"></div><div class="tracking-label">In Transit</div>
+        </div>
+        <div class="tracking-line ${as === 'delivered' ? 'done' : ''}"></div>
+        <div class="tracking-step ${as === 'delivered' ? 'done' : ''}">
+          <div class="tracking-dot"></div><div class="tracking-label">Delivered</div>
+        </div>
+      </div>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">${items.map(i => escHtml(i.name || 'Item')).join(', ')}${(pkg.items||[]).length > 3 ? ' +' + ((pkg.items||[]).length - 3) : ''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:.82rem;font-weight:700;color:var(--primary)">GHS ${total.toFixed(2)}</div>
+        <div style="font-size:.72rem;color:var(--text-muted)">${dateStr}</div>
+      </div>
+      <div style="font-size:.68rem;color:var(--text-muted);margin-top:6px"><i class="fas fa-hand-pointer"></i> Tap for full details</div>
+    </div>
+  </div>`;
+}
+
+async function trackPackageFromSearch(code) {
+  const dd = document.getElementById('search-dropdown');
+  if (!dd) return;
+  dd.classList.remove('hidden');
+  dd.innerHTML = '<div style="padding:14px;font-size:.82rem;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Looking up package...</div>';
+  try {
+    const pkgs = await fetchPkgSearchCache();
+    const pkg = pkgs.find(p => String(p.package_code || p.code || '').toUpperCase() === String(code).toUpperCase());
+    if (!pkg) {
+      dd.innerHTML = `<div style="padding:12px 14px;font-size:.82rem;color:var(--danger)">Package "${escHtml(code)}" not found.</div>`;
+      return;
+    }
+    dd.innerHTML = buildPackageTrackCard(pkg);
+  } catch (e) {
+    dd.innerHTML = '<div style="padding:12px 14px;font-size:.82rem;color:var(--danger)">Failed to look up package. Try again.</div>';
+  }
+}
+window.trackPackageFromSearch = trackPackageFromSearch;
+
+async function trackFromSearchBar(q) {
+  const dd = document.getElementById('search-dropdown');
+  if (!dd) return;
+  dd.classList.remove('hidden');
+  dd.innerHTML = '<div style="padding:14px;font-size:.82rem;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Looking up package...</div>';
+  try {
+    const pkgs = await fetchPkgSearchCache();
+    const ql = q.toLowerCase();
+    const pkg = pkgs.find(p => String(p.package_code || p.code || '').toLowerCase() === ql)
+             || pkgs.find(p => String(p.package_code || p.code || '').toLowerCase().includes(ql));
+    if (!pkg) {
+      dd.innerHTML = `<div style="padding:12px 14px;font-size:.82rem;color:var(--danger)"><i class="fas fa-search" style="margin-right:6px"></i>No package found for "${escHtml(q)}". Try the full code, e.g. <strong>PK-12345</strong>.</div>`;
+      return;
+    }
+    dd.innerHTML = buildPackageTrackCard(pkg);
+  } catch (e) {
+    dd.innerHTML = '<div style="padding:12px 14px;font-size:.82rem;color:var(--danger)">Failed to look up package. Try again.</div>';
+  }
+}
+
+// Swap the header search bar between product/store search and order tracking
+// depending on the current page. Also hides any open dropdown on page change.
+window.updateHeaderSearchForPage = function() {
+  const input = document.getElementById('nav-search-input');
+  if (input) {
+    input.placeholder = App.currentPage === 'cart'
+      ? 'Track order — enter package code (PK-…)'
+      : 'Search stores, products…';
+  }
+  hideSearchDropdown();
+};
