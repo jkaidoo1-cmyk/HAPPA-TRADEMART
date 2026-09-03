@@ -21,9 +21,19 @@ window.toStorefrontProduct = toStorefrontProduct;
 
 // Helper: check if a rendor's subscription is still active
 function isRendorSubActive(r) {
+  if (!r) return false;
+  if (r.rendor_sub_active !== undefined) return r.rendor_sub_active === true;
   if (r.rendor_sub_status !== 'active') return false;
   if (!r.rendor_sub_expiry) return false;
   return new Date(Number(r.rendor_sub_expiry)) > new Date();
+}
+
+// A rendor is publicly listed only while they have an active subscription.
+// New/unpaid rendors stay hidden until admin activates a paid plan — use the
+// server-derived rendor_sub_active flag when present (it survives PII scrub).
+function isRendorPubliclyVisible(r) {
+  if (!r || r.status !== 'active') return false;
+  return isRendorSubActive(r);
 }
 
 let currentMarketFilter = 'all';
@@ -193,7 +203,7 @@ async function renderRendorServices(grid, empty, counter) {
 
   const allPosts   = (postsRes?.data || []).filter(s => s.status === 'active' && !s.deleted);
 
-  const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && u.status === 'active' && (!u.rendor_sub_expiry || isRendorSubActive(u)));
+  const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && isRendorPubliclyVisible(u));
 
 
 
@@ -1070,7 +1080,9 @@ async function renderStoreDetail(id) {
         <div style="position: relative; display: flex; align-items: center;">
           <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; font-size: .85rem; z-index: 2; line-height: 1;"></i>
           <input type="text" placeholder="Search products in this store..." id="store-search-input" 
-                 oninput="handleStoreProductSearch('${s.id}', this.value)"
+                 oninput="handleStoreSearchInput('${s.id}', this.value)"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();handleStoreSearchInput('${s.id}', this.value, true)}"
+                 autocomplete="off"
                  style="width: 100%; padding: 9px 14px 9px 38px; border: 1px solid var(--border); border-radius: 25px; font-size: .82rem; outline: none; background: var(--bg);">
         </div>
       </div>
@@ -1567,7 +1579,9 @@ async function renderStorefront(id) {
         <div style="position: relative; flex: 1; display: flex; align-items: center;">
           <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: ${searchIconColor}; pointer-events: none; font-size: .85rem; z-index: 2; line-height: 1;"></i>
           <input type="text" placeholder="Search products in this store..." id="store-search-input" 
-                 oninput="handleStoreProductSearch('${s.id}', this.value)"
+                 oninput="handleStoreSearchInput('${s.id}', this.value)"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();handleStoreSearchInput('${s.id}', this.value, true)}"
+                 autocomplete="off"
                  style="${searchInputStyle}">
         </div>
         <button class="btn store-cart-btn" onclick="switchStorefrontTab('cart','${s.id}')" style="width: 38px; height: 38px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; cursor: pointer; position: relative; flex-shrink: 0; border-radius: 50%; background: ${primaryColor}; color: #ffffff; border: none; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent);" title="View Store Cart">
@@ -1665,10 +1679,10 @@ window.toggleStorefrontSearch = function(storeId) {
       if (inp) inp.focus();
     } else {
       el.style.display = 'none';
-      const inp = document.getElementById('store-search-input');
+      const inp = getActiveStoreSearchInput();
       if (inp) {
         inp.value = '';
-        handleStoreProductSearch(storeId, '');
+        handleStoreSearchInput(storeId, '');
       }
     }
   }
@@ -2308,19 +2322,26 @@ async function renderRendorProfilePublic() {
 
     apiGet('services', 'limit=100')
 
-  ]);
-
-
-
-  const rendor = rendorData;
-
+  ]);  const rendor = rendorData;
   if (!rendor || rendor.role !== 'rendor' || rendor.status !== 'active') {
-
     c.innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><h3>Profile not available</h3><p>This rendor profile is no longer active.</p></div>';
-
     return;
-
   }
+
+  // An active-subscription rendor is public. The owner or an admin may still
+  // preview an expired profile (with a notice); everyone else gets the same
+  // "not available" screen the listings imply.
+  const viewer = App.currentUser;
+  const viewerMayPreview = viewer && (String(viewer.id) === String(rendor.id) || viewer.role === 'admin');
+  const subHidden = !isRendorPubliclyVisible(rendor) && !viewerMayPreview;
+  if (subHidden) {
+    c.innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><h3>Profile not available</h3><p>This rendor\'s profile is currently unavailable. They may have an inactive subscription.</p></div>';
+    return;
+  }
+  const subPreviewNote = !isRendorPubliclyVisible(rendor) && viewerMayPreview
+    ? `<div style="background:#fef3c7;border:1.5px solid #fbbf24;color:#92400e;font-size:.78rem;padding:8px 12px;margin:0 14px 10px;border-radius:8px"><i class="fas fa-exclamation-triangle" style="margin-right:6px"></i>Subscription inactive — this profile is hidden from clients until the rendor renews.</div>`
+    : '';
+
 
 
 
@@ -2383,6 +2404,8 @@ async function renderRendorProfilePublic() {
 
 
   c.innerHTML = `
+
+  ${subPreviewNote}
 
 <!-- ── Profile Header ── -->
 
@@ -2616,7 +2639,7 @@ async function renderHomeServices() {
 
   const allPosts   = (postsRes?.data || []).filter(s => s.status === 'active' && !s.deleted);
 
-  const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && u.status === 'active' && (!u.rendor_sub_expiry || isRendorSubActive(u)));
+  const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && isRendorPubliclyVisible(u));
 
 
 
@@ -2679,6 +2702,30 @@ function getStoreTabContentEl() {
   return activePage ? activePage.querySelector('.store-tab-content') : document.getElementById('store-tab-content');
 }
 
+// Tracks which storefront tab is currently open so the store's own search bar
+// can switch between product search and order tracking. Used by
+// handleStoreSearchInput → handleStorefrontOrderSearch below.
+let _sfActiveTabName = 'home';
+let _sfActiveStoreId = null;
+let _sfOrderSearchTimer = null;
+
+function getActiveStoreSearchInput() {
+  const activePageId = App.currentPage === 'storefront' ? 'page-storefront' : 'page-store-detail';
+  const activePage = document.getElementById(activePageId);
+  return activePage ? activePage.querySelector('#store-search-input') : document.getElementById('store-search-input');
+}
+
+// The store search bar filters products on the shop tabs, but is repurposed
+// as an order tracker while the store's cart page is open (matching the main
+// website's cart page behaviour).
+function updateStoreSearchPlaceholder() {
+  const input = getActiveStoreSearchInput();
+  if (!input) return;
+  input.placeholder = _sfActiveTabName === 'cart'
+    ? 'Track order — enter package code (PK-…)'
+    : 'Search products in this store...';
+}
+
 // ── Storefront Helper Functions ──────────────────────────────────────────
 window.switchStorefrontTab = async function(tabName, storeId) {
   const targetId = String(storeId || '').trim();
@@ -2722,6 +2769,9 @@ window.switchStorefrontTab = async function(tabName, storeId) {
 
   if (!s) return;
   const realStoreId = s.id;
+  _sfActiveTabName = tabName;
+  _sfActiveStoreId = String(realStoreId);
+  updateStoreSearchPlaceholder();
 
   const activePageId = App.currentPage === 'storefront' ? 'page-storefront' : 'page-store-detail';
   const activePage = document.getElementById(activePageId);
@@ -2864,6 +2914,109 @@ window.handleStoreProductSearch = function(storeId, query) {
       ${filtered.map(p => productCardHTML(p)).join('')}
     </div>
   `;
+};
+
+// Dispatcher for the store's own search bar. While the store's cart page is
+// open the bar tracks orders by package code (like the main website's cart
+// page); on every other tab it filters products exactly as before.
+window.handleStoreSearchInput = async function(storeId, query, isEnter) {
+  const inCart = _sfActiveTabName === 'cart' && String(_sfActiveStoreId || '') === String(storeId);
+  if (inCart) return handleStorefrontOrderSearch(storeId, query, isEnter);
+  clearTimeout(_sfOrderSearchTimer);
+  return handleStoreProductSearch(storeId, query);
+};
+
+// Order tracking powered by the storefront search bar (used while the cart
+// tab is open). Typing a package code (e.g. PK-12345) lists matching orders;
+// Enter opens the exact match's full tracking modal.
+async function handleStorefrontOrderSearch(storeId, query, isEnter) {
+  const contentEl = getStoreTabContentEl();
+  if (!contentEl) return;
+  const q = (query || '').trim();
+  if (!q) { window.renderStorefrontCart(storeId); return; }
+  if (q.length < 2) return;
+
+  let pkgs = [];
+  try {
+    if (typeof fetchPkgSearchCache === 'function') pkgs = await fetchPkgSearchCache();
+    else {
+      const res = await apiGet('packages', 'limit=200');
+      pkgs = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+    }
+  } catch (e) {}
+
+  const ql = q.toLowerCase();
+  const matches = pkgs
+    .filter(p => String(p.store_id) === String(storeId) || String(p.storefront_id) === String(storeId))
+    .filter(p => String(p.package_code || p.code || '').toLowerCase().includes(ql))
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+    .slice(0, 6);
+
+  const exact = matches.find(p => String(p.package_code || p.code || '').toLowerCase() === ql);
+  if (isEnter && exact) { showPackageDetailModal(exact.id); return; }
+  if (isEnter && matches.length === 1) { showPackageDetailModal(matches[0].id); return; }
+
+  const s = (App.allStores || []).find(st => String(st.id) === String(storeId)) || {};
+  const primaryColor = s.primary_color || '#e85d04';
+
+  const statusOf = pkg => {
+    const vs = pkg.vendor_status || 'pending';
+    const as = pkg.admin_status || 'pending';
+    if (vs === 'rejected') return { text: 'Rejected', css: 'rejected', icon: 'fa-times-circle' };
+    if (as === 'delivered') return { text: 'Delivered', css: 'delivered', icon: 'fa-check-double' };
+    if (as === 'on_delivery') return { text: 'On Delivery', css: 'on_delivery', icon: 'fa-truck' };
+    if (vs === 'processed') return { text: 'Ready', css: 'processed', icon: 'fa-box' };
+    if (vs === 'received' || vs === 'accepted') return { text: 'Vendor Received', css: 'received', icon: 'fa-store' };
+    return { text: 'Processing', css: 'pending', icon: 'fa-clock' };
+  };
+
+  contentEl.innerHTML = `
+    <div style="padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:.9rem;font-weight:800"><i class="fas fa-truck" style="color:${primaryColor};margin-right:6px"></i>Order Tracking</div>
+        <button class="btn btn-ghost btn-sm" onclick="clearStorefrontTrackSearch('${storeId}')" style="font-size:.72rem;padding:4px 10px">← Back to Cart</button>
+      </div>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:10px">${matches.length ? `${matches.length} order${matches.length > 1 ? 's' : ''} matching "${escHtml(q)}"` : 'No matching orders'}</div>
+      ${matches.length ? matches.map(pkg => {
+        const st = statusOf(pkg);
+        const code = String(pkg.package_code || pkg.code || pkg.id || '').replace(/'/g, "\\'");
+        const dateStr = pkg.created_at ? new Date(pkg.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+        const total = parseFloat(pkg.total_amount || pkg.total || pkg.gross_amount) || 0;
+        const items = (pkg.items || []).slice(0, 2);
+        return `
+        <div class="package-card" style="margin-bottom:8px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
+          <div class="package-header" style="padding:10px 12px">
+            <span class="package-code" style="font-size:.78rem"><i class="fas fa-cube" style="margin-right:3px"></i>${pkg.package_code || pkg.id || ''}</span>
+            <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
+          </div>
+          <div style="padding:8px 12px 10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                ${buildItemThumbsHTML(pkg.items, 2)}
+                <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => itemDisplayName(i.name)).filter(Boolean).join(', ')}</div>
+              </div>
+              <div style="font-size:.75rem;color:var(--text-muted)">${dateStr}</div>
+            </div>
+            <div style="font-size:.82rem;font-weight:700;color:${primaryColor};margin-top:4px">GHS ${total.toFixed(2)}</div>
+          </div>
+        </div>`;
+      }).join('') : `
+        <div style="text-align:center;padding:26px 12px;color:var(--text-muted);font-size:.82rem">
+          <i class="fas fa-box-open" style="font-size:1.8rem;display:block;margin-bottom:8px;opacity:.5"></i>
+          No order matches "${escHtml(q)}". Try the full code, e.g. <strong>PK-12345</strong>.
+        </div>`}
+      <div style="font-size:.7rem;color:var(--text-muted);margin-top:6px;text-align:center">Tap an order for full details, or press Enter to open the top match.</div>
+    </div>`;
+}
+
+// Reset the store search bar back to product-search mode after leaving the
+// cart tab, and restore the cart view when a track search is cleared.
+window.clearStorefrontTrackSearch = function(storeId) {
+  clearTimeout(_sfOrderSearchTimer);
+  const input = getActiveStoreSearchInput();
+  if (input) input.value = '';
+  updateStoreSearchPlaceholder();
+  if (_sfActiveTabName === 'cart') window.renderStorefrontCart(storeId);
 };
 
 window.submitStorefrontReview = async function(form, storeId) {

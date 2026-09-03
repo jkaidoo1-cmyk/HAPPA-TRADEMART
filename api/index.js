@@ -326,7 +326,7 @@ function serializeRecord(record) {
 }
 
 const TABLE_COLUMNS = {
-  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual', 'whatsapp_phone', 'receive_order_notifications_on_whatsapp'],
+  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual', 'sub_payment_status', 'sub_payment_months', 'sub_payment_amount', 'sub_paid_at', 'whatsapp_phone', 'receive_order_notifications_on_whatsapp'],
   notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
   stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'created_at', 'updated_at', 'extra'],
   orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
@@ -976,6 +976,9 @@ app.get('/api/:table', async (req, res) => {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();
       let rows = store[table].map(serializeRecord);
+
+      // Expiry sweep on read (local path)
+      if (table === 'users') sweepExpiredRendorSubs(rows, null);
       
       // Apply filters
       if (search) rows = applyClientFilters(rows, { search, limit, page });
@@ -1029,6 +1032,11 @@ app.get('/api/:table', async (req, res) => {
     });
     let rows = Array.from(rowMap.values());
 
+    // Expiry sweep on read: mark expired rendor subs inactive before anything
+    // is sliced/filtered, so an admin list always reflects real expiry even if
+    // the rendor never logs back in after their subscription lapses.
+    if (table === 'users') sweepExpiredRendorSubs(rows, supabase);
+
     // Apply filters client-side (query params were also pushed to Supabase for
     // efficiency; local rows need them applied here).
     if (search) rows = applyClientFilters(rows, { search, limit, page });
@@ -1061,6 +1069,40 @@ app.get('/api/:table', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Mark rendor subscriptions inactive once their expiry passes — run on read so
+// an admin/user list always reflects real expiry even without a login sweep.
+// Mirrors server.js. Best-effort: updates supabase + the local data store when
+// available, and the in-memory rows always reflect the real state.
+function sweepExpiredRendorSubs(rows, supabase) {
+  const now = Date.now();
+  let changedAny = false;
+  for (const r of rows) {
+    if (!r || r.role !== 'rendor' || r.rendor_sub_status !== 'active') continue;
+    const expiryMs = Number(r.rendor_sub_expiry);
+    if (!Number.isFinite(expiryMs) || expiryMs <= 0 || expiryMs >= now) continue;
+    r.rendor_sub_status = 'inactive';
+    changedAny = true;
+    if (supabase) {
+      supabase.from('users').update({ rendor_sub_status: 'inactive' })
+        .eq('id', r.id).then(() => {}).catch(() => {});
+    }
+  }
+  if (changedAny) {
+    try {
+      dataStore.ensureTable('users');
+      const store = dataStore.getStore();
+      let localChanged = false;
+      for (const r of rows) {
+        if (r && r.rendor_sub_status === 'inactive' && Number(r.rendor_sub_expiry) > 0 && Number(r.rendor_sub_expiry) < now) {
+          const lu = (store.users || []).find(u => String(u.id) === String(r.id));
+          if (lu && lu.rendor_sub_status === 'active') { lu.rendor_sub_status = 'inactive'; localChanged = true; }
+        }
+      }
+      if (localChanged) dataStore.saveToFile();
+    } catch (e) {}
+  }
+}
 
 // GET /api/:table/:id  — single record
 app.get('/api/:table/:id', async (req, res) => {

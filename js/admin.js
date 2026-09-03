@@ -1583,12 +1583,16 @@ function adminActiveRendorCardHTML(r) {
   const subStatus = r.rendor_sub_status || null;
   const subExpiry = r.rendor_sub_expiry ? new Date(Number(r.rendor_sub_expiry)) : null;
   const subActive = subStatus === 'active' && subExpiry && subExpiry > new Date();
+  const claimPending = r.sub_payment_status === 'paid_pending';
+  const planLabel = { monthly:'1 Month', quarterly:'3 Months', biannual:'6 Months' }[r.rendor_sub_plan] || '';
 
-  const subBg     = subActive ? '#d1fae5' : r.sub_request_status === 'pending_quote' ? '#fef3c7' : '#fee2e2';
-  const subColor  = subActive ? '#059669' : r.sub_request_status === 'pending_quote' ? '#b45309' : '#dc2626';
-  const subIcon   = subActive ? 'check-circle' : r.sub_request_status === 'pending_quote' ? 'clock' : 'times-circle';
+  const subBg     = subActive ? '#d1fae5' : claimPending ? '#dbeafe' : r.sub_request_status === 'pending_quote' ? '#fef3c7' : '#fee2e2';
+  const subColor  = subActive ? '#059669' : claimPending ? '#1e40af' : r.sub_request_status === 'pending_quote' ? '#b45309' : '#dc2626';
+  const subIcon   = subActive ? 'check-circle' : claimPending ? 'credit-card' : r.sub_request_status === 'pending_quote' ? 'clock' : 'times-circle';
   const subLabel  = subActive
-    ? `Sub active → ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`
+    ? `Sub active (${planLabel || 'active'}) → ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`
+    : claimPending
+      ? `💳 Paid claim — ${r.sub_payment_months || ''} mo · GHS ${parseFloat(r.sub_payment_amount||0).toFixed(2)}`
     : r.sub_request_status === 'pending_quote' ? '⏳ Quote requested'
     : r.sub_request_status === 'quoted' ? '📋 Quote sent'
     : 'No subscription';
@@ -1624,7 +1628,7 @@ function adminActiveRendorCardHTML(r) {
         </button>` : `
         <button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.72rem;padding:4px 8px"
                 onclick="event.stopPropagation();adminActivateRendorSub('${r.id}','${escHtml(r.rendor_display_name||r.name)}')">
-          <i class="fas fa-star"></i> Sub
+          ${claimPending ? '<i class="fas fa-check-circle"></i> Verify & Activate' : '<i class="fas fa-star"></i> Sub'}
         </button>`}
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();adminNotifyUser('${r.id}')">
           <i class="fas fa-bell"></i>
@@ -1670,7 +1674,17 @@ async function adminSendSubQuote(userId, displayName) {
   const settingsRes = await apiGet('settings', 'limit=200').catch(() => null);
   const rows = settingsRes?.data || [];
   const getVal = (key, def) => parseFloat((rows.find(r => r.key === key) || {}).value) || def;
-  const defMonthly = getVal('rendor_sub_monthly', 30);
+  const defMonthly   = getVal('rendor_sub_monthly', 30);
+  const defQuarterly = getVal('rendor_sub_quarterly', 0) || Math.round(defMonthly * 3 * 100) / 100;
+  const defBiannual  = getVal('rendor_sub_biannual', 0)  || Math.round(defMonthly * 6 * 100) / 100;
+
+  // Pre-fill from any previously sent quote (admin can override per-rendor)
+  let prev = null;
+  try { prev = await apiGet('users/' + userId); } catch (e) {}
+  const qm = prev && parseFloat(prev.sub_quote_monthly)   > 0 ? parseFloat(prev.sub_quote_monthly)   : defMonthly;
+  const qq = prev && parseFloat(prev.sub_quote_quarterly) > 0 ? parseFloat(prev.sub_quote_quarterly) : defQuarterly;
+  const qb = prev && parseFloat(prev.sub_quote_biannual)  > 0 ? parseFloat(prev.sub_quote_biannual)  : defBiannual;
+
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
@@ -1679,13 +1693,25 @@ async function adminSendSubQuote(userId, displayName) {
 </div>
 <div class="modal-body">
   <p style="font-size:.85rem;color:var(--text-light);margin-bottom:16px;line-height:1.6">
-    Set the monthly subscription rate for <strong>${escHtml(displayName)}</strong>.
-    The rendor can then choose to pay for 1 or more months at a time.
+    Set the subscription prices for <strong>${escHtml(displayName)}</strong>.
+    The rendor can then choose a 1, 3 or 6 month plan and pay the exact total shown.
   </p>
-  <div class="form-group">
-    <label class="form-label">Monthly Rate (GHS) *</label>
-    <input class="form-control" type="number" min="0" step="0.01" id="quote-monthly" value="${defMonthly}">
-    <div style="font-size:.72rem;color:var(--text-muted);margin-top:4px">Rendors will see a dropdown to select 1–12 months and pay the total.</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="form-group" style="margin:0">
+      <label class="form-label">1 Month (GHS)</label>
+      <input class="form-control" type="number" min="0" step="0.01" id="quote-monthly" value="${qm}">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label">3 Months (GHS)</label>
+      <input class="form-control" type="number" min="0" step="0.01" id="quote-quarterly" value="${qq}">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label">6 Months (GHS)</label>
+      <input class="form-control" type="number" min="0" step="0.01" id="quote-biannual" value="${qb}">
+    </div>
+  </div>
+  <div style="background:#fef3c7;border:1px solid #fde047;border-radius:8px;padding:8px 12px;font-size:.74rem;color:#713f12;margin-bottom:14px">
+    <i class="fas fa-info-circle"></i> Leave a field blank to let it auto-derive (quarterly ≈ 1-month × 3, biannual ≈ × 6).
   </div>
   <button class="btn btn-block" id="send-quote-btn"
           style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:#f59e0b;margin-top:8px"
@@ -1697,10 +1723,12 @@ async function adminSendSubQuote(userId, displayName) {
 }
 
 async function _doSendSubQuote(userId, displayName) {
-  const monthly = parseFloat(document.getElementById('quote-monthly')?.value || 0);
+  const monthly   = parseFloat(document.getElementById('quote-monthly')?.value || 0);
+  const quarterly = parseFloat(document.getElementById('quote-quarterly')?.value || 0);
+  const biannual  = parseFloat(document.getElementById('quote-biannual')?.value || 0);
 
   if (!monthly || monthly <= 0) {
-    showToast('Monthly rate is required', 'warning');
+    showToast('1 Month price is required', 'warning');
     return;
   }
 
@@ -1709,13 +1737,18 @@ async function _doSendSubQuote(userId, displayName) {
 
   await apiPatch('users', userId, {
     sub_request_status: 'quoted',
-    sub_quote_monthly: String(monthly),
+    sub_quote_monthly:   String(monthly),
+    sub_quote_quarterly: String(quarterly > 0 ? quarterly : Math.round(monthly * 3 * 100) / 100),
+    sub_quote_biannual:  String(biannual  > 0 ? biannual  : Math.round(monthly * 6 * 100) / 100),
+    sub_payment_status: null,
+    sub_payment_months: null,
+    sub_payment_amount: null
   });
 
   // Notify the rendor
   addNotification(userId, 'system',
     '📋 Your Subscription Quote is Ready!',
-    `Admin has set your monthly rate to GHS ${monthly.toFixed(2)}. Go to Subscription tab to choose how many months you want to pay for.`
+    `Admin has quoted you: GHS ${monthly.toFixed(2)} (1 month), GHS ${(quarterly||Math.round(monthly*3*100)/100).toFixed(2)} (3 months), GHS ${(biannual||Math.round(monthly*6*100)/100).toFixed(2)} (6 months). Open your Subscription tab to choose a plan.`
   );
 
   showToast('Quote sent to rendor! ✅', 'success');
@@ -1724,88 +1757,116 @@ async function _doSendSubQuote(userId, displayName) {
 }
 
 // ── Rendor subscription activation (admin-side) ───────────
+// Modal offers the same plan tiers the rendor saw (1/3/6 months) with the
+// quoted totals, pre-filled from the rendor's payment claim when one exists.
+// Renewals extend from the current expiry instead of starting over.
 async function adminActivateRendorSub(userId, displayName) {
-  // Get the rendor's quoted monthly rate
+  const u = await apiGet('users/' + userId).catch(() => null) || {};
+
   const settingsRes = await apiGet('settings', 'limit=200').catch(() => null);
   const sRows = settingsRes?.data || [];
   const sVal = (key, def) => parseFloat((sRows.find(r => r.key === key) || {}).value) || def;
-  let monthlyRate = sVal('rendor_sub_monthly', 30);
-  // Use the rendor's individually quoted monthly rate if available
-  try {
-    const u = await apiGet('users/' + userId);
-    if (u && parseFloat(u.sub_quote_monthly) > 0) {
-      monthlyRate = parseFloat(u.sub_quote_monthly);
-    }
-  } catch(e) {}
+
+  // Prefer the rendor's quoted totals; fall back to settings defaults
+  const getQ = (qKey, sKey, def) => {
+    const q = parseFloat(u[qKey]);
+    return q > 0 ? q : sVal(sKey, def);
+  };
+  const monthly   = getQ('sub_quote_monthly',   'rendor_sub_monthly',   30);
+  const quarterly = getQ('sub_quote_quarterly', 'rendor_sub_quarterly', Math.round(monthly*3*100)/100);
+  const biannual  = getQ('sub_quote_biannual',  'rendor_sub_biannual',  Math.round(monthly*6*100)/100);
+
+  const tiers = [
+    { id:'monthly',   months:1, total:monthly },
+    { id:'quarterly', months:3, total:quarterly },
+    { id:'biannual',  months:6, total:biannual }
+  ];
+
+  const claimPending = u.sub_payment_status === 'paid_pending';
+  const claimPlan = claimPending && u.sub_payment_months
+    ? tiers.find(t => t.months === Number(u.sub_payment_months)) || null : null;
+  const preselect = claimPlan ? claimPlan.id : 'monthly';
+
+  // Active subscription → renewals extend the current expiry
+  const curExpiryMs = Number(u.rendor_sub_expiry);
+  const curActive = u.rendor_sub_status === 'active' && curExpiryMs > Date.now();
+  const startDefault = curActive ? new Date(curExpiryMs).toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
+
+  const planOpts = tiers.map(t =>
+    `<option value="${t.id}" data-months="${t.months}" data-total="${t.total}"${t.id===preselect?' selected':''}>${t.months} Month${t.months>1?'s':''} — GHS ${t.total.toFixed(2)}</option>`
+  ).join('');
 
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
-  <span class="modal-title">⭐ Activate Subscription</span>
+  <span class="modal-title">⭐ ${claimPending ? 'Verify Payment & Activate' : 'Activate'} Subscription</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
 <div class="modal-body">
+  ${claimPending ? `
+  <div style="background:#dbeafe;border:1.5px solid #93c5fd;border-radius:12px;padding:12px 14px;margin-bottom:16px">
+    <div style="font-weight:700;font-size:.82rem;color:#1e40af;margin-bottom:4px"><i class="fas fa-credit-card"></i> Payment Claimed by Rendor</div>
+    <div style="font-size:.78rem;color:#1e3a8a">
+      ${u.rendor_display_name||displayName} claims <strong>GHS ${parseFloat(u.sub_payment_amount||0).toFixed(2)}</strong> for <strong>${u.sub_payment_months||'?'} month${u.sub_payment_months>1?'s':''}</strong>
+      ${u.sub_paid_at ? `on ${new Date(u.sub_paid_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}` : ''}.
+      Confirm their payment before activating.
+    </div>
+  </div>` : `
   <p style="font-size:.85rem;color:var(--text-light);margin-bottom:16px;line-height:1.6">
     Activate a subscription for <strong>${escHtml(displayName)}</strong> after confirming their payment.
-  </p>
-  <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
-    <div style="font-size:.82rem;color:var(--text-muted)">Monthly Rate: <strong>GHS ${monthlyRate.toFixed(2)}</strong></div>
-  </div>
+  </p>`}
   <div class="form-group">
-    <label class="form-label">Number of Months *</label>
-    <select class="form-control form-select" id="sub-months-sel" onchange="
-      const m = parseInt(this.value);
-      const total = m * ${monthlyRate};
-      document.getElementById('sub-total-display').textContent = 'GHS ' + total.toFixed(2);
-    ">
-      ${Array.from({length:12}, (_, i) => i+1).map(n => `<option value="${n}">${n} Month${n>1?'s':''} — GHS ${(monthlyRate * n).toFixed(2)}</option>`).join('')}
+    <label class="form-label">Plan *</label>
+    <select class="form-control form-select" id="sub-months-sel"
+            onchange="document.getElementById('sub-total-display').textContent = 'GHS ' + parseFloat(this.selectedOptions[0].dataset.total).toFixed(2);">
+      ${planOpts}
     </select>
   </div>
   <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;text-align:center;margin-bottom:16px">
-    <div style="font-size:.78rem;color:#9a3412">Total Amount</div>
-    <div style="font-size:1.8rem;font-weight:900;color:#c2410c" id="sub-total-display">GHS ${monthlyRate.toFixed(2)}</div>
+    <div style="font-size:.78rem;color:#9a3412">${curActive ? 'Extending total (added to current expiry)' : 'Total Amount'}</div>
+    <div style="font-size:1.8rem;font-weight:900;color:#c2410c" id="sub-total-display">GHS ${(tiers.find(t=>t.id===preselect)||tiers[0]).total.toFixed(2)}</div>
   </div>
   <div class="form-group">
-    <label class="form-label">Start Date</label>
-    <input class="form-control" type="date" id="sub-start-date" value="${new Date().toISOString().slice(0,10)}">
+    <label class="form-label">Start Date${curActive ? ' (default = current expiry, i.e. a renewal)' : ''}</label>
+    <input class="form-control" type="date" id="sub-start-date" value="${startDefault}">
   </div>
   <button class="btn btn-block" id="sub-activate-btn"
           style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;margin-top:8px"
           onclick="_doActivateRendorSub('${userId}')">
-    <i class="fas fa-star"></i> Activate Subscription
+    <i class="fas fa-star"></i> ${claimPending ? 'Verify Payment & Activate' : 'Activate Subscription'}
   </button>
 </div>`);
 }
 
 function adminDeactivateRendorSub(userId) {
-  if (confirm('Are you sure you want to deactivate this rendor\'s subscription?')) {
-    apiPatch('users', userId, {
-      rendor_sub_status: 'inactive',
-      rendor_sub_expiry: null
-    });
-    showToast('Subscription deactivated!', 'info');
-    loadAdminRendors(); // Refresh if needed
-  }
+  if (!confirm('Are you sure you want to deactivate this rendor\'s subscription? Their profile will be hidden from clients until they subscribe again.')) return;
+  apiPatch('users', userId, {
+    rendor_sub_status: 'inactive',
+    rendor_sub_expiry: null,
+    rendor_sub_plan: null,
+    sub_payment_status: null,
+    sub_payment_months: null,
+    sub_payment_amount: null
+  }).then(() => {
+    addNotification(userId, 'system', '⏸️ Subscription Deactivated',
+      'Your subscription has been deactivated by admin. Your profile is no longer visible to clients. Contact admin to renew.'
+    );
+    showToast('Subscription deactivated', 'info');
+    loadAdminRendors();
+  });
 }
 
 async function _doActivateRendorSub(userId) {
-  const months    = parseInt(document.getElementById('sub-months-sel')?.value || '1');
+  const sel     = document.getElementById('sub-months-sel');
+  const planId  = sel?.value || 'monthly';
+  const months  = parseInt(sel?.selectedOptions?.[0]?.dataset?.months || '1');
+  const total   = parseFloat(sel?.selectedOptions?.[0]?.dataset?.total || 0);
   const startRaw  = document.getElementById('sub-start-date')?.value;
   const startMs   = startRaw ? new Date(startRaw).getTime() : Date.now();
   const days      = months * 30;
   const expiryMs  = startMs + days * 86400000;
   const planLabel = `${months} Month${months > 1 ? 's' : ''}`;
-
-  // Get monthly rate to calculate total
-  const settingsRes = await apiGet('settings', 'limit=200').catch(() => null);
-  const sRows = settingsRes?.data || [];
-  const sVal = (key, def) => parseFloat((sRows.find(r => r.key === key) || {}).value) || def;
-  let monthlyRate = sVal('rendor_sub_monthly', 30);
-  try {
-    const u = await apiGet('users/' + userId);
-    if (u && parseFloat(u.sub_quote_monthly) > 0) monthlyRate = parseFloat(u.sub_quote_monthly);
-  } catch(e) {}
-  const price = monthlyRate * months;
+  const price     = total;
 
   const btn = document.getElementById('sub-activate-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Activating…'; }
@@ -1813,8 +1874,11 @@ async function _doActivateRendorSub(userId) {
   await apiPatch('users', userId, {
     rendor_sub_status: 'active',
     rendor_sub_expiry: String(expiryMs),
-    rendor_sub_plan: 'monthly',
+    rendor_sub_plan: planId,
     sub_request_status: null,
+    sub_payment_status: null,
+    sub_payment_months: null,
+    sub_payment_amount: null
   });
 
   // Record platform revenue for this subscription payment
@@ -1823,7 +1887,7 @@ async function _doActivateRendorSub(userId) {
       source: 'subscription',
       amount: price,
       reference: 'RENDORSUB-' + userId + '-' + Date.now(),
-      description: `Rendor Subscription: ${planLabel} (GHS ${monthlyRate.toFixed(2)}/mo × ${months})`,
+      description: `Rendor Subscription: ${planLabel} plan (GHS ${price.toFixed(2)})`,
       created_at: new Date().toISOString()
     }).catch(e => console.warn('[Revenue] rendor subscription record failed:', e && e.message || e));
   }

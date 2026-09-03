@@ -367,6 +367,24 @@ function rendorPostCardHTML(p) {
 }
 
 // ── Subscription tab ──────────────────────────────────────
+// Rendor-facing subscription page. State machine:
+//   * no quote        → request a quote (admin sets monthly/quarterly/biannual totals)
+//   * pending_quote   → admin hasn't answered yet
+//   * quoted          → three plan cards (1 / 3 / 6 months) at the quoted totals
+//   * paid_pending    → rendor claims to have paid; awaiting admin verification
+//   * active          → active until rendor_sub_expiry (renew via the same plans)
+//   * expired/inactive → same plan cards; re-subscribing restarts the cycle
+function rendorSubQuotePrices(u) {
+  const n = v => { const x = parseFloat(v); return Number.isFinite(x) && x > 0 ? x : 0; };
+  let monthly   = n(u.sub_quote_monthly);
+  let quarterly = n(u.sub_quote_quarterly);
+  let biannual  = n(u.sub_quote_biannual);
+  if (!monthly && !quarterly && !biannual) return null;
+  if (!quarterly) quarterly = Math.round(monthly * 3 * 100) / 100;
+  if (!biannual)  biannual  = Math.round(monthly * 6 * 100) / 100;
+  return { monthly, quarterly, biannual };
+}
+
 function renderRendorSubscription() {
   const el = document.getElementById('rendor-sub-content');
   if (!el) return;
@@ -376,85 +394,85 @@ function renderRendorSubscription() {
   const subExpiry = u.rendor_sub_expiry ? new Date(Number(u.rendor_sub_expiry)) : null;
   const subActive = subStatus === 'active' && subExpiry && subExpiry > new Date();
   const reqStatus = u.sub_request_status || null; // 'pending_quote' | 'quoted' | null
+  const payPending = u.sub_payment_status === 'paid_pending'; // rendor claims payment
+  const prices = rendorSubQuotePrices(u);
+  const quoted  = reqStatus === 'quoted' && !!prices;
+  const planLabel = { monthly:'1 Month', quarterly:'3 Months', biannual:'6 Months' };
 
-  // Get monthly rate from admin quote
-  const monthlyRate = reqStatus === 'quoted' ? parseFloat(u.sub_quote_monthly || 0) : 0;
+  // Active subscription → status bar shows plan + expiry
+  let statusTitle, statusSub, statusBg, statusIcon, statusColor;
+  if (payPending) {
+    statusBg = '#dbeafe'; statusColor = '#1e40af'; statusIcon = '💳';
+    statusTitle = 'Payment Claimed — Awaiting Admin Activation';
+    statusSub = `You notified admin of a payment for ${planLabel[u.rendor_sub_plan] || (u.sub_payment_months ? u.sub_payment_months + ' Month' + (u.sub_payment_months>1?'s':'') : 'your plan')}. Admin will verify and activate it shortly.`;
+  } else if (subActive) {
+    statusBg = '#d1fae5'; statusColor = '#065f46'; statusIcon = '✅';
+    statusTitle = 'Subscription Active';
+    statusSub = `Plan: ${planLabel[u.rendor_sub_plan] || 'Subscription'} · Expires ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}`;
+  } else if (reqStatus === 'pending_quote') {
+    statusBg = '#fef3c7'; statusColor = '#92400e'; statusIcon = '⏳';
+    statusTitle = 'Quote Requested — Awaiting Admin';
+    statusSub = 'Admin will review and send you your subscription pricing options soon.';
+  } else if (quoted) {
+    statusBg = '#ede9fe'; statusColor = '#4c1d95'; statusIcon = '📋';
+    statusTitle = 'Your Quote is Ready!';
+    statusSub = 'Choose a plan below and make your payment to activate your profile.';
+  } else {
+    statusBg = '#fee2e2'; statusColor = '#991b1b'; statusIcon = '⏰';
+    statusTitle = 'No Active Subscription';
+    statusSub = 'Request a subscription quote from admin to get started.';
+  }
 
-  el.innerHTML = `
-<!-- Current status -->
-<div class="card" style="margin-bottom:20px;border-left:4px solid ${subActive?'var(--success)':reqStatus==='pending_quote'?'#f59e0b':reqStatus==='quoted'?'#3b82f6':'var(--danger)'}">
-  <div class="card-body">
-    <div style="display:flex;align-items:center;gap:12px">
-      <div style="width:44px;height:44px;border-radius:50%;background:${subActive?'#d1fae5':reqStatus==='pending_quote'?'#fef3c7':reqStatus==='quoted'?'#dbeafe':'#fee2e2'};display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0">
-        ${subActive?'✅':reqStatus==='pending_quote'?'⏳':reqStatus==='quoted'?'📋':'⏰'}
-      </div>
-      <div>
-        <div style="font-weight:800;font-size:.95rem">
-          ${subActive?'Subscription Active':reqStatus==='pending_quote'?'Quote Requested — Awaiting Admin':reqStatus==='quoted'?'Your Quote is Ready!':'No Active Subscription'}
-        </div>
-        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px">
-          ${subActive
-            ? `Expires ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}`
-            : reqStatus==='pending_quote'
-              ? 'Admin will review and send you pricing options soon'
-              : reqStatus==='quoted'
-                ? 'Choose a plan below and make your payment'
-                : 'Request a subscription quote from admin to get started'}
-        </div>
-      </div>
-    </div>
+  // Body sections
+  let bodyHTML = '';
+
+  if (payPending) {
+    bodyHTML = `
+<!-- Payment claim pending -->
+<div style="background:#dbeafe;border:1.5px solid #93c5fd;border-radius:var(--radius-md);padding:24px;text-align:center;margin-bottom:20px">
+  <div style="font-size:2.4rem;margin-bottom:10px">💳</div>
+  <div style="font-weight:800;font-size:.95rem;color:#1e40af;margin-bottom:6px">Payment Claim Under Review</div>
+  <div style="font-size:.8rem;color:#1e3a8a;line-height:1.7">
+    ${u.sub_payment_months ? `You claimed <strong>GHS ${parseFloat(u.sub_payment_amount||0).toFixed(2)}</strong> for <strong>${u.sub_payment_months} Month${u.sub_payment_months>1?'s':''}</strong>.` : 'Your payment claim has been sent to admin.'}
+    Admin will verify the payment and activate your profile shortly — you\'ll get a notification.
   </div>
-</div>
-
-<!-- How it works -->
-<div style="background:linear-gradient(90deg,#ede9fe,#ddd6fe);border:1.5px solid #a78bfa;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:20px">
-  <div style="font-weight:700;font-size:.83rem;color:#4c1d95;margin-bottom:6px"><i class="fas fa-info-circle"></i> How Subscriptions Work</div>
-  <ul style="font-size:.8rem;color:#4c1d95;padding-left:16px;line-height:2;margin:0">
-    <li>Request a quote — admin will set your personal subscription prices</li>
-    <li>Choose a plan from your quote and pay via Mobile Money</li>
-    <li>Notify admin after payment — they will activate your profile</li>
-    <li>Your profile &amp; posts stay visible to clients while your subscription is active</li>
-  </ul>
-</div>
-
-${reqStatus === 'pending_quote' ? `
+</div>`;
+  } else if (reqStatus === 'pending_quote') {
+    bodyHTML = `
 <!-- Awaiting quote state -->
 <div style="background:#fef3c7;border:1.5px solid #fbbf24;border-radius:var(--radius-md);padding:24px;text-align:center;margin-bottom:20px">
   <div style="font-size:2.4rem;margin-bottom:10px">⏳</div>
   <div style="font-weight:800;font-size:.95rem;color:#92400e;margin-bottom:6px">Quote Request Sent</div>
   <div style="font-size:.8rem;color:#78350f;line-height:1.7">Your request is with admin. You'll receive a notification with your subscription pricing options shortly.</div>
-</div>
-` : reqStatus === 'quoted' && monthlyRate > 0 ? `
+</div>`;
+  } else if (quoted) {
+    // Three plan cards priced from the admin's quote (1 / 3 / 6 months)
+    const plans = [
+      { id:'monthly',   months:1, total:prices.monthly },
+      { id:'quarterly', months:3, total:prices.quarterly },
+      { id:'biannual',  months:6, total:prices.biannual }
+    ];
+    const cards = plans.map(p => `
+    <div style="flex:1;min-width:150px;background:${p.months===1?'#ede9fe':'#f8fafc'};border:2px solid ${p.months===1?'#a78bfa':'var(--border)'};border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:.72rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">${p.months} Month${p.months>1?'s':''}</div>
+      <div style="font-size:1.3rem;font-weight:900;color:#4c1d95;margin:6px 0 2px">GHS ${p.total.toFixed(2)}</div>
+      <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:10px">${p.months===1?'Monthly':'GHS '+(p.total/p.months).toFixed(2)+'/month'}</div>
+      <button class="btn btn-sm" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.73rem;padding:5px 8px"
+              onclick="requestRendorSubscription('${p.id}',${p.months},${p.total},'${p.months} Month${p.months>1?'s':''}')">
+        ${subActive ? '🔄 Renew' : '⭐ Subscribe'}
+      </button>
+    </div>`).join('');
+    bodyHTML = `
 <!-- Admin-quoted plans -->
-<div style="display:inline-flex;align-items:center;gap:6px;background:#dbeafe;color:#1e40af;border-radius:20px;padding:4px 12px;font-size:.75rem;font-weight:700;margin-bottom:14px">
-  <i class="fas fa-tag"></i> Monthly rate set by admin
+<div style="display:inline-flex;align-items:center;gap:6px;background:#ede9fe;color:#4c1d95;border-radius:20px;padding:4px 12px;font-size:.75rem;font-weight:700;margin-bottom:14px">
+  <i class="fas fa-tag"></i> Prices set by admin
 </div>
-<div class="card" style="margin-bottom:20px;border:2px solid var(--border)">
-  <div class="card-body">
-    <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
-      <div style="font-size:.82rem;color:var(--text-muted)">Monthly Rate: <strong>GHS ${monthlyRate.toFixed(2)}</strong></div>
-    </div>
-    <div class="form-group" style="margin-bottom:16px">
-      <label class="form-label" style="font-weight:700;font-size:.85rem">Select Number of Months</label>
-      <select class="form-control form-select" id="rendor-sub-months-sel" onchange="
-        const m = parseInt(this.value);
-        const total = m * ${monthlyRate};
-        document.getElementById('rendor-sub-total-display').textContent = 'GHS ' + total.toFixed(2);
-      ">
-        ${Array.from({length:12}, (_, i) => i+1).map(n => `<option value="${n}">${n} Month${n>1?'s':''} — GHS ${(monthlyRate * n).toFixed(2)}</option>`).join('')}
-      </select>
-    </div>
-    <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;text-align:center;margin-bottom:16px">
-      <div style="font-size:.78rem;color:#9a3412">Total Amount to Pay</div>
-      <div style="font-size:1.8rem;font-weight:900;color:#c2410c" id="rendor-sub-total-display">GHS ${monthlyRate.toFixed(2)}</div>
-    </div>
-    <button class="btn" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed"
-            onclick="requestRendorSubscription()">
-      ${subActive ? '🔄 Renew Subscription' : '⭐ Subscribe Now'}
-    </button>
-  </div>
-</div>
-` : !subActive ? `
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">${cards}</div>
+<p style="font-size:.74rem;color:var(--text-muted);margin:0 0 4px;line-height:1.6">
+  <i class="fas fa-info-circle"></i> ${subActive ? 'Renewing adds the selected months on top of your current expiry date.' : 'Your profile becomes visible to clients as soon as admin activates your subscription.'} Pay via Mobile Money, then tap “I\'ve Paid — Notify Admin”.
+</p>`;
+  } else if (!subActive) {
+    bodyHTML = `
 <!-- No request yet -->
 <div style="text-align:center;padding:28px 16px;background:var(--bg);border:2px dashed var(--border);border-radius:var(--radius-md);margin-bottom:20px">
   <div style="font-size:2.6rem;margin-bottom:12px">📬</div>
@@ -467,8 +485,35 @@ ${reqStatus === 'pending_quote' ? `
           onclick="requestSubQuote()">
     <i class="fas fa-paper-plane"></i> Request Subscription Quote
   </button>
+</div>`;
+  }
+
+  el.innerHTML = `
+<!-- Current status -->
+<div class="card" style="margin-bottom:20px;border-left:4px solid ${statusColor}">
+  <div class="card-body">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:44px;height:44px;border-radius:50%;background:${statusBg};display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0">${statusIcon}</div>
+      <div>
+        <div style="font-weight:800;font-size:.95rem">${statusTitle}</div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px">${statusSub}</div>
+      </div>
+    </div>
+  </div>
 </div>
-` : ''}
+
+<!-- How it works -->
+<div style="background:linear-gradient(90deg,#ede9fe,#ddd6fe);border:1.5px solid #a78bfa;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:20px">
+  <div style="font-weight:700;font-size:.83rem;color:#4c1d95;margin-bottom:6px"><i class="fas fa-info-circle"></i> How Subscriptions Work</div>
+  <ul style="font-size:.8rem;color:#4c1d95;padding-left:16px;line-height:2;margin:0">
+    <li>Request a quote — admin will set your subscription prices (1, 3 or 6 months)</li>
+    <li>Choose a plan and pay via Mobile Money to admin</li>
+    <li>Notify admin after payment — they will verify &amp; activate your profile</li>
+    <li>Your profile &amp; posts stay visible to clients while your subscription is active</li>
+  </ul>
+</div>
+
+${bodyHTML}
 
 <!-- Contact admin -->
 <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;text-align:center">
@@ -505,18 +550,20 @@ async function requestSubQuote() {
   renderRendorSubscription();
 }
 
-// ── Step 2: Rendor picks months and sees payment info ──
-function requestRendorSubscription() {
+// ── Step 2: Rendor picks a plan and sees payment info ──
+async function requestRendorSubscription(planId, months, total, planLabel) {
   const u = App.currentUser;
-  const months = parseInt(document.getElementById('rendor-sub-months-sel')?.value || '1');
-  const monthlyRate = parseFloat(u.sub_quote_monthly || 0);
-  const total = monthlyRate * months;
-  const planLabel = `${months} Month${months > 1 ? 's' : ''}`;
+  const monthlyRate = total / months;
+  // Admin WhatsApp (configured in Admin → Settings → Customer Care) so the
+  // rendor can send proof of payment / ask questions directly while paying.
+  const adminWhatsApp = await getSetting('support_whatsapp', '233240000000');
+  const waHref = waMeHref(adminWhatsApp);
+  const waText = encodeURIComponent(`Hello! I just paid GHS ${total.toFixed(2)} for the ${planLabel} subscription. My payment reference phone is ${u.phone||''}. Please activate my subscription.`);
 
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
-  <span class="modal-title">📋 Subscribe — ${planLabel}</span>
+  <span class="modal-title">📋 ${planLabel} Plan — Payment</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
 <div class="modal-body">
@@ -532,13 +579,23 @@ function requestRendorSubscription() {
         <li>Send <strong>GHS ${total.toFixed(2)}</strong> via Mobile Money to admin</li>
         <li>Use your registered phone <strong>${escHtml(u.phone||'')}</strong> as reference</li>
         <li>Take a screenshot of your payment confirmation</li>
-        <li>Click <strong>"I've Paid — Notify Admin"</strong> below to alert admin to activate your account</li>
+        <li>Tap <strong>"I've Paid — Notify Admin"</strong> below to alert admin to verify &amp; activate your subscription</li>
       </ol>
     </div>
   </div>
+  ${waHref ? `
+  <div style="display:flex;align-items:center;gap:10px;margin:4px 0 12px;color:var(--text-muted);font-size:.75rem">
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <span>or send proof on WhatsApp</span>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+  </div>
+  <a class="btn btn-block" href="${waHref}${waText}" target="_blank" rel="noopener"
+     style="background:#25d366;color:#fff;border-color:#25d366;margin-bottom:12px;display:inline-flex;align-items:center;justify-content:center;gap:8px">
+    <i class="fab fa-whatsapp"></i> Send Payment Proof on WhatsApp
+  </a>` : ''}
   <button class="btn btn-block" id="sub-notify-btn"
           style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed"
-          onclick="notifyAdminSubscription('monthly',${total},'${planLabel}')">
+          onclick="notifyAdminSubscription('${planId}',${months},${total},'${planLabel}')">
     <i class="fas fa-bell"></i> I've Paid — Notify Admin
   </button>
   <button class="btn btn-ghost btn-block" onclick="closeModalForce()" style="margin-top:6px;color:var(--text-muted)">
@@ -547,27 +604,45 @@ function requestRendorSubscription() {
 </div>`);
 }
 
-// ── Step 3: Vendor notifies admin they've paid ─────────────
-async function notifyAdminSubscription(planId, price, planLabel) {
+// ── Step 3: Rendor notifies admin they've paid ────────────
+// Records the claim on the rendor's profile (sub_payment_status + months +
+// amount) so the admin list shows a concrete "awaiting activation" row, then
+// notifies every admin. The claim itself grants no privilege — admin must
+// still verify and activate (rendor_sub_status stays admin-only).
+async function notifyAdminSubscription(planId, months, price, planLabel) {
   const btn = document.getElementById('sub-notify-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…'; }
 
   const u = App.currentUser;
+
+  // Persist the payment claim (months chosen + amount + when claimed). Only
+  // these self-set fields are allowed by the access layer — status/expiry/plan
+  // remain admin-only.
+  const claim = {
+    sub_payment_status: 'paid_pending',
+    sub_payment_months: months,
+    sub_payment_amount: Math.round(parseFloat(price) * 100) / 100,
+    sub_paid_at: new Date().toISOString()
+  };
+  const saved = await apiPatch('users', u.id, claim).catch(() => null);
+  if (saved) Object.assign(App.currentUser, claim);
+
   const adminsRes = await apiGet('users', 'limit=200');
   const admins = (adminsRes?.data || []).filter(a => a.role === 'admin');
   for (const admin of admins) {
     addNotification(admin.id, 'system',
-      `💳 Subscription Payment — ${planLabel}`,
-      `${u.rendor_display_name||u.name} (${u.email}) claims to have paid GHS ${parseFloat(price).toFixed(2)} for the ${planLabel} plan. Please verify and activate their subscription.`
+      `💳 Subscription Payment Claim — ${planLabel}`,
+      `${u.rendor_display_name||u.name} (${u.email}) claims to have paid GHS ${parseFloat(price).toFixed(2)} for the ${planLabel} plan. Open their profile to verify and activate.`
     );
   }
   addNotification(u.id, 'system',
-    '✅ Payment Notification Sent',
-    `Your ${planLabel} payment notification (GHS ${parseFloat(price).toFixed(2)}) has been sent to admin. You'll be notified once your subscription is activated.`
+    '✅ Payment Claim Sent',
+    `Your ${planLabel} payment claim (GHS ${parseFloat(price).toFixed(2)}) has been sent to admin. You'll be notified once your subscription is activated.`
   );
 
   showToast('Admin notified! Your subscription will be activated shortly.', 'success');
   closeModalForce();
+  renderRendorSubscription();
 }
 
 // ── Contact admin modal ────────────────────────────────────

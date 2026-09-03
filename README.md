@@ -76,7 +76,7 @@ The app now runs with a real RESTful `/api` backend and persistent `db.json` sto
   | **Overview** | Profile banner (avatar, name, category, tags), subscription status strip, stats (Active Posts, Subscription status, Wallet, Verification), "How Rendors Work" explainer card, Quick Actions, Recent Posts preview |
   | **My Posts** | List of service posts (title, category, description, starting price, image). Add / Edit / Delete (archive) posts. Posts use the `services` table with `rendor_id` — no `service_orders` created |
   | **Contact Info** | WhatsApp, Email, Instagram, X/Twitter, Facebook, Website/Portfolio, Notes. Shown on profile so clients contact directly. Editable via "Edit" button |
-  | **Subscription** | Current status card (active / expired), plan cards (Monthly GHS 30 / 3-Month GHS 80 / 6-Month GHS 150), "I've Paid — Notify Admin" flow that sends an in-app notification to all admin accounts, Contact Admin message form |
+  | **Subscription** | Current status card (active / inactive / quote-pending / claim-pending), plan cards for the admin-quoted totals (1 / 3 / 6 months), "I've Paid — Notify Admin" flow that records a payment claim (months + amount) AND notifies every admin, Contact Admin message form |
   | **Wallet** | Balance card (purple gradient), Top Up (`showDepositModal`) + Withdraw (`showWithdrawalModal`) buttons, transaction history (`renderWalletHistory`). Wallet is for platform subscriptions — client payments are off-platform |
   | **Verify** | 3-step: Phone OTP → ID document upload → Admin review (purple-accented). Verified rendors get a `✅ Verified` badge |
 
@@ -89,8 +89,8 @@ The app now runs with a real RESTful `/api` backend and persistent `db.json` sto
 - **Vendors tab**: pending approval list (approve → assign store, or reject), all vendors with stores
 - **Rendors tab**:
   - Pending rendors: approve (with corrected notification copy) or reject
-  - Active rendors: subscription status pill (green active / red inactive), expiry date
-  - **⭐ Sub button** opens `adminActivateRendorSub()` modal — admin selects plan (Monthly/3-Month/6-Month), start date, activates subscription via PATCH and notifies rendor
+  - Active rendors: subscription status pill (green active / red inactive / blue paid-claim pending), expiry date, claim amount
+  - **⭐ Sub / Verify & Activate button** opens `adminActivateRendorSub()` modal — admin picks a plan tier (1 / 3 / 6 months at the quoted totals), start date (defaults to current expiry so renewals extend), activates via PATCH and notifies the rendor
   - 🔔 Notify button (`adminNotifyUser`) — send custom title + message
   - 🚫 Suspend button (`adminSuspendUser`) — suspend with in-app notification + reload
 - **Users tab**: search, view all users, suspend / activate
@@ -156,7 +156,7 @@ js/
 
 | Table | Key Fields |
 |---|---|
-| `users` | id, name, email, phone, role (buyer/vendor/rendor/admin), status, wallet_balance, is_verified, id_verified, referral_code, **rendor_display_name, rendor_service_cat, rendor_bio, rendor_starting_price, rendor_tags**, **rendor_whatsapp, rendor_email, rendor_instagram, rendor_twitter, rendor_facebook, rendor_website, rendor_contact_other**, **rendor_sub_status, rendor_sub_expiry, rendor_sub_plan**, preferred_store_* (vendor registration) |
+| `users` | id, name, email, phone, role (buyer/vendor/rendor/admin), status, wallet_balance, is_verified, id_verified, referral_code, **rendor_display_name, rendor_service_cat, rendor_bio, rendor_starting_price, rendor_tags**, **rendor_whatsapp, rendor_email, rendor_instagram, rendor_twitter, rendor_facebook, rendor_website, rendor_contact_other**, **rendor_sub_status, rendor_sub_expiry, rendor_sub_plan**, **sub_request_status, sub_quote_monthly, sub_quote_quarterly, sub_quote_biannual, sub_payment_status, sub_payment_months, sub_payment_amount, sub_paid_at**, preferred_store_* (vendor registration) |
 | `stores` | id, name, slug, vendor_id, category, location, campus, status, logo_url, banner_url, keywords, avg_rating, total_sales, total_orders, store_price, is_paid |
 | `products` | id, name, store_id, vendor_id, category, price, original_price, stock_qty, images, is_flash_sale, is_available |
 | `orders` | id, buyer_id, items, subtotal, platform_fee, delivery_fee, total, payment_method, status, delivery_address |
@@ -245,9 +245,17 @@ js/
 | `rendor_facebook` | text | Rendor's Facebook page |
 | `rendor_website` | text | Rendor's website/portfolio |
 | `rendor_contact_other` | rich_text | Other contact notes |
-| `rendor_sub_status` | text | `active` / `expired` / `none` |
-| `rendor_sub_expiry` | text | Unix timestamp (ms) string |
-| `rendor_sub_plan` | text | `monthly` / `quarterly` / `biannual` |
+| `rendor_sub_status` | text | `active` / `inactive` / null (admin-only field) |
+| `rendor_sub_expiry` | text | Unix timestamp (ms) string (admin-only field) |
+| `rendor_sub_plan` | text | `monthly` / `quarterly` / `biannual` (admin-only field) |
+| `sub_request_status` | text | `pending_quote` (rendor set) / `quoted` (admin set) |
+| `sub_quote_monthly` | text | 1-month quote total (admin set) |
+| `sub_quote_quarterly` | text | 3-month quote total (admin set) |
+| `sub_quote_biannual` | text | 6-month quote total (admin set) |
+| `sub_payment_status` | text | `paid_pending` — rendor claims payment, admin verifies (admin-only write; rendor may only set `paid_pending`) |
+| `sub_payment_months` | int | Months the rendor claims to have paid for (self-set) |
+| `sub_payment_amount` | number | Amount (GHS) the rendor claims to have paid (self-set) |
+| `sub_paid_at` | text | ISO timestamp of the payment claim (self-set) |
 
 ### `packages` table — 1 new field
 | Field | Type | Purpose |

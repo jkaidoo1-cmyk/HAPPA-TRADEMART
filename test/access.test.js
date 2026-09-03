@@ -128,3 +128,66 @@ test('access: anonymous mutations are rejected; owners/admins pass', () => {
   assert.equal(access.assertMutateAllowed('packages', { userId: 'other', role: 'vendor' }, pkg, {}).ok, false);
   assert.equal(access.assertMutateAllowed('packages', ADMIN, pkg, {}).ok, true);
 });
+
+test('access: rendors can never self-activate or self-quote a subscription', () => {
+  const RENDOR = { userId: 'rendor-1', role: 'rendor' };
+  const self = { id: 'rendor-1' };
+  // Admin-only fields are rejected for a rendor editing their own row
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { rendor_sub_status: 'active' }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { rendor_sub_expiry: String(Date.now() + 1e12) }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { rendor_sub_plan: 'biannual' }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { sub_quote_monthly: '50' }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { sub_request_status: 'quoted' }).ok, false);
+  // Admin may still set them
+  assert.equal(access.assertMutateAllowed('users', ADMIN, self, { rendor_sub_status: 'active', rendor_sub_expiry: String(Date.now() + 1e12) }).ok, true);
+  assert.equal(access.assertMutateAllowed('users', ADMIN, self, { sub_quote_biannual: '150' }).ok, true);
+});
+
+test('access: rendor may only request a quote / claim payment with allowed values', () => {
+  const RENDOR = { userId: 'rendor-2', role: 'rendor' };
+  const self = { id: 'rendor-2' };
+  // Requesting a quote is allowed; answering it is not
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { sub_request_status: 'pending_quote' }).ok, true);
+  // Claiming a payment with a concrete months + amount is allowed
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, {
+    sub_payment_status: 'paid_pending',
+    sub_payment_months: 3,
+    sub_payment_amount: 80,
+    sub_paid_at: '2026-09-03T00:00:00.000Z'
+  }).ok, true);
+  // Ranges are enforced (0 months, huge amounts rejected)
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { sub_payment_months: 0 }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { sub_payment_months: 25 }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { sub_payment_amount: -5 }).ok, false);
+  // A claim cannot be self-confirmed
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { sub_payment_status: 'confirmed' }).ok, false);
+  // Signup can never mint an admin or grant subscription state
+  const clean = access.sanitizeUserCreate({ role: 'rendor', rendor_sub_status: 'active', sub_quote_monthly: '30' });
+  assert.equal(clean.role, 'rendor');
+  assert.equal(clean.rendor_sub_status, undefined);
+  assert.equal(clean.sub_quote_monthly, undefined);
+});
+
+test('access: rendor_sub_active is derived for public rows but raw expiry stays private', () => {
+  const future = String(Date.now() + 90 * 86400000);
+  const rows = [{
+    id: 'r1', name: 'Ama', role: 'rendor', status: 'active',
+    rendor_sub_status: 'active', rendor_sub_expiry: future, rendor_sub_plan: 'quarterly',
+    sub_payment_status: 'paid_pending', sub_payment_months: 3, sub_payment_amount: 80,
+    email: 'ama@test.com', phone: '024111'
+  }, {
+    id: 'r2', name: 'Kojo', role: 'rendor', status: 'active',
+    rendor_sub_status: 'inactive', rendor_sub_expiry: String(Date.now() - 1000)
+  }];
+  const anon = access.applyReadPolicy('users', rows, null);
+  assert.equal(anon[0].rendor_sub_active, true);   // paid/active rendor visible
+  assert.equal(anon[1].rendor_sub_active, false);  // expired rendor hidden
+  assert.equal(anon[0].rendor_sub_expiry, undefined); // raw expiry scrubbed
+  assert.equal(anon[0].rendor_sub_plan, undefined);
+  assert.equal(anon[0].sub_payment_status, undefined);
+  assert.equal(anon[0].email, undefined);
+  // Admin sees everything including the raw expiry
+  const adminView = access.applyReadPolicy('users', rows, ADMIN);
+  assert.equal(adminView[0].rendor_sub_expiry, future);
+  assert.equal(adminView[0].sub_payment_months, 3);
+});

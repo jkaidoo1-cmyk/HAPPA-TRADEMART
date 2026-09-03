@@ -1550,6 +1550,13 @@ async function adminOpenRendorProfile(userId) {
       ${_apRow('Display Name', escHtml(u.rendor_display_name||'—'))}
       ${_apRow('Service Category', escHtml(u.rendor_service_cat||'—'))}
       ${_apRow('Starting Price', u.rendor_starting_price ? 'GHS '+parseFloat(u.rendor_starting_price).toFixed(2) : '—')}
+      <div style="height:1px;background:var(--border);margin:14px 0"></div>
+      <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Subscription</div>
+      ${_apRow('Status', '<span style="color:' + (subActive ? '#059669' : u.sub_payment_status === 'paid_pending' ? '#1e40af' : '#dc2626') + ';font-weight:800">' + (subActive ? 'Active' : u.sub_payment_status === 'paid_pending' ? 'Claim pending' : 'Inactive') + '</span>')}
+      ${_apRow('Plan', u.rendor_sub_plan ? ({monthly:'1 Month',quarterly:'3 Months',biannual:'6 Months'}[u.rendor_sub_plan] || u.rendor_sub_plan) : '—')}
+      ${_apRow('Expires', subExpiry ? subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—')}
+      ${u.sub_payment_months ? _apRow('Claimed', `GHS ${parseFloat(u.sub_payment_amount||0).toFixed(2)} · ${u.sub_payment_months} month${u.sub_payment_months>1?'s':''}${u.sub_paid_at ? ' · ' + new Date(u.sub_paid_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : ''}`) : ''}
+      ${_apRow('Quotes', [u.sub_quote_monthly&&('1mo: GHS '+parseFloat(u.sub_quote_monthly).toFixed(2)), u.sub_quote_quarterly&&('3mo: GHS '+parseFloat(u.sub_quote_quarterly).toFixed(2)), u.sub_quote_biannual&&('6mo: GHS '+parseFloat(u.sub_quote_biannual).toFixed(2))].filter(Boolean).join(' · ') || '—')}
       ${u.rendor_bio ? `<div style="margin-top:12px;background:var(--primary-light);padding:12px;border-radius:var(--radius-md);font-size:.9rem"><strong>Bio:</strong> ${escHtml(u.rendor_bio)}</div>` : ''}
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Verification</div>
@@ -1588,36 +1595,6 @@ async function adminOpenRendorProfile(userId) {
         ` : ''}
         <button class="btn btn-primary btn-block" type="submit" style="margin-bottom:20px"><i class="fas fa-save"></i> Save Changes</button>
       </form>
-      <div style="height:1px;background:var(--border);margin:16px 0"></div>
-      <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">⚙️ Account Controls</div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">
-        ${_apBtn('ap-action-blue','fas fa-bell','Send Notification','showSendNotificationModal(\'' + userId + '\',\'' + nameSafe + '\')')}
-        ${_apBtn('ap-action-purple','fas fa-wallet','Adjust Wallet','setTimeout(()=>adjustUserWallet(\'' + userId + '\',\'' + nameSafe + '\',' + (u.wallet_balance||0) + '),100)')}
-        ${u.is_verified
-          ? _apBtn('ap-action-gray','fas fa-phone-slash','Revoke Phone','_apRevokePhoneVerify(\'' + userId + '\')')
-          : _apBtn('ap-action-green','fas fa-phone','Verify Phone','_apGrantPhoneVerify(\'' + userId + '\')')}
-        ${u.id_verified
-          ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\'' + userId + '\')')
-          : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\'' + userId + '\')')}
-        ${u.status === 'active'
-          ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\'' + userId + '\')')
-          : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\'' + userId + '\')')}
-        ${u.sub_request_status === 'pending_quote'
-          ? _apBtn('ap-action-purple','fas fa-tag','Send Quote','adminSendSubQuote(\'' + userId + '\',\'' + nameSafe + '\')')
-          : (subActive
-            ? _apBtn('ap-action-gray','fas fa-star-slash','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
-            : _apBtn('ap-action-purple','fas fa-star','Activate Sub','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')'))}
-        ${_apBtn('ap-action-teal','fas fa-eye','View Public Profile','setTimeout(()=>{App.currentRendorId=\'' + userId + '\';showPage(\'rendor-profile\');renderRendorProfilePublic();},100)')}
-      </div>
-      ${_apRoleSection(userId, u.role||'rendor')}
-      ${_apPasswordSection(userId)}
-      <div style="height:1px;background:var(--border);margin:16px 0"></div>
-      <div style="font-weight:900;margin-bottom:12px;color:var(--danger);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">⚠️ Danger Zone</div>
-      <div style="background:#fee2e2;padding:12px;border-radius:var(--radius-md);border:1px solid #fca5a5">
-        <button class="btn btn-danger btn-block" onclick="if(confirm('Are you ABSOLUTELY sure you want to delete ${nameSafe||'this user'}? This CANNOT be undone!'))_apDeleteUser('${userId}')">
-          <i class="fas fa-user-slash"></i> Delete User Account
-        </button>
-      </div>
     </div>
   </div>
 
@@ -1651,11 +1628,13 @@ async function adminOpenRendorProfile(userId) {
         ${u.status === 'active'
           ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\'' + userId + '\')')
           : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\'' + userId + '\')')}
-        ${u.sub_request_status === 'pending_quote'
+        ${u.sub_request_status === 'pending_quote' && !u.sub_payment_status
           ? _apBtn('ap-action-purple','fas fa-tag','Send Quote','adminSendSubQuote(\'' + userId + '\',\'' + nameSafe + '\')')
-          : (subActive
-            ? _apBtn('ap-action-gray','fas fa-star-slash','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
-            : _apBtn('ap-action-purple','fas fa-star','Activate Sub','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')'))}
+          : (u.sub_payment_status === 'paid_pending'
+            ? _apBtn('ap-action-green','fas fa-check-circle','Verify Payment & Activate','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')')
+            : (subActive
+              ? _apBtn('ap-action-gray','fas fa-star-slash','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
+              : _apBtn('ap-action-purple','fas fa-star','Activate Sub','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')')))}
         ${_apBtn('ap-action-teal','fas fa-eye','View Public Profile','setTimeout(()=>{App.currentRendorId=\'' + userId + '\';showPage(\'rendor-profile\');renderRendorProfilePublic();},100)')}
       </div>
       ${_apRoleSection(userId, u.role||'rendor')}
