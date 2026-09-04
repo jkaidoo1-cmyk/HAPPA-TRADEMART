@@ -1804,29 +1804,54 @@ async function adminActivateRendorSub(userId, displayName) {
 }
 
 function adminDeactivateRendorSub(userId) {
-  if (!confirm('Are you sure you want to deactivate this rendor\'s subscription? Their profile will be hidden from clients until they subscribe again.')) return;
-  apiPatch('users', userId, {
-    rendor_sub_status: 'inactive',
-    rendor_sub_expiry: null,
-    rendor_sub_plan: null,
-    sub_request_status: null,
-    sub_quote_monthly: null,
-    sub_quote_quarterly: null,
-    sub_quote_biannual: null,
-    sub_payment_status: null,
-    sub_payment_months: null,
-    sub_payment_amount: null,
-    sub_payment_ref: null
-  }).then(() => {
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">⏸️ Deactivate Subscription</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body">
+  <p style="font-size:.85rem;color:var(--text-light);margin-bottom:16px;line-height:1.7">
+    Are you sure you want to deactivate this rendor's subscription?<br><br>
+    Their profile will be <strong>hidden from clients</strong> until they subscribe again.
+  </p>
+  <button class="btn btn-block" id="rendor-deactivate-confirm-btn"
+          style="background:var(--danger);color:#fff;border-color:var(--danger)"
+          onclick="_doDeactivateRendorSub('${userId}')">
+    <i class="fas fa-ban"></i> Yes, Deactivate
+  </button>
+  <button class="btn btn-ghost btn-block" onclick="closeModalForce()" style="margin-top:6px;color:var(--text-muted)">Cancel</button>
+</div>`);
+}
+
+async function _doDeactivateRendorSub(userId) {
+  const btn = document.getElementById('rendor-deactivate-confirm-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deactivating…'; }
+  try {
+    await apiPatch('users', userId, {
+      rendor_sub_status: 'inactive',
+      rendor_sub_expiry: null,
+      rendor_sub_plan: null,
+      sub_request_status: null,
+      sub_quote_monthly: null,
+      sub_quote_quarterly: null,
+      sub_quote_biannual: null,
+      sub_payment_status: null,
+      sub_payment_months: null,
+      sub_payment_amount: null,
+      sub_payment_ref: null
+    });
     addNotification(userId, 'system', '⏸️ Subscription Deactivated',
       'Your subscription has been deactivated by admin. Your profile is no longer visible to clients. Contact admin to renew.'
     );
     showToast('Subscription deactivated', 'info');
-    loadAdminRendors();
-  });
-}
-
-async function _doActivateRendorSub(userId) {
+    closeModalForce();
+    await loadAdminRendors();
+  } catch (e) {
+    showToast('Failed to deactivate: ' + (e.message || 'Unknown error'), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-ban"></i> Yes, Deactivate'; }
+  }
+}async function _doActivateRendorSub(userId) {
   const sel     = document.getElementById('sub-months-sel');
   const planId  = sel?.value || 'monthly';
   const months  = parseInt(sel?.selectedOptions?.[0]?.dataset?.months || '1');
@@ -1841,35 +1866,41 @@ async function _doActivateRendorSub(userId) {
   const btn = document.getElementById('sub-activate-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Activating…'; }
 
-  await apiPatch('users', userId, {
-    rendor_sub_status: 'active',
-    rendor_sub_expiry: String(expiryMs),
-    rendor_sub_plan: planId,
-    sub_request_status: null,
-    sub_payment_status: null,
-    sub_payment_months: null,
-    sub_payment_amount: null,
-    sub_payment_ref: null
-  });
+  try {
+    await apiPatch('users', userId, {
+      rendor_sub_status: 'active',
+      rendor_sub_expiry: String(expiryMs),
+      rendor_sub_plan: planId,
+      sub_request_status: null,
+      sub_payment_status: null,
+      sub_payment_months: null,
+      sub_payment_amount: null,
+      sub_payment_ref: null
+    });
 
-  // Record platform revenue for this subscription payment
-  if (price > 0) {
-    await apiPost('platform_revenue', {
-      source: 'subscription',
-      amount: price,
-      reference: 'RENDORSUB-' + userId + '-' + Date.now(),
-      description: `Rendor Subscription: ${planLabel} plan (GHS ${price.toFixed(2)})`,
-      created_at: new Date().toISOString()
-    }).catch(e => console.warn('[Revenue] rendor subscription record failed:', e && e.message || e));
+    // Record platform revenue for this subscription payment
+    if (price > 0) {
+      await apiPost('platform_revenue', {
+        source: 'subscription',
+        amount: price,
+        reference: 'RENDORSUB-' + userId + '-' + Date.now(),
+        description: `Rendor Subscription: ${planLabel} plan (GHS ${price.toFixed(2)})`,
+        created_at: new Date().toISOString()
+      }).catch(e => console.warn('[Revenue] rendor subscription record failed:', e && e.message || e));
+    }
+
+    addNotification(userId, 'system', '🎉 Subscription Activated!',
+      `Your ${planLabel} subscription is now active. Your profile is visible to clients until ${new Date(expiryMs).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}. Keep creating great posts!`
+    );
+
+    showToast('Subscription activated ✅', 'success');
+    closeModalForce();
+    await loadAdminRendors();
+  } catch(e) {
+    showToast('Activation failed: ' + ((window.lastApiError || e.message || 'Unknown error').replace(/^HTTP \d+: /, '')), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-star"></i> Activate Subscription'; }
   }
 
-  addNotification(userId, 'system', '🎉 Subscription Activated!',
-    `Your ${planLabel} subscription is now active. Your profile is visible to clients until ${new Date(expiryMs).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}. Keep creating great posts!`
-  );
-
-  showToast('Subscription activated ✅', 'success');
-  closeModalForce();
-  await loadAdminRendors();
 }
 
 // ── Reject vendor application ─────────────────────────────

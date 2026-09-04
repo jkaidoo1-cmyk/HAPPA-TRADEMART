@@ -371,6 +371,12 @@ function rendorSubPrices(u) {
 async function renderRendorSubscription() {
   const el = document.getElementById('rendor-sub-content');
   if (!el) return;
+  // Re-fetch fresh user data so subscription status + admin-set quotes are current.
+  const fresh = await apiGet('users/' + App.currentUser.id).catch(() => null);
+  if (fresh && !fresh.error) {
+    Object.assign(App.currentUser, fresh);
+    if (typeof saveSessions === 'function') saveSessions();
+  }
   const u = App.currentUser;
 
   const subStatus = u.rendor_sub_status || null;
@@ -378,8 +384,13 @@ async function renderRendorSubscription() {
   const subActive = subStatus === 'active' && subExpiry && subExpiry > new Date();
   const planLabel = { monthly:'1 Month', quarterly:'3 Months', biannual:'6 Months' };
 
-  // Prices: per-rendor quote wins, else the admin settings defaults (same as
-  // the storefront — admin sets the prices globally in Settings).
+  // Determine quote state
+  const requestStatus = u.sub_request_status || null;
+  const hasQuote = rendorSubPrices(u) !== null;
+  const quoteRequested = requestStatus === 'pending_quote' && !hasQuote;
+  const quoteReceived = requestStatus === 'quoted' || hasQuote;
+
+  // Prices: per-rendor quote wins, else admin settings defaults.
   let prices = rendorSubPrices(u);
   if (!prices) {
     const m = parseFloat(await getSetting('rendor_sub_monthly', ''));
@@ -392,33 +403,76 @@ async function renderRendorSubscription() {
     };
   }
 
+  // ── Status banner ──
   let statusTitle, statusSub, statusBg, statusIcon, statusColor;
   if (subActive) {
     statusBg = '#d1fae5'; statusColor = '#065f46'; statusIcon = '✅';
     statusTitle = 'Subscription Active';
     statusSub = `Plan: ${planLabel[u.rendor_sub_plan] || 'Subscription'} · Expires ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})} · Renew below to extend`;
+  } else if (quoteRequested) {
+    statusBg = '#fef3c7'; statusColor = '#92400e'; statusIcon = '⏳';
+    statusTitle = 'Quote Requested';
+    statusSub = 'You\'ve requested a subscription quote from admin. Waiting for admin to send pricing details.';
+  } else if (quoteReceived) {
+    statusBg = '#ede9fe'; statusColor = '#4c1d95'; statusIcon = '📋';
+    statusTitle = 'Quote Received';
+    statusSub = 'Admin has sent you a subscription quote. Choose a plan below and pay to activate.';
   } else {
     statusBg = '#fee2e2'; statusColor = '#991b1b'; statusIcon = '⏰';
     statusTitle = 'No Active Subscription';
-    statusSub = 'Choose a plan below and pay to activate your profile instantly.';
+    statusSub = 'Request a quote from admin to get started.';
   }
 
-  // Three plan cards priced from settings (1 / 3 / 6 months)
-  const plans = [
-    { id:'monthly',   months:1, total:prices.monthly },
-    { id:'quarterly', months:3, total:prices.quarterly },
-    { id:'biannual',  months:6, total:prices.biannual }
-  ];
-  const cards = plans.map(p => `
-  <div style="flex:1;min-width:150px;background:${p.months===1?'#ede9fe':'#f8fafc'};border:2px solid ${p.months===1?'#a78bfa':'var(--border)'};border-radius:12px;padding:14px;text-align:center">
-    <div style="font-size:.72rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">${p.months} Month${p.months>1?'s':''}</div>
-    <div style="font-size:1.3rem;font-weight:900;color:#4c1d95;margin:6px 0 2px">GHS ${p.total.toFixed(2)}</div>
-    <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:10px">${p.months===1?'Monthly':'GHS '+(p.total/p.months).toFixed(2)+'/month'}</div>
-    <button class="btn btn-sm" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.73rem;padding:5px 8px"
-            onclick="requestRendorSubscription('${p.id}',${p.months},${p.total},'${p.months} Month${p.months>1?'s':''}')">
-      ${subActive ? '🔄 Renew' : '⭐ Subscribe'}
-    </button>
-  </div>`).join('');
+  // ── Plan cards (shown when quote is received or active user wants to renew) ──
+  const showPlans = subActive || quoteReceived;
+  let cardsHTML = '';
+  if (showPlans) {
+    const plans = [
+      { id:'monthly',   months:1, total:prices.monthly },
+      { id:'quarterly', months:3, total:prices.quarterly },
+      { id:'biannual',  months:6, total:prices.biannual }
+    ];
+    cardsHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">` + plans.map(p => `
+    <div style="flex:1;min-width:150px;background:${p.months===1?'#ede9fe':'#f8fafc'};border:2px solid ${p.months===1?'#a78bfa':'var(--border)'};border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:.72rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">${p.months} Month${p.months>1?'s':''}</div>
+      <div style="font-size:1.3rem;font-weight:900;color:#4c1d95;margin:6px 0 2px">GHS ${p.total.toFixed(2)}</div>
+      <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:10px">${p.months===1?'Monthly':'GHS '+(p.total/p.months).toFixed(2)+'/month'}</div>
+      <button class="btn btn-sm" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.73rem;padding:5px 8px"
+              onclick="requestRendorSubscription('${p.id}',${p.months},${p.total},'${p.months} Month${p.months>1?'s':''}')">
+        ${subActive ? '🔄 Renew' : '⭐ Subscribe'}
+      </button>
+    </div>`).join('') + `</div>`;
+  }
+
+  // ── Request Quote button (shown when no quote yet) ──
+  let requestQuoteHTML = '';
+  if (!subActive && !quoteReceived) {
+    if (quoteRequested) {
+      requestQuoteHTML = `
+      <div style="background:#fef3c7;border:1.5px solid #fde047;border-radius:12px;padding:18px;text-align:center;margin-bottom:16px">
+        <div style="font-size:1.8rem;margin-bottom:8px">⏳</div>
+        <div style="font-weight:700;font-size:.9rem;color:#92400e;margin-bottom:4px">Quote Requested</div>
+        <div style="font-size:.8rem;color:#a16207;line-height:1.6">
+          Admin has been notified. You'll see the pricing here once they send a quote.<br>
+          You can also contact admin directly if needed.
+        </div>
+      </div>`;
+    } else {
+      requestQuoteHTML = `
+      <div style="background:linear-gradient(135deg,#ede9fe,#ddd6fe);border:1.5px solid #a78bfa;border-radius:12px;padding:24px;text-align:center;margin-bottom:16px">
+        <div style="font-size:2rem;margin-bottom:10px">📋</div>
+        <div style="font-weight:800;font-size:1rem;color:#4c1d95;margin-bottom:6px">Request a Subscription Quote</div>
+        <div style="font-size:.82rem;color:#6d28d9;line-height:1.6;margin-bottom:14px">
+          Ask admin to set your subscription pricing. Once they send a quote,<br>you can choose a plan and pay instantly.
+        </div>
+        <button class="btn" id="request-quote-btn"
+                style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;padding:10px 24px;font-weight:700"
+                onclick="requestRendorQuote()">
+          <i class="fas fa-paper-plane"></i> Request Quote from Admin
+        </button>
+      </div>`;
+    }
+  }
 
   el.innerHTML = `
 <!-- Current status -->
@@ -437,19 +491,20 @@ async function renderRendorSubscription() {
 <!-- How it works -->
 <div style="background:linear-gradient(90deg,#ede9fe,#ddd6fe);border:1.5px solid #a78bfa;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:20px">
   <div style="font-weight:700;font-size:.83rem;color:#4c1d95;margin-bottom:6px"><i class="fas fa-info-circle"></i> How Subscriptions Work</div>
-  <ul style="font-size:.8rem;color:#4c1d95;padding-left:16px;line-height:2;margin:0">
-    <li>Pick a plan (1, 3 or 6 months) — prices are set by admin</li>
-    <li>Pay instantly via Mobile Money in this page</li>
-    <li>Your profile &amp; posts go live immediately — no waiting</li>
+  <ol style="font-size:.8rem;color:#4c1d95;padding-left:16px;line-height:2;margin:0">
+    <li>Request a quote from admin</li>
+    <li>Admin sets your subscription pricing</li>
+    <li>Choose a plan (1, 3 or 6 months) and pay via Mobile Money</li>
+    <li>Your profile &amp; posts go live immediately</li>
     <li>Renew any time to extend your expiry date</li>
-  </ul>
+  </ol>
 </div>
 
-<!-- Plan cards -->
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${cards}</div>
-<p style="font-size:.74rem;color:var(--text-muted);margin:0 0 4px;line-height:1.6">
+${requestQuoteHTML}
+${cardsHTML}
+${showPlans ? `<p style="font-size:.74rem;color:var(--text-muted);margin:0 0 4px;line-height:1.6">
   <i class="fas fa-info-circle"></i> ${subActive ? 'Renewing adds the selected months on top of your current expiry date.' : 'Your profile becomes visible to clients as soon as your payment is confirmed.'}
-</p>
+</p>` : ''}
 
 <!-- Contact admin -->
 <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;text-align:center">
@@ -458,6 +513,35 @@ async function renderRendorSubscription() {
     <i class="fas fa-headset"></i> Contact Admin
   </button>
 </div>`;
+}
+
+// ── Step: Rendor requests a subscription quote from admin ──
+async function requestRendorQuote() {
+  const u = App.currentUser;
+  const btn = document.getElementById('request-quote-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending request…'; }
+
+  try {
+    await apiPatch('users', u.id, { sub_request_status: 'pending_quote' });
+    App.currentUser.sub_request_status = 'pending_quote';
+    if (typeof saveSessions === 'function') saveSessions();
+
+    // Notify admins about the quote request
+    const adminsRes = await apiGet('users', 'limit=200');
+    const admins = (adminsRes?.data || []).filter(a => a.role === 'admin');
+    for (const admin of admins) {
+      addNotification(admin.id, 'system',
+        '📋 Rendor Subscription Quote Request',
+        `${u.rendor_display_name || u.name} (${u.email}) is requesting a subscription quote. Go to Rendors → Send Quote to set pricing.`
+      );
+    }
+
+    showToast('Quote request sent to admin! ✅', 'success');
+    renderRendorSubscription();
+  } catch (e) {
+    showToast('Failed to send request: ' + ((window.lastApiError || e.message || 'Unknown error').replace(/^HTTP \d+: /, '')), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Request Quote from Admin'; }
+  }
 }
 
 // ── Step: Rendor picks a plan and pays in-app (storefront-style) ──
@@ -532,6 +616,13 @@ async function confirmRendorSubscription(planId, months, total, planLabel) {
     App.currentUser.sub_payment_amount = null;
     App.currentUser.sub_paid_at = null;
     App.currentUser.sub_payment_ref = null;
+    if (typeof saveSessions === 'function') saveSessions();
+  }
+
+  // Re-fetch full user data from server to sync derived fields (rendor_sub_active, etc.)
+  const freshUser = await apiGet('users/' + u.id).catch(() => null);
+  if (freshUser && !freshUser.error) {
+    Object.assign(App.currentUser, freshUser);
     if (typeof saveSessions === 'function') saveSessions();
   }
 
