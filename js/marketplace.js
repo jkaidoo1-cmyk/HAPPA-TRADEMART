@@ -2203,17 +2203,12 @@ function pickStar(n) {
 
 
 async function submitReview(targetId, targetType) {
-
   const rating  = parseInt(document.getElementById('review-rating')?.value);
-
   const comment = document.getElementById('review-comment')?.value.trim();
-
   if (!rating) { showToast('Please select a star rating', 'warning'); return; }
-
   if (!comment) { showToast('Please write a comment', 'warning'); return; }
-
-
-
+  const btn = document.querySelector('[onclick*="submitReview"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…'; }
   const rv = {
 
     target_id: targetId, target_type: targetType,
@@ -2270,16 +2265,22 @@ function reviewCardHTML(r) {
 
 
 
-// ── Open Rendor Public Profile ────────────────────────────
-
-function openRendorProfile(rendorId) {
-
+// ── Open Rendor Public Profile ────────────────────────────function openRendorProfile(rendorId) {
   if (!rendorId) return;
-
   App.currentRendorId = rendorId;
-
   showPage('rendor-profile');
+}
 
+function shareRendorProfile(rendorId, name) {
+  const url = window.location.origin + '/#rendor-profile/' + rendorId;
+  const text = `Check out ${name} on HAPPA TRADEMART — ${url}`;
+  if (navigator.share) {
+    navigator.share({ title: name, text, url }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => showToast('Profile link copied! 📋', 'success'));
+  } else {
+    prompt('Copy this link:', text);
+  }
 }
 
 
@@ -2436,6 +2437,10 @@ async function renderRendorProfilePublic() {
       ${startPrice ? `<div style="font-size:.82rem;font-weight:700;margin-top:4px;opacity:.95">${escHtml(startPrice)}</div>` : ''}
 
     </div>
+
+    <button onclick="shareRendorProfile('${rendorId}','${escHtml(displayName)}')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" title="Share this profile">
+      <i class="fas fa-share-alt" style="font-size:.85rem"></i>
+    </button>
 
   </div>
 
@@ -3023,6 +3028,8 @@ window.submitStorefrontReview = async function(form, storeId) {
   if (!App.currentUser) { showToast('Please sign in first', 'warning'); return; }
   const rating = parseInt(form.rating.value);
   const review = form.review.value.trim();
+  const btn = form.querySelector('[type=submit]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…'; }
 
   const newReview = await apiPost('reviews', {
     customer_id: App.currentUser.id,
@@ -3849,6 +3856,8 @@ window.renderStorefrontAdminPortalPage = async function(storeId) {
 window.submitStorefrontAdminLogin = async function(form, storeId) {
   const email = form.email.value.trim().toLowerCase();
   const password = form.password.value.trim();
+  const btn = form.querySelector('[type=submit]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in…'; }
 
   // Dynamically populate App.allUsers if missing or empty
   if (!App.allUsers || !App.allUsers.length) {

@@ -73,13 +73,6 @@ async function renderVendorDashboard() {
   let allStores = storeRes?.data || [];
   const validVendorId = (u && u.id && String(u.id).trim() !== 'undefined' && String(u.id).trim() !== 'null') ? String(u.id).trim() : null;
 
-  if (validVendorId === 'u-vendor-001') {
-    const s1 = allStores.find(s => s.id === '1');
-    if (s1 && s1.vendor_id !== 'u-vendor-001') {
-      s1.vendor_id = 'u-vendor-001';
-      apiPatch('stores', '1', { vendor_id: 'u-vendor-001' }).catch(() => {});
-    }
-  }
   let stores   = validVendorId ? allStores.filter(s => s && s.vendor_id && String(s.vendor_id).trim() === validVendorId) : [];
   let myStore  = stores[0] || null;
   
@@ -271,7 +264,7 @@ async function renderVendorDashboard() {
     </div>
     ${myProducts.length ? myProducts.map(p => vendorProductRowHTML(p)).join('') :
       '<div class="empty-state" style="padding:24px"><i class="fas fa-box-open"></i><h3>No products yet</h3><p>Add your first product to start selling</p></div>'}
-    ` : `<div class="empty-state"><i class="fas fa-store-slash"></i><h3>No store assigned</h3></div>`}
+    ` : `<div class="empty-state" style="padding:24px"><i class="fas fa-store-slash"></i><h3>No Store Yet</h3><p>Your store is being set up. If you just registered, admin needs to approve your account first. Contact support if this persists.</p></div>`}
   </div>
 </div>
 
@@ -347,11 +340,7 @@ async function renderVendorDashboard() {
         <table class="commission-table">
           <thead><tr><th>Price Range</th><th>Platform Takes</th><th>You Keep</th></tr></thead>
           <tbody>
-            <tr><td>GHS 1–50</td><td>8%</td><td>92%</td></tr>
-            <tr><td>GHS 51–100</td><td>6%</td><td>94%</td></tr>
-            <tr><td>GHS 101–500</td><td>4%</td><td>96%</td></tr>
-            <tr><td>GHS 501–1000</td><td>3%</td><td>97%</td></tr>
-            <tr><td>GHS 1000+</td><td>2%</td><td>98%</td></tr>
+            ${(typeof COMMISSION !== 'undefined' ? COMMISSION : [[1,50,8],[51,100,6],[101,500,4],[501,1000,3],[1001,Infinity,2]]).map(([min,max,pct]) => `<tr><td>GHS ${min}–${max === Infinity ? '+' : max}</td><td>${pct}%</td><td>${100-pct}%</td></tr>`).join('')}
           </tbody>
         </table>
       </div>
@@ -483,7 +472,7 @@ async function renderVendorDashboard() {
         <div style="flex:1">
           <div style="font-weight:700;font-size:.875rem">ID & Vendor Verification Uploads</div>
           <div style="font-size:.78rem;color:var(--text-muted)">
-            ${u.id_verified ? '✅ Verified' : (u.id_image ? '⏳ Awaiting Admin Approval' : 'Upload ID, sales proofs, and status sharing screenshots')}
+            ${u.id_verified ? '✅ Verified' : (u.id_image ? '⏳ Awaiting Admin Approval' : 'Upload ID, proof of previous sales, and link-sharing screenshot')}
           </div>
           ${!u.id_verified ? `
             <button class="btn btn-warning btn-sm" style="margin-top:8px" onclick="showVerificationUploadModal('${u.id}')">
@@ -1640,6 +1629,9 @@ async function saveProductEdit(productId) {
 
 async function archiveProduct(productId) {
   if (!confirm('Archive this product? It will be hidden from buyers.')) return;
+  const el = document.getElementById('vendor-product-' + productId);
+  const btn = el?.querySelector('[onclick*=archiveProduct]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
   await apiPatch('products', productId, { status: 'archived' });
   const p = App.allProducts.find(p => String(p.id) === String(productId));
   if (p) p.status = 'archived';
@@ -1653,6 +1645,9 @@ async function archiveProduct(productId) {
 
 async function deleteVendorProduct(productId) {
   if (!confirm('Permanently delete this product? This cannot be undone.')) return;
+  const el = document.getElementById('vendor-product-' + productId);
+  const btn = el?.querySelector('[onclick*=deleteVendorProduct]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
   await apiDelete('products', productId);
   // Remove from global cache immediately so it doesn't reappear
   if (typeof removeProductFromCaches === 'function') removeProductFromCaches(productId);
@@ -1722,17 +1717,20 @@ function editStoreInfo(storeId) {
 }
 
 async function saveStoreInfo(storeId) {
-  const name   = document.getElementById('s-name')?.value.trim();
-  const desc   = document.getElementById('s-desc')?.value.trim();
-  // Prefer newly uploaded base64 images; fall back to existing URLs
-  const logo   = document.getElementById('s-logo-b64')?.value.trim() || '';
-  const banner = document.getElementById('s-banner-b64')?.value.trim() || '';
-  await apiPatch('stores', storeId, { name, description: desc, logo_url: logo, banner_url: banner });
-  const s = App.allStores.find(s => s.id === storeId);
-  if (s) { s.name = name; s.description = desc; s.logo_url = logo; s.banner_url = banner; }
-  closeModalForce();
-  showToast('Store updated!', 'success');
-  renderVendorDashboard();
+  const btn = document.querySelector('.modal-body [onclick*="saveStoreInfo"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; }
+  try {
+    const name   = document.getElementById('s-name')?.value.trim();
+    const desc   = document.getElementById('s-desc')?.value.trim();
+    const logo   = document.getElementById('s-logo-b64')?.value.trim() || '';
+    const banner = document.getElementById('s-banner-b64')?.value.trim() || '';
+    await apiPatch('stores', storeId, { name, description: desc, logo_url: logo, banner_url: banner });
+    const s = App.allStores.find(s => s.id === storeId);
+    if (s) { s.name = name; s.description = desc; s.logo_url = logo; s.banner_url = banner; }
+    closeModalForce();
+    showToast('Store updated!', 'success');
+    renderVendorDashboard();
+  } catch(e) { showToast('Failed to save. Please try again.', 'error'); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Changes'; } }
 }
 
 function resendOTP() {
@@ -1754,15 +1752,16 @@ function resendOTP() {
 
 function showVerificationUploadModal(userId) {
   const u = App.currentUser || {};
+  const isRendor = u.role === 'rendor';
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
-  <span class="modal-title">Vendor Verification Uploads</span>
+  <span class="modal-title">${isRendor ? 'Rendor' : 'Vendor'} Verification Uploads</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
 <div class="modal-body" style="max-height:75vh;overflow-y:auto;padding-bottom:20px">
   <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:14px;line-height:1.4">
-    Please upload the required verification items. All fields are mandatory to apply for vendor verification.
+    Please upload the required verification items. All fields are mandatory to apply for ${isRendor ? 'rendor' : 'vendor'} verification.
   </p>
 
   <!-- 1. ID document -->
@@ -1780,8 +1779,8 @@ function showVerificationUploadModal(userId) {
 
   <!-- 2. Proof of Previous Sales (3 images) -->
   <div class="form-group" style="margin-bottom:14px">
-    <label class="form-label" style="font-weight:700">2. Proof of Previous Sales (Upload exactly 3 images)</label>
-    <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">Invoices, screenshots of customer chats, or package deliveries.</p>
+    <label class="form-label" style="font-weight:700">2. ${isRendor ? 'Portfolio / Sample Work (Upload exactly 3 images)' : 'Proof of Previous Sales (Upload exactly 3 images)'}</label>
+    <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">${isRendor ? 'Screenshots of past projects, client feedback, or sample deliverables.' : 'Invoices, screenshots of customer chats, or package deliveries.'}</p>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
       <!-- Slot 1 -->
       <div>
@@ -1929,7 +1928,8 @@ async function submitVerificationDocuments(userId) {
     saveSessions();
     closeModalForce();
     showToast('Verification documents submitted for review ✅', 'success');
-    renderVendorDashboard();
+    if (App.currentUser?.role === 'rendor' && typeof renderRendorDashboard === 'function') renderRendorDashboard();
+    else renderVendorDashboard();
   } catch (err) {
     console.error(err);
     showToast('Failed to submit documents: ' + (err?.message || 'Network error'), 'danger');
@@ -2948,8 +2948,6 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
     }
   }
   
-  if (!confirm(`Pay GH₵ ${totalCost.toFixed(2)} to activate ${months} month(s) of the ${planKey.toUpperCase()} plan?`)) return;
-  
   showToast('Processing payment & activating storefront...', 'info');
   
   const storeIdx = App.allStores ? App.allStores.findIndex(s => String(s.id) === String(storeId)) : -1;
@@ -2962,12 +2960,6 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
     method,
     payment_ref: 'SUB-' + storeId + '-' + Date.now(),
     note: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — ${storeIdx !== -1 ? (App.allStores[storeIdx].name || '') : ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`,
-    record_revenue: {
-      source: 'subscription',
-      amount: totalCost,
-      reference: 'SUB-' + storeId + '-' + Date.now(),
-      description: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — ${storeIdx !== -1 ? (App.allStores[storeIdx].name || '') : ''}`
-    }
   });
   if (!payRes || payRes.error) {
     const msg = (payRes && payRes.error) || window.lastApiError || 'Payment could not be processed. Please try again.';
@@ -3454,6 +3446,8 @@ window.createStorefrontDraft = async function(storeId) {
     showToast('No active store found for your account. Please ensure your vendor store is active.', 'warning');
     return;
   }
+  const btn = document.querySelector('[onclick*="createStorefrontDraft"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating…'; }
 
   showToast('Initializing storefront draft...', 'info');
   const draftSF = {
@@ -3490,6 +3484,8 @@ window.saveVendorStoreSettings = async function(storeId) {
     showToast('No active store found for your account. Please ensure your vendor store is active.', 'warning');
     return;
   }
+  const btn = document.querySelector('[onclick*="saveVendorStoreSettings"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; }
 
   const sfName = (document.getElementById('store-name')?.value || document.getElementById('store-display-name')?.value || store.name || '').trim();
   const sfSlug = (document.getElementById('store-slug')?.value || store.slug || '').trim();
@@ -3576,6 +3572,8 @@ window.submitStorefrontRequest = async function(storeId) {
     showToast('No active store found for your account. Please ensure your vendor store is active.', 'warning');
     return;
   }
+  const btn = document.querySelector('[onclick*="submitStorefrontRequest"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…'; }
 
   // Save latest form settings before submitting
   await window.saveVendorStoreSettings(storeId);
@@ -3614,14 +3612,34 @@ window.setStorefrontStatus = async function(storeId, status) {
 
 // ── Storefront Subscription System ───────────────────────────────────────────
 
-const STOREFRONT_PLANS = {
-  starter: { name: 'Starter', price: 29, color: '#16a34a', icon: '🌱',
+const _STOREFRONT_PLANS_DEFAULTS = {
+  starter: { name: 'Starter', color: '#16a34a', icon: '🌱',
     features: ['Custom storefront URL','Basic theme & colors','Up to 20 products','Email support'] },
-  growth:  { name: 'Growth',  price: 59, color: 'var(--primary)', icon: '🚀',
+  growth:  { name: 'Growth',  color: 'var(--primary)', icon: '🚀',
     features: ['All Starter features','All 4 premium themes','Up to 100 products','Hero banner & gallery','Priority support'] },
-  pro:     { name: 'Pro',     price: 99, color: '#7c3aed', icon: '💎',
+  pro:     { name: 'Pro',     color: '#7c3aed', icon: '💎',
     features: ['All Growth features','Unlimited products','Custom domain support','Analytics dashboard','Dedicated support'] }
 };
+// Resolve storefront plan prices: admin-set plan_prices on the storefront record
+// take priority, then fallback to default prices.
+function _getSfPlanPrices(store) {
+  const pp = store?.plan_prices || {};
+  return {
+    starter: parseFloat(pp.starter) || 29,
+    growth:  parseFloat(pp.growth)  || 59,
+    pro:     parseFloat(pp.pro)     || 99
+  };
+}
+function _getSfPlans(store) {
+  const prices = _getSfPlanPrices(store);
+  const plans = {};
+  for (const [k, v] of Object.entries(_STOREFRONT_PLANS_DEFAULTS)) {
+    plans[k] = { ...v, price: prices[k] || v.price };
+  }
+  return plans;
+}
+// Mutable reference updated at render time so all helpers use current prices
+let STOREFRONT_PLANS = _getSfPlans({});
 
 window.getSubscriptionBannerHTML = function(store) {
   const sub = store.subscription_status;
@@ -3636,7 +3654,7 @@ window.getSubscriptionBannerHTML = function(store) {
         <div><i class="fas fa-exclamation-circle"></i> <strong>No Active Subscription</strong>
           <div style="font-size:.75rem;margin-top:3px">Choose a plan to keep your storefront running.</div>
         </div>
-        <button class="btn btn-sm" style="background:#ea580c;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','growth',59)">
+        <button class="btn btn-sm" style="background:#ea580c;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','growth',${(store.plan_prices?.growth || 59).toFixed(2)})">
           <i class="fas fa-sync"></i> Subscribe Now
         </button>
       </div>`;
@@ -3652,7 +3670,7 @@ window.getSubscriptionBannerHTML = function(store) {
         <div><i class="fas fa-times-circle"></i> <strong>Subscription Expired</strong>
           <div style="font-size:.75rem;margin-top:3px">Your ${planInfo ? planInfo.name : plan} plan expired on ${end.toLocaleDateString()}. Renew to restore storefront access.</div>
         </div>
-        <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${planInfo ? planInfo.price : 59})">
+        <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${store.plan_prices?.[plan] || planInfo ? planInfo.price : 59})">
           <i class="fas fa-sync"></i> Renew Now
         </button>
       </div>`;
@@ -3673,7 +3691,7 @@ window.getSubscriptionBannerHTML = function(store) {
           ${expiring ? `⚠️ Expires in <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong>` : `Active until <strong>${end.toLocaleDateString()}</strong>`}
         </div>
       </div>
-      <button class="btn btn-sm" style="background:${expiring ? '#ea580c' : '#16a34a'};color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${planInfo ? planInfo.price : 59})">
+      <button class="btn btn-sm" style="background:${expiring ? '#ea580c' : '#16a34a'};color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${store.plan_prices?.[plan] || planInfo ? planInfo.price : 59})">
         <i class="fas fa-sync"></i> ${expiring ? 'Renew Now' : 'Manage Plan'}
       </button>
     </div>`;
@@ -3684,6 +3702,7 @@ window.openStorefrontSubscribeModal = function(storeId, preSelectedPlan, price) 
   if (existing) existing.remove();
 
   const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || {};
+  STOREFRONT_PLANS = _getSfPlans(store);
   const plan = STOREFRONT_PLANS[preSelectedPlan] || STOREFRONT_PLANS.growth;
 
   const html = `
@@ -3814,6 +3833,8 @@ window.confirmStorefrontSubscription = async function(storeId) {
   const payMethod = document.querySelector('[name="sub-pay"]:checked');
   const durationEl = document.getElementById('sub-duration');
   if (!selectedPlan || !durationEl) return;
+  const payBtn = document.querySelector('#storefront-sub-modal button[onclick*="confirmStorefrontSubscription"]');
+  if (payBtn) { payBtn.disabled = true; payBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing…'; }
 
   const planKey = selectedPlan.value;
   const plan = STOREFRONT_PLANS[planKey];
@@ -3858,12 +3879,6 @@ window.confirmStorefrontSubscription = async function(storeId) {
     method,
     payment_ref: 'SUB-' + storeId + '-' + Date.now(),
     note: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`,
-    record_revenue: {
-      source: 'subscription',
-      amount: amt,
-      reference: 'SUB-' + storeId + '-' + Date.now(),
-      description: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''}`
-    }
   });
   if (!payRes || payRes.error) {
     const msg = (payRes && payRes.error) || window.lastApiError || 'Payment could not be processed. Please try again.';

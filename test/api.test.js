@@ -139,3 +139,56 @@ test('wallet engine: rendors are blocked from every wallet action (no wallet)', 
   assert.equal(res5.ok, false); // blocked by unverified check, NOT by role
   assert.equal(res5.status, 403);
 });
+
+test('wallet engine: rendor-subscribe activates instantly like a storefront plan', async () => {
+  const wallet = require('../lib/wallet.js');
+  const RENDOR = { userId: 'rendor-10', role: 'rendor' };
+  let user = { id: 'rendor-10', wallet_balance: 0, rendor_sub_status: null, rendor_sub_expiry: null };
+  let revenueRows = [];
+  let txns = [];
+  const adapter = {
+    loadUser: async () => user,
+    saveUser: async (id, patch) => { user = { ...user, ...patch }; },
+    getSetting: async (key, def) => key === 'rendor_sub_monthly' ? '30' : def,
+    listUserTxns: async () => txns,
+    insert: async (table, rec) => {
+      if (table === 'platform_revenue') revenueRows.push(rec);
+      if (table === 'wallet_transactions') txns.push(rec);
+      return rec;
+    },
+    update: async () => {}
+  };
+
+  // Wrong amount is rejected (price comes from admin settings, never the client)
+  const under = await wallet.rendorSubscribe(adapter, RENDOR, { months: 1, amount: 5, method: 'momo', payment_ref: 'R-1' });
+  assert.equal(under.ok, false);
+  assert.equal(under.status, 400);
+
+  // Correct payment activates instantly, extends expiry, records revenue
+  const res = await wallet.rendorSubscribe(adapter, RENDOR, { months: 1, amount: 30, method: 'momo', payment_ref: 'R-2' });
+  assert.equal(res.ok, true);
+  assert.equal(user.rendor_sub_status, 'active');
+  assert.equal(user.rendor_sub_plan, 'monthly');
+  assert.ok(Number(user.rendor_sub_expiry) > Date.now());
+  assert.equal(revenueRows.length, 1);
+
+  // Renewal extends from the current expiry, not from today
+  const firstExpiry = Number(user.rendor_sub_expiry);
+  const res2 = await wallet.rendorSubscribe(adapter, RENDOR, { months: 3, amount: 80, method: 'momo', payment_ref: 'R-3' });
+  assert.equal(res2.ok, true);
+  assert.ok(Number(user.rendor_sub_expiry) > firstExpiry + 60 * 86400000); // ~3 more months on top
+
+  // Same payment_ref is idempotent (no double activation / double revenue)
+  const dup = await wallet.rendorSubscribe(adapter, RENDOR, { months: 3, amount: 80, method: 'momo', payment_ref: 'R-3' });
+  assert.equal(dup.ok, true);
+  assert.equal(dup.data.already, true);
+});
+
+test('wallet engine: rendor-subscribe requires a rendor role', async () => {
+  const wallet = require('../lib/wallet.js');
+  const BUYER = { userId: 'buyer-99', role: 'buyer' };
+  const dummy = { loadUser: async () => ({}), saveUser: async () => {}, getSetting: async () => '', listUserTxns: async () => [], insert: async () => ({}), update: async () => {} };
+  const res = await wallet.rendorSubscribe(dummy, BUYER, { months: 1, amount: 30, method: 'momo' });
+  assert.equal(res.ok, false);
+  assert.equal(res.status, 403);
+});

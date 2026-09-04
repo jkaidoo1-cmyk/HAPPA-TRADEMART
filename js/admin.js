@@ -113,7 +113,7 @@ async function renderAdminDashboard() {
   const rejectionRate  = allPkgs.length ? ((rejectedPkgs.length / allPkgs.length) * 100).toFixed(1) : '0.0';
 
   const pendingAll     = pendingVendors.length + pendingRendors.length;
-  const pendingIdVendors = vendors.filter(u => !u.id_verified && (u.id_image || u.proof_sales_1));
+  const pendingIdVendors = [...vendors, ...rendors].filter(u => !u.id_verified && (u.id_image || u.proof_sales_1));
   
   // Fetch storefronts separately
   const storefrontsRes = await apiGet('storefronts', 'limit=200');
@@ -300,7 +300,7 @@ async function renderAdminDashboard() {
     ${pendingIdVendors.length ? `
     <div class="verify-banner" style="margin-top:8px;background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c">
       <i class="fas fa-id-card" style="color:#ea580c"></i>
-      <p style="color:#9a3412"><strong>${pendingIdVendors.length} vendor(s)</strong> submitted verification documents.
+      <p style="color:#9a3412"><strong>${pendingIdVendors.length} vendor(s)/rendor(s)</strong> submitted verification documents.
         <a href="javascript:void(0)" onclick="showAdminVerificationModal('${pendingIdVendors[0].id}')"
            style="color:#ea580c;font-weight:700">Review &amp; Approve Docs →</a></p>
     </div>` : ''}
@@ -1469,38 +1469,8 @@ async function approveVendor(userId, email) {
 
 // ── Approve + auto-create store from vendor's preferences ──
 async function approveAndCreateStore(userId, email) {
-  const btn = event?.target?.closest('button');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
-
-  // Fetch fresh vendor data to get their store preferences
-  const vendorData = await apiFetch('users/' + userId).catch(() => null);
-  let vendor = vendorData || {};
-  if (!vendor.id) {
-    vendor = (App.allUsers || []).find(u => String(u.id) === String(userId)) || {};
-  }
-  if (!vendor.id) vendor.id = userId;
-  if (!vendor.email) vendor.email = email;
-
-  // First approve the vendor
-  await apiPatch('users', userId, { status: 'active' });
-  addNotification(userId, 'system', '✅ Vendor Account Approved!',
-    'Your vendor account has been approved! Your store is being set up — you will be notified when it is ready.');
-
-  // Remove the pending card
-  const card = document.getElementById('pending-vendor-' + userId);
-  if (card) card.remove();
-
-  showToast(`Vendor approved — creating store…`, 'success');
-
-  const store = await window.autoCreateStoreForVendor(vendor);
-
-  if (store && store.id) {
-    showToast(`Store "${store.name}" created and assigned ✅`, 'success');
-  } else {
-    showToast('Store creation failed — please create the store manually from the Add Vendor tab', 'warning');
-  }
-
-  await refreshAdminVendorsFull();
+  // Delegate to approveVendor which handles approval + store creation
+  await approveVendor(userId, email);
 }
 
 // ── Load Rendors tab ──────────────────────────────────────
@@ -1658,6 +1628,8 @@ async function approveRendor(userId, email) {
 
 async function rejectRendorApplication(userId, email) {
   if (!confirm('Reject this rendor application? The user will be notified.')) return;
+  const btn = event?.target?.closest('button');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
   await apiPatch('users', userId, { status: 'suspended' });
   addNotification(userId, 'system', '❌ Rendor Application Not Approved',
     'Your rendor application was not approved at this time. Please contact support for more information.');
@@ -1846,6 +1818,10 @@ function adminDeactivateRendorSub(userId) {
     rendor_sub_status: 'inactive',
     rendor_sub_expiry: null,
     rendor_sub_plan: null,
+    sub_request_status: null,
+    sub_quote_monthly: null,
+    sub_quote_quarterly: null,
+    sub_quote_biannual: null,
     sub_payment_status: null,
     sub_payment_months: null,
     sub_payment_amount: null,
@@ -1908,6 +1884,8 @@ async function _doActivateRendorSub(userId) {
 // ── Reject vendor application ─────────────────────────────
 async function rejectVendorApplication(userId, email) {
   if (!confirm(`Reject this vendor application? The user will be notified.`)) return;
+  const btn = event?.target?.closest('button');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
   await apiPatch('users', userId, { status: 'suspended' });
   addNotification(userId, 'system', '❌ Application Not Approved',
     'Your vendor application was not approved at this time. Please contact support for more information.');
@@ -2062,6 +2040,10 @@ async function refreshAdminVendorsFull() {
 // ── Vendor card with embedded store info ─────────────────────
 function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
   let store = (allStores || []).find(s => s.vendor_id === u.id);
+  if (!store && u.status === 'active') {
+    // Also check by fallback ID to avoid duplicates on re-renders
+    store = (allStores || []).find(s => s.id === 'store-' + u.id);
+  }
   if (!store && u.status === 'active') {
     // Only auto-create a fallback store for already active vendors if one is missing,
     // using their preferences if available to keep the information in place.
@@ -2393,6 +2375,18 @@ async function suspendUser(userId) {
   const users = res?.data || [];
   const list = document.getElementById('admin-users-list');
   if (list) list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
+}
+
+/** Open verification docs review for a user (vendor or rendor) */
+function showAdminVerificationModal(userId) {
+  if (!userId) return;
+  const user = (App.allUsers || []).find(u => u.id === userId);
+  if (!user) return;
+  if (user.role === 'rendor') {
+    if (typeof adminOpenRendorProfile === 'function') adminOpenRendorProfile(userId);
+  } else {
+    if (typeof adminOpenVendorProfile === 'function') adminOpenVendorProfile(userId);
+  }
 }
 
 /** Rendor-card notify / suspend (wrappers used in adminActiveRendorCardHTML) */
@@ -2876,6 +2870,8 @@ window.showAdminStorefrontReviewModal = async function(sfId) {
 };
 
 window.approveStorefrontWithModal = async function(sfId) {
+  const btn = document.querySelector('[onclick*="approveStorefrontWithModal"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Approving…'; }
   const defaultStarter = parseInt(await getSetting('storefront_price_starter', '50')) || 50;
   const defaultGrowth  = parseInt(await getSetting('storefront_price_growth', '100')) || 100;
   const defaultPro     = parseInt(await getSetting('storefront_price_pro', '200')) || 200;
@@ -2919,8 +2915,10 @@ window.approveStorefrontWithModal = async function(sfId) {
 };
 
 window.rejectStorefrontWithModal = async function(sfId) {
+  const btn = document.querySelector('[onclick*="rejectStorefrontWithModal"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rejecting…'; }
   const reason = prompt('Enter a reason for rejecting this storefront request:');
-  if (reason === null) return;
+  if (reason === null) { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-times-circle"></i> Reject'; } return; }
 
   showToast('Rejecting storefront request...', 'info');
   const cleanId = String(sfId).replace(/^sft-/, '');
@@ -2965,6 +2963,8 @@ async function rejectStorefront(sfId) {
 
 async function disableStorefront(sfId) {
   if (!confirm('Are you sure you want to disable/revoke this storefront? It will no longer be publicly accessible.')) return;
+  const btn = event?.target?.closest('button');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Disabling…'; }
 
   // Patch the storefront record to mark it inactive
   showToast('Disabling storefront...', 'info');

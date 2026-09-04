@@ -585,13 +585,30 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
       const expiryMs = Number(user.rendor_sub_expiry);
       if (expiryMs && expiryMs < Date.now()) {
         user.rendor_sub_status = 'inactive';
+        user.sub_request_status = null;
+        user.sub_payment_status = null;
+        user.sub_payment_months = null;
+        user.sub_payment_amount = null;
         if (supabase) {
-          supabase.from('users').update({ rendor_sub_status: 'inactive' }).eq('id', user.id).then(() => {}).catch(() => {});
+          supabase.from('users').update({
+            rendor_sub_status: 'inactive',
+            sub_request_status: null,
+            sub_payment_status: null,
+            sub_payment_months: null,
+            sub_payment_amount: null
+          }).eq('id', user.id).then(() => {}).catch(() => {});
         }
         try {
           const store = dataStore.getStore();
           const localUser = (store.users || []).find(u => String(u.id) === String(user.id));
-          if (localUser) { localUser.rendor_sub_status = 'inactive'; dataStore.save(store); }
+          if (localUser) {
+            localUser.rendor_sub_status = 'inactive';
+            localUser.sub_request_status = null;
+            localUser.sub_payment_status = null;
+            localUser.sub_payment_months = null;
+            localUser.sub_payment_amount = null;
+            dataStore.save(store);
+          }
         } catch (e) {}
       }
     }
@@ -1082,10 +1099,19 @@ function sweepExpiredRendorSubs(rows, supabase) {
     const expiryMs = Number(r.rendor_sub_expiry);
     if (!Number.isFinite(expiryMs) || expiryMs <= 0 || expiryMs >= now) continue;
     r.rendor_sub_status = 'inactive';
+    r.sub_request_status = null;
+    r.sub_payment_status = null;
+    r.sub_payment_months = null;
+    r.sub_payment_amount = null;
     changedAny = true;
     if (supabase) {
-      supabase.from('users').update({ rendor_sub_status: 'inactive' })
-        .eq('id', r.id).then(() => {}).catch(() => {});
+      supabase.from('users').update({
+        rendor_sub_status: 'inactive',
+        sub_request_status: null,
+        sub_payment_status: null,
+        sub_payment_months: null,
+        sub_payment_amount: null
+      }).eq('id', r.id).then(() => {}).catch(() => {});
     }
   }
   if (changedAny) {
@@ -1096,7 +1122,7 @@ function sweepExpiredRendorSubs(rows, supabase) {
       for (const r of rows) {
         if (r && r.rendor_sub_status === 'inactive' && Number(r.rendor_sub_expiry) > 0 && Number(r.rendor_sub_expiry) < now) {
           const lu = (store.users || []).find(u => String(u.id) === String(r.id));
-          if (lu && lu.rendor_sub_status === 'active') { lu.rendor_sub_status = 'inactive'; localChanged = true; }
+          if (lu && lu.rendor_sub_status === 'active') { lu.rendor_sub_status = 'inactive'; lu.sub_request_status = null; lu.sub_payment_status = null; lu.sub_payment_months = null; lu.sub_payment_amount = null; localChanged = true; }
         }
       }
       if (localChanged) dataStore.saveToFile();
@@ -1486,6 +1512,7 @@ const WALLET_ACTIONS = {
   withdraw: wallet.withdraw,
   pay: wallet.pay,
   purchase: wallet.purchase,
+  'rendor-subscribe': wallet.rendorSubscribe,
   'storefront-payout': wallet.storefrontPayout,
   'release-delivery': wallet.releaseDelivery,
   'refund-reject': wallet.refundReject

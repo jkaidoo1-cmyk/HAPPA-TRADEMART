@@ -76,8 +76,7 @@ The app now runs with a real RESTful `/api` backend and persistent `db.json` sto
   | **Overview** | Profile banner (avatar, name, category, tags), subscription status strip, stats (Active Posts, Subscription status, Wallet, Verification), "How Rendors Work" explainer card, Quick Actions, Recent Posts preview |
   | **My Posts** | List of service posts (title, category, description, starting price, image). Add / Edit / Delete (archive) posts. Posts use the `services` table with `rendor_id` — no `service_orders` created |
   | **Contact Info** | WhatsApp, Email, Instagram, X/Twitter, Facebook, Website/Portfolio, Notes. Shown on profile so clients contact directly. Editable via "Edit" button |
-  | **Subscription** | Current status card (active / inactive / quote-pending / claim-pending), plan cards for the admin-quoted totals (1 / 3 / 6 months), "I've Paid — Notify Admin" flow that records a payment claim (months + amount) AND notifies every admin, Contact Admin message form |
-  | **Wallet** | Balance card (purple gradient), Top Up (`showDepositModal`) + Withdraw (`showWithdrawalModal`) buttons, transaction history (`renderWalletHistory`). Wallet is for platform subscriptions — client payments are off-platform |
+  | **Subscription** | Storefront-style: plan cards (1 / 3 / 6 months) priced from admin settings (`rendor_sub_monthly/quarterly/biannual`, per-rendor quote wins if set), in-app MoMo payment modal → subscription activates instantly server-side (no admin verification step), renewals extend the current expiry, Contact Admin message form |
   | **Verify** | 3-step: Phone OTP → ID document upload → Admin review (purple-accented). Verified rendors get a `✅ Verified` badge |
 
 - **Edit Profile** modal — brand name, service category, bio, starting price, tags
@@ -90,7 +89,7 @@ The app now runs with a real RESTful `/api` backend and persistent `db.json` sto
 - **Rendors tab**:
   - Pending rendors: approve (with corrected notification copy) or reject
   - Active rendors: subscription status pill (green active / red inactive / blue paid-claim pending), expiry date, claim amount
-  - **⭐ Sub / Verify & Activate button** opens `adminActivateRendorSub()` modal — admin picks a plan tier (1 / 3 / 6 months at the quoted totals), start date (defaults to current expiry so renewals extend), activates via PATCH and notifies the rendor
+  - **⭐ Sub / Verify & Activate button** opens `adminActivateRendorSub()` modal — manual override for bank-transfer payments; the primary flow is self-serve (rendors pay in-app and activate instantly). Admin can still send a per-rendor quote to override the global settings prices
   - 🔔 Notify button (`adminNotifyUser`) — send custom title + message
   - 🚫 Suspend button (`adminSuspendUser`) — suspend with in-app notification + reload
 - **Users tab**: search, view all users, suspend / activate

@@ -351,6 +351,9 @@ async function submitOrderReview(storeId, packageId) {
   if (!rating) { showToast('Please select a rating first', 'warning'); return; }
   if (!u)      { showToast('You must be logged in', 'error'); return; }
 
+  const btn = document.querySelector('[onclick*="submitOrderReview"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…'; }
+
   await apiPost('reviews', {
     target_id:     storeId,
     target_type:   'store',
@@ -1021,13 +1024,15 @@ async function loadVendorNotifs(pkgId) {
 }
 
 window.resendVendorWhatsApp = async function(pkgId) {
+  const btn = document.querySelector('[onclick*="resendVendorWhatsApp"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…'; }
   const res = await apiFetch('packages/' + pkgId + '/notify-vendor', { method: 'POST' }).catch(() => null);
   if (!res || res.error) {
     showToast('Resend failed: ' + (res?.error || 'network error'), 'error', 4000);
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-whatsapp"></i> Resend WhatsApp'; }
   } else {
     showToast('WhatsApp notification processed (' + (res.status || 'sent') + ')', 'success', 2500);
   }
-  // Bypass the 30s client-side GET cache so the freshly written log row shows up
   if (typeof invalidateAppState === 'function') invalidateAppState('order_notifications');
   loadVendorNotifs(pkgId);
 };

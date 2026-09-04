@@ -139,6 +139,8 @@ async function submitDeposit() {
   if (!amount || amount < MIN_DEPOSIT) {
     showToast(`Minimum deposit is GHS ${MIN_DEPOSIT}`, 'warning'); return;
   }
+  const btn = document.querySelector('[onclick*="submitDeposit"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing…'; }
 
   // Validate method-specific fields
   if (method === 'mobile_money') {
@@ -347,6 +349,8 @@ async function submitWithdrawal(balance) {
   if (amount > balance) {
     showToast('Amount exceeds available balance', 'error'); return;
   }
+  const btn = document.querySelector('[onclick*="submitWithdrawal"]');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…'; }
 
   let network = '', accountNum = '', note = '';
 

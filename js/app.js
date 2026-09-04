@@ -3307,9 +3307,15 @@ async function requestAccountDeletion() {
   }
 }
 
+window._autoCreateStoreLock = window._autoCreateStoreLock || {};
 window.autoCreateStoreForVendor = async function(vendor) {
   if (!vendor) return null;
   if (vendor.role === 'admin' || vendor.id === 'admin') return null;
+  
+  // Prevent concurrent calls for the same vendor
+  if (window._autoCreateStoreLock[vendor.id]) return window._autoCreateStoreLock[vendor.id];
+  let _resolve;
+  window._autoCreateStoreLock[vendor.id] = new Promise(r => { _resolve = r; });
   
   // 1. Double check if store already exists to prevent duplicate stores
   const storeRes = await apiGet('stores', 'limit=200').catch(() => null);
@@ -3368,6 +3374,7 @@ window.autoCreateStoreForVendor = async function(vendor) {
   addNotification(vendor.id, 'system', '🏪 Store Automatically Set Up!',
     `Your store "${storeName}" has been successfully set up. You can customize details and upload product listings now.`);
 
+  if (_resolve) _resolve(finalStore);
   return finalStore;
 };
 
