@@ -1612,7 +1612,7 @@ function adminActiveRendorCardHTML(r) {
         </div>
         <div style="font-size:.73rem;color:var(--text-muted)">${r.email} · ${r.rendor_service_cat||'—'}</div>
         <div style="font-size:.73rem;color:var(--text-muted);margin-top:2px">
-          📍 ${r.location||'—'} · 💳 GHS ${(r.wallet_balance||0).toFixed(2)}
+          📍 ${r.location||'—'}
           ${r.rendor_starting_price ? ` · From GHS ${parseFloat(r.rendor_starting_price).toFixed(2)}` : ''}
         </div>
         <!-- Subscription pill -->

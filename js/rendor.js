@@ -112,7 +112,6 @@ async function renderRendorDashboard() {
   <div class="tab-btn ${activeTabId === 'rendor-posts' ? 'active' : ''}" onclick="switchTab(this,'rendor-posts');loadRendorPosts()">My Posts</div>
   <div class="tab-btn ${activeTabId === 'rendor-contact' ? 'active' : ''}" onclick="switchTab(this,'rendor-contact')">Contact Info</div>
   <div class="tab-btn ${activeTabId === 'rendor-subscription' ? 'active' : ''}" onclick="switchTab(this,'rendor-subscription');renderRendorSubscription()">Subscription</div>
-  <div class="tab-btn ${activeTabId === 'rendor-wallet' ? 'active' : ''}" onclick="switchTab(this,'rendor-wallet');renderRendorWallet()">Wallet</div>
   <div class="tab-btn ${activeTabId === 'rendor-verify' ? 'active' : ''}" onclick="switchTab(this,'rendor-verify');renderRendorVerify()">Verify</div>
 </div>
 
@@ -146,11 +145,6 @@ async function renderRendorDashboard() {
         </div>
         <div class="stat-value" style="font-size:.9rem">${subActive?'Active':'Inactive'}</div>
         <div class="stat-label">Subscription</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-wallet" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
-        <div class="stat-label">Wallet</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:${u.is_verified?'#d1fae5':'#fef3c7'}">
@@ -188,9 +182,6 @@ async function renderRendorDashboard() {
       </button>
       <button class="quick-action-btn" onclick="switchTab(document.querySelectorAll('#rendor-tabs .tab-btn')[3],'rendor-subscription');renderRendorSubscription()">
         <i class="fas fa-star"></i><span>Subscription</span>
-      </button>
-      <button class="quick-action-btn" onclick="switchTab(document.querySelectorAll('#rendor-tabs .tab-btn')[4],'rendor-wallet');renderRendorWallet()">
-        <i class="fas fa-wallet"></i><span>Wallet</span>
       </button>
     </div>
 
@@ -243,13 +234,6 @@ async function renderRendorDashboard() {
 <div class="tab-content" id="rendor-subscription">
   <div class="dashboard-wrap" id="rendor-sub-content">
     <div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div>
-  </div>
-</div>
-
-<!-- ══ WALLET ══ -->
-<div class="tab-content" id="rendor-wallet">
-  <div class="dashboard-wrap" id="rendor-wallet-content">
-    <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
   </div>
 </div>
 
@@ -788,34 +772,6 @@ async function saveContactInfo() {
   // Refresh contact tab in-place
   const el = document.getElementById('rendor-contact-content');
   if (el) el.innerHTML = _rendorContactHTML(App.currentUser);
-}
-
-// ── Wallet tab ────────────────────────────────────────────
-function renderRendorWallet() {
-  const el = document.getElementById('rendor-wallet-content');
-  if (!el) return;
-  const u = App.currentUser;
-  el.innerHTML = `
-<div style="background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-radius:var(--radius-md);padding:20px;margin-bottom:20px">
-  <div style="font-size:.75rem;opacity:.8">Wallet Balance</div>
-  <div style="font-size:2rem;font-weight:900">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
-  <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-    <button class="btn btn-sm" onclick="showDepositModal()" style="background:rgba(255,255,255,.2);color:#fff;border-color:transparent">
-      <i class="fas fa-arrow-down"></i> Top Up
-    </button>
-    <button class="btn btn-sm" onclick="showWithdrawalModal()" style="background:rgba(255,255,255,.2);color:#fff;border-color:transparent">
-      <i class="fas fa-arrow-up"></i> Withdraw
-    </button>
-  </div>
-</div>
-<p style="font-size:.8rem;color:var(--text-muted);margin-bottom:14px;line-height:1.6">
-  <i class="fas fa-info-circle"></i> Your wallet is for platform top-ups and subscriptions. Earnings from client work are handled directly between you and the client.
-</p>
-<h3 style="font-size:.88rem;font-weight:700;margin-bottom:10px">Transaction History</h3>
-<div id="rendor-txn-wrap">
-  <div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div>
-</div>`;
-  renderWalletHistory('rendor-txn-wrap');
 }
 
 // ── Verify tab ────────────────────────────────────────────

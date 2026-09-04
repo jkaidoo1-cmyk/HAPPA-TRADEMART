@@ -139,7 +139,7 @@ js/
   orders.js                 Buyer/vendor/admin order management, package detail, reviews
   buyer.js                  Buyer dashboard (overview, orders, wallet, referrals, saved stores)
   vendor.js                 Vendor dashboard (tabs, store page, products, earnings, referrals)
-  rendor.js                 Rendor Hub (posts, contact info, subscription, wallet, verify)
+  rendor.js                 Rendor Hub (posts, contact info, subscription, verify)
   admin.js                  Admin panel (vendors, rendors, users, orders, ads, analytics, wallet, settings)
   admin-settings.js         Platform settings tab logic
   wallet.js                 Deposit/withdraw modals, transaction history, admin wallet

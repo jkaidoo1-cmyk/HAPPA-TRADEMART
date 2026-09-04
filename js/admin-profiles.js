@@ -889,9 +889,6 @@ function switchAdminProfileTab(type, tab) {
     }
     document.querySelectorAll('.ap-r-tab-content').forEach(el => el.style.display = 'none');
     document.getElementById('ap-r-' + tab).style.display = 'block';
-    
-    // Re-render dynamic content when tab is selected
-    if (tab === 'wallet') _apRenderUserTxnsForPage(window.currentAdminRendorId, null, 'ap-r-wallet-txns');
   }
 }
 
@@ -1525,14 +1522,12 @@ async function adminOpenRendorProfile(userId) {
   <!-- Stats -->
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
     ${_apStat('fas fa-briefcase','Service',escHtml(u.rendor_service_cat||'—'),'#7c3aed')}
-    ${_apStat('fas fa-money-bill-wave','Wallet','GHS ' + (u.wallet_balance||0).toFixed(2),'#b45309')}
     ${_apStat('fas fa-star','Sub',subActive?'Active':'Inactive',subActive?'#059669':'#dc2626')}
   </div>
 
   <!-- Tabs -->
   <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;padding-bottom:6px">
     <button class="btn btn-primary btn-sm ap-r-tab active" data-tab="info" onclick="switchAdminProfileTab('rendor','info')">Info</button>
-    <button class="btn btn-ghost btn-sm ap-r-tab" data-tab="wallet" onclick="switchAdminProfileTab('rendor','wallet')">Wallet</button>
     <button class="btn btn-ghost btn-sm ap-r-tab" data-tab="actions" onclick="switchAdminProfileTab('rendor','actions')">⚙️ Actions</button>
   </div>
 
@@ -1598,27 +1593,11 @@ async function adminOpenRendorProfile(userId) {
     </div>
   </div>
 
-  <div class="ap-r-tab-content" id="ap-r-wallet" style="display:none">
-    <div style="background:white;border-radius:var(--radius-md);padding:14px;border:1px solid var(--border)">
-      <div style="background:linear-gradient(135deg,#4c1d95,#7c3aed);padding:18px;border-radius:var(--radius-md);text-align:center;color:white;margin-bottom:14px">
-        <div style="font-size:.85rem;opacity:.8">Wallet Balance</div>
-        <div style="font-size:2rem;font-weight:900;margin-top:4px">GHS ${(u.wallet_balance||0).toFixed(2)}</div>
-      </div>
-      <button class="btn btn-outline btn-block" onclick="setTimeout(()=>adjustUserWallet('${userId}','${nameSafe}',${u.wallet_balance||0}),100)">
-        <i class="fas fa-sliders-h"></i> Adjust Wallet
-      </button>
-      <div style="height:1px;background:var(--border);margin:14px 0"></div>
-      <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Transaction History</div>
-      <div id="ap-r-wallet-txns"></div>
-    </div>
-  </div>
-
   <div class="ap-r-tab-content" id="ap-r-actions" style="display:none">
     <div style="background:white;border-radius:var(--radius-md);padding:14px;border:1px solid var(--border)">
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Account Controls</div>
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
         ${_apBtn('ap-action-blue','fas fa-bell','Send Notification','showSendNotificationModal(\'' + userId + '\',\'' + nameSafe + '\')')}
-        ${_apBtn('ap-action-purple','fas fa-wallet','Adjust Wallet','setTimeout(()=>adjustUserWallet(\'' + userId + '\',\'' + nameSafe + '\',' + (u.wallet_balance||0) + '),100)')}
         ${u.is_verified
           ? _apBtn('ap-action-gray','fas fa-phone-slash','Revoke Phone','_apRevokePhoneVerify(\'' + userId + '\')')
           : _apBtn('ap-action-green','fas fa-phone','Verify Phone','_apGrantPhoneVerify(\'' + userId + '\')')}
@@ -1650,7 +1629,6 @@ async function adminOpenRendorProfile(userId) {
   </div>
 </div>`;
 
-  _apRenderUserTxnsForPage(userId, txns, 'ap-r-wallet-txns');
 }
 
 window.showZoomedImage = function(src, title = 'Image Preview') {

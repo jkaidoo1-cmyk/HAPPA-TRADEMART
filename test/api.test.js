@@ -116,3 +116,26 @@ test('wallet transactions preserve ledger metadata without leaking store-only al
   assert.equal(serialized.payment_ref, 'WD-123');
   assert.equal(serialized.about_us, undefined);
 });
+
+test('wallet engine: rendors are blocked from every wallet action (no wallet)', async () => {
+  const wallet = require('../lib/wallet.js');
+  const RENDOR = { userId: 'rendor-9', role: 'rendor' };
+  const dummy = { loadUser: async () => ({}), saveUser: async () => {}, insert: async () => ({}), update: async () => ({}) };
+  const res = await wallet.deposit(dummy, RENDOR, { amount: 50 });
+  assert.equal(res.ok, false);
+  assert.equal(res.status, 403);
+  const res2 = await wallet.pay(dummy, RENDOR, { amount: 50, method: 'momo' });
+  assert.equal(res2.ok, false);
+  assert.equal(res2.status, 403);
+  const res3 = await wallet.purchase(dummy, RENDOR, { amount: 50 });
+  assert.equal(res3.ok, false);
+  assert.equal(res3.status, 403);
+  const res4 = await wallet.withdraw(dummy, RENDOR, { amount: 50 });
+  assert.equal(res4.ok, false);
+  assert.equal(res4.status, 403);
+  // Vendors can still withdraw (reaches the verification check, not a role block)
+  const VENDOR = { userId: 'vendor-9', role: 'vendor' };
+  const res5 = await wallet.withdraw(dummy, VENDOR, { amount: 50 });
+  assert.equal(res5.ok, false); // blocked by unverified check, NOT by role
+  assert.equal(res5.status, 403);
+});
