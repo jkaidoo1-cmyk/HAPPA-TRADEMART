@@ -2090,9 +2090,20 @@ async function purchaseStore(storeId, price) {
     return;
   }
 
-  // Deduct from wallet
-  const newBalance = currentBalance - price;
-  await apiPatch('users', u.id, { wallet_balance: newBalance });
+  // Deduct from wallet via the server-side wallet engine (ledger + balance move
+  // atomically — the client never patches wallet_balance directly).
+  const payRes = await apiWallet('purchase', {
+    amount: price,
+    payment_ref: 'STORE-' + storeId + '-' + Date.now(),
+    note: `Store purchase: ${storeCheck.name || storeId}`
+  });
+  if (!payRes || !payRes.txn) {
+    const msg = (payRes && payRes.error) || window.lastApiError || 'Payment could not be processed. Please try again.';
+    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-shopping-cart"></i> Buy'; }
+    return;
+  }
+  const newBalance = payRes.balance != null ? payRes.balance : currentBalance - price;
   App.currentUser.wallet_balance = newBalance;
   saveSessions();
   
@@ -2106,27 +2117,21 @@ async function purchaseStore(storeId, price) {
   });
 
   if (!updatedStore) {
-    // Rollback wallet deduction on failure
-    await apiPatch('users', u.id, { wallet_balance: currentBalance });
+    // Rollback wallet deduction on failure — refund via the wallet engine.
+    try {
+      await apiWallet('deposit', {
+        amount: price,
+        method: 'wallet',
+        payment_ref: 'ROLLBACK-' + storeId + '-' + Date.now(),
+        note: 'Store purchase rollback (store acquisition failed)'
+      });
+    } catch(e){}
     App.currentUser.wallet_balance = currentBalance;
     saveSessions();
     showToast('Failed to acquire store. Wallet balance restored.', 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-shopping-cart"></i> Buy'; }
     return;
   }
-  
-  // Create wallet transaction record (positive amount; the 'purchase' type marks it as a debit)
-  await apiPost('wallet_transactions', {
-    user_id:        u.id,
-    type:           'purchase',
-    amount:         price,
-    balance_before: currentBalance,
-    balance_after:  newBalance,
-    payment_method: 'wallet',
-    status:         'completed',
-    note:           `Store purchase: ${storeCheck.name || storeId}`,
-    created_at:     new Date().toISOString()
-  });
 
   // Update local store cache
   const cached = App.allStores.find(s => s.id === storeId);
@@ -2947,38 +2952,33 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
   
   showToast('Processing payment & activating storefront...', 'info');
   
-  // 1. Payment: MoMo is recorded (no wallet deduction); wallet deducts with a full
-  //    ledger entry (before/after balances).
-  if (method === 'wallet') {
-    const balBeforePlan = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
-    const balAfterPlan  = Math.max(0, balBeforePlan - totalCost);
-    await apiPost('wallet_transactions', {
-      user_id:        App.currentUser.id,
-      type:           'payment',
-      amount:         totalCost,
-      balance_before: balBeforePlan,
-      balance_after:  balAfterPlan,
-      payment_method: 'wallet',
-      status:         'completed',
-      note:           `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — via wallet`
-    }).catch(() => {});
-    
-    const finalBal = Math.max(0, (parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? totalCost) - totalCost));
-    if (App.currentUser) App.currentUser.wallet_balance = finalBal;
-    App.walletBalance = finalBal;
-    await apiPatch('users', App.currentUser?.id, { wallet_balance: finalBal }).catch(() => {});
+  const storeIdx = App.allStores ? App.allStores.findIndex(s => String(s.id) === String(storeId)) : -1;
+  
+  // 1. Payment: server-side wallet engine deducts the balance (or records the
+  //    MoMo payment) and records platform revenue atomically — the client never
+  //    patches wallet_balance or posts revenue rows.
+  const payRes = await apiWallet('pay', {
+    amount: totalCost,
+    method,
+    payment_ref: 'SUB-' + storeId + '-' + Date.now(),
+    note: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — ${storeIdx !== -1 ? (App.allStores[storeIdx].name || '') : ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`,
+    record_revenue: {
+      source: 'subscription',
+      amount: totalCost,
+      reference: 'SUB-' + storeId + '-' + Date.now(),
+      description: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — ${storeIdx !== -1 ? (App.allStores[storeIdx].name || '') : ''}`
+    }
+  });
+  if (!payRes || payRes.error) {
+    const msg = (payRes && payRes.error) || window.lastApiError || 'Payment could not be processed. Please try again.';
+    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    return;
+  }
+  if (method === 'wallet' && payRes.balance != null) {
+    if (App.currentUser) App.currentUser.wallet_balance = payRes.balance;
+    App.walletBalance = payRes.balance;
     if (typeof saveSessions === 'function') saveSessions();
     if (typeof updateWalletUI === 'function') updateWalletUI();
-  } else {
-    const phone = (momoPhone || document.getElementById('sf-sub-momo-phone')?.value?.trim() || '');
-    await apiPost('wallet_transactions', {
-      user_id:        App.currentUser?.id || '',
-      type:           'payment',
-      amount:         totalCost,
-      payment_method: 'momo',
-      status:         'completed',
-      note:           `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — via MoMo (${phone})`
-    }).catch(() => {});
   }
   
   // 2. Update storefront status to active
@@ -2988,7 +2988,6 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
   if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'active';
   
   // 3. Update store subscription details
-  const storeIdx = App.allStores ? App.allStores.findIndex(s => String(s.id) === String(storeId)) : -1;
   const now = new Date();
   const newEnd = new Date(now);
   newEnd.setMonth(newEnd.getMonth() + months);
@@ -3010,15 +3009,6 @@ window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, m
     if (App.myStore) App.myStore.storefront_status = 'active';
   }
   
-  // 4. Record platform revenue for this subscription payment (reflects in admin revenue)
-  await apiPost('platform_revenue', {
-    source: 'subscription',
-    amount: totalCost,
-    reference: 'SUB-' + storeId + '-' + Date.now(),
-    description: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — ${storeIdx !== -1 ? (App.allStores[storeIdx].name || '') : ''}`,
-    created_at: now.toISOString()
-  }).catch(e => console.warn('[Revenue] subscription record failed:', e && e.message || e));
-
   try {
     localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
     localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
@@ -3859,53 +3849,33 @@ window.confirmStorefrontSubscription = async function(storeId) {
   // Simulate payment processing
   await new Promise(r => setTimeout(r, 1800));
 
-  // Payment: actually deduct the vendor's HAPPA Wallet (ledger-first) or record the MoMo payment
-  if (method === 'wallet') {
-    if (!App.currentUser?.id) {
-      showToast('Please sign in to pay with your HAPPA Wallet.', 'error');
-      return;
-    }
-    const balBefore = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
-    const amt = parseFloat(total);
-    if (balBefore < amt) {
-      showToast(`Insufficient wallet balance. You need GH₵ ${total} to activate this plan. Top up your wallet first.`, 'error');
-      return;
-    }
-    const balAfter = Math.max(0, balBefore - amt);
-    await apiPost('wallet_transactions', {
-      user_id: App.currentUser.id,
-      type: 'payment',
+  // Payment: server-side wallet engine deducts the balance (or records the MoMo
+  // payment) and records platform revenue atomically — the client never patches
+  // wallet_balance directly (that path is admin-only) nor posts revenue rows.
+  const amt = parseFloat(total);
+  const payRes = await apiWallet('pay', {
+    amount: amt,
+    method,
+    payment_ref: 'SUB-' + storeId + '-' + Date.now(),
+    note: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`,
+    record_revenue: {
+      source: 'subscription',
       amount: amt,
-      balance_before: balBefore,
-      balance_after: balAfter,
-      payment_method: 'wallet',
-      status: 'completed',
-      note: `Storefront Subscription: ${plan.name} (${months} month(s)) — via wallet`
-    }).catch(e => console.warn('[Revenue] subscription wallet ledger failed:', e && e.message || e));
-    if (App.currentUser) App.currentUser.wallet_balance = balAfter;
-    App.walletBalance = balAfter;
-    await apiPatch('users', App.currentUser.id, { wallet_balance: balAfter }).catch(() => {});
+      reference: 'SUB-' + storeId + '-' + Date.now(),
+      description: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''}`
+    }
+  });
+  if (!payRes || payRes.error) {
+    const msg = (payRes && payRes.error) || window.lastApiError || 'Payment could not be processed. Please try again.';
+    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    return;
+  }
+  if (method === 'wallet' && payRes.balance != null) {
+    if (App.currentUser) App.currentUser.wallet_balance = payRes.balance;
+    App.walletBalance = payRes.balance;
     if (typeof saveSessions === 'function') saveSessions();
     if (typeof updateWalletUI === 'function') updateWalletUI();
-  } else if (method === 'momo') {
-    await apiPost('wallet_transactions', {
-      user_id: App.currentUser?.id || '',
-      type: 'payment',
-      amount: parseFloat(total),
-      payment_method: 'momo',
-      status: 'completed',
-      note: `Storefront Subscription: ${plan.name} (${months} month(s)) — via MoMo`
-    }).catch(e => console.warn('[Revenue] subscription momo ledger failed:', e && e.message || e));
   }
-
-  // Record platform revenue so the payment reflects in admin revenue stats & chart
-  await apiPost('platform_revenue', {
-    source: 'subscription',
-    amount: parseFloat(total),
-    reference: 'SUB-' + storeId + '-' + Date.now(),
-    description: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''}`,
-    created_at: now.toISOString()
-  }).catch(e => console.warn('[Revenue] subscription record failed:', e && e.message || e));
 
   // Update store subscription fields
   App.allStores[idx].subscription_plan = planKey;

@@ -1955,6 +1955,17 @@ async function apiDelete(table, id) {
   return apiFetch(table + '/' + id, { method: 'DELETE' });
 }
 
+// Server-side wallet engine calls (POST /api/wallet/:action). The only way a
+// balance-changing ledger row is created — the client never patches
+// wallet_balance or wallet_transactions directly.
+async function apiWallet(action, data) {
+  return apiFetch('wallet/' + action, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data || {})
+  });
+}
+
 // Remove a product from every in-memory cache so a deleted product can't keep
 // rendering on the home page, shop, storefront, search results or the admin's
 // vendor-profile view. Every delete path (admin, vendor, storefront, auto-cleanup)
@@ -3361,59 +3372,24 @@ window.autoCreateStoreForVendor = async function(vendor) {
 };
 
 // ── Referral Balance Calculation ──────────────────────────
+// Balance = referral_reward ledger rows actually paid to this user, minus what
+// they've already spent as a REF- checkout discount. Using the user's own
+// wallet ledger keeps the math honest: it only counts money the server actually
+// credited (at delivery), and it never requires reading other people's orders
+// (which are PII-scrubbed for non-owners).
 async function calculateUserReferralBalance(userId) {
   try {
-    // Fetch all users to see their referrals
-    const usersRes = await apiGet('users');
+    const res = await apiGet('wallet_transactions', `search=${encodeURIComponent(userId)}&limit=500`);
+    const txns = Array.isArray(res?.data) ? res.data : [];
+    const totalEarned = txns
+      .filter(t => t.type === 'referral_reward' && String(t.status) !== 'failed')
+      .reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+
+    const usersRes = await apiGet('users', 'limit=500').catch(() => null);
     const allUsers = usersRes?.data || [];
-    
-    // Find all users referred by this user
-    const referredUsers = allUsers.filter(u => String(u.referred_by) === String(userId));
-    if (!referredUsers.length) return 0;
-    
-    // Fetch all completed orders
-    const ordersRes = await apiGet('orders');
-    const allOrders = ordersRes?.data || [];
-    
-    // Fetch referral commission tiers from settings
-    const settingsRes = await apiGet('settings');
-    const tiersRow = settingsRes?.data?.find(r => r.key === 'referral_commission_tiers');
-    let tiers = [];
-    if (tiersRow && tiersRow.value) {
-      try { tiers = JSON.parse(tiersRow.value); } catch(e) {}
-    }
-    
-    // Fallback if tiers aren't configured
-    const getPct = (amount) => {
-      if (tiers.length) {
-        for (const t of tiers) {
-          const maxVal = t.max >= 99999 ? Infinity : t.max;
-          if (amount >= t.min && amount <= maxVal) return t.pct;
-        }
-        return tiers[tiers.length - 1]?.pct || 3;
-      }
-      return 3;
-    };
-    
-    let totalEarned = 0;
-    
-    for (const refUser of referredUsers) {
-      // Find completed or paid orders for this referred user
-      const userOrders = allOrders.filter(o => 
-        (String(o.buyer_id) === String(refUser.id) || String(o.user_id) === String(refUser.id)) && 
-        ['completed', 'paid', 'delivered'].includes(o.status)
-      );
-      
-      for (const order of userOrders) {
-        const amt = parseFloat(order.total || order.subtotal || order.total_amount) || 0;
-        const pct = getPct(amt);
-        totalEarned += amt * (pct / 100);
-      }
-    }
-    
     const user = allUsers.find(u => String(u.id) === String(userId));
     const totalUsed = parseFloat(user?.referral_commission_used) || 0;
-    
+
     const balance = totalEarned - totalUsed;
     return balance > 0 ? balance : 0;
   } catch (err) {

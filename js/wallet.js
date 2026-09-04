@@ -154,26 +154,21 @@ async function submitDeposit() {
 
 async function processDeposit(amount, method, network, accountNum, ref) {
   const u = App.currentUser;
-  const balBefore = u.wallet_balance || 0;
-  const balAfter  = balBefore + amount;
 
-  // 1. Record transaction
-  const txn = await apiPost('wallet_transactions', {
-    user_id: u.id, type: 'deposit', amount,
-    balance_before: balBefore, balance_after: balAfter,
-    payment_method: method, payment_ref: ref,
-    network, account_number: accountNum,
-    status: 'completed', note: 'Wallet top-up', reviewed_by: ''
+  // Server-side wallet engine: ledger row + balance move atomically. The client
+  // never patches wallet_balance directly — that path is admin-only.
+  const res = await apiWallet('deposit', {
+    amount, method, network, account_number: accountNum, payment_ref: ref
   });
-
-  if (!txn) { showToast('Transaction failed. Please try again.', 'error'); return; }
-
-  // 2. Update user wallet balance
-  await apiPatch('users', u.id, { wallet_balance: balAfter });
+  if (!res || !res.txn) {
+    const msg = (res && res.error) || window.lastApiError || 'Transaction failed. Please try again.';
+    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    return;
+  }
+  const balAfter = res.balance;
   App.currentUser.wallet_balance = balAfter;
   saveSessions();
 
-  // 3. Notify
   addNotification(u.id, 'system', '💰 Deposit Successful!',
     `GHS ${amount.toFixed(2)} added to your wallet. New balance: GHS ${balAfter.toFixed(2)}`);
 
@@ -200,6 +195,15 @@ async function showWithdrawalModal() {
   if (!u.is_verified || !u.id_verified) {
     showToast('Complete phone & ID verification before withdrawing', 'warning'); return;
   }
+
+  // Limits come from Admin → Settings (Wallet & Withdrawals) with hardcoded fallbacks.
+  const settingsRes = await apiGet('settings', 'limit=200').catch(() => null);
+  const sRows = settingsRes?.data || [];
+  const sVal = (key, def) => (sRows.find(r => r.key === key) || {}).value ?? def;
+  window._wdMin = parseFloat(sVal('min_withdrawal', MIN_WITHDRAWAL)) || MIN_WITHDRAWAL;
+  window._wdMaxP = parseInt(sVal('max_pending_withdrawals', MAX_WITHDRAWAL_PENDING), 10) || MAX_WITHDRAWAL_PENDING;
+  const MIN_WITHDRAWAL = window._wdMin;
+  const MAX_WITHDRAWAL_PENDING = window._wdMaxP;
 
   const balance = u.wallet_balance || 0;
 
@@ -335,6 +339,7 @@ async function submitWithdrawal(balance) {
   const amount = parseFloat(document.getElementById('wd-amount')?.value);
   const method = document.getElementById('wd-selected-method')?.value;
   const u = App.currentUser;
+  const MIN_WITHDRAWAL = window._wdMin || 10;
 
   if (!amount || amount < MIN_WITHDRAWAL) {
     showToast(`Minimum withdrawal is GHS ${MIN_WITHDRAWAL}`, 'warning'); return;
@@ -358,22 +363,17 @@ async function submitWithdrawal(balance) {
     note = `Bank transfer to ${network} – ${accName} (${accountNum})`;
   }
 
-  const balBefore = balance;
-  const balAfter  = balance - amount;
-
-  // Create pending transaction
-  const txn = await apiPost('wallet_transactions', {
-    user_id: u.id, type: 'withdrawal', amount,
-    balance_before: balBefore, balance_after: balAfter,
-    payment_method: method, payment_ref: 'WD' + Date.now(),
-    network, account_number: accountNum,
-    status: 'pending', note, reviewed_by: ''
+  // Server-side wallet engine: holds the balance + writes the pending ledger row
+  // atomically for the session user (never for someone else).
+  const res = await apiWallet('withdraw', {
+    amount, method, network, account_number: accountNum, note
   });
-
-  if (!txn) { showToast('Failed to submit request. Try again.', 'error'); return; }
-
-  // Hold balance (deduct immediately, show as pending)
-  await apiPatch('users', u.id, { wallet_balance: balAfter });
+  if (!res || !res.txn) {
+    const msg = (res && res.error) || window.lastApiError || 'Failed to submit request. Try again.';
+    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    return;
+  }
+  const balAfter = res.balance;
   App.currentUser.wallet_balance = balAfter;
   saveSessions();
 

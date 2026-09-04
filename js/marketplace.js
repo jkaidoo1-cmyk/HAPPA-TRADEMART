@@ -3564,7 +3564,6 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   const adminShare = Number(platformFee.toFixed(2));
   const storeName = storeObj.name || 'Vendor Storefront';
   const primaryColor = storeObj.primary_color || '#e85d04';
-  const storefrontSource = `Storefront order from ${storeName}`;
 
   // Mark the submission as pending ONLY after payment succeeded — a cancelled MoMo
   // prompt or an insufficient-balance check must never leave a stale block.
@@ -3660,74 +3659,14 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     await apiPatch('packages', newPkg.id, { order_id: orderRec.id }).catch(() => {});
   }
 
-  // Record the 1% platform fee so it reflects in admin Platform Revenue stats & chart
-  await apiPost('platform_revenue', {
-    source: 'platform_fee',
-    amount: adminShare,
-    reference: pCode,
-    description: `Platform fee (1%) on storefront order ${pCode} — ${storeName}`,
-    created_at: new Date().toISOString()
-  }).catch(e => console.warn('[Revenue] platform_fee record failed:', e && e.message || e));
-
-  // Vendor payout: for prepaid storefront orders the vendor is paid immediately at
-  // checkout. For COD the vendor is paid when the package is marked delivered
-  // (handled in orders.js), so no payout here.
-  if (payment !== 'cod') {
-    const vendorUser = (App.allUsers || []).find(u => String(u.id) === String(vendorId)) || await apiFetch('users/' + vendorId).catch(() => null);
-    if (vendorUser) {
-      const oldVendorBal = parseFloat(vendorUser.wallet_balance || 0);
-      const newVendorBal = oldVendorBal + vendorShare;
-      // Ledger first: never credit a balance without a trace. If the ledger write fails,
-      // skip the credit entirely and flag it for manual reconciliation.
-      const vendorLedger = await apiPost('wallet_transactions', {
-        user_id: vendorId,
-        type: 'earning',
-        amount: vendorShare,
-        balance_before: oldVendorBal,
-        balance_after: newVendorBal,
-        payment_method: 'system',
-        payment_ref: `SF-PAYOUT-${Date.now()}`,
-        network: '',
-        account_number: '',
-        status: 'completed',
-        note: `${storefrontSource} — payout ${pCode} (${vendorShare.toFixed(2)} direct payout)`,
-        reviewed_by: ''
-      }).catch(() => null);
-      if (vendorLedger) {
-        await apiPatch('users', vendorId, { wallet_balance: newVendorBal }).catch(() => {});
-      } else {
-        console.warn('[Wallet] Vendor payout ledger failed for', pCode, '— balance NOT credited. Reconcile manually.');
-      }
-    }
-  }
-
-  // Platform fee (1%): credit the admin wallet on EVERY storefront order — the fee is
-  // charged from the buyer at order time regardless of payment method, so it must land
-  // in the admin wallet even for Cash on Delivery (previously skipped for COD orders).
-  const adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin') || await apiFetch('users/admin').catch(() => null);
-  if (adminUser && adminShare > 0) {
-    const oldAdminBal = parseFloat(adminUser.wallet_balance || 0);
-    const newAdminBal = oldAdminBal + adminShare;
-    const adminLedger = await apiPost('wallet_transactions', {
-      user_id: adminUser.id,
-      type: 'earning',
-      amount: adminShare,
-      balance_before: oldAdminBal,
-      balance_after: newAdminBal,
-      payment_method: 'system',
-      payment_ref: `SF-COMM-${Date.now()}`,
-      network: '',
-      account_number: '',
-      status: 'completed',
-      note: `${storefrontSource} — platform fee ${pCode} (${adminShare.toFixed(2)})`,
-      reviewed_by: ''
-    }).catch(() => null);
-    if (adminLedger) {
-      await apiPatch('users', adminUser.id, { wallet_balance: newAdminBal }).catch(() => {});
-    } else {
-      console.warn('[Wallet] Platform fee ledger failed for', pCode, '— balance NOT credited. Reconcile manually.');
-    }
-  }
+  // Money moves server-side only: the wallet engine derives the vendor payout and
+  // platform fee from the package row (never from this client), credits the vendor
+  // + admin wallets with ledger entries, and records the platform_revenue row.
+  // It is idempotent (sf_payout_done) so a retried request can never double-pay.
+  await apiWallet('storefront-payout', {
+    package_id: newPkg.id,
+    payment
+  }).catch(e => console.warn('[Wallet] storefront-payout call failed:', e && e.message || e));
 
   showToast('Order placed successfully! 🎉', 'success');
   localStorage.removeItem(key);

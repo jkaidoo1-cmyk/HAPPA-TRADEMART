@@ -326,7 +326,7 @@ function serializeRecord(record) {
 }
 
 const TABLE_COLUMNS = {
-  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual', 'sub_payment_status', 'sub_payment_months', 'sub_payment_amount', 'sub_paid_at', 'whatsapp_phone', 'receive_order_notifications_on_whatsapp'],
+  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual', 'sub_payment_status', 'sub_payment_months', 'sub_payment_amount', 'sub_paid_at', 'sub_payment_ref', 'whatsapp_phone', 'receive_order_notifications_on_whatsapp'],
   notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
   stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'created_at', 'updated_at', 'extra'],
   orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
@@ -1343,6 +1343,167 @@ app.post('/api/whatsapp/test', whatsappTestRateLimiter, requireAdmin, async (req
   }
 });
 
+// ── Server-side wallet engine (the only writer of balance-changing ledger rows) ──
+const wallet = require('../lib/wallet');
+
+function walletAdapter() {
+  const findPkg = (list, id) => (list || []).find(p =>
+    String(p.id) === String(id) || String(p.package_code || '') === String(id) || String(p.code || '') === String(id)
+  );
+  const mergeById = (supa, local) => {
+    const map = new Map();
+    (supa || []).forEach(r => map.set(String(r.id), r));
+    (local || []).forEach(r => map.set(String(r.id), { ...(map.get(String(r.id)) || {}), ...r }));
+    return Array.from(map.values());
+  };
+  return {
+    async loadUser(id) {
+      let u = null;
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('users').select('*').eq('id', String(id)).maybeSingle();
+          if (!error && data) u = serializeRecord(data);
+        } catch (e) {}
+      }
+      dataStore.ensureTable('users');
+      const lu = (dataStore.getStore().users || []).find(x => String(x.id) === String(id));
+      return lu ? { ...(u || {}), ...lu } : u;
+    },
+    async saveUser(id, patch) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try { await supabase.from('users').update(patch).eq('id', String(id)); } catch (e) {}
+      }
+      try {
+        dataStore.ensureTable('users');
+        const store = dataStore.getStore();
+        const idx = (store.users || []).findIndex(x => String(x.id) === String(id));
+        if (idx !== -1) { store.users[idx] = { ...store.users[idx], ...patch }; dataStore.saveToFile(); }
+      } catch (e) {}
+    },
+    async insert(table, rec) {
+      try {
+        dataStore.ensureTable(table);
+        const store = dataStore.getStore();
+        store[table].push(rec);
+        dataStore.saveToFile();
+      } catch (e) { console.warn('[Wallet] local insert failed:', e && e.message || e); }
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const dbRecord = prepareRecordForDb(table, serializeRecord(rec));
+          const { data, error } = await withSupaTimeout(supabase.from(table).insert(dbRecord).select().single(), 2000);
+          if (!error && data) return serializeRecord(data);
+        } catch (e) { console.warn('[Wallet] supabase insert failed:', table, e && e.message || e); }
+      }
+      return rec;
+    },
+    async update(table, id, patch) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try { await supabase.from(table).update(patch).eq('id', String(id)); } catch (e) {}
+      }
+      try {
+        dataStore.ensureTable(table);
+        const store = dataStore.getStore();
+        const idx = (store[table] || []).findIndex(x => String(x.id) === String(id));
+        if (idx !== -1) { store[table][idx] = { ...store[table][idx], ...patch }; dataStore.saveToFile(); }
+      } catch (e) {}
+    },
+    async loadPackage(id) {
+      let p = null;
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('packages').select('*').limit(500);
+          if (!error && data) p = findPkg(data.map(serializeRecord), id);
+        } catch (e) {}
+      }
+      dataStore.ensureTable('packages');
+      const lp = findPkg(dataStore.getStore().packages || [], id);
+      return lp ? { ...(p || {}), ...lp } : p;
+    },
+    async loadAdmin() {
+      let a = null;
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('users').select('*').eq('role', 'admin').limit(1);
+          if (!error && data && data.length) a = serializeRecord(data[0]);
+        } catch (e) {}
+      }
+      dataStore.ensureTable('users');
+      const la = (dataStore.getStore().users || []).find(u => String(u.role) === 'admin');
+      return la ? { ...(a || {}), ...la } : a;
+    },
+    async getSetting(key, def) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('settings').select('value').eq('key', key).maybeSingle();
+          if (!error && data) return data.value;
+        } catch (e) {}
+      }
+      dataStore.ensureTable('settings');
+      const row = (dataStore.getStore().settings || []).find(r => r.key === key);
+      return row ? row.value : def;
+    },
+    async listUserTxns(userId) {
+      let supa = [];
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('wallet_transactions').select('*').eq('user_id', String(userId)).limit(500);
+          if (!error && data) supa = data.map(serializeRecord);
+        } catch (e) {}
+      }
+      dataStore.ensureTable('wallet_transactions');
+      const local = (dataStore.getStore().wallet_transactions || []).filter(t => String(t.user_id) === String(userId));
+      return mergeById(supa, local);
+    },
+    async countUserTxns(userId, filterFn) {
+      return (await this.listUserTxns(userId)).filter(filterFn).length;
+    },
+    async listActiveReferrals(referredId) {
+      let supa = [];
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('referrals').select('*').eq('referred_id', String(referredId)).eq('status', 'active').limit(50);
+          if (!error && data) supa = data.map(serializeRecord);
+        } catch (e) {}
+      }
+      dataStore.ensureTable('referrals');
+      const local = (dataStore.getStore().referrals || []).filter(r => String(r.referred_id) === String(referredId) && String(r.status) === 'active');
+      return mergeById(supa, local);
+    }
+  };
+}
+
+const WALLET_ACTIONS = {
+  deposit: wallet.deposit,
+  withdraw: wallet.withdraw,
+  pay: wallet.pay,
+  purchase: wallet.purchase,
+  'storefront-payout': wallet.storefrontPayout,
+  'release-delivery': wallet.releaseDelivery,
+  'refund-reject': wallet.refundReject
+};
+
+app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
+  const fn = WALLET_ACTIONS[req.params.action];
+  if (!fn) return res.status(404).json({ error: 'Unknown wallet action.' });
+  try {
+    const out = await fn(walletAdapter(), access.getAccessContext(req), req.body || {});
+    if (!out.ok) return res.status(out.status).json({ error: out.error });
+    return res.json(out.data);
+  } catch (err) {
+    console.error('[Wallet]', req.params.action, 'error:', err && err.message || err);
+    return res.status(500).json({ error: err.message || 'Wallet operation failed.' });
+  }
+});
+
 app.post('/api/:table', writeRateLimiter, async (req, res) => {
   try {
     const supabase = getSupabase();
@@ -1357,6 +1518,75 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     // self-verify. Admins creating users via the panel keep full control.
     if (table === 'users' && !access.isAdmin(viewer)) {
       Object.assign(body, access.sanitizeUserCreate(body));
+    }
+
+    // ── Server-enforced ownership + revenue recording ───────────────────────
+    // Orders/packages are created by the checkout flows: the buyer is always the
+    // session user (or an anonymous guest_* id). A logged-in user must never be
+    // able to create orders/packages attributed to someone else.
+    if (table === 'orders' || table === 'packages') {
+      const isGuest = !viewer;
+      if (!isGuest) body.buyer_id = String(viewer.userId);
+
+      if (table === 'packages' && body.store_id) {
+        // vendor_id must come from the store, never from the client.
+        let store = null;
+        if (supabase) {
+          try {
+            const { data, error } = await supabase.from('stores').select('*').eq('id', String(body.store_id)).maybeSingle();
+            if (!error && data) store = serializeRecord(data);
+          } catch (e) {}
+        }
+        if (!store) {
+          dataStore.ensureTable('stores');
+          store = (dataStore.getStore().stores || []).find(s => String(s.id) === String(body.store_id)) || null;
+        }
+        if (store && store.vendor_id) body.vendor_id = String(store.vendor_id);
+      }
+    }
+
+    // Main-site orders: record the platform fee revenue server-side (storefront
+    // orders record it via /api/wallet/storefront-payout instead).
+    if (table === 'orders' && String(body.order_source || '') !== 'storefront') {
+      const fee = parseFloat(body.platform_fee) || 0;
+      if (fee > 0) {
+        try {
+          const revRec = {
+            id: generateId('platform_revenue'),
+            source: 'platform_fee',
+            amount: Math.round(fee * 100) / 100,
+            reference: 'ORD-' + (body.id || '') + '-' + Date.now(),
+            description: `Platform fee on order ${body.id || ''}`,
+            created_at: new Date().toISOString()
+          };
+          dataStore.ensureTable('platform_revenue');
+          dataStore.getStore().platform_revenue.push(revRec);
+          dataStore.saveToFile();
+          if (supabase) {
+            try { await withSupaTimeout(supabase.from('platform_revenue').insert(serializeRecord(revRec)), 2000); } catch (e) {}
+          }
+        } catch (e) {}
+      }
+    }
+
+    // REF- personal-referral coupons: the used allowance is server-managed now.
+    if (table === 'orders' && viewer && String(body.coupon_code || '').startsWith('REF-')) {
+      const used = parseFloat(body.discount) || 0;
+      if (used > 0) {
+        try {
+          dataStore.ensureTable('users');
+          const storeU = dataStore.getStore();
+          const uIdx = (storeU.users || []).findIndex(x => String(x.id) === String(viewer.userId));
+          if (uIdx !== -1) {
+            const cur = parseFloat(storeU.users[uIdx].referral_commission_used) || 0;
+            storeU.users[uIdx].referral_commission_used = Math.round((cur + used) * 100) / 100;
+            dataStore.saveToFile();
+            if (supabase) {
+              try { await supabase.from('users').update({ referral_commission_used: storeU.users[uIdx].referral_commission_used }).eq('id', String(viewer.userId)); } catch (e) {}
+            }
+          }
+        } catch (e) {}
+      }
     }
 
     // Hash user passwords server-side (admin reset sends password/password_hash)

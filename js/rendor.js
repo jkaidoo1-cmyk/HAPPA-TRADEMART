@@ -583,6 +583,11 @@ async function requestRendorSubscription(planId, months, total, planLabel) {
       </ol>
     </div>
   </div>
+  <div class="form-group">
+    <label class="form-label">Payment Reference / MoMo Transaction ID <span style="color:var(--text-muted);font-weight:400">(optional, helps admin verify)</span></label>
+    <input class="form-control" id="sub-payment-ref-input" type="text" maxlength="60"
+           placeholder="e.g. MOMOTXN-84271933" style="margin-bottom:4px"/>
+  </div>
   ${waHref ? `
   <div style="display:flex;align-items:center;gap:10px;margin:4px 0 12px;color:var(--text-muted);font-size:.75rem">
     <div style="flex:1;height:1px;background:var(--border)"></div>
@@ -615,14 +620,19 @@ async function notifyAdminSubscription(planId, months, price, planLabel) {
 
   const u = App.currentUser;
 
-  // Persist the payment claim (months chosen + amount + when claimed). Only
-  // these self-set fields are allowed by the access layer — status/expiry/plan
-  // remain admin-only.
+  // Payment proof reference the rendor attaches (MoMo txn id etc.) so admin can
+  // cross-check the claim against their own statement.
+  const payRef = (document.getElementById('sub-payment-ref-input')?.value || '').trim();
+
+  // Persist the payment claim (months chosen + amount + when claimed + optional
+  // payment reference). Only these self-set fields are allowed by the access
+  // layer — status/expiry/plan remain admin-only.
   const claim = {
     sub_payment_status: 'paid_pending',
     sub_payment_months: months,
     sub_payment_amount: Math.round(parseFloat(price) * 100) / 100,
-    sub_paid_at: new Date().toISOString()
+    sub_paid_at: new Date().toISOString(),
+    sub_payment_ref: payRef || ''
   };
   const saved = await apiPatch('users', u.id, claim).catch(() => null);
   if (saved) Object.assign(App.currentUser, claim);
@@ -632,7 +642,7 @@ async function notifyAdminSubscription(planId, months, price, planLabel) {
   for (const admin of admins) {
     addNotification(admin.id, 'system',
       `💳 Subscription Payment Claim — ${planLabel}`,
-      `${u.rendor_display_name||u.name} (${u.email}) claims to have paid GHS ${parseFloat(price).toFixed(2)} for the ${planLabel} plan. Open their profile to verify and activate.`
+      `${u.rendor_display_name||u.name} (${u.email}) claims to have paid GHS ${parseFloat(price).toFixed(2)} for the ${planLabel} plan${payRef ? ` · Ref: ${payRef}` : ''}. Open their profile to verify and activate.`
     );
   }
   addNotification(u.id, 'system',

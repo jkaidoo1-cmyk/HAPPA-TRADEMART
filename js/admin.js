@@ -1592,7 +1592,7 @@ function adminActiveRendorCardHTML(r) {
   const subLabel  = subActive
     ? `Sub active (${planLabel || 'active'}) → ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`
     : claimPending
-      ? `💳 Paid claim — ${r.sub_payment_months || ''} mo · GHS ${parseFloat(r.sub_payment_amount||0).toFixed(2)}`
+      ? `💳 Paid claim — ${r.sub_payment_months || ''} mo · GHS ${parseFloat(r.sub_payment_amount||0).toFixed(2)}${r.sub_payment_ref ? ' · Ref: ' + escHtml(r.sub_payment_ref) : ''}`
     : r.sub_request_status === 'pending_quote' ? '⏳ Quote requested'
     : r.sub_request_status === 'quoted' ? '📋 Quote sent'
     : 'No subscription';
@@ -1742,7 +1742,8 @@ async function _doSendSubQuote(userId, displayName) {
     sub_quote_biannual:  String(biannual  > 0 ? biannual  : Math.round(monthly * 6 * 100) / 100),
     sub_payment_status: null,
     sub_payment_months: null,
-    sub_payment_amount: null
+    sub_payment_amount: null,
+    sub_payment_ref: null
   });
 
   // Notify the rendor
@@ -1809,6 +1810,7 @@ async function adminActivateRendorSub(userId, displayName) {
     <div style="font-size:.78rem;color:#1e3a8a">
       ${u.rendor_display_name||displayName} claims <strong>GHS ${parseFloat(u.sub_payment_amount||0).toFixed(2)}</strong> for <strong>${u.sub_payment_months||'?'} month${u.sub_payment_months>1?'s':''}</strong>
       ${u.sub_paid_at ? `on ${new Date(u.sub_paid_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}` : ''}.
+      ${u.sub_payment_ref ? `<br/><span style="display:inline-block;margin-top:4px;background:#fff;border:1px dashed #93c5fd;border-radius:6px;padding:3px 8px;font-family:monospace;font-size:.75rem">Payment Ref: ${escHtml(u.sub_payment_ref)}</span>` : ''}
       Confirm their payment before activating.
     </div>
   </div>` : `
@@ -1846,7 +1848,8 @@ function adminDeactivateRendorSub(userId) {
     rendor_sub_plan: null,
     sub_payment_status: null,
     sub_payment_months: null,
-    sub_payment_amount: null
+    sub_payment_amount: null,
+    sub_payment_ref: null
   }).then(() => {
     addNotification(userId, 'system', '⏸️ Subscription Deactivated',
       'Your subscription has been deactivated by admin. Your profile is no longer visible to clients. Contact admin to renew.'
@@ -1878,7 +1881,8 @@ async function _doActivateRendorSub(userId) {
     sub_request_status: null,
     sub_payment_status: null,
     sub_payment_months: null,
-    sub_payment_amount: null
+    sub_payment_amount: null,
+    sub_payment_ref: null
   });
 
   // Record platform revenue for this subscription payment

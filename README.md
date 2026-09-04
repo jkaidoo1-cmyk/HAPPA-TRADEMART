@@ -156,7 +156,7 @@ js/
 
 | Table | Key Fields |
 |---|---|
-| `users` | id, name, email, phone, role (buyer/vendor/rendor/admin), status, wallet_balance, is_verified, id_verified, referral_code, **rendor_display_name, rendor_service_cat, rendor_bio, rendor_starting_price, rendor_tags**, **rendor_whatsapp, rendor_email, rendor_instagram, rendor_twitter, rendor_facebook, rendor_website, rendor_contact_other**, **rendor_sub_status, rendor_sub_expiry, rendor_sub_plan**, **sub_request_status, sub_quote_monthly, sub_quote_quarterly, sub_quote_biannual, sub_payment_status, sub_payment_months, sub_payment_amount, sub_paid_at**, preferred_store_* (vendor registration) |
+| `users` | id, name, email, phone, role (buyer/vendor/rendor/admin), status, wallet_balance, is_verified, id_verified, referral_code, **rendor_display_name, rendor_service_cat, rendor_bio, rendor_starting_price, rendor_tags**, **rendor_whatsapp, rendor_email, rendor_instagram, rendor_twitter, rendor_facebook, rendor_website, rendor_contact_other**, **rendor_sub_status, rendor_sub_expiry, rendor_sub_plan**, **sub_request_status, sub_quote_monthly, sub_quote_quarterly, sub_quote_biannual, sub_payment_status, sub_payment_months, sub_payment_amount, sub_paid_at, sub_payment_ref**, preferred_store_* (vendor registration) |
 | `stores` | id, name, slug, vendor_id, category, location, campus, status, logo_url, banner_url, keywords, avg_rating, total_sales, total_orders, store_price, is_paid |
 | `products` | id, name, store_id, vendor_id, category, price, original_price, stock_qty, images, is_flash_sale, is_available |
 | `orders` | id, buyer_id, items, subtotal, platform_fee, delivery_fee, total, payment_method, status, delivery_address |
@@ -256,6 +256,7 @@ js/
 | `sub_payment_months` | int | Months the rendor claims to have paid for (self-set) |
 | `sub_payment_amount` | number | Amount (GHS) the rendor claims to have paid (self-set) |
 | `sub_paid_at` | text | ISO timestamp of the payment claim (self-set) |
+| `sub_payment_ref` | text | Optional payment reference / MoMo txn ID the rendor attaches to a claim so admin can verify it (self-set) |
 
 ### `packages` table — 1 new field
 | Field | Type | Purpose |

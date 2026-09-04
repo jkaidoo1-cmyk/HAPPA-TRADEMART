@@ -585,83 +585,23 @@ async function confirmRejectOrder(packageId) {
     }
   }
 
-  // Full refund to buyer: money paid for product + delivery (excluding platform fee which website retains in platform revenue)
-  const productCost = parseFloat(pkg.gross_amount) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
-  const deliveryFee = parseFloat(pkg.delivery_fee) || 0;
-  const refundAmt = productCost + deliveryFee;
-  // Only refund if the buyer actually paid — a COD order was never charged, so
-  // crediting the wallet would mint money out of thin air.
-  const wasPaid = String(pkg.payment_status || '').toLowerCase() !== 'pending'
-    && String(pkg.payment_method || '').toLowerCase() !== 'cod';
-  if (pkg.buyer_id && wasPaid) {
-    let buyer = null;
-    try {
-      buyer = await apiFetch('users/' + pkg.buyer_id);
-      if (buyer && buyer.data && Array.isArray(buyer.data)) buyer = buyer.data[0];
-    } catch(e){}
-    if (!buyer && App.allUsers) buyer = App.allUsers.find(u => String(u.id) === String(pkg.buyer_id));
-
-    if (buyer) {
-      const balBefore = parseFloat(buyer.wallet_balance)||0;
-      const newBal = balBefore + refundAmt;
-      buyer.wallet_balance = newBal;
-      await apiPatch('users', pkg.buyer_id, { wallet_balance: newBal });
-      await apiPost('wallet_transactions', {
-        user_id:        pkg.buyer_id,
-        type:           'refund',
-        amount:         refundAmt,
-        balance_before: balBefore,
-        balance_after:  newBal,
-        payment_method: 'wallet',
-        status:         'completed',
-        note:           `Refund for rejected order ${pCode}: ${reason}`
-      });
-      addNotification(pkg.buyer_id, 'order', '💰 Order Refunded',
-        `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`);
-    } else {
-      // Guest customer refund tracking record
-      await apiPost('wallet_transactions', {
-        user_id:        pkg.buyer_id,
-        type:           'refund',
-        amount:         refundAmt,
-        payment_method: 'guest_refund',
-        status:         'completed',
-        note:           `Guest Refund (${pkg.buyer_name || 'Guest'} - ${pkg.buyer_phone || 'N/A'}): Order ${pCode} rejected. Reason: ${reason}`
-      });
-    }
+  // Money movement is server-side only: the wallet engine refunds the buyer
+  // (product + delivery), claws back storefront prepaid payouts, and credits the
+  // retained platform fee — all with ledger entries, idempotently. The client
+  // never patches wallet_balance or posts wallet_transactions directly.
+  let refundAmt = 0;
+  const refundRes = await apiWallet('refund-reject', { package_id: targetId, reason }).catch(() => null);
+  if (refundRes && refundRes.error) {
+    console.warn('[Wallet] refund-reject failed:', refundRes.error);
+  } else if (refundRes && refundRes.refundAmt != null) {
+    refundAmt = parseFloat(refundRes.refundAmt) || 0;
+  } else {
+    const productCost = parseFloat(pkg.gross_amount) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
+    refundAmt = productCost + (parseFloat(pkg.delivery_fee) || 0);
   }
-
-  // Storefront prepaid orders paid the vendor at checkout — claw the payout back on
-  // rejection, otherwise the platform refunds the buyer AND the vendor keeps the money.
-  const vendorPaidAmt = parseFloat(pkg.vendor_amount) || 0;
-  const vendorWasPaid = !!pkg.balance_released && String(pkg.payment_status || '').toLowerCase() !== 'pending' && vendorPaidAmt > 0;
-  if (vendorWasPaid && pkg.vendor_id) {
-    let vendorUser = null;
-    try {
-      vendorUser = await apiFetch('users/' + pkg.vendor_id);
-      if (vendorUser && vendorUser.data && Array.isArray(vendorUser.data)) vendorUser = vendorUser.data[0];
-    } catch(e){}
-    if (!vendorUser && App.allUsers) vendorUser = App.allUsers.find(u => String(u.id) === String(pkg.vendor_id));
-    if (vendorUser) {
-      const vBalBefore = parseFloat(vendorUser.wallet_balance) || 0;
-      const clawback = Math.min(vendorPaidAmt, vBalBefore);
-      if (clawback > 0) {
-        const vBalAfter = parseFloat((vBalBefore - clawback).toFixed(2));
-        await apiPatch('users', pkg.vendor_id, { wallet_balance: vBalAfter }).catch(() => {});
-        await apiPost('wallet_transactions', {
-          user_id:        pkg.vendor_id,
-          type:           'reversal',
-          amount:         clawback,
-          balance_before: vBalBefore,
-          balance_after:  vBalAfter,
-          payment_method: 'system',
-          status:         'completed',
-          note:           `Payout reversal: order ${pCode} was rejected — GHS ${clawback.toFixed(2)} clawed back from vendor`
-        }).catch(() => {});
-        addNotification(pkg.vendor_id, 'earning', '↩️ Payout Reversed',
-          `GHS ${clawback.toFixed(2)} from order ${pCode} was reversed because the order was rejected.`);
-      }
-    }
+  if (refundAmt > 0 && pkg.buyer_id) {
+    addNotification(pkg.buyer_id, 'order', '💰 Order Refunded',
+      `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`);
   }
 
   // Restore product stock & update status back to active
@@ -804,55 +744,18 @@ async function finalizePackageDelivery(pkg, packageId, newStatus) {
   // Auto-release vendor earnings on delivery
   // vendor_amount already has commission deducted at checkout (it's what vendor earns, not order total)
   if (newStatus === 'delivered' && !(await _packageEarningsReleased(pkg))) {
-    // vendor_amount is the net amount after platform commission was deducted at order time.
-    // Hoisted above the vendor lookup so a failed vendor fetch can't crash the whole
-    // delivery transition (package is already marked delivered at this point).
+    // Money movement is server-side only: the wallet engine credits the vendor
+    // earnings, the platform commission/fee, and any referral rewards — all with
+    // ledger entries, idempotently. The client never patches wallet_balance or
+    // posts wallet_transactions directly.
     const earnAmt      = parseFloat(pkg.vendor_amount)      || 0;
-    const commAmt      = parseFloat(pkg.commission_amount)  || 0;
-    const vendor = await apiFetch('users/' + pkg.vendor_id).catch(() => null);
-    if (vendor) {
-      const vendorBalBefore = parseFloat(vendor.wallet_balance) || 0;
-      const newBal       = vendorBalBefore + earnAmt;
-      await apiPatch('users', pkg.vendor_id, { wallet_balance: newBal });
-      await apiPost('wallet_transactions', {
-        user_id:        pkg.vendor_id,
-        type:           'earning',
-        amount:         earnAmt,
-        balance_before: vendorBalBefore,
-        balance_after:  newBal,
-        payment_method: 'system',
-        status:         'completed',
-        note:           `Earnings released: ${pkg.package_code} — GHS ${earnAmt.toFixed(2)} paid to vendor (commission GHS ${commAmt.toFixed(2)} retained by platform)`
-      });
-      addNotification(pkg.vendor_id, 'earning', '💰 Payment Released',
-        `GHS ${earnAmt.toFixed(2)} from order ${pkg.package_code} has been released to your wallet.`);
-    }
-
-    // Platform commission: credit the admin wallet so the fee actually lands somewhere
-    // traceable (previously it was written off in the ledger note but never recorded).
-    // Main-site orders carry BOTH commission_amount (8% deducted from the vendor) and
-    // platform_fee (1.5% charged to the buyer) — both are the platform's revenue.
-    // Storefront orders set commission_amount:0 and are excluded here because their
-    // 1% platform fee is already credited to the admin wallet at checkout.
-    const sfPlatformFee = parseFloat(pkg.platform_fee) || 0;
-    const adminShareAmt = commAmt + (String(pkg.order_source) !== 'storefront' ? sfPlatformFee : 0);
-    if (adminShareAmt > 0) {
-      let adminUser = (App.allUsers || []).find(u => String(u.role) === 'admin');
-      if (!adminUser) adminUser = await apiFetch('users/admin').catch(() => null);
-      if (adminUser) {
-        const adminBalBefore = parseFloat(adminUser.wallet_balance) || 0;
-        const adminNewBal    = adminBalBefore + adminShareAmt;
-        await apiPatch('users', adminUser.id, { wallet_balance: adminNewBal }).catch(() => {});
-        await apiPost('wallet_transactions', {
-          user_id:        adminUser.id,
-          type:           'earning',
-          amount:         adminShareAmt,
-          balance_before: adminBalBefore,
-          balance_after:  adminNewBal,
-          payment_method: 'system',
-          status:         'completed',
-          note:           `Platform earnings: ${pkg.package_code} — GHS ${adminShareAmt.toFixed(2)} (commission GHS ${commAmt.toFixed(2)}${sfPlatformFee > 0 && String(pkg.order_source) !== 'storefront' ? ` + platform fee GHS ${sfPlatformFee.toFixed(2)}` : ''})`
-        }).catch(() => {});
+    const releaseRes = await apiWallet('release-delivery', { package_id: packageId }).catch(() => null);
+    if (releaseRes && releaseRes.error) {
+      console.warn('[Wallet] release-delivery failed:', releaseRes.error);
+    } else {
+      if (earnAmt > 0) {
+        addNotification(pkg.vendor_id, 'earning', '💰 Payment Released',
+          `GHS ${earnAmt.toFixed(2)} from order ${pkg.package_code} has been released to your wallet.`);
       }
     }
 
@@ -910,54 +813,26 @@ async function finalizePackageDelivery(pkg, packageId, newStatus) {
       }
     }
 
-    // Process referral reward if any
+    // Referral rewards are paid server-side by release-delivery (ledger + wallet
+    // credit). Here we only surface the in-app notification to the referrer — the
+    // money movement never touches the client.
     try {
       const refRes = await apiGet('referrals', `referred_id=${pkg.buyer_id}&status=active&limit=10`);
       const refs = refRes?.data || [];
       if (refs.length > 0) {
-        for (const refItem of refs) {
-          const referrer = await apiFetch('users/' + refItem.referrer_id);
-          if (referrer) {
-            const vendorAmt = parseFloat(pkg.vendor_amount) || 0;
-            const pct = typeof getEffectiveReferralCommissionPct === 'function'
-              ? getEffectiveReferralCommissionPct(vendorAmt)
-              : 3;
-            const reward = parseFloat((vendorAmt * (pct / 100)).toFixed(2));
-
-            if (reward > 0) {
-              // Update referral status and record reward
-              await apiPatch('referrals', refItem.id, {
-                reward_amount: reward,
-                reward_pct: pct,
-                order_id: pkg.order_id || pkg.id,
-                status: 'completed'
-              });
-
-              // Update referrer wallet balance
-              const oldBal = parseFloat(referrer.wallet_balance) || 0;
-              const newBal = parseFloat((oldBal + reward).toFixed(2));
-              await apiPatch('users', referrer.id, { wallet_balance: newBal });
-
-              // Record transaction
-              await apiPost('wallet_transactions', {
-                user_id: refItem.referrer_id,
-                type: 'referral_reward',
-                amount: reward,
-                balance_before: oldBal,
-                balance_after: newBal,
-                payment_method: 'system',
-                status: 'completed',
-                note: `Referral Reward: Earned ${pct}% on referred purchase by ${pkg.buyer_name || 'referred buyer'} (${pkg.package_code})`
-              });
-
-              // Notify referrer
-              addNotification(
-                refItem.referrer_id,
-                'referral',
-                '🎁 Referral Reward Received!',
-                `You earned GHS ${reward.toFixed(2)} (${pct}%) referral reward from ${pkg.buyer_name || 'a friend'}'s purchase ${pkg.package_code}.`
-              );
-            }
+        const vendorAmt = parseFloat(pkg.vendor_amount) || 0;
+        const pct = typeof getEffectiveReferralCommissionPct === 'function'
+          ? getEffectiveReferralCommissionPct(vendorAmt)
+          : 3;
+        const reward = parseFloat((vendorAmt * (pct / 100)).toFixed(2));
+        if (reward > 0) {
+          for (const refItem of refs) {
+            addNotification(
+              refItem.referrer_id,
+              'referral',
+              '🎁 Referral Reward Received!',
+              `You earned GHS ${reward.toFixed(2)} (${pct}%) referral reward from ${pkg.buyer_name || 'a friend'}'s purchase ${pkg.package_code}.`
+            );
           }
         }
       }

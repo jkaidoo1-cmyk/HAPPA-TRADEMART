@@ -366,15 +366,8 @@ async function placeOrder() {
     return;
   }
 
-  // Record the platform fee charged on this order so it reflects in the admin
-  // Platform Revenue stats & weekly chart.
-  await apiPost('platform_revenue', {
-    source: 'platform_fee',
-    amount: parseFloat(totals.platformFee) || 0,
-    reference: 'ORD-' + (order.id || '') + '-' + Date.now(),
-    description: `Platform fee (${PLATFORM_FEE_PCT}%) on order ${order.id || ''}`,
-    created_at: new Date().toISOString()
-  }).catch(e => console.warn('[Revenue] platform_fee record failed:', e && e.message || e));
+  // Platform fee revenue is recorded server-side when the order row is created
+  // (never from the client — client posting of platform_revenue is admin-only).
 
   // Clear cart after order is confirmed created
   App.cart = [];
@@ -383,11 +376,8 @@ async function placeOrder() {
   saveCart();
   if (typeof updateCartBadge === 'function') updateCartBadge();
 
-  if (usedReferralDiscount > 0 && App.currentUser) {
-    const newUsed = (parseFloat(App.currentUser.referral_commission_used) || 0) + usedReferralDiscount;
-    App.currentUser.referral_commission_used = newUsed;
-    apiPatch('users', App.currentUser.id, { referral_commission_used: newUsed });
-  }
+  // REF- personal-referral coupon usage is tracked server-side on order POST
+  // (referral_commission_used is admin-managed — the client cannot patch it).
 
   // Update coupon usage if a standard coupon was applied.
   // Increment used_count for EVERY redemption (logged-in or guest) so max_uses

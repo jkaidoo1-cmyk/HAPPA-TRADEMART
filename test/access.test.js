@@ -191,3 +191,63 @@ test('access: rendor_sub_active is derived for public rows but raw expiry stays 
   assert.equal(adminView[0].rendor_sub_expiry, future);
   assert.equal(adminView[0].sub_payment_months, 3);
 });
+
+test('access: wallet_transactions and platform_revenue are admin-only writes', () => {
+  const BUYER = { userId: 'buyer-1', role: 'buyer' };
+  const VENDOR = { userId: 'vendor-1', role: 'vendor' };
+  // No POSTing fake ledger or revenue rows
+  assert.equal(access.assertPostAllowed('wallet_transactions', BUYER, { user_id: 'someone-else', type: 'earning', amount: 999999 }).ok, false);
+  assert.equal(access.assertPostAllowed('platform_revenue', BUYER, { source: 'subscription', amount: 999999 }).ok, false);
+  assert.equal(access.assertPostAllowed('wallet_transactions', VENDOR, { user_id: 'someone-else', type: 'withdrawal' }).ok, false);
+  // No owner-editable status flips: PATCH is admin-only, period
+  const ownTxn = { id: 'wtx-1', user_id: 'vendor-1', type: 'withdrawal', status: 'pending' };
+  assert.equal(access.assertMutateAllowed('wallet_transactions', VENDOR, ownTxn, { user_id: 'vendor-1', status: 'completed' }).ok, false);
+  assert.equal(access.assertMutateAllowed('wallet_transactions', BUYER, ownTxn, { status: 'completed' }).ok, false);
+  // Admin can
+  assert.equal(access.assertMutateAllowed('wallet_transactions', ADMIN, ownTxn, { status: 'completed' }).ok, true);
+  assert.equal(access.assertPostAllowed('platform_revenue', ADMIN, { source: 'subscription', amount: 80 }).ok, true);
+});
+
+test('access: referral identity and counters are admin-only fields', () => {
+  const USER = { userId: 'u-1', role: 'buyer' };
+  const self = { id: 'u-1' };
+  // A user cannot rewrite their own share code or reset their counters
+  assert.equal(access.assertMutateAllowed('users', USER, self, { referral_code: 'STOLEN-CODE' }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', USER, self, { referral_count: 0 }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', USER, self, { referral_earnings: 0 }).ok, false);
+  assert.equal(access.assertMutateAllowed('users', USER, self, { referral_commission_used: 0 }).ok, false);
+  // Admin can
+  assert.equal(access.assertMutateAllowed('users', ADMIN, self, { referral_code: 'NEW-CODE' }).ok, true);
+});
+
+test('access: rendor may attach a payment reference to a claim (C3)', () => {
+  const RENDOR = { userId: 'rendor-3', role: 'rendor' };
+  const self = { id: 'rendor-3' };
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, {
+    sub_payment_status: 'paid_pending',
+    sub_payment_months: 3,
+    sub_payment_amount: 80,
+    sub_paid_at: '2026-09-03T00:00:00.000Z',
+    sub_payment_ref: 'MOMOTXN-84271933'
+  }).ok, true);
+  // Non-string refs are rejected
+  assert.equal(access.assertMutateAllowed('users', RENDOR, self, { sub_payment_ref: 12345 }).ok, false);
+  // The ref is scrubbed from public rows and never granted on signup
+  const rows = [{ id: 'r1', name: 'Ama', role: 'rendor', sub_payment_ref: 'MOMOTXN-1', email: 'a@t.com' }];
+  const anon = access.applyReadPolicy('users', rows, null);
+  assert.equal(anon[0].sub_payment_ref, undefined);
+  const clean = access.sanitizeUserCreate({ role: 'rendor', sub_payment_ref: 'MOMOTXN-1' });
+  assert.equal(clean.sub_payment_ref, undefined);
+});
+
+test('access: orders/packages POST still open but ownership is forced server-side (A7)', () => {
+  const BUYER = { userId: 'buyer-9', role: 'buyer' };
+  // POST stays open for checkout
+  assert.equal(access.assertPostAllowed('orders', BUYER).ok, true);
+  assert.equal(access.assertPostAllowed('packages', BUYER).ok, true);
+  // But order/package MUTATIONS still require owner-or-admin
+  const someoneElse = { id: 'pkg-1', buyer_id: 'other-buyer', vendor_id: 'other-vendor' };
+  assert.equal(access.assertMutateAllowed('packages', BUYER, someoneElse, { delivery_status: 'delivered' }).ok, false);
+  const own = { id: 'pkg-2', buyer_id: 'buyer-9', vendor_id: 'other-vendor' };
+  assert.equal(access.assertMutateAllowed('packages', BUYER, own, { status: 'cancelled' }).ok, true);
+});

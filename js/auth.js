@@ -763,6 +763,14 @@ async function doRegister(e) {
 
     if (referrer) {
 
+      // Persist the referrer's USER ID on the new account (the referral code
+
+      // string is not comparable to a user id — the balance calculator and any
+
+      // server logic key on the id). referral_* counters stay admin-managed.
+
+      await apiPatch('users', created.id, { referred_by: referrer.id }).catch(() => {});
+
       // Create referral record — reward_amount stays 0 until a purchase is made
 
       await apiPost('referrals', {
@@ -787,11 +795,13 @@ async function doRegister(e) {
 
       });
 
-      // Increment referrer's referral_count immediately
+      // Increment referrer's referral_count immediately (best-effort: users may
+
+      // not patch other users' admin-managed counters, so failures are ignored).
 
       const newCount = (referrer.referral_count || 0) + 1;
 
-      await apiPatch('users', referrer.id, { referral_count: newCount });
+      await apiPatch('users', referrer.id, { referral_count: newCount }).catch(() => {});
 
       // Notify the referrer
 
