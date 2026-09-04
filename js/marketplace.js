@@ -2265,7 +2265,8 @@ function reviewCardHTML(r) {
 
 
 
-// ── Open Rendor Public Profile ────────────────────────────function openRendorProfile(rendorId) {
+// ── Open Rendor Public Profile ────────────────────────────
+function openRendorProfile(rendorId) {
   if (!rendorId) return;
   App.currentRendorId = rendorId;
   showPage('rendor-profile');
@@ -2951,8 +2952,20 @@ async function handleStorefrontOrderSearch(storeId, query, isEnter) {
   } catch (e) {}
 
   const ql = q.toLowerCase();
+  const u = App.currentUser || {};
+  const userId = u.id ? String(u.id) : '';
+  const userPhone = (u.phone || '').replace(/\D/g, '');
+  const userEmail = (u.email || '').toLowerCase().trim();
+  const norm = v => String(v || '').replace(/\D/g, '');
   const matches = pkgs
     .filter(p => String(p.store_id) === String(storeId) || String(p.storefront_id) === String(storeId))
+    .filter(p => {
+      if (userId && String(p.buyer_id || '') === userId) return true;
+      const pkgPhone = norm(p.buyer_phone || p.delivery_phone);
+      if (userPhone && pkgPhone === userPhone) return true;
+      if (userEmail && String(p.buyer_email || '').toLowerCase().trim() === userEmail) return true;
+      return false;
+    })
     .filter(p => String(p.package_code || p.code || '').toLowerCase().includes(ql))
     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     .slice(0, 6);

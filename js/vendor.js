@@ -1071,8 +1071,7 @@ function showAddProductModal(storeId, vendorId) {
 
   // Enforce subscription plan product limits
   const planKey = store.subscription_plan || 'starter';
-  const limits = { starter: 50, growth: 100, pro: Infinity };
-  const maxAllowed = limits[planKey] || 50;
+  const maxAllowed = STOREFRONT_PRODUCT_LIMITS[planKey] || 100;
   const currentCount = (App.allProducts || []).filter(p => String(p.store_id) === String(store.id) && p.status !== 'archived').length;
 
   if (currentCount >= maxAllowed) {
@@ -1675,6 +1674,11 @@ function editStoreInfo(storeId) {
   <div class="form-group"><label class="form-label">Description</label>
     <textarea class="form-control" id="s-desc" rows="3">${escHtml(String(s.description||''))}</textarea>
   </div>
+  <div class="form-group">
+    <label class="form-label">Keywords (for search & discoverability)</label>
+    <input class="form-control" id="s-keywords" value="${Array.isArray(s.keywords) ? s.keywords.join(', ') : escHtml(String(s.keywords||''))}" placeholder="e.g. fashion, shoes, streetwear">
+    <p style="font-size:.72rem;color:var(--text-muted);margin-top:4px">Comma-separated. Helps buyers find your store in search.</p>
+  </div>
 
   <!-- Logo upload -->
   <div class="form-group">
@@ -1722,11 +1726,13 @@ async function saveStoreInfo(storeId) {
   try {
     const name   = document.getElementById('s-name')?.value.trim();
     const desc   = document.getElementById('s-desc')?.value.trim();
+    const kwsRaw = document.getElementById('s-keywords')?.value.trim() || '';
+    const keywords = kwsRaw ? kwsRaw.split(',').map(k => k.trim()).filter(Boolean) : [];
     const logo   = document.getElementById('s-logo-b64')?.value.trim() || '';
     const banner = document.getElementById('s-banner-b64')?.value.trim() || '';
-    await apiPatch('stores', storeId, { name, description: desc, logo_url: logo, banner_url: banner });
+    await apiPatch('stores', storeId, { name, description: desc, keywords, logo_url: logo, banner_url: banner });
     const s = App.allStores.find(s => s.id === storeId);
-    if (s) { s.name = name; s.description = desc; s.logo_url = logo; s.banner_url = banner; }
+    if (s) { s.name = name; s.description = desc; s.keywords = keywords; s.logo_url = logo; s.banner_url = banner; }
     closeModalForce();
     showToast('Store updated!', 'success');
     renderVendorDashboard();
@@ -2670,8 +2676,7 @@ async function _bapSubmitAll() {
   // Check subscription upload limit
   if (store && store.id) {
     const planKey = store.subscription_plan || 'starter';
-    const limits = { starter: 50, growth: 100, pro: Infinity };
-    const maxAllowed = limits[planKey] || 50;
+    const maxAllowed = STOREFRONT_PRODUCT_LIMITS[planKey] || 100;
     const currentCount = (App.allProducts || []).filter(p => String(p.store_id) === String(store.id) && p.status !== 'archived').length;
     const remainingSlotCount = maxAllowed - currentCount;
 
@@ -2830,8 +2835,8 @@ window.openStorefrontUpgradeModal = function(storeId, planKey, price) {
 window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthlyPrice) {
   const planNames = { starter: '🌱 Starter Plan', growth: '🚀 Growth Plan', pro: '💎 Pro Plan (Unlimited)' };
   const uploadLimits = { 
-    starter: '50 Product Uploads Max', 
-    growth: '100 Product Uploads Max', 
+    starter: '100 Product Uploads Max', 
+    growth: '200 Product Uploads Max', 
     pro: 'UNLIMITED Products + Daily Automated Promotion Outside the Site & Across Social Media' 
   };
   const name = planNames[planKey] || planKey;
@@ -2898,7 +2903,8 @@ window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthl
             const payMethod = (document.querySelector('[name=sf-sub-pay]:checked')||{}).value || 'momo';
             const payPhone = (document.getElementById('sf-sub-momo-phone')||{}).value || '';
             closeModal('modal-sf-sub-pay');
-            window.activateStorefrontPlan('${storeId}', '${planKey}', ${monthlyPrice}, months, payMethod, payPhone);
+            closeModal('modal-sf-sub-pay');
+            window.confirmStorefrontSubscription('${storeId}');
           ">
             <i class="fas fa-lock"></i> Pay &amp; Activate Now
           </button>
@@ -2923,101 +2929,7 @@ window.toggleSfSubPay = function() {
   });
 };
 
-window.activateStorefrontPlan = async function(storeId, planKey, monthlyPrice, months = 1, method = 'momo', momoPhone = '') {
-  if (!App.myStorefront || App.myStorefront.status !== 'approved_pending_payment') return;
-  
-  const totalCost = monthlyPrice * months;
-  
-  // Storefront subscriptions are paid by Mobile Money — never from the vendor's
-  // wallet — so an empty wallet must not block activation. Wallet remains an
-  // optional alternative for vendors who choose it.
-  if (method === 'momo') {
-    // The Pay button closes the modal (removing its DOM) before calling this
-    // function, so the phone number must be passed in as an argument rather than
-    // read from the (now-gone) input — reading the input made payment always fail.
-    const phone = (momoPhone || document.getElementById('sf-sub-momo-phone')?.value || '').trim();
-    if (!phone || phone.replace(/\D/g,'').length < 9) {
-      showToast('Please enter a valid MoMo phone number.', 'error');
-      return;
-    }
-  } else if (method === 'wallet') {
-    const userBal = parseFloat(App.currentUser?.wallet_balance ?? App.walletBalance ?? 0);
-    if (userBal < totalCost) {
-      showToast(`Insufficient wallet balance. You need GH₵ ${totalCost.toFixed(2)} to activate this plan. Top up your wallet first.`, 'error');
-      return;
-    }
-  }
-  
-  showToast('Processing payment & activating storefront...', 'info');
-  
-  const storeIdx = App.allStores ? App.allStores.findIndex(s => String(s.id) === String(storeId)) : -1;
-  
-  // 1. Payment: server-side wallet engine deducts the balance (or records the
-  //    MoMo payment) and records platform revenue atomically — the client never
-  //    patches wallet_balance or posts revenue rows.
-  const payRes = await apiWallet('pay', {
-    amount: totalCost,
-    method,
-    payment_ref: 'SUB-' + storeId + '-' + Date.now(),
-    note: `Storefront Subscription: ${planKey.toUpperCase()} Plan (${months} month(s)) — ${storeIdx !== -1 ? (App.allStores[storeIdx].name || '') : ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`,
-  });
-  if (!payRes || payRes.error) {
-    const msg = (payRes && payRes.error) || window.lastApiError || 'Payment could not be processed. Please try again.';
-    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
-    return;
-  }
-  if (method === 'wallet' && payRes.balance != null) {
-    if (App.currentUser) App.currentUser.wallet_balance = payRes.balance;
-    App.walletBalance = payRes.balance;
-    if (typeof saveSessions === 'function') saveSessions();
-    if (typeof updateWalletUI === 'function') updateWalletUI();
-  }
-  
-  // 2. Update storefront status to active
-  App.myStorefront.status = 'active';
-  await apiPatch('storefronts', App.myStorefront.id, { status: 'active' }).catch(() => {});
-  const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
-  if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'active';
-  
-  // 3. Update store subscription details
-  const now = new Date();
-  const newEnd = new Date(now);
-  newEnd.setMonth(newEnd.getMonth() + months);
-  
-  if (storeIdx !== -1) {
-    App.allStores[storeIdx].subscription_plan = planKey;
-    App.allStores[storeIdx].subscription_status = 'active';
-    App.allStores[storeIdx].subscription_start = now.toISOString();
-    App.allStores[storeIdx].subscription_end = newEnd.toISOString();
-    App.allStores[storeIdx].subscription_method = 'vendor_paid';
-    
-    await apiPatch('stores', storeId, {
-      subscription_plan: planKey,
-      subscription_status: 'active',
-      subscription_start: now.toISOString(),
-      subscription_end: newEnd.toISOString(),
-      storefront_status: 'active'
-    }).catch(() => {});
-    if (App.myStore) App.myStore.storefront_status = 'active';
-  }
-  
-  try {
-    localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts));
-    localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores));
-  } catch(e){}
-
-  const sfSlug = App.myStorefront?.url_slug || storeId;
-  const liveUrl = `${window.location.origin}/#storefront/${sfSlug}`;
-
-  if (typeof addNotification === 'function' && App.currentUser?.id) {
-    addNotification(App.currentUser.id, 'system', '🚀 Storefront Activated & Live!',
-      `Your storefront is active! Subscribed for ${months} month(s) on the ${planKey.toUpperCase()} plan. Live URL: ${liveUrl}`,
-      `#storefront/${sfSlug}`);
-  }
-
-  showToast(`Storefront activated for ${months} month(s)! 🎉`, 'success');
-  renderVendorDashboard();
-};
+// activateStorefrontPlan removed — all flows now use confirmStorefrontSubscription
 
 window.handleImageUpload = async function(type) {
   const fileInput = document.getElementById(`store-${type}-file`);
@@ -3614,20 +3526,22 @@ window.setStorefrontStatus = async function(storeId, status) {
 
 const _STOREFRONT_PLANS_DEFAULTS = {
   starter: { name: 'Starter', color: '#16a34a', icon: '🌱',
-    features: ['Custom storefront URL','Basic theme & colors','Up to 20 products','Email support'] },
+    features: ['Custom storefront URL','Basic theme & colors','Up to 100 products','Email support'] },
   growth:  { name: 'Growth',  color: 'var(--primary)', icon: '🚀',
-    features: ['All Starter features','All 4 premium themes','Up to 100 products','Hero banner & gallery','Priority support'] },
+    features: ['All Starter features','All 4 premium themes','Up to 200 products','Hero banner & gallery','Priority support'] },
   pro:     { name: 'Pro',     color: '#7c3aed', icon: '💎',
     features: ['All Growth features','Unlimited products','Custom domain support','Analytics dashboard','Dedicated support'] }
 };
+// Product limits per plan (used by showAddProductModal)
+const STOREFRONT_PRODUCT_LIMITS = { starter: 100, growth: 200, pro: Infinity };
 // Resolve storefront plan prices: admin-set plan_prices on the storefront record
 // take priority, then fallback to default prices.
-function _getSfPlanPrices(store) {
-  const pp = store?.plan_prices || {};
+function _getSfPlanPrices(sfOrStore) {
+  const pp = sfOrStore?.plan_prices || {};
   return {
-    starter: parseFloat(pp.starter) || 29,
-    growth:  parseFloat(pp.growth)  || 59,
-    pro:     parseFloat(pp.pro)     || 99
+    starter: parseFloat(pp.starter) || 50,
+    growth:  parseFloat(pp.growth)  || 100,
+    pro:     parseFloat(pp.pro)     || 200
   };
 }
 function _getSfPlans(store) {
@@ -3654,7 +3568,7 @@ window.getSubscriptionBannerHTML = function(store) {
         <div><i class="fas fa-exclamation-circle"></i> <strong>No Active Subscription</strong>
           <div style="font-size:.75rem;margin-top:3px">Choose a plan to keep your storefront running.</div>
         </div>
-        <button class="btn btn-sm" style="background:#ea580c;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','growth',${(store.plan_prices?.growth || 59).toFixed(2)})">
+        <button class="btn btn-sm" style="background:#ea580c;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','growth',${(store.plan_prices?.growth || 100).toFixed(2)})">
           <i class="fas fa-sync"></i> Subscribe Now
         </button>
       </div>`;
@@ -3670,7 +3584,7 @@ window.getSubscriptionBannerHTML = function(store) {
         <div><i class="fas fa-times-circle"></i> <strong>Subscription Expired</strong>
           <div style="font-size:.75rem;margin-top:3px">Your ${planInfo ? planInfo.name : plan} plan expired on ${end.toLocaleDateString()}. Renew to restore storefront access.</div>
         </div>
-        <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${store.plan_prices?.[plan] || planInfo ? planInfo.price : 59})">
+        <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${store.plan_prices?.[plan] || (planInfo ? planInfo.price : 100)})">
           <i class="fas fa-sync"></i> Renew Now
         </button>
       </div>`;
@@ -3691,7 +3605,7 @@ window.getSubscriptionBannerHTML = function(store) {
           ${expiring ? `⚠️ Expires in <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong>` : `Active until <strong>${end.toLocaleDateString()}</strong>`}
         </div>
       </div>
-      <button class="btn btn-sm" style="background:${expiring ? '#ea580c' : '#16a34a'};color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${store.plan_prices?.[plan] || planInfo ? planInfo.price : 59})">
+      <button class="btn btn-sm" style="background:${expiring ? '#ea580c' : '#16a34a'};color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${store.plan_prices?.[plan] || (planInfo ? planInfo.price : 100)})">
         <i class="fas fa-sync"></i> ${expiring ? 'Renew Now' : 'Manage Plan'}
       </button>
     </div>`;
@@ -3702,7 +3616,10 @@ window.openStorefrontSubscribeModal = function(storeId, preSelectedPlan, price) 
   if (existing) existing.remove();
 
   const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || {};
-  STOREFRONT_PLANS = _getSfPlans(store);
+  // Prefer plan_prices from the storefront record (set by admin) over the store object
+  const sfRecord = (App.allStorefronts || []).find(sf => String(sf.store_id) === String(storeId));
+  const priceSource = sfRecord?.plan_prices ? sfRecord : store;
+  STOREFRONT_PLANS = _getSfPlans(priceSource);
   const plan = STOREFRONT_PLANS[preSelectedPlan] || STOREFRONT_PLANS.growth;
 
   const html = `
@@ -3856,7 +3773,7 @@ window.confirmStorefrontSubscription = async function(storeId) {
 
   // Calculate new expiry
   const idx = App.allStores.findIndex(s => String(s.id) === String(storeId));
-  if (idx === -1) { showToast('Store not found.', 'error'); return; }
+  if (idx === -1) { showToast('Store not found.', 'error'); if (payBtn) { payBtn.disabled = false; payBtn.innerHTML = '<i class="fas fa-lock"></i> Confirm & Pay'; } return; }
 
   const now = new Date();
   const currentEnd = App.allStores[idx].subscription_end ? new Date(App.allStores[idx].subscription_end) : null;
@@ -3866,9 +3783,6 @@ window.confirmStorefrontSubscription = async function(storeId) {
 
   document.getElementById('storefront-sub-modal')?.remove();
   showToast(`Processing GH₵${total} payment via ${method === 'momo' ? 'MTN MoMo' : 'HAPPA Wallet'}...`, 'info');
-
-  // Simulate payment processing
-  await new Promise(r => setTimeout(r, 1800));
 
   // Payment: server-side wallet engine deducts the balance (or records the MoMo
   // payment) and records platform revenue atomically — the client never patches
@@ -3909,15 +3823,13 @@ window.confirmStorefrontSubscription = async function(storeId) {
     subscription_end: newEnd.toISOString()
   }).catch(() => {});
 
-  // If storefront wasn't active yet, set to draft so vendor can customize and submit
+  // Update storefront record status to active
   if (App.myStorefront) {
-    if (App.myStorefront.status === 'inactive') {
-      App.myStorefront.status = 'draft';
-      const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
-      if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'draft';
-      try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
-      await apiPatch('storefronts', App.myStorefront.id, { status: 'draft' }).catch(() => {});
-    }
+    App.myStorefront.status = 'active';
+    const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
+    if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'active';
+    try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+    await apiPatch('storefronts', App.myStorefront.id, { status: 'active' }).catch(() => {});
   }
 
   showToast(`🎉 ${plan.name} plan activated! Storefront subscription runs until ${newEnd.toLocaleDateString()}.`, 'success');

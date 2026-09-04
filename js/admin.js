@@ -71,11 +71,11 @@ async function renderAdminDashboard() {
 
   // Fetch all data in parallel
   const [usersRes, storesRes, productsRes, ordersRes, pkgsRes, platformRevenueRes] = await Promise.all([
-    apiGet('users',    'limit=200'),
-    apiGet('stores',   'limit=200'),
-    apiGet('products', 'limit=200'),
-    apiGet('orders',   'limit=200'),
-    apiGet('packages', 'limit=200'),
+    apiGet('users',    'limit=500'),
+    apiGet('stores',   'limit=500'),
+    apiGet('products', 'limit=500'),
+    apiGet('orders',   'limit=500'),
+    apiGet('packages', 'limit=500'),
     apiGet('platform_revenue', 'limit=500').catch(() => null)
   ]);
 
@@ -250,6 +250,9 @@ async function renderAdminDashboard() {
       <div class="admin-action-btn" onclick="switchTab(null,'admin-vendors');refreshAdminVendorsFull()">
         <i class="fas fa-store"></i><span>Manage Vendors</span>
       </div>
+      <div class="admin-action-btn" onclick="switchTab(null,'admin-rendors');loadAdminRendors()">
+        <i class="fas fa-briefcase"></i><span>Manage Rendors</span>
+      </div>
       <div class="admin-action-btn" onclick="switchTab(null,'admin-create-store')">
         <i class="fas fa-plus-circle"></i><span>Add Vendor</span>
       </div>
@@ -397,7 +400,7 @@ async function renderAdminDashboard() {
     <div style="margin-bottom:12px">
       <input class="form-control" id="admin-user-search"
              placeholder="Search users by name, email or phone…"
-             oninput="filterAdminUsers(this.value,${JSON.stringify(allUsers).replace(/"/g,'&quot;')})">
+             oninput="filterAdminUsers(this.value)">
     </div>
     <div id="admin-users-list">
       ${allUsers.map(u => adminUserRowHTML(u)).join('')}
@@ -876,19 +879,7 @@ async function renderAdminDashboard() {
           <i class="fas fa-check-circle"></i> Announcement sent!
         </div>
       </div>
-    </div>
-
-    <!-- ── Storefronts Tab ── -->
-    <div class="tab-content" id="admin-storefronts">
-      <div class="dashboard-wrap">
-        <h3 style="font-size:.95rem;font-weight:700;margin-bottom:14px">Storefront Launch Requests</h3>
-        <div id="admin-storefronts-list">
-          <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Support / Customer Care Tab ── -->
+    </div>    <!-- ── Support / Customer Care Tab ── -->
     <div class="tab-content ${activeTabId === 'admin-support' ? 'active' : ''}" id="admin-support">
       <div class="dashboard-wrap">
         <h3 style="font-size:.95rem;font-weight:700;margin-bottom:4px">🎧 Customer Care / Support Tickets</h3>
@@ -1321,7 +1312,7 @@ async function adminCreateStore(e) {
       preferred_store_name: name,
       preferred_store_cat:  cat || '',
       preferred_store_desc: desc || '',
-      preferred_store_kws:  kwsStr || '',
+      preferred_store_kws:  '',
       status:            'active',           // admin-created → directly active
       password_hash:     newVendorPass,
       registered_at:     new Date().toISOString()
@@ -2368,13 +2359,19 @@ async function suspendUser(userId) {
   if (!confirm('Suspend this user? They will not be able to log in.')) return;
   const btn = event?.target?.closest('button');
   if (btn) { btn.disabled = true; }
-  await apiPatch('users', userId, { status: 'suspended' });
-  showToast('User suspended', 'warning');
-  // Refresh users list in-place without full re-render
-  const res = await apiGet('users', 'limit=200');
-  const users = res?.data || [];
-  const list = document.getElementById('admin-users-list');
-  if (list) list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
+  try {
+    await apiPatch('users', userId, { status: 'suspended' });
+    showToast('User suspended', 'warning');
+    // Refresh users list in-place without full re-render
+    const res = await apiGet('users', 'limit=500');
+    const users = res?.data || [];
+    const list = document.getElementById('admin-users-list');
+    if (list) list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
+  } catch(e) {
+    showToast('Failed to suspend user', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
 }
 
 /** Open verification docs review for a user (vendor or rendor) */
@@ -2390,6 +2387,15 @@ function showAdminVerificationModal(userId) {
 }
 
 /** Rendor-card notify / suspend (wrappers used in adminActiveRendorCardHTML) */
+function _doAdminNotifyUser(userId) {
+  const t = document.getElementById('notif-title')?.value?.trim();
+  const m = document.getElementById('notif-msg')?.value?.trim();
+  if (!t || !m) { showToast('Title and message required', 'warning'); return; }
+  addNotification(userId, 'system', t, m);
+  showToast('Notification sent ✅', 'success');
+  closeModalForce();
+}
+
 async function adminNotifyUser(userId) {
   showModal(`
 <div class="modal-handle"></div>
@@ -2406,83 +2412,124 @@ async function adminNotifyUser(userId) {
     <label class="form-label">Message *</label>
     <textarea class="form-control" id="notif-msg" rows="3" placeholder="Write your message…"></textarea>
   </div>
-  <button class="btn btn-primary btn-block" onclick="
-    const t=document.getElementById('notif-title')?.value?.trim();
-    const m=document.getElementById('notif-msg')?.value?.trim();
-    if(!t||!m){showToast('Title and message required','warning');return;}
-    addNotification('${userId}','system',t,m);
-    showToast('Notification sent ✅','success');
-    closeModalForce();
-  ">
+  <button class="btn btn-primary btn-block" onclick="_doAdminNotifyUser('${userId}')">
     <i class="fas fa-paper-plane"></i> Send
   </button>
 </div>`);
 }
 
 async function adminSuspendUser(userId) {
+  // Delegate to the same suspendUser logic but refresh rendors list after
   if (!confirm('Suspend this user? They will not be able to log in.')) return;
-  await apiPatch('users', userId, { status: 'suspended' });
-  addNotification(userId, 'system', '🚫 Account Suspended',
-    'Your account has been suspended. Please contact support if you believe this is an error.');
-  showToast('User suspended', 'warning');
-  await loadAdminRendors();
+  const btn = event?.target?.closest('button');
+  if (btn) { btn.disabled = true; }
+  try {
+    await apiPatch('users', userId, { status: 'suspended' });
+    addNotification(userId, 'system', '🚫 Account Suspended',
+      'Your account has been suspended. Please contact support if you believe this is an error.');
+    showToast('User suspended', 'warning');
+    await loadAdminRendors();
+  } catch(e) {
+    showToast('Failed to suspend user', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
 }
 
 async function activateUser(userId) {
   const btn = event?.target?.closest('button');
   if (btn) { btn.disabled = true; }
-  await apiPatch('users', userId, { status: 'active' });
-  showToast('User activated ✅', 'success');
-  // Refresh users list in-place without full re-render
-  const res = await apiGet('users', 'limit=200');
-  const users = res?.data || [];
-  App.allUsers = users;
-  
-  let user = users.find(u => String(u.id) === String(userId));
-  if (!user || !user.id) {
-    const vendorData = await apiFetch('users/' + userId).catch(() => null);
-    user = vendorData || {};
-  }
-  if (!user.id) user.id = userId;
+  try {
+    await apiPatch('users', userId, { status: 'active' });
+    showToast('User activated ✅', 'success');
+    // Refresh users list in-place without full re-render
+    const res = await apiGet('users', 'limit=500');
+    const users = res?.data || [];
+    App.allUsers = users;
+    
+    let user = users.find(u => String(u.id) === String(userId));
+    if (!user || !user.id) {
+      const vendorData = await apiFetch('users/' + userId).catch(() => null);
+      user = vendorData || {};
+    }
+    if (!user.id) user.id = userId;
 
-  if (user && (user.role === 'vendor' || !user.role)) {
-    await window.autoCreateStoreForVendor(user);
+    // Only auto-create a store for actual vendor accounts
+    if (user && user.role === 'vendor') {
+      await window.autoCreateStoreForVendor(user);
+    }
+    const list = document.getElementById('admin-users-list');
+    if (list) list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
+  } catch(e) {
+    showToast('Failed to activate user: ' + (e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; }
   }
-  const list = document.getElementById('admin-users-list');
-  if (list) list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
 }
 
-function filterAdminUsers(query, users) {
-  const q = query.toLowerCase();
-  const filtered = users.filter(u =>
+function filterAdminUsers(query) {
+  const q = (query || '').toLowerCase();
+  const users = (App.allUsers || []);
+  const filtered = q ? users.filter(u =>
     u.name?.toLowerCase().includes(q)  ||
     u.email?.toLowerCase().includes(q) ||
-    u.phone?.includes(q)
-  );
+    (u.phone || '').toLowerCase().includes(q)
+  ) : users;
   const list = document.getElementById('admin-users-list');
   if (list) list.innerHTML = filtered.map(u => adminUserRowHTML(u)).join('');
 }
 
 // ── Review management ─────────────────────────────────────
-function showAdminReviewsModal() {
-  showModal(`
+async function showAdminReviewsModal() {
+  const res = await apiGet('reviews', 'limit=200').catch(() => null);
+  const reviews = res?.data || [];
+  const usersRes = await apiGet('users', 'limit=500').catch(() => null);
+  const users = usersRes?.data || [];
+  const storesRes = await apiGet('stores', 'limit=500').catch(() => null);
+  const stores = storesRes?.data || [];
+
+  if (!reviews.length) {
+    showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
   <span class="modal-title">⭐ Review Management</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
 <div class="modal-body">
-  <p style="font-size:.85rem;color:var(--text-light);margin-bottom:12px">Monitor and manage vendor ratings.</p>
-  <div class="verify-banner">
-    <i class="fas fa-shield-alt"></i>
-    <p>Auto-detection active for duplicate and suspicious reviews.</p>
+  <div class="empty-state" style="padding:20px 0">
+    <i class="fas fa-star" style="font-size:2rem;color:var(--text-muted);margin-bottom:8px"></i>
+    <h3>No Reviews Yet</h3>
+    <p style="font-size:.82rem;color:var(--text-muted)">Reviews from buyers will appear here once they rate their purchases.</p>
   </div>
-  <ul style="font-size:.82rem;color:var(--text-muted);padding-left:16px;line-height:2;margin-top:12px">
-    <li>Flag reviews from non-buyers</li>
-    <li>Detect repeated identical reviews</li>
-    <li>Rate anomaly detection</li>
-    <li>Manual approve / reject reviews</li>
-  </ul>
+</div>`, true);
+    return;
+  }
+
+  const reviewHTML = reviews.map(r => {
+    const buyer = users.find(u => String(u.id) === String(r.buyer_id));
+    const store = stores.find(s => String(s.id) === String(r.store_id));
+    const stars = '&#9733;'.repeat(Math.min(5, Math.max(0, parseInt(r.rating) || 0))) + '&#9734;'.repeat(5 - Math.min(5, Math.max(0, parseInt(r.rating) || 0)));
+    return `
+      <div style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:.82rem">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div>
+            <div style="font-weight:700">${buyer ? escHtml(buyer.name) : 'Anonymous'}</div>
+            <div style="font-size:.72rem;color:var(--text-muted)">${store ? escHtml(store.name) : 'Unknown Store'} · ${r.created_at ? new Date(r.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : ''}</div>
+            <div style="color:#f59e0b;margin:2px 0">${stars}</div>
+            ${r.comment ? `<div style="color:var(--text-light);margin-top:2px">${escHtml(r.comment)}</div>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">⭐ Reviews (${reviews.length})</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body" style="max-height:60vh;overflow-y:auto;padding:0">
+  ${reviewHTML}
 </div>`, true);
 }
 
@@ -2533,7 +2580,11 @@ function renderAdminRevenueChart(packages = [], platformRevenue = []) {
 
   const now = new Date();
   const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
-  const weeks = ['W1', 'W2', 'W3', 'W4', 'W5'];
+  const weeks = [];
+  for (let i = 4; i >= 0; i--) {
+    const d = new Date(now - i * oneWeekMs);
+    weeks.push(d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+  }
   const data = [0, 0, 0, 0, 0];
 
   packages.forEach(p => {
@@ -2620,7 +2671,13 @@ async function renderAdminStorefronts() {
   const allStores = storesRes?.data || [];
   
   App.allStorefronts = allStorefronts;
-  App.allStores = allStores;
+  // Merge fetched stores into App.allStores instead of overwriting —
+  // other tabs (vendors, dashboard) may have loaded a fresher copy.
+  for (const s of allStores) {
+    const idx = (App.allStores || []).findIndex(x => String(x.id) === String(s.id));
+    if (idx !== -1) Object.assign(App.allStores[idx], s);
+    else App.allStores.push(s);
+  }
   
   const pending = allStorefronts.filter(s => s.status === 'pending_approval');
   const pendingPayment = allStorefronts.filter(s => s.status === 'approved_pending_payment');
@@ -2915,10 +2972,40 @@ window.approveStorefrontWithModal = async function(sfId) {
 };
 
 window.rejectStorefrontWithModal = async function(sfId) {
-  const btn = document.querySelector('[onclick*="rejectStorefrontWithModal"]');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rejecting…'; }
-  const reason = prompt('Enter a reason for rejecting this storefront request:');
-  if (reason === null) { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-times-circle"></i> Reject'; } return; }
+  // Close any open review modal first
+  const reviewModal = document.getElementById('modal-sf-review');
+  if (reviewModal) reviewModal.remove();
+  closeModal('modal-sf-review');
+
+  const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
+  const store = (App.allStores || []).find(st => String(st.id) === String(sf?.store_id || String(sfId).replace(/^sft-/, ''))) || {};
+
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">❌ Reject Storefront Request</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body">
+  <p style="font-size:.85rem;color:var(--text-light);margin-bottom:12px;line-height:1.6">
+    Reject storefront request for <strong>${escHtml(store.name || 'this store')}</strong>? Please provide a reason so the vendor knows what to fix.
+  </p>
+  <div class="form-group">
+    <label class="form-label">Rejection Reason *</label>
+    <textarea class="form-control" id="reject-reason" rows="3" placeholder="e.g. Slogan needs revision, logo is too small..."></textarea>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-ghost" style="flex:1" onclick="closeModalForce()">Cancel</button>
+    <button class="btn btn-danger" style="flex:1;background:var(--danger);color:#fff;border:none" onclick="window._doRejectStorefront('${sfId}')">
+      <i class="fas fa-times-circle"></i> Reject Request
+    </button>
+  </div>
+</div>`);
+};
+
+window._doRejectStorefront = async function(sfId) {
+  const reason = document.getElementById('reject-reason')?.value?.trim();
+  if (!reason) { showToast('Please enter a rejection reason.', 'warning'); return; }
 
   showToast('Rejecting storefront request...', 'info');
   const cleanId = String(sfId).replace(/^sft-/, '');
@@ -2946,9 +3033,7 @@ window.rejectStorefrontWithModal = async function(sfId) {
       '#vendor-dashboard');
   }
 
-  const modalEl = document.getElementById('modal-sf-review');
-  if (modalEl) modalEl.remove();
-  closeModal('modal-sf-review');
+  closeModalForce();
   showToast('Storefront request rejected.', 'error');
   renderAdminStorefronts();
 };
@@ -2962,24 +3047,42 @@ async function rejectStorefront(sfId) {
 }
 
 async function disableStorefront(sfId) {
-  if (!confirm('Are you sure you want to disable/revoke this storefront? It will no longer be publicly accessible.')) return;
-  const btn = event?.target?.closest('button');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Disabling…'; }
+  const sf = (App.allStorefronts || []).find(s => String(s.id) === String(sfId));
+  const store = (App.allStores || []).find(st => String(st.id) === String(sf?.store_id || '')) || {};
 
-  // Patch the storefront record to mark it inactive
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">⚠️ Disable Storefront</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body">
+  <p style="font-size:.85rem;color:var(--text-light);margin-bottom:16px;line-height:1.6">
+    Disable the storefront for <strong>${escHtml(store.name || 'this store')}</strong>? It will no longer be publicly accessible.
+  </p>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-ghost" style="flex:1" onclick="closeModalForce()">Cancel</button>
+    <button class="btn btn-danger" style="flex:1;background:var(--danger);color:#fff;border:none" onclick="window._doDisableStorefront('${sfId}')">
+      <i class="fas fa-ban"></i> Disable Storefront
+    </button>
+  </div>
+</div>`);
+}
+
+window._doDisableStorefront = async function(sfId) {
   showToast('Disabling storefront...', 'info');
   await apiPatch('storefronts', sfId, { status: 'inactive' }).catch(() => {});
 
-  // Update local cache
   const idx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(sfId)) : -1;
   if (idx !== -1) {
     App.allStorefronts[idx].status = 'inactive';
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
   }
 
+  closeModalForce();
   showToast('Storefront disabled successfully.', 'warning');
   renderAdminStorefronts();
-}
+};
 
 async function deleteStorefront(sfId) {
   if (!confirm('Are you sure you want to permanently delete this storefront? This will not affect the vendor account, products, or reviews.')) return;
@@ -3008,13 +3111,40 @@ async function adminGrantSubscription(sfId) {
   const store = App.allStores.find(s => String(s.id) === String(sf.store_id));
   if (!store) return;
 
-  const planKey = prompt(`Grant free subscription plan for "${store.name}".\nEnter plan: starter, growth, or pro`, store.subscription_plan || 'growth');
-  if (!planKey || !['starter','growth','pro'].includes(planKey.toLowerCase())) {
-    showToast('Invalid plan. Use: starter, growth, or pro', 'error');
-    return;
-  }
-  const months = parseInt(prompt('How many free months?', '1') || '1', 10);
-  if (!months || months < 1) return;
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">🎁 Grant Subscription — ${escHtml(store.name)}</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body">
+  <div class="form-group">
+    <label class="form-label">Plan *</label>
+    <select class="form-control form-select" id="grant-plan">
+      <option value="starter" ${store.subscription_plan === 'starter' ? 'selected' : ''}>🌱 Starter</option>
+      <option value="growth" ${store.subscription_plan === 'growth' ? 'selected' : ''}>🚀 Growth</option>
+      <option value="pro" ${store.subscription_plan === 'pro' ? 'selected' : ''}>💎 Pro</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Free Months *</label>
+    <input class="form-control" type="number" id="grant-months" min="1" max="24" value="1">
+  </div>
+  <button class="btn btn-primary btn-block" onclick="_doAdminGrantSubscription('${sfId}')">
+    <i class="fas fa-gift"></i> Grant Subscription
+  </button>
+</div>`);
+}
+
+window._doAdminGrantSubscription = async function(sfId) {
+  const planKey = document.getElementById('grant-plan')?.value || 'growth';
+  const months = parseInt(document.getElementById('grant-months')?.value || '1', 10);
+  if (!months || months < 1) { showToast('Enter at least 1 month', 'warning'); return; }
+
+  const sf = App.allStorefronts.find(s => String(s.id) === String(sfId));
+  if (!sf) return;
+  const store = App.allStores.find(s => String(s.id) === String(sf.store_id));
+  if (!store) return;
 
   const idx = App.allStores.findIndex(s => String(s.id) === String(store.id));
   const now = new Date();
@@ -3034,28 +3164,53 @@ async function adminGrantSubscription(sfId) {
     subscription_plan: planKey.toLowerCase(),
     subscription_status: 'active',
     subscription_start: now.toISOString(),
-    subscription_end: newEnd.toISOString()
+    subscription_end: newEnd.toISOString(),
+    storefront_status: 'active'
   }).catch(() => {});
-
-  // Update storefront status to draft if it was inactive
-  if (sf.status === 'inactive') {
-    sf.status = 'draft';
+  // Also activate the storefront record
+  if (sf.status === 'inactive' || sf.status === 'draft') {
+    sf.status = 'active';
     const sfIdx = App.allStorefronts.findIndex(s => String(s.id) === String(sf.id));
-    if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'draft';
+    if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'active';
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
-    await apiPatch('storefronts', sf.id, { status: 'draft' }).catch(() => {});
+    await apiPatch('storefronts', sf.id, { status: 'active' }).catch(() => {});
   }
 
+  closeModalForce();
   showToast(`✅ ${months} month(s) of ${planKey} plan granted to ${store.name} until ${newEnd.toLocaleDateString()}.`, 'success');
   renderAdminStorefronts();
-}
+};
 
 async function adminRevokeSubscription(sfId) {
   const sf = App.allStorefronts.find(s => String(s.id) === String(sfId));
   if (!sf) return;
   const store = App.allStores.find(s => String(s.id) === String(sf.store_id));
   if (!store) return;
-  if (!confirm(`Revoke subscription for "${store.name}"? This will expire their plan immediately.`)) return;
+
+  showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">⚠️ Revoke Subscription</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body">
+  <p style="font-size:.85rem;color:var(--text-light);margin-bottom:16px;line-height:1.6">
+    Revoke the subscription for <strong>${escHtml(store.name)}</strong>? Their storefront will expire immediately and they'll need to resubscribe.
+  </p>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-ghost" style="flex:1" onclick="closeModalForce()">Cancel</button>
+    <button class="btn btn-danger" style="flex:1;background:var(--danger);color:#fff;border:none" onclick="_doAdminRevokeSubscription('${sfId}')">
+      <i class="fas fa-times-circle"></i> Revoke
+    </button>
+  </div>
+</div>`);
+}
+
+window._doAdminRevokeSubscription = async function(sfId) {
+  const sf = App.allStorefronts.find(s => String(s.id) === String(sfId));
+  if (!sf) return;
+  const store = App.allStores.find(s => String(s.id) === String(sf.store_id));
+  if (!store) return;
 
   const idx = App.allStores.findIndex(s => String(s.id) === String(store.id));
   const yesterday = new Date();
@@ -3067,9 +3222,18 @@ async function adminRevokeSubscription(sfId) {
   try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
   await apiPatch('stores', store.id, {
     subscription_status: 'revoked',
-    subscription_end: yesterday.toISOString()
+    subscription_end: yesterday.toISOString(),
+    storefront_status: 'inactive'
   }).catch(() => {});
 
+  // Also deactivate the storefront record
+  sf.status = 'inactive';
+  const sfIdx = App.allStorefronts.findIndex(s => String(s.id) === String(sf.id));
+  if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'inactive';
+  try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
+  await apiPatch('storefronts', sf.id, { status: 'inactive' }).catch(() => {});
+
+  closeModalForce();
   showToast(`Subscription revoked for ${store.name}.`, 'warning');
   renderAdminStorefronts();
 }
@@ -3103,15 +3267,26 @@ async function loadAdminReferrals() {
       grouped[ref.referrer_id].users.push(ref.referred_user_id);
     }
 
+    // Pre-index users and orders for O(1) lookups instead of repeated .filter()
+    const userMap = {};
+    for (const u of users) userMap[String(u.id)] = u;
+    const ordersByBuyer = {};
+    for (const o of orders) {
+      const bid = String(o.buyer_id);
+      if (!ordersByBuyer[bid]) ordersByBuyer[bid] = [];
+      ordersByBuyer[bid].push(o);
+    }
+
     const rows = [];
     for (const [referrerId, data] of Object.entries(grouped)) {
-      const referrer = users.find(u => String(u.id) === String(referrerId));
+      const referrer = userMap[referrerId];
       if (!referrer) continue;
 
       let totalEarned = 0;
       for (const referredUserId of data.users) {
-        const userOrders = orders.filter(o => String(o.buyer_id) === String(referredUserId) && o.status === 'completed');
+        const userOrders = ordersByBuyer[String(referredUserId)] || [];
         for (const order of userOrders) {
+          if (order.status !== 'completed') continue;
           const amt = parseFloat(order.total) || parseFloat(order.total_amount) || 0;
           const pct = typeof getEffectiveReferralCommissionPct === 'function' ? getEffectiveReferralCommissionPct(amt) : 3;
           totalEarned += amt * (pct / 100);
