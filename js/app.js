@@ -1182,19 +1182,19 @@ function renderSettingsPage() {
                       window.navigator.standalone === true;
   const showInstallBtn = !isInstalled && !!deferredInstallPrompt;
   const installBtnHtml = showInstallBtn ? `
-      <div class="card" style="margin-bottom:14px;border:2px solid var(--primary);border-radius:12px;overflow:hidden">
-        <div class="card-header" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff">
-          <h3>📲 Install HAPPA TRADEMART</h3>
+      <div class="card" style="margin-bottom:14px;border:1px solid #fbbf24;border-radius:12px;overflow:hidden;background:linear-gradient(135deg,#fff7ed,#ffedd5)">
+        <div class="card-header" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;padding:10px 14px">
+          <h3 style="font-size:.9rem;margin:0">📲 Install HAPPA TRADEMART</h3>
         </div>
-        <div class="card-body" style="display:flex;align-items:center;gap:14px">
-          <div style="flex:1">
-            <p style="font-size:.82rem;color:var(--text);margin:0 0 4px;font-weight:600">Add to your home screen</p>
-            <p style="font-size:.74rem;color:var(--text-muted);margin:0;line-height:1.6">
-              Get quick access from your home screen. Works offline and sends push notifications.
+        <div class="card-body" style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+          <div style="flex:1;min-width:0">
+            <p style="font-size:.78rem;color:var(--text);margin:0 0 4px;font-weight:600">Add to your home screen</p>
+            <p style="font-size:.72rem;color:var(--text-muted);margin:0;line-height:1.5">
+              Quick access, offline use, and push notifications.
             </p>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="installApp()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);border-color:#7c3aed;white-space:nowrap">
-            <i class="fas fa-download"></i> Install App
+          <button class="btn btn-sm" onclick="installApp()" style="background:linear-gradient(135deg,#f97316,#ea580c);border:1px solid #f97316;color:#fff;padding:7px 12px;font-size:.75rem;white-space:nowrap;flex-shrink:0">
+            <i class="fas fa-download"></i> Install
           </button>
         </div>
       </div>

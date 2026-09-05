@@ -1,6 +1,7 @@
 async function addNotification(userId, type, title, message, actionUrl = '') {
   if (!userId) return;
-  const targetId = String(userId);
+  const targetId = String(userId).trim();
+  if (!targetId) return;
 
   // Check if target user is deleted or no longer exists
   try {
@@ -49,9 +50,13 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
     renderNotifBadge();
   }
 
-  // Upload to server DB
+  // Upload to server DB and refresh the active user immediately when the
+  // notification was sent to the person currently signed in.
   try {
     await apiPost('notifications', notif);
+    if (App.currentUser && String(App.currentUser.id) === targetId && typeof fetchServerNotifications === 'function') {
+      await fetchServerNotifications();
+    }
   } catch (err) {
     console.warn('Failed to upload notification to server:', err);
   }
