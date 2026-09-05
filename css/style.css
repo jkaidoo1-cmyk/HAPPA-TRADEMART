@@ -168,15 +168,9 @@ html.is-storefront-root body #main-content {
   display: flex;
   align-items: center;
 }
-.nav-search-inner {
-  width: 100%;
-  position: relative;
-  display: flex;
-  align-items: center;
-}
 .nav-search-wrap input {
   width: 100%;
-  padding: 8px 40px 8px 36px;
+  padding: 8px 12px 8px 36px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-full);
   font-size: 0.875rem;
@@ -193,23 +187,6 @@ html.is-storefront-root body #main-content {
   pointer-events: none;
   z-index: 2;
   line-height: 1;
-}
-.nav-search-wrap .nav-search-btn {
-  position: absolute; right: 4px; top: 50%;
-  transform: translateY(-50%);
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #ffffff;
-  border: none;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  z-index: 3;
-  font-size: 0.85rem;
-  transition: background var(--transition), transform var(--transition);
-}
-.nav-search-wrap .nav-search-btn:hover {
-  background: var(--primary-dark, #0f766e);
 }
 
 /* ----- Responsive Search (Mobile Expandable, Desktop Inline) ----- */

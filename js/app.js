@@ -146,8 +146,17 @@ window.renderItemsProgressively = renderItemsProgressively;
 
 // ── Initialize ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  // ── PWA Storefront Link Interceptor ─────────────────────────────
-  // If the app is installed as a PWA, intercept any <a> click or
+  // ── PWA Install Prompt Handler ────────────────────────────────
+  // Capture the beforeinstallprompt event so we can show our own install button
+  // instead of relying on the browser's automatic mini-info bar.
+  let deferredInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    showToast(' HAPPA TRADEMART can be installed as an app. Go to Settings → Install App.', 'info');
+  });
+
+  // If the app is already installed as a PWA, intercept any <a> click or
   // programmatic navigation that targets a storefront/store-admin URL
   // and open it in the default browser instead.
   const isPWA = () =>
@@ -1128,11 +1137,83 @@ function closeProfileMenu() {
   if (dropdown) dropdown.classList.add('hidden');
 }
 
+function installApp() {
+  if (!deferredInstallPrompt) {
+    // Not on a supported browser/platform, or already installed
+    if (window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.navigator.standalone === true) {
+      showToast('HAPPA TRADEMART is already installed!', 'success');
+    } else {
+      showToast('Install is not available on this browser or device. Try Chrome, Edge, or Safari on desktop/mobile.', 'warning');
+    }
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.then(choiceResult => {
+    if (choiceResult.outcome === 'accepted') {
+      showToast('HAPPA TRADEMART installed! Open from your home screen.', 'success');
+    } else {
+      showToast('Installation cancelled.', 'info');
+    }
+    deferredInstallPrompt = null;
+  }).catch(() => {
+    deferredInstallPrompt = null;
+  });
+}
+
 function renderSettingsPage() {
   const el = document.getElementById('settings-page-content');
   if (!el) return;
   if (!App.currentUser) { showPage('auth'); return; }
   const u = App.currentUser;
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches ||
+                      window.matchMedia('(display-mode: fullscreen)').matches ||
+                      window.navigator.standalone === true;
+  const showInstallBtn = !isInstalled && !!deferredInstallPrompt;
+  const installBtnHtml = showInstallBtn ? `
+      <div class="card" style="margin-bottom:14px;border:2px solid var(--primary);border-radius:12px;overflow:hidden">
+        <div class="card-header" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff">
+          <h3>📲 Install HAPPA TRADEMART</h3>
+        </div>
+        <div class="card-body" style="display:flex;align-items:center;gap:14px">
+          <div style="flex:1">
+            <p style="font-size:.82rem;color:var(--text);margin:0 0 4px;font-weight:600">Add to your home screen</p>
+            <p style="font-size:.74rem;color:var(--text-muted);margin:0;line-height:1.6">
+              Get quick access from your home screen. Works offline and sends push notifications.
+            </p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="installApp()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);border-color:#7c3aed;white-space:nowrap">
+            <i class="fas fa-download"></i> Install App
+          </button>
+        </div>
+      </div>
+      ` : (isInstalled ? `
+      <div class="card" style="margin-bottom:14px;background:linear-gradient(90deg,#ecfdf5,#d1fae5);border-color:#a7f3d0">
+        <div class="card-body" style="display:flex;align-items:center;gap:12px">
+          <i class="fas fa-check-circle" style="color:var(--success);font-size:1.3rem"></i>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:.85rem;color:#065f46">HAPPA TRADEMART is installed</div>
+            <div style="font-size:.74rem;color:#047857">Open from your home screen for the best experience.</div>
+          </div>
+        </div>
+      </div>
+      ` : `
+      <div class="card" style="margin-bottom:14px;border:2px dashed var(--border);border-radius:12px">
+        <div class="card-body" style="display:flex;align-items:center;gap:14px">
+          <div style="flex:1">
+            <p style="font-size:.82rem;color:var(--text);margin:0 0 4px;font-weight:600">Install HAPPA TRADEMART</p>
+            <p style="font-size:.74rem;color:var(--text-muted);margin:0;line-height:1.6">
+              Install from the browser prompt (Chrome/Edge/Safari) to get an app icon on your home screen.
+            </p>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="installApp()" style="border-color:var(--border);color:var(--text-muted)">
+            <i class="fas fa-mobile-alt"></i> Check Availability
+          </button>
+        </div>
+      </div>
+      `);
+
   el.innerHTML = `
     <div class="dashboard-wrap">
 

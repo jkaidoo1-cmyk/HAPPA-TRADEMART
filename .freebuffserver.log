@@ -1,4 +1,6 @@
-<!DOCTYPE html>
+[Supabase] Testing database connection... ⚡
+HAPPA backend running on http://localhost:9000
+[Supabase] Connection query failed. Falling back to local db.json: <!DOCTYPE html>
 <html lang="en">
 
 <head>

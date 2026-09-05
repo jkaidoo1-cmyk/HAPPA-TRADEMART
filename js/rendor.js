@@ -68,6 +68,13 @@ async function renderRendorDashboard() {
 
   // ── Subscription status ───────────────────────────────────
   // rendor_sub_status: 'active' | 'expired' | null
+  // Refresh user data from server so the dashboard always shows current subscription status.
+  let freshUser = null;
+  try { freshUser = await apiFetch('users/' + u.id); } catch (_) {}
+  if (freshUser && !freshUser.error) {
+    Object.assign(u, freshUser);
+    if (typeof saveSessions === 'function') saveSessions();
+  }
   const subStatus  = u.rendor_sub_status || null;
   const subExpiry  = u.rendor_sub_expiry  ? new Date(Number(u.rendor_sub_expiry)) : null;
   const subActive  = subStatus === 'active' && subExpiry && subExpiry > new Date();
@@ -527,12 +534,15 @@ async function confirmRendorSubscription(total, months) {
     if (typeof saveSessions === 'function') saveSessions();
   }
 
-  // Re-fetch full user data from server to sync derived fields (rendor_sub_active, etc.)
-  const freshUser = await apiGet('users/' + u.id).catch(() => null);
+  // Re-fetch full user data from server to sync derived fields (rendor_sub_active, etc.).
+  // Force a fresh fetch (not the cached promise) since the subscription just changed.
+  const freshUser = await apiFetch('users/' + u.id).catch(() => null);
   if (freshUser && !freshUser.error) {
     Object.assign(App.currentUser, freshUser);
     if (typeof saveSessions === 'function') saveSessions();
   }
+  // Also clear the users cache so any other pending re-fetches get fresh data.
+  if (typeof invalidateAppState === 'function') invalidateAppState('users');
 
   // Notify admins so they can see the new subscription in their dashboard.
   const adminsRes = await apiGet('users', 'limit=200');
