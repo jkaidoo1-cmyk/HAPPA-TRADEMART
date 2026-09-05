@@ -165,7 +165,6 @@ html.is-storefront-root body #main-content {
 .nav-search-wrap {
   flex: 1;
   position: relative;
-  max-width: 400px;
   display: flex;
   align-items: center;
 }
@@ -1164,6 +1163,9 @@ html.is-storefront-root body #main-content {
 .admin-action-btn:hover { border-color: var(--primary); background: var(--primary-light); }
 .admin-action-btn i { font-size: 1.5rem; color: var(--primary); }
 .admin-action-btn span { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+
+/* Rendor dashboard quick actions — even 3-tile flow that wraps gracefully */
+.rendor-quick-actions { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 
 /* ----- Verification Steps ----- */
 .verify-steps { display: flex; flex-direction: column; gap: 12px; }

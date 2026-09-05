@@ -148,8 +148,8 @@ test('wallet engine: rendor-subscribe activates instantly like a storefront plan
   let txns = [];
   const adapter = {
     loadUser: async () => user,
-    saveUser: async (id, patch) => { user = { ...user, ...patch }; },
-    getSetting: async (key, def) => key === 'rendor_sub_monthly' ? '30' : def,
+    saveUser: async (id, patch) => { user = { ...user, ...patch }; return true; },
+    getSetting: async (key, def) => key === 'rendor_sub_price' ? '30' : def,
     listUserTxns: async () => txns,
     insert: async (table, rec) => {
       if (table === 'platform_revenue') revenueRows.push(rec);
@@ -168,18 +168,18 @@ test('wallet engine: rendor-subscribe activates instantly like a storefront plan
   const res = await wallet.rendorSubscribe(adapter, RENDOR, { months: 1, amount: 30, method: 'momo', payment_ref: 'R-2' });
   assert.equal(res.ok, true);
   assert.equal(user.rendor_sub_status, 'active');
-  assert.equal(user.rendor_sub_plan, 'monthly');
+  assert.equal(user.rendor_sub_plan, '1month');
   assert.ok(Number(user.rendor_sub_expiry) > Date.now());
   assert.equal(revenueRows.length, 1);
 
   // Renewal extends from the current expiry, not from today
   const firstExpiry = Number(user.rendor_sub_expiry);
-  const res2 = await wallet.rendorSubscribe(adapter, RENDOR, { months: 3, amount: 80, method: 'momo', payment_ref: 'R-3' });
+  const res2 = await wallet.rendorSubscribe(adapter, RENDOR, { months: 3, amount: 30, method: 'momo', payment_ref: 'R-3' });
   assert.equal(res2.ok, true);
   assert.ok(Number(user.rendor_sub_expiry) > firstExpiry + 60 * 86400000); // ~3 more months on top
 
   // Same payment_ref is idempotent (no double activation / double revenue)
-  const dup = await wallet.rendorSubscribe(adapter, RENDOR, { months: 3, amount: 80, method: 'momo', payment_ref: 'R-3' });
+  const dup = await wallet.rendorSubscribe(adapter, RENDOR, { months: 3, amount: 30, method: 'momo', payment_ref: 'R-3' });
   assert.equal(dup.ok, true);
   assert.equal(dup.data.already, true);
 });

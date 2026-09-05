@@ -1,5 +1,3 @@
 [Supabase] Testing database connection... ⚡
-HAPPA backend running on http://localhost:54321
-[Supabase] Connection timeout/error. Falling back to local db.json: Supabase timeout
-[Auth Migration] Auto-migrated password for user "sfmomo-test-1786302086680" to bcrypt hash.
-[Auth Migration] Auto-migrated password for user "sfflow-1786303646489" to bcrypt hash.
+HAPPA backend running on http://localhost:0
+[Supabase] Connected to database successfully! ⚡

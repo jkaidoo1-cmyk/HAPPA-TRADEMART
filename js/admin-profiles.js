@@ -1554,7 +1554,7 @@ async function adminOpenRendorProfile(userId) {
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Subscription</div>
       ${_apRow('Status', '<span style="color:' + (subActive ? '#059669' : '#dc2626') + ';font-weight:800">' + (subActive ? 'Active' : 'Inactive') + '</span>')}
-      ${_apRow('Plan', u.rendor_sub_plan ? ({monthly:'1 Month',quarterly:'3 Months',biannual:'6 Months'}[u.rendor_sub_plan] || u.rendor_sub_plan) : '—')}
+      ${_apRow('Plan', u.rendor_sub_plan ? ({monthly:'1 Month',quarterly:'3 Months',biannual:'6 Months','1month':'1 Month','3month':'3 Months','6month':'6 Months'}[u.rendor_sub_plan] || u.rendor_sub_plan) : '—')}
       ${_apRow('Expires', subExpiry ? subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—')}
       <div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border)">
         <div style="font-weight:700;font-size:.78rem;color:var(--text-muted);margin-bottom:8px">Custom Subscription Price (overrides global)</div>

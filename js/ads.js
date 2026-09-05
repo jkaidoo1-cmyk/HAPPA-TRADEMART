@@ -424,7 +424,7 @@ function _renderSlide(slot, slotId, product, store, state) {
 
   const slideHTML = `
 <div class="ads-slide ads-slide--active"
-     ${!isHero ? `onclick="openProduct('${product.id}')" role="button" tabindex="0" aria-label="Sponsored: ${escHtml(product.name)}"` : ''}>
+     ${!isHero ? `onclick="openProduct('${product.id}')" role="button" tabindex="0" aria-label="Sponsored: ${escHtml(itemDisplayName(product.name))}"` : ''}>
 
   ${img
     ? `<div class="ads-slide-bg" style="background-image:url('${escHtml(img)}')"></div>`
@@ -432,7 +432,7 @@ function _renderSlide(slot, slotId, product, store, state) {
 
   <div class="ads-img-wrap" ${isHero ? 'style="width:100%;height:100%;padding:0;max-width:none"' : ''}>
     ${img
-      ? `<img class="ads-img" src="${escHtml(img)}" alt="${isHero ? 'Hero Banner' : escHtml(product.name)}" loading="lazy"
+      ? `<img class="ads-img" src="${escHtml(img)}" alt="${isHero ? 'Hero Banner' : escHtml(itemDisplayName(product.name))}" loading="lazy"
               ${isHero ? 'style="width:100%;height:100%;object-fit:cover;border-radius:0"' : ''}
               onerror="this.closest('.ads-img-wrap').classList.add('ads-img-wrap--err')">`
       : `<div class="ads-img-placeholder"><i class="fas fa-shopping-bag"></i></div>`}
@@ -447,7 +447,7 @@ function _renderSlide(slot, slotId, product, store, state) {
     ${state.showStoreName && store.name
       ? `<div class="ads-store-name"><i class="fas fa-store"></i> ${escHtml(store.name)}</div>`
       : ''}
-    <h2 class="ads-product-name">${escHtml(product.name)}</h2>
+    <h2 class="ads-product-name">${escHtml(itemDisplayName(product.name))}</h2>
     <div class="ads-price-row">
       <span class="ads-price">GHS ${Number(product.price).toFixed(2)}</span>
       ${product.original_price > product.price

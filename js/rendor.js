@@ -172,17 +172,19 @@ async function renderRendorDashboard() {
     </div>
 
     <!-- Quick Actions -->
-    <h3 style="font-size:.88rem;font-weight:700;margin-bottom:10px">Quick Actions</h3>
-    <div class="quick-actions-grid" style="margin-bottom:20px">
-      <button class="quick-action-btn" onclick="switchTab(document.querySelectorAll('#rendor-tabs .tab-btn')[2],'rendor-contact')">
-        <i class="fas fa-address-card"></i><span>Contact Info</span>
-      </button>
-      <button class="quick-action-btn" onclick="switchTab(document.querySelectorAll('#rendor-tabs .tab-btn')[1],'rendor-posts');loadRendorPosts()">
-        <i class="fas fa-plus-circle"></i><span>My Posts</span>
-      </button>
-      <button class="quick-action-btn" onclick="switchTab(document.querySelectorAll('#rendor-tabs .tab-btn')[3],'rendor-subscription');renderRendorSubscription()">
-        <i class="fas fa-star"></i><span>Subscription</span>
-      </button>
+    <div style="margin-bottom:20px">
+      <h3 style="font-size:.88rem;font-weight:700;margin-bottom:10px">Quick Actions</h3>
+      <div class="admin-actions-grid rendor-quick-actions" style="--primary:#7c3aed;--primary-light:#ede9fe">
+        <div class="admin-action-btn" onclick="switchTab(document.querySelectorAll('#rendor-tabs .tab-btn')[2],'rendor-contact')">
+          <i class="fas fa-address-card"></i><span>Contact Info</span>
+        </div>
+        <div class="admin-action-btn" onclick="switchTab(document.querySelectorAll('#rendor-tabs .tab-btn')[1],'rendor-posts');loadRendorPosts()">
+          <i class="fas fa-plus-circle"></i><span>My Posts</span>
+        </div>
+        <div class="admin-action-btn" onclick="switchTab(document.querySelectorAll('#rendor-tabs .tab-btn')[3],'rendor-subscription');renderRendorSubscription()">
+          <i class="fas fa-star"></i><span>Subscription</span>
+        </div>
+      </div>
     </div>
 
     <!-- Recent posts preview -->
