@@ -21,10 +21,9 @@ const SETTINGS_CONFIG = [
   { key: 'support_whatsapp',           id: 'setting-support-whatsapp',           type: 'text',     default: '233240000000' },
   { key: 'support_email',              id: 'setting-support-email',              type: 'text',     default: 'support@happamart.com' },
   { key: 'support_phone',              id: 'setting-support-phone',              type: 'text',     default: '+233 24 000 0000' },
-  // Rendor subscription prices (global defaults — applied to all rendor accounts)
-  { key: 'rendor_sub_monthly',         id: 'setting-rendor-sub-monthly',         type: 'number',   default: '30'  },
-  { key: 'rendor_sub_quarterly',       id: 'setting-rendor-sub-quarterly',       type: 'number',   default: '80'  },
-  { key: 'rendor_sub_biannual',        id: 'setting-rendor-sub-biannual',        type: 'number',   default: '150' },
+  // Rendor subscription (single price — admin can override per rendor)
+  { key: 'rendor_sub_price',           id: 'setting-rendor-sub-price',           type: 'number',   default: '30'  },
+  { key: 'rendor_sub_months',          id: 'setting-rendor-sub-months',          type: 'number',   default: '1'   },
   // Note: announcement fields are loaded separately (outside the form) via loadAdminSettings
   // but saved via sendAnnouncement() / clearAnnouncement()
 ];

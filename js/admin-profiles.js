@@ -1553,11 +1553,18 @@ async function adminOpenRendorProfile(userId) {
       ${_apRow('Starting Price', u.rendor_starting_price ? 'GHS '+parseFloat(u.rendor_starting_price).toFixed(2) : '—')}
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Subscription</div>
-      ${_apRow('Status', '<span style="color:' + (subActive ? '#059669' : u.sub_payment_status === 'paid_pending' ? '#1e40af' : '#dc2626') + ';font-weight:800">' + (subActive ? 'Active' : u.sub_payment_status === 'paid_pending' ? 'Claim pending' : 'Inactive') + '</span>')}
+      ${_apRow('Status', '<span style="color:' + (subActive ? '#059669' : '#dc2626') + ';font-weight:800">' + (subActive ? 'Active' : 'Inactive') + '</span>')}
       ${_apRow('Plan', u.rendor_sub_plan ? ({monthly:'1 Month',quarterly:'3 Months',biannual:'6 Months'}[u.rendor_sub_plan] || u.rendor_sub_plan) : '—')}
       ${_apRow('Expires', subExpiry ? subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—')}
-      ${u.sub_payment_months ? _apRow('Claimed', `GHS ${parseFloat(u.sub_payment_amount||0).toFixed(2)} · ${u.sub_payment_months} month${u.sub_payment_months>1?'s':''}${u.sub_paid_at ? ' · ' + new Date(u.sub_paid_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : ''}${u.sub_payment_ref ? ' · Ref: ' + escHtml(u.sub_payment_ref) : ''}`) : ''}
-      ${_apRow('Quotes', [u.sub_quote_monthly&&('1mo: GHS '+parseFloat(u.sub_quote_monthly).toFixed(2)), u.sub_quote_quarterly&&('3mo: GHS '+parseFloat(u.sub_quote_quarterly).toFixed(2)), u.sub_quote_biannual&&('6mo: GHS '+parseFloat(u.sub_quote_biannual).toFixed(2))].filter(Boolean).join(' · ') || '—')}
+      <div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border)">
+        <div style="font-weight:700;font-size:.78rem;color:var(--text-muted);margin-bottom:8px">Custom Subscription Price (overrides global)</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="form-control" id="rendor-custom-price" type="number" min="0" step="0.01" placeholder="Leave blank for global price" value="${u.rendor_sub_price_override || ''}" style="flex:1">
+          <button class="btn btn-sm btn-primary" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);border-color:#7c3aed;white-space:nowrap" onclick="saveRendorCustomPrice('${userId}')">
+            <i class="fas fa-save"></i> Save Price
+          </button>
+        </div>
+      </div>
       ${u.rendor_bio ? `<div style="margin-top:12px;background:var(--primary-light);padding:12px;border-radius:var(--radius-md);font-size:.9rem"><strong>Bio:</strong> ${escHtml(u.rendor_bio)}</div>` : ''}
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Verification</div>
@@ -1648,13 +1655,9 @@ async function adminOpenRendorProfile(userId) {
         ${u.status === 'active'
           ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\'' + userId + '\')')
           : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\'' + userId + '\')')}
-        ${u.sub_request_status === 'pending_quote' && !u.sub_payment_status
-          ? _apBtn('ap-action-purple','fas fa-tag','Send Quote','adminSendSubQuote(\'' + userId + '\',\'' + nameSafe + '\')')
-          : (u.sub_payment_status === 'paid_pending'
-            ? _apBtn('ap-action-green','fas fa-check-circle','Verify Payment & Activate','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')')
-            : (subActive
-              ? _apBtn('ap-action-gray','fas fa-star-slash','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
-              : _apBtn('ap-action-purple','fas fa-star','Activate Sub','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')')))}
+        ${subActive
+          ? _apBtn('ap-action-gray','fas fa-star-slash','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
+          : _apBtn('ap-action-purple','fas fa-star','Activate Sub','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')')}
         ${_apBtn('ap-action-teal','fas fa-eye','View Public Profile','setTimeout(()=>{App.currentRendorId=\'' + userId + '\';showPage(\'rendor-profile\');renderRendorProfilePublic();},100)')}
       </div>
       ${_apRoleSection(userId, u.role||'rendor')}
@@ -1747,7 +1750,23 @@ window._apApproveStorefront = async function(storeId, storeName) {
   if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
 };
 
+async function saveRendorCustomPrice(userId) {
+  const inp = document.getElementById('rendor-custom-price');
+  const raw = inp?.value?.trim();
+  const price = raw !== '' ? parseFloat(raw) : null;
+  if (raw !== '' && (!Number.isFinite(price) || price < 0)) {
+    showToast('Enter a valid price or leave blank for global default.', 'warning');
+    return;
+  }
+  await apiPatch('users', userId, { rendor_sub_price_override: price });
+  const u = (App.allUsers || []).find(u => u.id === userId);
+  if (u) u.rendor_sub_price_override = price;
+  showToast(price !== null ? `Custom price set: GHS ${price.toFixed(2)}` : 'Reverted to global price', 'success');
+  adminOpenRendorProfile(userId);
+}
+
 window._apDeleteUser = _apDeleteUser;
 window._apResetUserPassword = _apResetUserPassword;
 window._apChangeUserRole = _apChangeUserRole;
 window._apMarkStorePaid = _apMarkStorePaid;
+window.saveRendorCustomPrice = saveRendorCustomPrice;
