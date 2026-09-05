@@ -1724,6 +1724,7 @@ async function _doDeactivateRendorSub(userId) {
   const sVal = (key, def) => parseFloat((sRows.find(r => r.key === key) || {}).value) || def;
   const months = Math.round(sVal('rendor_sub_months', 1)) || 1;
   const total = sVal('rendor_sub_price', 30) * months;
+  const planId = months + 'month';
   const startRaw  = document.getElementById('sub-start-date')?.value;
   const startMs   = startRaw ? new Date(startRaw).getTime() : Date.now();
   const days      = months * 30;

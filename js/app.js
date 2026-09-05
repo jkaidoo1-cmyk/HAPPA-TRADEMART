@@ -76,6 +76,9 @@ const App = {
   activeTab: {},
 };
 
+let deferredInstallPrompt = null;
+let installPromptToastShown = false;
+
 /**
  * Progressive One-by-One Item Renderer
  * Loads and displays items ONE BY ONE with staggered micro-delays for an ultra-responsive UX.
@@ -149,11 +152,18 @@ window.addEventListener('DOMContentLoaded', () => {
   // ── PWA Install Prompt Handler ────────────────────────────────
   // Capture the beforeinstallprompt event so we can show our own install button
   // instead of relying on the browser's automatic mini-info bar.
-  let deferredInstallPrompt = null;
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;
-    showToast(' HAPPA TRADEMART can be installed as an app. Go to Settings → Install App.', 'info');
+
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+      window.matchMedia('(display-mode: fullscreen)').matches ||
+      window.navigator.standalone === true;
+
+    if (!isStandalone && !installPromptToastShown) {
+      installPromptToastShown = true;
+      showToast('HAPPA TRADEMART can be installed as an app. Go to Settings → Install App.', 'info');
+    }
   });
 
   // If the app is already installed as a PWA, intercept any <a> click or
