@@ -6,6 +6,8 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
+const webpush = require('web-push');
+
 // Shared session/auth module (HMAC-signed tokens or in-memory fallback)
 const { createSessionToken, getSessionUser, requireAuth, requireAdmin, revokeToken } = require('./lib/session');
 
@@ -440,7 +442,8 @@ const TABLE_COLUMNS = {
   platform_revenue: ['id', 'source', 'amount', 'reference', 'description', 'created_at', 'extra'],
   support_tickets: ['id', 'user_id', 'user_name', 'user_email', 'user_role', 'subject', 'category', 'priority', 'status', 'message', 'messages', 'assigned_to', 'created_at', 'updated_at', 'extra'],
   order_notifications: ['id', 'order_id', 'package_id', 'package_code', 'vendor_id', 'channel', 'status', 'error_message', 'sent_at', 'created_at', 'updated_at', 'extra'],
-  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'plan_prices', 'created_at', 'updated_at', 'extra']
+  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'plan_prices', 'created_at', 'updated_at', 'extra'],
+  push_subscriptions: ['id', 'user_id', 'endpoint', 'keys', 'created_at']
 };
 
 function prepareRecordForDb(table, record, existingRecord) {
@@ -1064,6 +1067,107 @@ app.post('/api/packages/:id/notify-vendor', requireAdmin, async (req, res) => {
   }
 });
 
+// ── Push Notification API Routes ───────────────────────────
+let vapidKeys = null;
+try {
+  const db = loadDb();
+  const pub = (getTable(db, 'settings') || []).find(s => s.key === 'vapid_public_key')?.value;
+  const priv = (getTable(db, 'settings') || []).find(s => s.key === 'vapid_private_key')?.value;
+  if (pub && priv) {
+    vapidKeys = { publicKey: pub, privateKey: priv };
+  } else {
+    vapidKeys = webpush.generateVAPIDKeys();
+    if (db && Array.isArray(db.settings)) {
+      db.settings.push({ id: 'set-vapid-pub', key: 'vapid_public_key', value: vapidKeys.publicKey, updated_at: new Date().toISOString() });
+      db.settings.push({ id: 'set-vapid-priv', key: 'vapid_private_key', value: vapidKeys.privateKey, updated_at: new Date().toISOString() });
+      saveDb(db);
+    }
+  }
+} catch(e) {
+  try { vapidKeys = webpush.generateVAPIDKeys(); } catch(err) {}
+}
+
+if (vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey) {
+  try {
+    webpush.setVapidDetails('mailto:support@happatrademart.com', vapidKeys.publicKey, vapidKeys.privateKey);
+  } catch(e) {}
+}
+
+app.get('/api/push/vapid-key', (req, res) => {
+  if (!vapidKeys || !vapidKeys.publicKey) {
+    return res.status(500).json({ error: 'VAPID key not configured.' });
+  }
+  return res.json({ publicKey: vapidKeys.publicKey });
+});
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const { subscription, user_id } = req.body || {};
+  if (!subscription || !subscription.endpoint) {
+    return res.status(400).json({ error: 'Invalid subscription payload.' });
+  }
+  const uid = String(user_id || 'anonymous');
+  const endpoint = subscription.endpoint;
+  const keys = subscription.keys || {};
+  const rec = {
+    id: 'pushsub-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+    user_id: uid,
+    endpoint,
+    keys,
+    created_at: new Date().toISOString()
+  };
+
+  const db = loadDb();
+  if (!Array.isArray(db.push_subscriptions)) db.push_subscriptions = [];
+  db.push_subscriptions = db.push_subscriptions.filter(s => s.endpoint !== endpoint);
+  db.push_subscriptions.push(rec);
+  saveDb(db);
+
+  if (supabase) {
+    try {
+      await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+      await supabase.from('push_subscriptions').insert(rec);
+    } catch(e) {}
+  }
+  return res.json({ ok: true, message: 'Subscribed successfully' });
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+  const { endpoint } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: 'Endpoint required.' });
+  const db = loadDb();
+  if (Array.isArray(db.push_subscriptions)) {
+    db.push_subscriptions = db.push_subscriptions.filter(s => s.endpoint !== endpoint);
+    saveDb(db);
+  }
+  if (supabase) {
+    try { await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint); } catch(e) {}
+  }
+  return res.json({ ok: true, message: 'Unsubscribed successfully' });
+});
+
+app.post('/api/push/send', async (req, res) => {
+  const { user_id, title, body, url } = req.body || {};
+  if (!user_id) return res.status(400).json({ error: 'user_id required.' });
+  const db = loadDb();
+  const subs = (getTable(db, 'push_subscriptions') || []).filter(s => String(s.user_id) === String(user_id));
+  const payload = JSON.stringify({ title: title || 'HAPPA TRADEMART', body: body || '', url: url || '/' });
+
+  const results = await Promise.all(subs.map(async sub => {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
+      return true;
+    } catch(err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        db.push_subscriptions = (db.push_subscriptions || []).filter(s => s.endpoint !== sub.endpoint);
+        saveDb(db);
+      }
+      return false;
+    }
+  }));
+
+  return res.json({ ok: true, sentCount: results.filter(Boolean).length });
+});
+
 // Send a test WhatsApp message (admin UI) — verifies the Meta Cloud API
 // credentials + delivery path without needing a real order.
 app.post('/api/whatsapp/test', whatsappTestRateLimiter, requireAdmin, async (req, res) => {
@@ -1156,6 +1260,7 @@ function walletAdapter() {
         if (idx !== -1) { db.users[idx] = { ...db.users[idx], ...patch }; saveDb(db); }
         if (!supabase) ok = true;
       } catch (e) {}
+      invalidateApiCache('users');
       return ok;
     },
     async insert(table, rec) {
@@ -1595,6 +1700,10 @@ app.put('/api/:table/:id', async (req, res) => {
     if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
     if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
     if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+    if ('subscription_start' in body) storeUpdates.subscription_start = body.subscription_start;
+    if ('subscription_end' in body) storeUpdates.subscription_end = body.subscription_end;
+    if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
+    if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
     if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
     storeUpdates.updated_at = new Date().toISOString();
 
@@ -1650,6 +1759,10 @@ app.put('/api/:table/:id', async (req, res) => {
       meta_description: body.meta_description || '',
       subscription_plan: updatedSt.subscription_plan || 'starter',
       subscription_status: updatedSt.subscription_status || 'active',
+      subscription_start: updatedSt.subscription_start || null,
+      subscription_end: updatedSt.subscription_end || null,
+      subscription_months: updatedSt.subscription_months || null,
+      subscription_method: updatedSt.subscription_method || null,
       plan_prices: updatedSt.plan_prices || body.plan_prices || null,
       created_at: updatedSt.created_at,
       updated_at: updatedSt.updated_at
@@ -1764,6 +1877,10 @@ app.patch('/api/:table/:id', async (req, res) => {
     if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
     if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
     if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+    if ('subscription_start' in body) storeUpdates.subscription_start = body.subscription_start;
+    if ('subscription_end' in body) storeUpdates.subscription_end = body.subscription_end;
+    if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
+    if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
     if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
     
     let extra = {};
@@ -1825,6 +1942,10 @@ app.patch('/api/:table/:id', async (req, res) => {
       meta_description: body.meta_description || '',
       subscription_plan: updatedSt.subscription_plan || 'starter',
       subscription_status: updatedSt.subscription_status || 'active',
+      subscription_start: updatedSt.subscription_start || null,
+      subscription_end: updatedSt.subscription_end || null,
+      subscription_months: updatedSt.subscription_months || null,
+      subscription_method: updatedSt.subscription_method || null,
       plan_prices: updatedSt.plan_prices || body.plan_prices || null,
       only_show_on_storefront: updatedSt.extra?.only_show_on_storefront === true || updatedSt.extra?.only_show_on_storefront === 'true',
       created_at: updatedSt.created_at,

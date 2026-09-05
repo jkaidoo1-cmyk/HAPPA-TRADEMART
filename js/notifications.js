@@ -483,7 +483,7 @@ async function subscribeToPush() {
     // Request permission
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      showToast('Notification permission denied', 'warning');
+      showToast('Notification permission denied. Please allow notifications in your browser settings.', 'warning');
       return false;
     }
     const reg = await navigator.serviceWorker.ready;
@@ -509,6 +509,7 @@ async function subscribeToPush() {
       user_id: App.currentUser?.id || 'anonymous'
     });
     showToast('Push notifications enabled 🔔', 'success');
+    if (typeof renderNotifications === 'function') renderNotifications();
     return true;
   } catch(e) {
     console.error('[Push] Subscribe failed:', e);
@@ -526,6 +527,7 @@ async function unsubscribeFromPush() {
       await sub.unsubscribe();
     }
     showToast('Push notifications disabled', 'info');
+    if (typeof renderNotifications === 'function') renderNotifications();
   } catch(e) {
     console.warn('[Push] Unsubscribe error:', e);
   }

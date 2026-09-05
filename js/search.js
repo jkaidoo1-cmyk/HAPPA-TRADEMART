@@ -44,6 +44,21 @@ function initSearch() {
   });
 }
 
+window.submitNavSearch = function(event) {
+  if (event) event.preventDefault();
+  const input = document.getElementById('nav-search-input');
+  if (!input) return;
+  const q = input.value.trim();
+  if (!q) return;
+  if (App.currentPage === 'cart') {
+    trackFromSearchBar(q);
+  } else {
+    performSearch(q);
+    window.hideHeaderSearchBar();
+  }
+};
+
+
 window.toggleHeaderSearchBar = function(event) {
   if (event) event.stopPropagation();
   const container = document.getElementById('nav-search-container');

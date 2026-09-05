@@ -344,7 +344,8 @@ const TABLE_COLUMNS = {
   platform_revenue: ['id', 'source', 'amount', 'reference', 'description', 'created_at', 'extra'],
   support_tickets: ['id', 'user_id', 'user_name', 'user_email', 'user_role', 'subject', 'category', 'priority', 'status', 'message', 'messages', 'assigned_to', 'created_at', 'updated_at', 'extra'],
   order_notifications: ['id', 'order_id', 'package_id', 'package_code', 'vendor_id', 'channel', 'status', 'error_message', 'sent_at', 'created_at', 'updated_at', 'extra'],
-  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'name', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'business_hours', 'shipping_policy', 'return_policy', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'created_at', 'updated_at']
+  storefronts: ['id', 'store_id', 'vendor_id', 'status', 'url_slug', 'name', 'theme', 'font_family', 'slogan', 'about_us', 'logo_url', 'banner_url', 'primary_color', 'secondary_color', 'tertiary_color', 'business_hours', 'shipping_policy', 'return_policy', 'whatsapp_number', 'facebook_url', 'instagram_url', 'youtube_url', 'meta_description', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'created_at', 'updated_at'],
+  push_subscriptions: ['id', 'user_id', 'endpoint', 'keys', 'created_at']
 };
 
 function prepareRecordForDb(table, record, existingRecord) {
@@ -1425,6 +1426,7 @@ function walletAdapter() {
         if (idx !== -1) { store.users[idx] = { ...store.users[idx], ...patch }; dataStore.saveToFile(); }
         if (!supabase) ok = true;
       } catch (e) {}
+      invalidateApiCache('users');
       return ok;
     },
     async insert(table, rec) {
@@ -1903,6 +1905,10 @@ app.put('/api/:table/:id', async (req, res) => {
       if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
       if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
       if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+      if ('subscription_start' in body) storeUpdates.subscription_start = body.subscription_start;
+      if ('subscription_end' in body) storeUpdates.subscription_end = body.subscription_end;
+      if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
+      if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
       if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
       storeUpdates.updated_at = new Date().toISOString();
 
@@ -1920,29 +1926,30 @@ app.put('/api/:table/:id', async (req, res) => {
       if (supabase) {
         try {
           const dbRecord = prepareRecordForDb('stores', storeUpdates);
-          const { error: writeErr } = await writeWithCandidates(supabase, 'stores', 'update', dbRecord, st, storeId);
-          if (writeErr) console.warn('[PUT] Supabase storefront update failed:', writeErr.message);
+          await supabase.from('stores').update(dbRecord).eq('id', storeId);
         } catch (err) {
-          console.warn('[PUT] Supabase storefront update exception:', err.message);
+          console.warn('[PUT] Supabase storefront update failed:', err.message);
         }
       }
       dataStore.ensureTable('stores');
-      const store = dataStore.getStore();
-      const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
+      const storeData = dataStore.getStore();
+      const idx = (storeData.stores || []).findIndex(s => String(s.id) === String(storeId));
       if (idx !== -1) {
-        store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
+        storeData.stores[idx] = { ...storeData.stores[idx], ...storeUpdates };
+        dataStore.saveToFile();
       } else {
-        store.stores.push({ id: storeId, vendor_id: st.vendor_id, ...storeUpdates });
+        storeData.stores.push({ id: storeId, vendor_id: st.vendor_id, ...storeUpdates });
+        dataStore.saveToFile();
       }
-      dataStore.saveToFile();
 
-      const updatedSt = { ...st, ...storeUpdates };
+      let updatedSt = { ...st, ...storeUpdates };
       const sf = {
         id: storeId,
         store_id: storeId,
         vendor_id: updatedSt.vendor_id,
         status: updatedSt.storefront_status || 'draft',
         url_slug: updatedSt.slug || '',
+        name: updatedSt.name || '',
         theme: updatedSt.theme || 'classic',
         font_family: updatedSt.font_family || 'Outfit',
         slogan: updatedSt.slogan || '',
@@ -1961,6 +1968,10 @@ app.put('/api/:table/:id', async (req, res) => {
         meta_description: body.meta_description || '',
         subscription_plan: updatedSt.subscription_plan || 'starter',
         subscription_status: updatedSt.subscription_status || 'active',
+        subscription_start: updatedSt.subscription_start || null,
+        subscription_end: updatedSt.subscription_end || null,
+        subscription_months: updatedSt.subscription_months || null,
+        subscription_method: updatedSt.subscription_method || null,
         plan_prices: updatedSt.plan_prices || body.plan_prices || null,
         created_at: updatedSt.created_at,
         updated_at: updatedSt.updated_at
@@ -2021,6 +2032,7 @@ app.patch('/api/:table/:id', async (req, res) => {
       if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
         try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
       }
+      global.userCache = {};
     }
 
     const record = serializeRecord(body);
@@ -2079,6 +2091,10 @@ app.patch('/api/:table/:id', async (req, res) => {
       if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
       if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
       if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
+      if ('subscription_start' in body) storeUpdates.subscription_start = body.subscription_start;
+      if ('subscription_end' in body) storeUpdates.subscription_end = body.subscription_end;
+      if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
+      if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
 
       let extra = {};
       try {
@@ -2092,9 +2108,6 @@ app.patch('/api/:table/:id', async (req, res) => {
       if ('only_show_on_storefront' in body) {
         extra.only_show_on_storefront = body.only_show_on_storefront === true || body.only_show_on_storefront === 'true';
       }
-      if ('plan_prices' in body) {
-        extra.plan_prices = body.plan_prices;
-      }
       storeUpdates.extra = extra;
 
       storeUpdates.updated_at = new Date().toISOString();
@@ -2102,21 +2115,21 @@ app.patch('/api/:table/:id', async (req, res) => {
       if (supabase) {
         try {
           const dbRecord = prepareRecordForDb('stores', storeUpdates);
-          const { error: writeErr } = await writeWithCandidates(supabase, 'stores', 'update', dbRecord, st, storeId);
-          if (writeErr) console.warn('[PATCH] Supabase storefront update failed:', writeErr.message);
+          await supabase.from('stores').update(dbRecord).eq('id', storeId);
         } catch (err) {
-          console.warn('[PATCH] Supabase storefront update exception:', err.message);
+          console.warn('[PATCH] Supabase storefront update failed:', err.message);
         }
       }
       dataStore.ensureTable('stores');
-      const store = dataStore.getStore();
-      const idx = store.stores.findIndex(s => String(s.id) === String(storeId));
+      const storeData = dataStore.getStore();
+      const idx = (storeData.stores || []).findIndex(s => String(s.id) === String(storeId));
       if (idx !== -1) {
-        store.stores[idx] = { ...store.stores[idx], ...storeUpdates };
+        storeData.stores[idx] = { ...storeData.stores[idx], ...storeUpdates };
+        dataStore.saveToFile();
       } else {
-        store.stores.push({ id: storeId, vendor_id: st.vendor_id || '', ...storeUpdates });
+        storeData.stores.push({ id: storeId, vendor_id: st.vendor_id || '', ...storeUpdates });
+        dataStore.saveToFile();
       }
-      dataStore.saveToFile();
 
       let updatedSt = { ...st, ...storeUpdates };
       const sf = {
@@ -2125,6 +2138,7 @@ app.patch('/api/:table/:id', async (req, res) => {
         vendor_id: updatedSt.vendor_id,
         status: updatedSt.storefront_status || 'draft',
         url_slug: updatedSt.slug || '',
+        name: updatedSt.name || '',
         theme: updatedSt.theme || 'classic',
         font_family: updatedSt.font_family || 'Outfit',
         slogan: updatedSt.slogan || '',
@@ -2143,6 +2157,10 @@ app.patch('/api/:table/:id', async (req, res) => {
         meta_description: body.meta_description || '',
         subscription_plan: updatedSt.subscription_plan || 'starter',
         subscription_status: updatedSt.subscription_status || 'active',
+        subscription_start: updatedSt.subscription_start || null,
+        subscription_end: updatedSt.subscription_end || null,
+        subscription_months: updatedSt.subscription_months || null,
+        subscription_method: updatedSt.subscription_method || null,
         only_show_on_storefront: updatedSt.extra?.only_show_on_storefront === true || updatedSt.extra?.only_show_on_storefront === 'true',
         created_at: updatedSt.created_at,
         updated_at: updatedSt.updated_at

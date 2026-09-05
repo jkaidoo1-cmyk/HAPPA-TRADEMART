@@ -194,6 +194,7 @@
       to {
         opacity: 1;
       }
+    }
     body.is-storefront-view #top-nav,
     body.is-storefront-view #bottom-nav,
     body.is-storefront-view #page-home,
@@ -325,8 +326,13 @@
     
     <!-- Responsive Search Container (Inline on Desktop, Expandable Panel on Mobile) -->
     <div class="nav-search-wrap" id="nav-search-container">
-      <i class="fas fa-search search-icon"></i>
-      <input type="text" id="nav-search-input" placeholder="Search stores, products…" autocomplete="off">
+      <div class="nav-search-inner">
+        <i class="fas fa-search search-icon"></i>
+        <input type="text" id="nav-search-input" placeholder="Search stores, products…" autocomplete="off">
+        <button class="nav-search-btn" id="nav-search-submit" onclick="window.submitNavSearch(event)" title="Search">
+          <i class="fas fa-search"></i>
+        </button>
+      </div>
       <div class="search-dropdown hidden" id="search-dropdown"></div>
     </div>
 
