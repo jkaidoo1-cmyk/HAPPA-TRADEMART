@@ -1226,6 +1226,7 @@ function renderSettingsPage() {
 
   el.innerHTML = `
     <div class="dashboard-wrap">
+      ${installBtnHtml}
 
       <div class="card" style="margin-bottom:14px">
         <div class="card-header"><h3>👤 Profile Settings</h3></div>
