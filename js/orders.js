@@ -153,7 +153,7 @@ function buyerPackageCard(rawPkg) {
     </div>
 
     <div style="font-size:.84rem;margin-bottom:8px;font-weight:500">
-      ${(pkg.items||[]).slice(0,2).map(i=>{const im=itemImage(i);return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0"><span style="display:flex;align-items:center;gap:8px;min-width:0">${im ? `<img src="${im}" style="width:30px;height:30px;border-radius:6px;object-fit:cover;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">` : ''}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(i.name||'')} × ${i.qty}</span></span><span style="flex-shrink:0">GHS ${(i.price*i.qty).toFixed(2)}</span></div>`;}).join('')}
+      ${(pkg.items||[]).slice(0,2).map(i=>{const im=itemImage(i);return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0"><span style="display:flex;align-items:center;gap:8px;min-width:0">${im ? `<img src="${im}" style="width:30px;height:30px;border-radius:6px;object-fit:contain;border:1px solid var(--border);flex-shrink:0;background:#f8f9fa" onerror="this.style.display='none'">` : ''}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(i.name||'')} × ${i.qty}</span></span><span style="flex-shrink:0">GHS ${(i.price*i.qty).toFixed(2)}</span></div>`;}).join('')}
       ${(pkg.items||[]).length > 2 ? `<div style="color:var(--text-muted);font-size:.78rem">+${(pkg.items||[]).length-2} more items</div>` : ''}
     </div>
 
@@ -242,7 +242,7 @@ async function showPackageDetailModal(packageId) {
         const img = itemImage(i) || 'https://via.placeholder.com/50x50?text=Item';
         return `
         <div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
-          <img src="${img}" alt="${title}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://via.placeholder.com/50x50?text=Item'">
+          <img src="${img}" alt="${title}" style="width:38px;height:38px;object-fit:contain;border-radius:6px;border:1px solid var(--border);flex-shrink:0;background:#f8f9fa" onerror="this.src='https://via.placeholder.com/50x50?text=Item'">
           <div style="flex:1;min-width:0">
             <div style="font-size:.84rem;font-weight:700">${title}</div>
             <div style="font-size:.72rem;color:var(--text-muted)">Qty: ${i.qty || 1} · Unit: GHS ${(parseFloat(i.price)||0).toFixed(2)} ${i.id ? `· ID: ${escHtml(String(i.id))}` : ''}</div>
@@ -1152,7 +1152,7 @@ function packageDetailHTML(rawPkg) {
         const itemImg = itemImage(i) || 'https://via.placeholder.com/60x60?text=Item';
         return `
         <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:#fff">
-          <img src="${itemImg}" alt="${itemTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://via.placeholder.com/60x60?text=Item'">
+          <img src="${itemImg}" alt="${itemTitle}" style="width:42px;height:42px;object-fit:contain;border-radius:6px;border:1px solid var(--border);flex-shrink:0;background:#f8f9fa" onerror="this.src='https://via.placeholder.com/60x60?text=Item'">
           <div style="flex:1;min-width:0">
             <div style="font-size:.83rem;font-weight:700;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               ${itemTitle}

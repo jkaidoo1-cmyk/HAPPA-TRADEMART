@@ -363,7 +363,7 @@ async function renderVendorDashboard() {
         ${myProducts.sort((a,b)=>(b.sold_count||0)-(a.sold_count||0)).slice(0,5).map((p,i) => `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
           <span style="font-weight:700;color:var(--text-muted);width:16px">${i+1}</span>
-          <img src="${p.images?.[0]||'https://via.placeholder.com/40x40?text=P'}" style="width:36px;height:36px;border-radius:6px;object-fit:cover" onerror="this.src='https://via.placeholder.com/40x40?text=P'">
+          <img src="${p.images?.[0]||'https://via.placeholder.com/40x40?text=P'}" style="width:36px;height:36px;border-radius:6px;object-fit:contain;background:#f8f9fa" onerror="this.src='https://via.placeholder.com/40x40?text=P'">
           <div style="flex:1;font-size:.82rem"><strong>${escHtml(p.name)}</strong><br><span style="color:var(--text-muted)">${p.sold_count||0} sold · GHS ${p.price}</span></div>
           <span style="font-weight:700;color:var(--primary)">GHS ${((p.sold_count||0)*p.price).toFixed(0)}</span>
         </div>`).join('')}
@@ -1016,7 +1016,7 @@ function vendorProductRowHTML(p) {
   return `
 <div class="card" style="margin-bottom:10px">
   <div class="card-body" style="display:flex;gap:10px;align-items:flex-start">
-    <img src="${p.images?.[0]||'https://via.placeholder.com/70x70?text=P'}" style="width:64px;height:64px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
+    <img src="${p.images?.[0]||'https://via.placeholder.com/70x70?text=P'}" style="width:64px;height:64px;border-radius:var(--radius-sm);object-fit:contain;background:#f8f9fa;flex-shrink:0"
          onerror="this.src='https://via.placeholder.com/70x70?text=P'">
     <div style="flex:1;min-width:0">
       <div style="font-weight:700;font-size:.875rem;margin-bottom:2px">${escHtml(p.name)}</div>
@@ -1043,7 +1043,7 @@ function packageRowHTML(pkg) {
   const rowTitle = (firstItem.name && firstItem.name.trim()) ? escHtml(firstItem.name) : `${(pkg.items||[]).length} item(s)`;
   return `
 <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
-  ${rowImg ? `<img src="${rowImg}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">` : ''}
+  ${rowImg ? `<img src="${rowImg}" style="width:40px;height:40px;border-radius:8px;object-fit:contain;border:1px solid var(--border);flex-shrink:0;background:#f8f9fa" onerror="this.style.display='none'">` : ''}
   <code style="background:var(--secondary);color:var(--accent);padding:3px 7px;border-radius:4px;font-size:.75rem;font-weight:700;flex-shrink:0">${pkg.package_code||'—'}</code>
   <div style="flex:1;font-size:.8rem;color:var(--text-muted);min-width:0">${rowTitle} · ${pkg.origin_location||''}<br><span style="color:var(--primary);font-weight:700">${sourceLabel}</span></div>
   <span class="status-badge status-${pkg.status}">${pkg.status}</span>
@@ -1109,7 +1109,7 @@ function _addProductImgSlot(prefix) {
   slot.id = slotId;
   slot.style.cssText = 'position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:2px solid var(--border);background:var(--bg);flex-shrink:0';
   slot.innerHTML = `
-    <img id="${thumbId}" style="width:100%;height:100%;object-fit:cover;display:none">
+    <img id="${thumbId}" style="width:100%;height:100%;object-fit:contain;background:#f8f9fa;display:none">
     <div id="${prefix}-slot-placeholder-${idx}" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);font-size:1.4rem" onclick="document.getElementById('${fileId}').click()">
       <i class="fas fa-image"></i>
     </div>
@@ -1464,7 +1464,7 @@ async function showEditProductModal(productId) {
   const existingImgs = Array.isArray(p.images) ? p.images : (p.images ? [p.images] : []);
   const existingSlotsHTML = existingImgs.map((src, i) => `
     <div class="pi-slot" id="edit-p-slot-${i}" style="position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:2px solid var(--border);background:var(--bg);flex-shrink:0">
-      <img id="edit-p-thumb-${i}" src="${escHtml(src)}" style="width:100%;height:100%;object-fit:cover;display:block">
+      <img id="edit-p-thumb-${i}" src="${escHtml(src)}" style="width:100%;height:100%;object-fit:contain;background:#f8f9fa;display:block">
       <div id="edit-p-slot-placeholder-${i}" style="display:none"></div>
       <input type="file" id="edit-p-img-file-${i}" accept="image/*" style="display:none" onchange="_onProductImgPick(this,'edit-p',${i})">
       <input type="hidden" id="edit-p-img-b64-${i}" value="${escHtml(src)}">
@@ -2401,7 +2401,7 @@ function _bapRenderStep2() {
     <div id="bap-img-slots-${i}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
       <!-- Cover slot pre-filled from picked image -->
       <div class="pi-slot" id="bap-p-slot-0-${i}" style="position:relative;width:52px;height:52px;border-radius:6px;overflow:hidden;border:2px solid var(--primary);background:var(--bg);flex-shrink:0">
-        <img id="bap-p-thumb-0-${i}" src="${d.b64}" style="width:100%;height:100%;object-fit:cover;display:block">
+        <img id="bap-p-thumb-0-${i}" src="${d.b64}" style="width:100%;height:100%;object-fit:contain;background:#f8f9fa;display:block">
         <div id="bap-p-slot-placeholder-0-${i}" style="display:none"></div>
         <input type="file" id="bap-p-img-file-0-${i}" accept="image/*" style="display:none" onchange="_bapSlotPick(this,${i},0)">
         <input type="hidden" id="bap-p-img-b64-0-${i}" value="">
@@ -2554,7 +2554,7 @@ function _bapAddSlot(cardIdx) {
   slot.id = `bap-p-slot-${slotIdx}-${cardIdx}`;
   slot.style.cssText = 'position:relative;width:52px;height:52px;border-radius:6px;overflow:hidden;border:2px solid var(--border);background:var(--bg);flex-shrink:0';
   slot.innerHTML = `
-    <img id="bap-p-thumb-${slotIdx}-${cardIdx}" style="width:100%;height:100%;object-fit:cover;display:none">
+    <img id="bap-p-thumb-${slotIdx}-${cardIdx}" style="width:100%;height:100%;object-fit:contain;background:#f8f9fa;display:none">
     <div id="bap-p-slot-placeholder-${slotIdx}-${cardIdx}" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);font-size:1.1rem" onclick="document.getElementById('bap-p-img-file-${slotIdx}-${cardIdx}').click()">
       <i class="fas fa-image"></i>
     </div>
@@ -3025,7 +3025,7 @@ window.updateStorefrontPreview = function() {
 
   const getProductImageHTML = (p) => {
     if (p.image_url && (p.image_url.startsWith('http') || p.image_url.startsWith('data:') || p.image_url.includes('/') || p.image_url.includes('.'))) {
-      return `<img src="${p.image_url}" style="width:100%; height:100%; object-fit:cover" onerror="this.outerHTML='📦'">`;
+      return `<img src="${p.image_url}" style="width:100%; height:100%; object-fit:contain;background:#f8f9fa" onerror="this.outerHTML='📦'">`;
     }
     return p.image_url || '📦';
   };
@@ -3209,7 +3209,7 @@ window.updateStorefrontPreview = function() {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
           ${displayProducts.slice(0, 4).map(p => `
             <div class="product-card">
-              <div class="product-img" style="height:60px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; overflow:hidden">
+              <div class="product-img" style="height:60px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; background:#f8f9fa">
                 ${getProductImageHTML(p)}
               </div>
               <div class="product-body" style="padding: 6px 8px; display:flex; flex-direction:column; gap:2px">
@@ -3241,7 +3241,7 @@ window.updateStorefrontPreview = function() {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
           ${displayProducts.slice(0, 2).map(p => `
             <div class="product-card">
-              <div class="product-img" style="height:50px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; overflow:hidden">
+              <div class="product-img" style="height:50px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; background:#f8f9fa">
                 ${getProductImageHTML(p)}
               </div>
               <div class="product-body" style="padding:4px 6px; display:flex; flex-direction:column">
