@@ -1178,6 +1178,99 @@ function installApp() {
     deferredInstallPrompt = null;
   });
 }
+// ── App & Notifications card (Settings) ─────────────────────
+// One tidy card: install/download the app + enable push notifications.
+function _appCardHtml() {
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches ||
+                      window.matchMedia('(display-mode: fullscreen)').matches ||
+                      window.navigator.standalone === true;
+  const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const canPrompt = typeof deferredInstallPrompt !== 'undefined' && !!deferredInstallPrompt;
+  const pushSupported = ('serviceWorker' in navigator) && ('PushManager' in window);
+
+  // ── Row 1: install / download ──
+  const installAction = isInstalled
+    ? `<div style="display:flex;align-items:center;gap:6px;color:var(--success);font-size:.78rem;font-weight:700;white-space:nowrap">
+         <i class="fas fa-check-circle"></i> Installed
+       </div>`
+    : `<button class="btn btn-sm" onclick="installApp()" style="background:linear-gradient(135deg,#f97316,#ea580c);border:1px solid #f97316;color:#fff;padding:7px 14px;font-size:.75rem;white-space:nowrap;flex-shrink:0">
+         <i class="fas fa-download"></i> Install App
+       </button>`;
+  const installHint = (!isInstalled && !canPrompt) ? `
+      <div style="font-size:.68rem;color:var(--text-muted);line-height:1.6;margin-top:6px">
+        ${isIOSDevice
+          ? 'In Safari: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.'
+          : 'In Chrome/Edge: tap <strong>⋮ menu</strong> → <strong>Install app</strong> (or the install icon in the address bar).'}
+      </div>` : '';
+
+  // ── Row 2: push notifications ──
+  const pushRow = pushSupported ? `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--border)">
+      <div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">
+        <i class="fas fa-bell"></i>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:.82rem;color:var(--text)">Push notifications <span id="app-push-state" style="font-size:.7rem;font-weight:600;color:var(--text-muted)">…</span></div>
+        <div style="font-size:.72rem;color:var(--text-muted);line-height:1.5">Pop-up alerts even when HAPPA is closed.</div>
+      </div>
+      <button id="app-push-btn" class="btn btn-primary btn-sm" onclick="enablePushFromSettings()" style="white-space:nowrap;flex-shrink:0;font-size:.75rem;padding:7px 14px">
+        Enable
+      </button>
+    </div>` : '';
+
+  return `
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><h3>📱 App &amp; Notifications</h3></div>
+        <div class="card-body" style="padding:0">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+            <div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">
+              <i class="fas fa-mobile-alt"></i>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:.82rem;color:var(--text)">${isInstalled ? 'HAPPA app' : 'Get the app'}</div>
+              <div style="font-size:.72rem;color:var(--text-muted);line-height:1.5">${isInstalled ? 'Installed on this device — open from your home screen.' : 'Add HAPPA to your home screen for quick access.'}</div>
+              ${installHint}
+            </div>
+            ${installAction}
+          </div>
+          ${pushRow}
+        </div>
+      </div>`;
+}
+
+// Refine the push row's live state (button + status) after render.
+async function _updateAppCardStates() {
+  const stateEl = document.getElementById('app-push-state');
+  const btnEl = document.getElementById('app-push-btn');
+  if (!stateEl || !btnEl) return;
+  let subscribed = false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    subscribed = !!(await reg.pushManager.getSubscription());
+  } catch (e) {}
+  const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'unsupported';
+  const on = subscribed && perm === 'granted';
+  stateEl.textContent = on ? '· On' : '· Off';
+  stateEl.style.color = on ? 'var(--success)' : 'var(--text-muted)';
+  btnEl.textContent = on ? 'Turn off' : 'Enable';
+  btnEl.setAttribute('onclick', on ? 'disablePushFromSettings()' : 'enablePushFromSettings()');
+  btnEl.classList.toggle('btn-outline', on);
+  btnEl.classList.toggle('btn-primary', !on);
+}
+
+async function enablePushFromSettings() {
+  if (typeof subscribeToPush !== 'function') {
+    showToast('Push is not available in this browser', 'warning');
+    return;
+  }
+  await subscribeToPush();
+  if (typeof showPage === 'function') showPage('settings');
+}
+
+async function disablePushFromSettings() {
+  if (typeof unsubscribeFromPush === 'function') await unsubscribeFromPush();
+  if (typeof showPage === 'function') showPage('settings');
+}
 
 function renderSettingsPage() {
   const el = document.getElementById('settings-page-content');
@@ -1187,49 +1280,7 @@ function renderSettingsPage() {
   const isInstalled = window.matchMedia('(display-mode: standalone)').matches ||
                       window.matchMedia('(display-mode: fullscreen)').matches ||
                       window.navigator.standalone === true;
-  const showInstallBtn = !isInstalled && typeof deferredInstallPrompt !== 'undefined' && !!deferredInstallPrompt;
-  const installBtnHtml = showInstallBtn ? `
-      <div class="card" style="margin-bottom:14px;border:1px solid #fbbf24;border-radius:12px;overflow:hidden;background:linear-gradient(135deg,#fff7ed,#ffedd5)">
-        <div class="card-header" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;padding:10px 14px">
-          <h3 style="font-size:.9rem;margin:0">📲 Install HAPPA TRADEMART</h3>
-        </div>
-        <div class="card-body" style="display:flex;align-items:center;gap:12px;padding:12px 14px">
-          <div style="flex:1;min-width:0">
-            <p style="font-size:.78rem;color:var(--text);margin:0 0 4px;font-weight:600">Add to your home screen</p>
-            <p style="font-size:.72rem;color:var(--text-muted);margin:0;line-height:1.5">
-              Quick access, offline use, and push notifications.
-            </p>
-          </div>
-          <button class="btn btn-sm" onclick="installApp()" style="background:linear-gradient(135deg,#f97316,#ea580c);border:1px solid #f97316;color:#fff;padding:7px 12px;font-size:.75rem;white-space:nowrap;flex-shrink:0">
-            <i class="fas fa-download"></i> Install
-          </button>
-        </div>
-      </div>
-      ` : (isInstalled ? `
-      <div class="card" style="margin-bottom:14px;background:linear-gradient(90deg,#ecfdf5,#d1fae5);border-color:#a7f3d0">
-        <div class="card-body" style="display:flex;align-items:center;gap:12px">
-          <i class="fas fa-check-circle" style="color:var(--success);font-size:1.3rem"></i>
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:.85rem;color:#065f46">HAPPA TRADEMART is installed</div>
-            <div style="font-size:.74rem;color:#047857">Open from your home screen for the best experience.</div>
-          </div>
-        </div>
-      </div>
-      ` : `
-      <div class="card" style="margin-bottom:14px;border:2px dashed var(--border);border-radius:12px">
-        <div class="card-body" style="display:flex;align-items:center;gap:14px">
-          <div style="flex:1">
-            <p style="font-size:.82rem;color:var(--text);margin:0 0 4px;font-weight:600">Install HAPPA TRADEMART</p>
-            <p style="font-size:.74rem;color:var(--text-muted);margin:0;line-height:1.6">
-              Install from the browser prompt (Chrome/Edge/Safari) to get an app icon on your home screen.
-            </p>
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="installApp()" style="border-color:var(--border);color:var(--text-muted)">
-            <i class="fas fa-mobile-alt"></i> Check Availability
-          </button>
-        </div>
-      </div>
-      `);
+  const installBtnHtml = _appCardHtml();
 
   el.innerHTML = `
     <div class="dashboard-wrap">
@@ -1331,6 +1382,8 @@ function renderSettingsPage() {
 
     </div>
   `;
+
+  _updateAppCardStates();
 }
 
 // ── Update nav visibility based on current user role ─────

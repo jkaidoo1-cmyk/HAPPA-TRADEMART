@@ -89,7 +89,10 @@ function renderNotifBadge() {
 }
 
 // ── Fetch server-side notifications and merge into App.notifications ──
-async function fetchServerNotifications() {
+// bustCache=true is used when we know data just changed (push received,
+// page focus) — it bypasses both the client apiCache and the SW HTTP cache
+// so fresh server data lands immediately.
+async function fetchServerNotifications(bustCache = false) {
   if (!App.currentUser || !App.currentUser.id) {
     App.notifications = [];
     saveNotifs();
@@ -103,7 +106,13 @@ async function fetchServerNotifications() {
 
   const uid = String(App.currentUser.id);
   try {
-    const res = await apiGet('notifications', `limit=200`);
+    let res;
+    if (bustCache && typeof apiFetch === 'function') {
+      // Direct fetch — skips the 30s apiCache promise entirely
+      res = await apiFetch('notifications?limit=200');
+    } else {
+      res = await apiGet('notifications', `limit=200`);
+    }
     const all = res?.data || (Array.isArray(res) ? res : []);
     
     // Filter to current user OR global announcements
@@ -126,12 +135,44 @@ async function fetchServerNotifications() {
 
     saveNotifs();
     renderNotifBadge();
+
+    // If the open Notifications page is showing, live-refresh its list so the
+    // user sees the new notification without navigating away and back.
+    const listEl = document.getElementById('notifications-content');
+    if (listEl && typeof renderNotificationsLocal === 'function') {
+      try { renderNotificationsLocal(); } catch (e) {}
+    }
   } catch(e) {
     console.warn('Failed to fetch server notifications', e);
   }
 }
 
-// ── Poll for new notifications every 60 s when user is logged in ──
+// ── Push-driven instant refresh ──────────────────────────────
+// The service worker posts {type:'PUSH_RECEIVED'} to every open page the
+// moment a push arrives. Listen here and refresh instantly — no waiting for
+// the polling interval.
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    const msg = event.data || {};
+    if (msg.type === 'PUSH_RECEIVED') {
+      console.log('[Push] Received PUSH_RECEIVED from SW — refreshing notifications now');
+      if (App.currentUser && App.currentUser.id) {
+        fetchServerNotifications(true);
+      }
+    }
+  });
+
+  // Also refresh (bypassing cache) when the user returns to the tab —
+  // catches anything that happened while the tab was backgrounded.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && App.currentUser && App.currentUser.id) {
+      fetchServerNotifications(true);
+    }
+  });
+}
+
+// ── Poll for new notifications every 20 s when user is logged in ──
+// (fallback path for users without push; push users get instant updates)
 let _notifPollTimer = null;
 function startNotifPolling() {
   stopNotifPolling();
@@ -139,7 +180,7 @@ function startNotifPolling() {
   _notifPollTimer = setInterval(async () => {
     if (!App.currentUser) { stopNotifPolling(); return; }
     await fetchServerNotifications();
-  }, 60000);
+  }, 20000);
 }
 function stopNotifPolling() {
   if (_notifPollTimer) { clearInterval(_notifPollTimer); _notifPollTimer = null; }

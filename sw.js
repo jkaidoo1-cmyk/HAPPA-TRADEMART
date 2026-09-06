@@ -5,7 +5,7 @@
  *            Offline fallback page for navigation requests.
  */
 
-const CACHE_NAME      = 'happa-v123';
+const CACHE_NAME      = 'happa-v124';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install
@@ -183,9 +183,23 @@ self.addEventListener('push', event => {
     tag:   payload.tag || 'happa-notif',
     renotify: true
   };
-  event.waitUntil(
-    self.registration.showNotification(payload.title || 'HAPPA TRADEMART', options)
-  );
+  // Show the OS notification (works with the tab closed)…
+  const showPromise = self.registration.showNotification(payload.title || 'HAPPA TRADEMART', options);
+
+  // …and immediately tell any open app pages to refresh their notification
+  // data so in-app lists update instantly instead of waiting for the next
+  // 20-second poll.
+  const notifyPages = self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    .then(clients => {
+      clients.forEach(client => {
+        try {
+          client.postMessage({ type: 'PUSH_RECEIVED', title: payload.title || '', body: payload.body || '', url: payload.url || '' });
+        } catch (e) {}
+      });
+    })
+    .catch(() => {});
+
+  event.waitUntil(Promise.all([showPromise, notifyPages]));
 });
 
 self.addEventListener('notificationclick', event => {

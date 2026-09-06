@@ -194,6 +194,7 @@
       to {
         opacity: 1;
       }
+    }
     body.is-storefront-view #top-nav,
     body.is-storefront-view #bottom-nav,
     body.is-storefront-view #page-home,
