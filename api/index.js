@@ -22,7 +22,8 @@ const access = require('../lib/access');
 const { notifyVendorOfPackage, sendWhatsAppText, isValidWhatsappNumber, getConfigStatus } = require('../lib/whatsapp');
 
 const app = express();
-app.use(express.json({ limit: '15mb' }));
+// Allow larger JSON payloads (product images are sent as base64 up to 5 images)
+app.use(express.json({ limit: '50mb' }));
 
 // ── Response security: never leak password hashes to clients ──────────
 // Deep-copies the payload, dropping `password_hash` at any depth. Applied at
@@ -327,7 +328,7 @@ function serializeRecord(record) {
 }
 
 const TABLE_COLUMNS = {
-  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual', 'sub_payment_status', 'sub_payment_months', 'sub_payment_amount', 'sub_paid_at', 'sub_payment_ref', 'rendor_sub_price_override', 'whatsapp_phone', 'receive_order_notifications_on_whatsapp'],
+  users: ['id', 'name', 'email', 'phone', 'password_hash', 'role', 'status', 'location', 'wallet_balance', 'referral_code', 'referred_by', 'registered_at', 'created_at', 'updated_at', 'is_verified', 'id_verified', 'rendor_display_name', 'rendor_service_cat', 'rendor_bio', 'rendor_starting_price', 'rendor_tags', 'rendor_whatsapp', 'rendor_email', 'rendor_instagram', 'rendor_twitter', 'rendor_facebook', 'rendor_website', 'rendor_contact_other', 'rendor_sub_status', 'rendor_sub_expiry', 'rendor_sub_plan', 'avatar_url', 'extra', 'referral_earnings', 'referral_count', 'preferred_store_name', 'preferred_store_cat', 'preferred_store_desc', 'preferred_store_kws', 'sub_request_status', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual', 'sub_payment_status', 'sub_payment_months', 'sub_payment_amount', 'sub_paid_at', 'sub_payment_ref', 'rendor_sub_price_override', 'whatsapp_phone', 'receive_order_notifications_on_whatsapp', 'push_enabled'],
   notifications: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at', 'extra'],
   stores: ['id', 'name', 'slug', 'vendor_id', 'category', 'location', 'status', 'logo_url', 'banner_url', 'description', 'keywords', 'avg_rating', 'review_count', 'total_sales', 'total_orders', 'store_price', 'is_paid', 'storefront_status', 'slogan', 'primary_color', 'secondary_color', 'tertiary_color', 'theme', 'font_family', 'hero_image_url', 'gallery_images', 'business_hours', 'return_policy', 'whatsapp', 'instagram', 'facebook', 'twitter', 'subscription_plan', 'subscription_status', 'subscription_start', 'subscription_end', 'subscription_months', 'subscription_method', 'created_at', 'updated_at', 'extra'],
   orders: ['id', 'buyer_id', 'vendor_id', 'store_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total', 'status', 'payment_method', 'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location', 'package_code', 'notes', 'created_at', 'updated_at', 'extra'],
@@ -1419,13 +1420,19 @@ function walletAdapter() {
           ok = true;
         } catch (e) { console.warn('[Wallet] Supabase saveUser failed:', e && e.message || e); }
       }
+      let localSaved = false;
       try {
         dataStore.ensureTable('users');
         const store = dataStore.getStore();
         const idx = (store.users || []).findIndex(x => String(x.id) === String(id));
-        if (idx !== -1) { store.users[idx] = { ...store.users[idx], ...patch }; dataStore.saveToFile(); }
-        if (!supabase) ok = true;
-      } catch (e) {}
+        if (idx !== -1) { store.users[idx] = { ...store.users[idx], ...patch }; dataStore.saveToFile(); localSaved = true; }
+        // Consider local persistence a successful save. Even when Supabase is
+        // configured but temporarily failing, keeping the local mirror up-to-date
+        // ensures the GET handlers merge local changes and the subscription
+        // becomes effective for the user. This avoids a paid-but-not-activated
+        // state when Supabase is transiently unavailable.
+        if (localSaved) ok = true;
+      } catch (e) { console.warn('[Wallet] local saveUser failed:', e && e.message || e); }
       invalidateApiCache('users');
       return ok;
     },

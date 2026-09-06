@@ -160,8 +160,15 @@ window.addEventListener('DOMContentLoaded', () => {
       window.matchMedia('(display-mode: fullscreen)').matches ||
       window.navigator.standalone === true;
 
-    if (!isStandalone && !installPromptToastShown) {
+    // Show the install hint at most once every 3 days (persisted), so it
+    // never nags on every page load.
+    const COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
+    let lastShown = 0;
+    try { lastShown = parseInt(localStorage.getItem('happa_install_toast_at') || '0', 10) || 0; } catch(err) {}
+
+    if (!isStandalone && !installPromptToastShown && (Date.now() - lastShown) > COOLDOWN_MS) {
       installPromptToastShown = true;
+      try { localStorage.setItem('happa_install_toast_at', String(Date.now())); } catch(err) {}
       showToast('HAPPA TRADEMART can be installed as an app. Go to Settings → Install App.', 'info');
     }
   });
@@ -1180,7 +1187,7 @@ function renderSettingsPage() {
   const isInstalled = window.matchMedia('(display-mode: standalone)').matches ||
                       window.matchMedia('(display-mode: fullscreen)').matches ||
                       window.navigator.standalone === true;
-  const showInstallBtn = !isInstalled && !!deferredInstallPrompt;
+  const showInstallBtn = !isInstalled && typeof deferredInstallPrompt !== 'undefined' && !!deferredInstallPrompt;
   const installBtnHtml = showInstallBtn ? `
       <div class="card" style="margin-bottom:14px;border:1px solid #fbbf24;border-radius:12px;overflow:hidden;background:linear-gradient(135deg,#fff7ed,#ffedd5)">
         <div class="card-header" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;padding:10px 14px">

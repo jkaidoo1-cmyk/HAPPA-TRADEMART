@@ -1872,6 +1872,19 @@ async function sendAnnouncement() {
     ));
   }
 
+  // Also deliver browser push to every user who has a stored push subscription.
+  // Fire-and-forget per-user push in parallel batches — failures are logged server-side,
+  // never block the announcement flow.
+  if (typeof sendPushToUser === 'function') {
+    for (let i = 0; i < allUsers.length; i += BATCH) {
+      const batch = allUsers.slice(i, i + BATCH);
+      await Promise.all(batch.map(u =>
+        sendPushToUser(u.id, `${icon} Platform Announcement`, text)
+          .catch(() => {}) // never let one bad push stall the broadcast
+      ));
+    }
+  }
+
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Announcement'; }
   const msg = document.getElementById('announcement-sent-msg');
   if (msg) { msg.style.display = 'block'; setTimeout(() => msg.style.display = 'none', 3000); }

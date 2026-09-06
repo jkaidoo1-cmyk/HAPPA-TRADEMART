@@ -472,8 +472,36 @@ async function initPushNotifications() {
       await _syncSubscription(existing);
       return;
     }
-    // Auto-request permission on user interaction (browser requires gesture)
-    // Don't auto-prompt — wait for user to click enable button
+    // If the user previously enabled push (persisted on their user record) but
+    // no subscription exists yet (e.g. after a cache clear or browser restore),
+    // re-subscribe automatically. Browsers that support push will re-engage the
+    // existing permission without re-prompting the user.
+    const u = App.currentUser || {};
+    if (u.push_enabled) {
+      try {
+        const permission = await Notification.permission;
+        if (permission === 'granted') {
+          const res = await apiFetch('push/vapid-key');
+          const vapidKey = res?.publicKey;
+          if (vapidKey) {
+            const appServerKey = _urlBase64ToUint8Array(vapidKey);
+            const subscription = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: appServerKey
+            });
+            await apiPost('push/subscribe', {
+              subscription: {
+                endpoint: subscription.endpoint,
+                keys: subscription.toJSON().keys
+              },
+              user_id: u.id || 'anonymous'
+            });
+          }
+        }
+      } catch(e) {
+        console.warn('[Push] Auto-resubscribe failed:', e.message);
+      }
+    }
   } catch(e) {
     console.warn('[Push] init error:', e);
   }
@@ -513,6 +541,11 @@ async function subscribeToPush() {
       },
       user_id: App.currentUser?.id || 'anonymous'
     });
+    // Persist explicit preference on the user record so the choice survives reload
+    try {
+      await apiPatch('users/' + encodeURIComponent(App.currentUser?.id || ''), { push_enabled: true });
+      if (App.currentUser) App.currentUser.push_enabled = true;
+    } catch(e) { /* non-fatal — push still works for this session */ }
     showToast('Push notifications enabled 🔔', 'success');
     if (typeof renderNotifications === 'function') renderNotifications();
     return true;
@@ -531,6 +564,11 @@ async function unsubscribeFromPush() {
       await apiPost('push/unsubscribe', { endpoint: sub.endpoint });
       await sub.unsubscribe();
     }
+    // Persist explicit preference on the user record so the choice survives reload
+    try {
+      await apiPatch('users/' + encodeURIComponent(App.currentUser?.id || ''), { push_enabled: false });
+      if (App.currentUser) App.currentUser.push_enabled = false;
+    } catch(e) { /* non-fatal */ }
     showToast('Push notifications disabled', 'info');
     if (typeof renderNotifications === 'function') renderNotifications();
   } catch(e) {
