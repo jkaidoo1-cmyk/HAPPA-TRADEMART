@@ -391,8 +391,11 @@ async function markNotifRead(notifId) {
     }
     renderNotifBadge();
 
-    // Patch server in background
-    if (notifId) {
+    // Patch server in background. Only personal notifications (user_id ===
+    // my id) can be patched server-side — global announcements belong to no
+    // single user, so their read state is kept locally per device.
+    const uid = App.currentUser?.id ? String(App.currentUser.id) : '';
+    if (notifId && uid && String(n.user_id || '') === uid) {
       try {
         await apiPatch('notifications', notifId, { is_read: true });
       } catch (e) {
@@ -421,9 +424,14 @@ async function markAllRead() {
 
   if (uid) {
     try {
-      const res = await apiGet('notifications', `limit=200`);
+      // Direct fetch (no 30s apiCache) so we see the true unread set
+      const res = typeof apiFetch === 'function'
+        ? await apiFetch('notifications?limit=200')
+        : await apiGet('notifications', `limit=200`);
       const all = res?.data || (Array.isArray(res) ? res : []);
-      const unread = all.filter(n => (String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global') && !n.is_read);
+      // Only patch rows the user owns — global announcement rows can't be
+      // patched by non-admins (they belong to no single user).
+      const unread = all.filter(n => String(n.user_id) === uid && !n.is_read);
       await Promise.all(unread.map(n => apiPatch('notifications', n.id, { is_read: true })));
     } catch(e) { /* silent */ }
   }
@@ -445,7 +453,10 @@ async function clearAllNotifications() {
 
   if (uid) {
     try {
-      const res = await apiGet('notifications', `limit=200`);
+      // Direct fetch (no 30s apiCache) so we delete the true current set
+      const res = typeof apiFetch === 'function'
+        ? await apiFetch('notifications?limit=200')
+        : await apiGet('notifications', `limit=200`);
       const all = res?.data || (Array.isArray(res) ? res : []);
       const mine = all.filter(n => String(n.user_id) === uid);
       await Promise.all(mine.map(n => apiDelete('notifications', n.id)));

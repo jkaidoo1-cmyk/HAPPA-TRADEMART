@@ -1636,10 +1636,23 @@ app.put('/api/:table/:id', async (req, res) => {
   if (table === 'storefronts') invalidateApiCache('stores');
 
   // ── Access control (storefronts are checked inside their branch after the
-  // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──
+  // store is resolved — a PUT upsert may carry the owner id in its body) ──
   if (table !== 'storefronts') {
     const viewer = access.getAccessContext(req);
-    const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : null, body);
+    // Resolve the existing row BEFORE the ownership check so row owners can
+    // update their records even when the body itself carries no owner field.
+    let existingForAuth = null;
+    if (table !== 'users') {
+      const dbAuth = loadDb();
+      existingForAuth = getTable(dbAuth, table).find(r => String(r.id) === String(id)) || null;
+      if (!existingForAuth && supabase) {
+        try {
+          const { data } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+          if (data) existingForAuth = serializeRecord(data);
+        } catch (e) {}
+      }
+    }
+    const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
     if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
   }
 
@@ -1816,7 +1829,21 @@ app.patch('/api/:table/:id', async (req, res) => {
   // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──
   if (table !== 'storefronts') {
     const viewer = access.getAccessContext(req);
-    const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : null, body);
+    // Resolve the existing row BEFORE the ownership check so row owners can
+    // mutate their records even when the PATCH body itself carries no owner
+    // field (e.g. marking a notification read sends only { is_read: true }).
+    let existingForAuth = null;
+    if (table !== 'users') {
+      const dbAuth = loadDb();
+      existingForAuth = getTable(dbAuth, table).find(r => String(r.id) === String(id)) || null;
+      if (!existingForAuth && supabase) {
+        try {
+          const { data } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+          if (data) existingForAuth = serializeRecord(data);
+        } catch (e) {}
+      }
+    }
+    const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
     if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
   }
 

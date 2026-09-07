@@ -2950,7 +2950,7 @@ function buildItemThumbsHTML(items, max = 3) {
   const thumbs = all.slice(0, max).map(i => {
     const img = String(i.image || (i.images && i.images[0]) || '').trim();
     if (!img) return '';
-    return `<img src="${escHtml(img)}" alt="" loading="lazy" style="width:30px;height:30px;border-radius:6px;object-fit:contain;border:1px solid var(--border);flex-shrink:0;background:#f8f9fa" onerror="this.onerror=null;this.style.display='none'">`;
+    return `<img src="${escHtml(img)}" alt="" loading="lazy" style="width:30px;height:30px;border-radius:6px;object-fit:contain;border:1px solid var(--border);flex-shrink:0;background:#fff" onerror="this.onerror=null;this.style.display='none'">`;
   }).filter(Boolean);
   if (!thumbs.length) return '';
   const extra = all.length > max ? `<span style="font-size:.68rem;font-weight:700;color:var(--text-muted);flex-shrink:0">+${all.length - max}</span>` : '';

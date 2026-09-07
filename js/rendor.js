@@ -333,7 +333,7 @@ function rendorPostCardHTML(p) {
   <div class="card-body">
     ${p.image_url ? `
     <img src="${escHtml(p.image_url)}" alt=""
-         style="width:100%;height:140px;object-fit:contain;border-radius:var(--radius-sm);margin-bottom:10px;background:#f8f9fa"
+         style="width:100%;height:140px;object-fit:contain;border-radius:var(--radius-sm);margin-bottom:10px;background:#fff"
          onerror="this.style.display='none'">` : ''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
       <div style="flex:1;min-width:0">
@@ -805,12 +805,12 @@ function _showPostModal(post) {
       <p style="font-size:.72rem;color:var(--text-muted)">JPG, PNG or WEBP · Max 5 MB</p>
     </div>
     <input type="file" id="post-img-file" accept="image/*" style="display:none"
-           onchange="previewProductImage(this,'post-img-preview','post-img-b64')">
+           onchange="previewProductImage(this,'post-img-preview','post-img-b64', true)">
     <!-- Preview (visible once file chosen OR when editing an existing image) -->
     <div id="post-img-preview" style="margin-top:8px;display:${hasExistingImg?'flex':'none'};align-items:center;gap:10px">
       <img id="post-img-thumb"
            src="${hasExistingImg ? escHtml(post.image_url) : ''}"
-           style="width:80px;height:80px;border-radius:8px;object-fit:contain;background:#f8f9fa;border:2px solid var(--border)">
+           style="width:80px;height:80px;border-radius:8px;object-fit:contain;background:#fff;border:2px solid var(--border)">
       <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger)"
               onclick="clearProductImage('post-img-preview','post-img-file','post-img-b64');document.getElementById('post-img-keep').value=''">
         <i class="fas fa-times"></i> Remove

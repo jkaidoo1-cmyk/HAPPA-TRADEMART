@@ -554,7 +554,7 @@ function _apRenderEmbeddedStore(storeId, userId, products) {
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
     ${productsForPreview.map(p=>`
     <div style="aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border)">
-      <img src="${(p.images||[])[0]||'https://placehold.co/80x80?text=P'}" style="width:100%;height:100%;object-fit:contain;background:#f8f9fa">
+      <img src="${(p.images||[])[0]||'https://placehold.co/80x80?text=P'}" style="width:100%;height:100%;object-fit:contain;background:#fff">
     </div>`).join('')}
   </div>
   `;
@@ -861,7 +861,7 @@ function _apRenderEmbeddedStoreForPage(storeId, userId, products) {
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
         ${productsForPreview.map(p=>`
           <div style="aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border)">
-            <img src="${(p.images||[])[0]||'https://placehold.co/80x80?text=P'}" style="width:100%;height:100%;object-fit:contain;background:#f8f9fa">
+            <img src="${(p.images||[])[0]||'https://placehold.co/80x80?text=P'}" style="width:100%;height:100%;object-fit:contain;background:#fff">
           </div>
         `).join('')}
       </div>

@@ -285,7 +285,7 @@ function rendorPostCardPublicHTML(post, rendor) {
 
     ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
 
-            style="width:100%;height:160px;object-fit:contain;background:#f8f9fa;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
+            style="width:100%;height:160px;object-fit:contain;background:#fff;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
 
             onerror="this.style.display='none'">`
 
@@ -551,13 +551,13 @@ async function renderProductDetail(id) {
 
   <img src="${images[0]}" alt="${escHtml(p.name)}"
 
-       style="width:100%;aspect-ratio:1;object-fit:contain;max-height:340px;background:#f8f9fa"
+       style="width:100%;aspect-ratio:1;object-fit:contain;max-height:340px;background:#fff"
 
        onerror="this.src='https://via.placeholder.com/600x600?text=No+Image'">
 
   ${images.length > 1 ? `<div style="display:flex;gap:6px;padding:8px 12px;overflow-x:auto">
 
-    ${images.map((img,i) => `<img src="${img}" onclick="switchImg(this,'${img}')" style="width:56px;height:56px;border-radius:6px;object-fit:contain;background:#f8f9fa;cursor:pointer;opacity:${i===0?'1':'0.6'}" onerror="this.src='https://via.placeholder.com/60x60?text=img'">`).join('')}
+    ${images.map((img,i) => `<img src="${img}" onclick="switchImg(this,'${img}')" style="width:56px;height:56px;border-radius:6px;object-fit:contain;background:#fff;cursor:pointer;opacity:${i===0?'1':'0.6'}" onerror="this.src='https://via.placeholder.com/60x60?text=img'">`).join('')}
 
   </div>` : ''}
 
@@ -1000,7 +1000,7 @@ async function renderStoreDetail(id) {
   }
 
   const headerHTML = `
-    <div style="position:relative;background:#f8f9fa">
+    <div style="position:relative;background:#fff">
       <img src="${bannerSrc}" alt="${escHtml(storeName)}" 
            style="width:100%;height:140px;object-fit:cover;" onerror="this.src='https://via.placeholder.com/800x300?text=Store+Banner'">
       <div style="padding:12px 16px;background:#fff;border-bottom:1px solid var(--border);position:relative">
@@ -1087,7 +1087,7 @@ async function renderStoreDetail(id) {
         </div>
       </div>
       <!-- Tab Content Area (Used for handleStoreProductSearch) -->
-      <div class="store-tab-content" id="store-tab-content" style="padding:16px;background:#f8f9fa;">
+      <div class="store-tab-content" id="store-tab-content" style="padding:16px;background:#fff;">
         <div class="product-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
            ${storeProds.map(p => productCardHTML(p)).join('')}
         </div>
@@ -1439,7 +1439,7 @@ async function renderStorefront(id) {
       #storefront-page-container .store-cart-btn { font-family: inherit !important; border-radius: 50% !important; font-weight: 700 !important; background: ${primaryColor} !important; color: #ffffff !important; border: none !important; box-shadow: 0 4px 12px color-mix(in srgb, ${primaryColor} 30%, transparent) !important; }
     `;
     headerHTML = `
-      <div style="position:relative;background:#f8f9fa">
+      <div style="position:relative;background:#fff">
 
         <img src="${bannerSrc}" alt="${escHtml(storeName)}" 
              style="width:100%;height:180px;object-fit:cover;" onerror="this.src='https://via.placeholder.com/800x300?text=Store+Banner'">
@@ -1761,7 +1761,7 @@ function adminProductCardHTML(p) {
 
     ${flash}${soldOut}${hidden}
 
-    <img style="width:100%;height:140px;object-fit:contain;display:block;background:#f8f9fa"
+    <img style="width:100%;height:140px;object-fit:contain;display:block;background:#fff"
 
          src="${p.images?.[0]||'https://via.placeholder.com/300x300?text=No+Image'}"
 
@@ -2571,7 +2571,7 @@ function _rendorPublicPostCardHTML(post) {
 
     ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
 
-           style="width:100%;height:140px;object-fit:contain;background:#f8f9fa;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
+           style="width:100%;height:140px;object-fit:contain;background:#fff;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
 
            onerror="this.style.display='none'">`
 
@@ -3100,8 +3100,8 @@ window.openStorefrontProductModal = async function(productId) {
       <button onclick="document.getElementById('storefront-product-modal').remove()" style="position:absolute; top:12px; right:12px; border:none; background:rgba(0,0,0,0.5); color:#fff; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.8rem; z-index:10">
         <i class="fas fa-times"></i>
       </button>
-      <div style="width:100%; height:200px; background:#f8f9fa; display:flex; align-items:center; justify-content:center; overflow:hidden">
-        <img src="${img}" style="width:100%; height:100%; object-fit:contain;background:#f8f9fa" onerror="this.src='https://via.placeholder.com/400x300?text=Product'">
+      <div style="width:100%; height:200px; background:#fff; display:flex; align-items:center; justify-content:center; overflow:hidden">
+        <img src="${img}" style="width:100%; height:100%; object-fit:contain;background:#fff" onerror="this.src='https://via.placeholder.com/400x300?text=Product'">
       </div>
       <div style="padding:20px; display:grid; gap:12px">
         <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name))}</h3>
@@ -3208,7 +3208,7 @@ window.renderStorefrontCart = async function(storeId) {
       const img = item.images && item.images[0] ? item.images[0] : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
       return `
         <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border)">
-          <img src="${img}" style="width:50px; height:50px; border-radius:8px; object-fit:contain; background:#f8f9fa">
+          <img src="${img}" style="width:50px; height:50px; border-radius:8px; object-fit:contain; background:#fff">
           <div style="flex:1">
             <div style="font-weight:800; font-size:0.85rem">${escHtml(itemDisplayName(item.name))}</div>
             <div style="font-size:0.8rem; color:var(--text-muted)">GHS ${item.price}</div>

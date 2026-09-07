@@ -158,7 +158,52 @@ async function compressImage(file, maxWidth = 750, quality = 0.70) {
   });
 }
 
-async function previewProductImage(input, previewWrapperId, hiddenId) {
+// ── Square product image helper ────────────────────────────
+// Centers the image on a square white canvas so product photos fill
+// square product cards edge-to-edge (no cropping, no distortion).
+// Used for product uploads (vendor products, bulk builder, rendor posts).
+async function squareImage(file, size = 900, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = ev => {
+      const img = new Image();
+      img.src = ev.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        const scale = Math.min(size / img.width, size / img.height);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        ctx.drawImage(img, Math.round((size - w) / 2), Math.round((size - h) / 2), w, h);
+        let q = quality;
+        let dataUrl = canvas.toDataURL('image/jpeg', q);
+        // Keep payloads compact (~180KB max string) — same budget as compressImage
+        const maxChars = 180 * 1024;
+        while (dataUrl.length > maxChars && q > 0.45) {
+          q = Math.round((q - 0.08) * 100) / 100;
+          dataUrl = canvas.toDataURL('image/jpeg', q);
+        }
+        if (dataUrl.length > maxChars) {
+          const c2 = document.createElement('canvas');
+          c2.width = 550;
+          c2.height = 550;
+          c2.getContext('2d').drawImage(canvas, 0, 0, 550, 550);
+          dataUrl = c2.toDataURL('image/jpeg', 0.60);
+        }
+        resolve(dataUrl);
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+}
+
+async function previewProductImage(input, previewWrapperId, hiddenId, makeSquare = false) {
   const file = input.files?.[0];
   if (!file) return;
 
@@ -170,7 +215,7 @@ async function previewProductImage(input, previewWrapperId, hiddenId) {
   }
 
   try {
-    const base64 = await compressImage(file);
+    const base64 = makeSquare ? await squareImage(file, 900, 0.72) : await compressImage(file);
     
     const wrap  = document.getElementById(previewWrapperId);
     const thumb = document.getElementById(previewWrapperId.replace('preview', 'thumb'));

@@ -348,7 +348,7 @@ html.is-storefront-root body #main-content {
   width: 100%;
   aspect-ratio: 1;
   object-fit: contain;
-  background: var(--bg);
+  background: #fff;
 }
 .product-card .product-body { padding: 10px 12px 12px; }
 .product-card .product-name {
@@ -429,7 +429,7 @@ html.is-storefront-root body #main-content {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: var(--bg);
+  background: #fff;
   display: block;
 }
 /* Prev / Next arrows */
@@ -923,7 +923,7 @@ html.is-storefront-root body #main-content {
   width: 56px; height: 56px;
   border-radius: var(--radius-sm);
   object-fit: contain;
-  background: #f8f9fa;
+  background: #fff;
   flex-shrink: 0;
 }
 .order-item-info { flex: 1; min-width: 0; }
@@ -1055,7 +1055,7 @@ html.is-storefront-root body #main-content {
   width: 64px; height: 64px;
   border-radius: var(--radius-sm);
   object-fit: contain;
-  background: #f8f9fa;
+  background: #fff;
   flex-shrink: 0;
 }
 .cart-item-info { flex: 1; min-width: 0; }
@@ -1833,7 +1833,7 @@ html.is-storefront-root body #main-content {
   border: 2px solid var(--border);
   flex-shrink: 0;
 }
-.bap-thumb img { width: 100%; height: 100%; object-fit: contain; background: #f8f9fa; display: block; }
+.bap-thumb img { width: 100%; height: 100%; object-fit: contain; background: #fff; display: block; }
 .bap-thumb .bap-thumb-rm {
   position: absolute;
   top: 2px; right: 2px;
@@ -1883,7 +1883,7 @@ html.is-storefront-root body #main-content {
 .bap-draft-img-wrap img {
   width: 100%; height: 100%;
   object-fit: contain;
-  background: #f8f9fa;
+  background: #fff;
   display: block;
 }
 .bap-draft-img-wrap .bap-card-num {
