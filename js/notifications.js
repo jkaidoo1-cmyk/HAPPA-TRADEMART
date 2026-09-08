@@ -113,6 +113,9 @@ async function fetchServerNotifications(bustCache = false) {
     } else {
       res = await apiGet('notifications', `limit=200`);
     }
+    // Request failed (e.g. session expired) — keep the current list rather
+    // than wiping it with an empty result.
+    if (!res) return;
     const all = res?.data || (Array.isArray(res) ? res : []);
     
     // Filter to current user OR global announcements

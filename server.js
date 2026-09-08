@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const webpush = require('web-push');
 
 // Shared session/auth module (HMAC-signed tokens or in-memory fallback)
-const { createSessionToken, getSessionUser, requireAuth, requireAdmin, revokeToken } = require('./lib/session');
+const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requireAdmin, revokeToken } = require('./lib/session');
 
 // Shared API access-control (read scrubbing, ownership rules, audit log)
 const access = require('./lib/access');
@@ -135,6 +135,21 @@ function invalidateApiCache(table) {
 }
 
 app.use(express.json({ limit: '15mb' }));
+
+// ── Dead-session detection ─────────────────────────────────────
+// A presented-but-invalid Bearer token is an explicit 401, never silent
+// anonymity: owner-only tables (notifications, wallet, …) would otherwise
+// return an empty 200 for an expired session and the client would freeze on
+// stale data until the user manually logged out and back in. Auth endpoints
+// are exempt so a stale token can never block logging in.
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  if (String(req.path || '').startsWith('/api/auth/')) return next();
+  if (hasInvalidSession(req)) {
+    return res.status(401).json({ error: 'Session expired. Please sign in again.' });
+  }
+  next();
+});
 
 // ── Response security: never leak password hashes to clients ──────────
 // Deep-copies the payload, dropping `password_hash` at any depth. Applied at

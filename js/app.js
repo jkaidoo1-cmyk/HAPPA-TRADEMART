@@ -2006,6 +2006,23 @@ function setAuthToken(token) {
   }
 }
 
+// ── Dead-session handling ─────────────────────────────────
+// The server answers 401 when the presented token is expired/unknown (e.g.
+// after a backend restart or serverless instance rotation). Without this
+// handler every authenticated read silently returns nothing or stale local
+// data — new notifications never appear until the user manually logs out
+// and back in. React once per burst of parallel 401s, then re-authenticate.
+let _sessionExpiredHandledAt = 0;
+function _handleSessionExpired() {
+  const now = Date.now();
+  if (now - _sessionExpiredHandledAt < 30000) return;
+  _sessionExpiredHandledAt = now;
+  try {
+    if (typeof showToast === 'function') showToast('Your session has expired. Please sign in again.', 'warning');
+  } catch(e) {}
+  try { logout(true); } catch(e) {}
+}
+
 async function apiFetch(table, opts = {}) {
   if (API === 'tables/') {
     return localTablesApi(table, opts);
@@ -2051,6 +2068,13 @@ async function apiFetch(table, opts = {}) {
   } catch(e) {
     console.warn('API Error:', table, e);
     window.lastApiError = e.message || String(e);
+    // A 401 while holding a token means the server no longer recognizes this
+    // session (expired/rotated). Re-authenticate — never serve stale local
+    // data as if it were live.
+    if (e && e.status === 401 && token) {
+      _handleSessionExpired();
+      return null;
+    }
     // Writes (POST/PATCH/PUT/DELETE) must NEVER silently fall back to localStorage
     // on a server error: an order that "succeeds" only in the local browser is
     // invisible to the vendor, buyer and admin. Only a pure network failure
@@ -2950,7 +2974,7 @@ function buildItemThumbsHTML(items, max = 3) {
   const thumbs = all.slice(0, max).map(i => {
     const img = String(i.image || (i.images && i.images[0]) || '').trim();
     if (!img) return '';
-    return `<img src="${escHtml(img)}" alt="" loading="lazy" style="width:30px;height:30px;border-radius:6px;object-fit:contain;border:1px solid var(--border);flex-shrink:0;background:#fff" onerror="this.onerror=null;this.style.display='none'">`;
+    return `<img src="${escHtml(img)}" alt="" loading="lazy" style="width:30px;height:30px;border-radius:6px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;background:var(--bg)" onerror="this.onerror=null;this.style.display='none'">`;
   }).filter(Boolean);
   if (!thumbs.length) return '';
   const extra = all.length > max ? `<span style="font-size:.68rem;font-weight:700;color:var(--text-muted);flex-shrink:0">+${all.length - max}</span>` : '';

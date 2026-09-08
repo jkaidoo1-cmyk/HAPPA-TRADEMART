@@ -15,7 +15,7 @@ const dataStore = require('./data-store');
 
 // Shared session/auth module (HMAC-signed tokens via SESSION_SECRET, or
 // in-memory fallback) and the shared API access-control layer.
-const { createSessionToken, getSessionUser, requireAuth, requireAdmin, revokeToken } = require('../lib/session');
+const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requireAdmin, revokeToken } = require('../lib/session');
 const access = require('../lib/access');
 
 // Meta WhatsApp Cloud API helper (env-driven, server-side only)
@@ -24,6 +24,21 @@ const { notifyVendorOfPackage, sendWhatsAppText, isValidWhatsappNumber, getConfi
 const app = express();
 // Allow larger JSON payloads (product images are sent as base64 up to 5 images)
 app.use(express.json({ limit: '50mb' }));
+
+// ── Dead-session detection ─────────────────────────────────────
+// A presented-but-invalid Bearer token is an explicit 401, never silent
+// anonymity: owner-only tables (notifications, wallet, …) would otherwise
+// return an empty 200 for an expired session (e.g. after instance rotation
+// without SESSION_SECRET) and the client would freeze on stale data until
+// re-login. Auth endpoints are exempt so a stale token can never block login.
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  if (String(req.path || '').startsWith('/api/auth/')) return next();
+  if (hasInvalidSession(req)) {
+    return res.status(401).json({ error: 'Session expired. Please sign in again.' });
+  }
+  next();
+});
 
 // ── Response security: never leak password hashes to clients ──────────
 // Deep-copies the payload, dropping `password_hash` at any depth. Applied at

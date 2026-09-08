@@ -128,7 +128,7 @@ async function showSearchSuggestions(q) {
     html += `<div style="padding:8px 14px;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Products</div>`;
     html += matchedProducts.map(p => `
     <div class="search-suggestion" onclick="openProduct('${p.id}');hideSearchDropdown()">
-      <img src="${p.images?.[0]||'https://via.placeholder.com/30x30?text=P'}" style="width:30px;height:30px;border-radius:4px;object-fit:contain;background:#fff" onerror="this.src='https://via.placeholder.com/30x30?text=P'">
+      <img src="${p.images?.[0]||'https://via.placeholder.com/30x30?text=P'}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src='https://via.placeholder.com/30x30?text=P'">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${highlight(p.name||'', q)}</div>
         <div style="font-size:.72rem;color:var(--text-muted)">GHS ${p.price} · ${p.location}</div>
