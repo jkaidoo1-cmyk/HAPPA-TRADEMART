@@ -633,6 +633,14 @@ async function unsubscribeFromPush() {
 
 async function _syncSubscription(subscription) {
   try {
+    // First, ask the server to attach this endpoint to the logged-in user
+    // in case it was created while the user was anonymous.
+    try {
+      await apiPost('push/migrate', { endpoint: subscription.endpoint });
+    } catch (e) {
+      /* non-fatal */
+    }
+
     await apiPost('push/subscribe', {
       subscription: {
         endpoint: subscription.endpoint,

@@ -856,6 +856,44 @@ app.post('/api/push/unsubscribe', async (req, res) => {
   }
 });
 
+// POST /api/push/migrate — reassign an existing subscription endpoint to the
+// currently authenticated user (useful when subscriptions were created while
+// the user was anonymous and need to be attached to their account on login).
+app.post('/api/push/migrate', requireAuth, async (req, res) => {
+  try {
+    const { endpoint } = req.body || {};
+    if (!endpoint) return res.status(400).json({ error: 'Missing endpoint' });
+    const userId = String(req.userSession.userId);
+    const supabase = getSupabase();
+    if (supabase) {
+      // Update any rows for this endpoint that are anonymous (or null) to the
+      // authenticated user's id. Use a safe delete+insert to avoid unique-key
+      // conflicts with primary endpoint key.
+      const { data } = await supabase.from('push_subscriptions').select('*').eq('endpoint', endpoint).limit(1);
+      if (data && data.length) {
+        await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+      }
+      const subRecord = { endpoint, keys: {}, user_id: userId, created_at: new Date().toISOString() };
+      await supabase.from('push_subscriptions').insert(subRecord).catch(() => {});
+    } else {
+      const ds = require('./data-store');
+      const subs = ds.get('push_subscriptions') || [];
+      const idx = subs.findIndex(s => s.endpoint === endpoint);
+      if (idx !== -1) {
+        subs[idx].user_id = userId;
+      } else {
+        subs.push({ endpoint, keys: {}, user_id: userId, created_at: new Date().toISOString() });
+      }
+      ds.set('push_subscriptions', subs);
+      ds.saveToFile();
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Push] Migrate error:', err && err.message || err);
+    res.status(500).json({ error: 'Migration failed' });
+  }
+});
+
 // POST /api/push/send — send push notification to a user (internal use)
 app.post('/api/push/send', async (req, res) => {
   try {
@@ -872,22 +910,31 @@ app.post('/api/push/send', async (req, res) => {
     }
     if (!subs.length) return res.json({ sent: 0, message: 'No subscriptions for this user' });
     const payload = JSON.stringify({ title, body: body || '', url: url || './' });
+    // Send notifications in parallel to avoid slow sequential waits
+    const sendPromises = subs.map(sub =>
+      webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload)
+        .then(() => ({ endpoint: sub.endpoint, success: true }))
+        .catch(err => ({ endpoint: sub.endpoint, success: false, err }))
+    );
+
+    const settled = await Promise.allSettled(sendPromises);
     let sent = 0, failed = 0;
     const failedEndpoints = [];
-    for (const sub of subs) {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: sub.keys },
-          payload
-        );
-        sent++;
-      } catch(err) {
-        failed++;
-        // 404 or 410 = subscription expired — remove it
-        if (err.statusCode === 404 || err.statusCode === 410) {
-          failedEndpoints.push(sub.endpoint);
+    for (const r of settled) {
+      if (r.status === 'fulfilled') {
+        const val = r.value;
+        if (val && val.success) {
+          sent++;
+        } else {
+          failed++;
+          const err = val && val.err;
+          if (err && (err.statusCode === 404 || err.statusCode === 410)) failedEndpoints.push(val && val.endpoint);
+          console.warn(`[Push] Send failed for ${String(val && val.endpoint).substring(0,50)}...: ${err && (err.statusCode || err.message)}`);
         }
-        console.warn(`[Push] Send failed for ${sub.endpoint?.substring(0,50)}...: ${err.statusCode || err.message}`);
+      } else {
+        // Promise rejected unexpectedly
+        failed++;
+        console.warn('[Push] Unexpected send error:', r.reason && (r.reason.message || r.reason));
       }
     }
     // Clean up expired subscriptions
