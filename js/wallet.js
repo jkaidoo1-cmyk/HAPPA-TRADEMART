@@ -202,10 +202,10 @@ async function showWithdrawalModal() {
   const settingsRes = await apiGet('settings', 'limit=200').catch(() => null);
   const sRows = settingsRes?.data || [];
   const sVal = (key, def) => (sRows.find(r => r.key === key) || {}).value ?? def;
-  window._wdMin = parseFloat(sVal('min_withdrawal', MIN_WITHDRAWAL)) || MIN_WITHDRAWAL;
-  window._wdMaxP = parseInt(sVal('max_pending_withdrawals', MAX_WITHDRAWAL_PENDING), 10) || MAX_WITHDRAWAL_PENDING;
-  const MIN_WITHDRAWAL = window._wdMin;
-  const MAX_WITHDRAWAL_PENDING = window._wdMaxP;
+  const minWd = parseFloat(sVal('min_withdrawal', MIN_WITHDRAWAL)) || MIN_WITHDRAWAL;
+  const maxPendingWd = parseInt(sVal('max_pending_withdrawals', MAX_WITHDRAWAL_PENDING), 10) || MAX_WITHDRAWAL_PENDING;
+  window._wdMin = minWd;
+  window._wdMaxP = maxPendingWd;
 
   const balance = u.wallet_balance || 0;
 
@@ -229,17 +229,17 @@ async function showWithdrawalModal() {
     <div style="font-size:.75rem;opacity:.75;margin-top:4px">Storefront payouts settle immediately. Marketplace payouts still wait for delivery confirmation.</div>
   </div>
 
-  ${pendingWithdrawals.length >= MAX_WITHDRAWAL_PENDING ? `
+  ${pendingWithdrawals.length >= maxPendingWd ? `
   <div class="verify-banner" style="background:#fff7ed;border-color:#fb923c;margin-bottom:14px">
     <i class="fas fa-clock" style="color:#ea580c"></i>
     <p>You have a pending withdrawal request. Wait for it to be processed before submitting another.</p>
   </div>
   <button class="btn btn-ghost btn-block" onclick="closeModalForce()">Close</button>
-  ` : balance < MIN_WITHDRAWAL ? `
+  ` : balance < minWd ? `
   <div class="empty-state" style="padding:20px 0">
     <i class="fas fa-coins"></i>
     <h3>Insufficient Balance</h3>
-    <p>Minimum withdrawal is GHS ${MIN_WITHDRAWAL}. Your balance is GHS ${balance.toFixed(2)}.</p>
+    <p>Minimum withdrawal is GHS ${minWd}. Your balance is GHS ${balance.toFixed(2)}.</p>
   </div>
   <button class="btn btn-ghost btn-block" onclick="closeModalForce()">Close</button>
   ` : `
@@ -248,9 +248,9 @@ async function showWithdrawalModal() {
     <label class="form-label">Amount to Withdraw (GHS) *</label>
     <div class="input-group">
       <span class="input-icon" style="font-weight:700;color:var(--success);font-size:.9rem">GHS</span>
-      <input class="form-control" id="wd-amount" type="number" min="${MIN_WITHDRAWAL}"
+      <input class="form-control" id="wd-amount" type="number" min="${minWd}"
              max="${balance.toFixed(2)}" step="0.01"
-             placeholder="Min GHS ${MIN_WITHDRAWAL}" oninput="updateWithdrawPreview(${balance})" style="padding-left:48px">
+             placeholder="Min GHS ${minWd}" oninput="updateWithdrawPreview(${balance})" style="padding-left:48px">
     </div>
     <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
       ${[50, 100, 200, 500].filter(a => a <= balance).map(a =>

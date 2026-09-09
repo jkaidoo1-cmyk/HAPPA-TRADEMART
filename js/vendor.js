@@ -464,7 +464,7 @@ async function renderVendorDashboard() {
         <div>
           <div style="font-weight:700;font-size:.875rem">Phone OTP Verification</div>
           <div style="font-size:.78rem;color:var(--text-muted)">${u.is_verified?'✅ Verified':'Pending — verify your phone number'}</div>
-          ${!u.is_verified ? `<button class="btn btn-warning btn-sm" style="margin-top:6px" onclick="resendOTP()">Resend OTP</button>` : ''}
+          ${!u.is_verified ? `<button class="btn btn-warning btn-sm" style="margin-top:6px" onclick="showOTPModal(App.currentUser)">Resend OTP</button>` : ''}
         </div>
       </div>
       <div class="verify-step ${u.id_verified?'done':(u.id_image?'done':'pending-step')}">
@@ -1310,8 +1310,8 @@ async function submitAddProduct(e, storeId, vendorId) {
       renderVendorDashboard();
     }
     // Re-open the modal so user doesn't lose their input
-    showModal(_addProductModalHTML(storeId, vendorId, { name, desc, price: finalPrice, orig: finalOrig, stock, weight, cat, isFlash, allowBuyerNote, buyerNotePrompt }));
-    _rehydrateAddProductModal({ name, desc, price: finalPrice, orig: finalOrig, stock, weight, cat, isFlash, allowBuyerNote, buyerNotePrompt }, images);
+    showModal(_addProductModalHTML(storeId, vendorId, { name, desc, price: finalPrice, orig: finalOrig, stock, weight, cat, tags: tagsStr, isFlash, allowBuyerNote, buyerNotePrompt }));
+    _rehydrateAddProductModal({ name, desc, price: finalPrice, orig: finalOrig, stock, weight, cat, tags: tagsStr, isFlash, allowBuyerNote, buyerNotePrompt }, images);
     showToast(`Could not save product: ${err.message || 'network error'}`, 'error', 5000);
   }
 }
@@ -1411,6 +1411,10 @@ function _addProductModalHTML(storeId, vendorId, prev) {
           <option ${prev.cat==='Other'?'selected':''}>Other</option>
         </optgroup>
       </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tags <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(optional, comma-separated)</span></label>
+      <input class="form-control" id="new-p-tags" placeholder="e.g. sneakers, sale, shoes" value="${escHtml(prev.tags || '')}">
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <input type="checkbox" id="new-p-flash" ${prev.isFlash ? 'checked' : ''}>
@@ -1919,8 +1923,7 @@ async function submitVerificationDocuments(userId) {
       proof_sales_1: s1,
       proof_sales_2: s2,
       proof_sales_3: s3,
-      proof_share: share,
-      id_verified: false
+      proof_share: share
     });
 
     if (App.currentUser) {
@@ -1929,7 +1932,7 @@ async function submitVerificationDocuments(userId) {
       App.currentUser.proof_sales_2 = s2;
       App.currentUser.proof_sales_3 = s3;
       App.currentUser.proof_share = share;
-      App.currentUser.id_verified = false;
+      // id_verified is set to true by admin review — do not override it here
     }
     saveSessions();
     closeModalForce();
@@ -2191,6 +2194,7 @@ function switchTab(el, tabId) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
+window.switchTab = switchTab;
 
 
 /* ============================================================

@@ -35,6 +35,7 @@ async function renderBuyerDashboard() {
   c.innerHTML = `
 <div class="tab-nav" id="buyer-tabs" style="display:flex;overflow-x:auto;white-space:nowrap;gap:8px;padding-bottom:8px">
   <div class="tab-btn ${activeTabId === 'buyer-overview' ? 'active' : ''}" id="nav-buyer-overview" onclick="switchTab(this,'buyer-overview')">Overview</div>
+  <div class="tab-btn ${activeTabId === 'buyer-orders' ? 'active' : ''}" id="nav-buyer-orders" onclick="switchTab(this,'buyer-orders')">Orders (${myPackages.length})</div>
   <div class="tab-btn ${activeTabId === 'buyer-addresses' ? 'active' : ''}" id="nav-buyer-addresses" onclick="switchTab(this,'buyer-addresses');renderBuyerAddresses()">Addresses</div>
   <div class="tab-btn ${activeTabId === 'buyer-reviews' ? 'active' : ''}" id="nav-buyer-reviews" onclick="switchTab(this,'buyer-reviews');renderBuyerReviews()">My Reviews</div>
   <div class="tab-btn" id="nav-buyer-settings" onclick="showPage('settings')">Settings</div>
@@ -66,7 +67,7 @@ async function renderBuyerDashboard() {
     </div>
 
     <div class="stats-grid">
-      <div class="stat-card" style="cursor:pointer" onclick="showPage('cart')">
+      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('nav-buyer-orders')?.click()">
         <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-shopping-bag" style="color:#1d4ed8"></i></div>
         <div class="stat-value">${totalOrderCount}</div>
         <div class="stat-label">Total Orders</div>
@@ -98,16 +99,21 @@ async function renderBuyerDashboard() {
     </div>` : ''}
 
     <!-- Recent Orders -->
-    <h3 style="font-size:.9rem;font-weight:700;margin-bottom:10px">Recent Orders</h3>
-    ${myPackages.slice(0,3).map(pkg => buyerPackageCard(pkg)).join('') ||
-      `<div class="empty-state" style="padding:24px">
-        <i class="fas fa-shopping-bag"></i>
-        <h3>No orders yet</h3>
-        <p>Start shopping to see your orders here</p>
-        <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="showPage('marketplace')">
-          <i class="fas fa-store"></i> Browse Marketplace
-        </button>
-      </div>`}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h3 style="font-size:.9rem;font-weight:700;margin:0">Recent Orders</h3>
+      ${myPackages.length > 3 ? `<a href="javascript:void(0)" onclick="document.getElementById('nav-buyer-orders')?.click()" style="font-size:.78rem;color:var(--primary);font-weight:600">View all (${myPackages.length}) →</a>` : ''}
+    </div>
+    <div id="buyer-recent-orders">
+      ${myPackages.slice(0,3).map(pkg => buyerPackageCard(pkg)).join('') ||
+        `<div class="empty-state" style="padding:24px">
+          <i class="fas fa-shopping-bag"></i>
+          <h3>No orders yet</h3>
+          <p>Start shopping to see your orders here</p>
+          <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="showPage('marketplace')">
+            <i class="fas fa-store"></i> Browse Marketplace
+          </button>
+        </div>`}
+    </div>
 
     <!-- My Wishlist (moved from its own tab into the overview) -->
     <div class="card" style="margin-top:18px">
@@ -115,6 +121,29 @@ async function renderBuyerDashboard() {
       <div class="card-body" id="wishlist-container" style="padding:14px">
         <!-- Rendered dynamically -->
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Orders Tab ── -->
+<div class="tab-content ${activeTabId === 'buyer-orders' ? 'active' : ''}" id="buyer-orders">
+  <div class="dashboard-wrap">
+    <div class="tab-nav" style="margin-bottom:14px;display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">
+      <button class="tab-btn active" onclick="filterBuyerOrders('all', this)">All</button>
+      <button class="tab-btn" onclick="filterBuyerOrders('pending', this)">Processing</button>
+      <button class="tab-btn" onclick="filterBuyerOrders('on_delivery', this)">On Delivery</button>
+      <button class="tab-btn" onclick="filterBuyerOrders('delivered', this)">Delivered</button>
+    </div>
+    <div id="buyer-orders-list">
+      ${myPackages.length ? myPackages.map(pkg => buyerPackageCard(pkg)).join('') : `
+      <div class="empty-state" style="padding:40px 20px">
+        <i class="fas fa-shopping-bag"></i>
+        <h3>No orders yet</h3>
+        <p>Start shopping to see your orders here</p>
+        <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="showPage('marketplace')">
+          <i class="fas fa-store"></i> Browse Marketplace
+        </button>
+      </div>`}
     </div>
   </div>
 </div>
@@ -424,6 +453,7 @@ window.addNewAddress = function(form) {
 
 window.deleteAddress = function(index) {
   if (!confirm('Delete this address?')) return;
+  if (!App.currentUser.addresses) App.currentUser.addresses = [];
   App.currentUser.addresses.splice(index, 1);
   saveSessions();
   apiPatch('users', App.currentUser.id, { addresses: App.currentUser.addresses });
@@ -435,7 +465,7 @@ window.renderBuyerReviews = async function() {
   const container = document.getElementById('buyer-reviews-container');
   if (!container) return;
   const res = await apiGet('reviews', `search=${App.currentUser.id}&limit=50`);
-  const myReviews = (res?.data || []).filter(r => r.customer_id === App.currentUser.id);
+  const myReviews = (res?.data || []).filter(r => r.buyer_id === App.currentUser.id);
   if (!myReviews.length) {
     container.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:.85rem">You have not submitted any reviews yet.</p>';
     return;
@@ -443,10 +473,10 @@ window.renderBuyerReviews = async function() {
   container.innerHTML = myReviews.map(r => `
     <div style="border-bottom:1px solid var(--border);padding:10px 0">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <strong>${escHtml(r.target_id)}</strong>
+        <strong>${escHtml(r.product_id || r.store_id || '—')}</strong>
         <div>${renderStars(r.rating)}</div>
       </div>
-      <p style="font-size:.82rem;color:var(--text-light);margin-top:4px">${escHtml(r.review)}</p>
+      <p style="font-size:.82rem;color:var(--text-light);margin-top:4px">${escHtml(r.comment || '')}</p>
     </div>
   `).join('');
 };

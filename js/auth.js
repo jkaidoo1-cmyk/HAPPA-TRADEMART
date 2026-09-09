@@ -725,7 +725,7 @@ async function doRegister(e) {
 
   if (!created || !created.id) {
 
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = `<i class="fas fa-user-plus"></i> Create ${authRole === 'vendor' ? 'Vendor' : 'Buyer'} Account`; }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = `<i class="fas fa-user-plus"></i> Create ${authRole === 'vendor' ? 'Vendor' : authRole === 'rendor' ? 'Rendor' : 'Buyer'} Account`; }
 
     showToast('Registration failed. Please try again.', 'error');
 
@@ -882,6 +882,19 @@ async function doRegister(e) {
 
 
   App.currentUser = created;
+  if (created && created.token) {
+    setAuthToken(created.token);
+  } else {
+    // Acquire session token immediately
+    try {
+      const authRes = await apiFetch('auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass })
+      });
+      if (authRes && authRes.token) setAuthToken(authRes.token);
+    } catch (_) {}
+  }
   saveSessions();
   if (typeof startDashboardSyncPolling === 'function') startDashboardSyncPolling();
   if (typeof startNotifPolling === 'function') startNotifPolling();
@@ -908,7 +921,7 @@ async function doRegister(e) {
 
   // Vendors need OTP first, then show pending-approval screen
 
-  // Buyers go straight through OTP ΓåÆ dashboard
+  // Buyers go straight through OTP → dashboard
 
   showOTPModal(created);
 
@@ -967,19 +980,22 @@ function showOTPModal(user) {
 
 
 async function verifyOTP(userId, expectedOtp) {
-
   const entered = document.getElementById('otp-input')?.value.trim();
-
   if (entered !== expectedOtp) { showToast('Incorrect OTP. Please try again.', 'error'); return; }
 
-  await apiPatch('users', userId, { is_verified: true });
+  try {
+    await apiFetch('auth/verify-phone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+  } catch (err) {
+    console.warn('[VerifyOTP] Server verify-phone fallback:', err);
+  }
 
   if (App.currentUser) App.currentUser.is_verified = true;
-
   saveSessions();
-
   closeModalForce();
-
   showToast('Phone verified successfully! ✅', 'success');
 
 

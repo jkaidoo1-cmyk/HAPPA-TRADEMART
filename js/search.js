@@ -154,13 +154,13 @@ async function showSearchSuggestions(q) {
       <i class="fas fa-search"></i>
       <span style="color:var(--text-muted)">No results for "<strong>${escHtml(q)}</strong>"</span>
     </div>
-    <div class="search-suggestion" onclick="performSearch('${escHtml(q)}')">
+    <div class="search-suggestion" onclick="performSearch(document.getElementById('nav-search-input')?.value || '')">
       <i class="fas fa-arrow-right" style="color:var(--primary)"></i>
       <span style="color:var(--primary);font-weight:600">Search all products for "${escHtml(q)}"</span>
     </div>`;
   } else {
     html += `
-    <div class="search-suggestion" onclick="performSearch('${escHtml(q)}');hideSearchDropdown()" style="border-top:1px solid var(--border)">
+    <div class="search-suggestion" onclick="performSearch(document.getElementById('nav-search-input')?.value || '');hideSearchDropdown()" style="border-top:1px solid var(--border)">
       <i class="fas fa-search" style="color:var(--primary)"></i>
       <span style="color:var(--primary);font-weight:600">See all results for "${escHtml(q)}"</span>
     </div>`;

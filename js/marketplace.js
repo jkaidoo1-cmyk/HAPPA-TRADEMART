@@ -1007,13 +1007,19 @@ async function renderStoreDetail(id) {
                style="width:64px;height:64px;border-radius:12px;border:3px solid #fff;object-fit:cover;box-shadow:var(--shadow-sm)"
                onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
           <div style="flex:1;padding-top:25px">
-            <h1 style="font-size:1.1rem;font-weight:800;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text)">
-              ${escHtml(storeName)} ${verifiedBadge}
-            </h1>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <h1 style="font-size:1.1rem;font-weight:800;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text)">
+                ${escHtml(storeName)} ${verifiedBadge}
+              </h1>
+              <button id="follow-store-btn" class="btn btn-sm ${followed ? 'btn-outline' : 'store-theme-btn'}" onclick="toggleFollowStore('${id}')" style="padding:4px 12px;font-size:.75rem">
+                <i class="fas ${followed ? 'fa-check' : 'fa-plus'}"></i> ${followed ? 'Following' : 'Follow Store'}
+              </button>
+            </div>
             <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
               ${renderStars(s.avg_rating || 0)}
               <span style="font-size:.75rem;color:var(--text-muted)">${(s.avg_rating || 0).toFixed(1)} (${s.review_count || 0})</span>
               <span style="font-size:.75rem;color:var(--text-muted)"><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</span>
+              <span id="followers-count" style="font-size:.75rem;color:var(--text-muted);font-weight:600">· ${s.followers || 0} followers</span>
             </div>
           </div>
         </div>

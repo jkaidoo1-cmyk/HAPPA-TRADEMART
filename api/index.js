@@ -702,6 +702,35 @@ app.get('/api/auth/verify', (req, res) => {
   return res.json({ valid: true, userId: session.userId, role: session.role });
 });
 
+// POST /api/auth/verify-phone
+app.post('/api/auth/verify-phone', async (req, res) => {
+  try {
+    const session = getSessionUser(req);
+    const targetId = (session && session.userId) || (req.body && req.body.userId);
+    if (!targetId) return res.status(400).json({ error: 'User ID is required.' });
+
+    dataStore.ensureTable('users');
+    const store = dataStore.getStore();
+    const uIdx = (store.users || []).findIndex(u => String(u.id) === String(targetId));
+    if (uIdx !== -1) {
+      store.users[uIdx].is_verified = true;
+      store.users[uIdx].updated_at = new Date().toISOString();
+      dataStore.saveToFile();
+    }
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('users').update({ is_verified: true, updated_at: new Date().toISOString() }).eq('id', String(targetId));
+      } catch (e) {
+        console.warn('[VerifyPhone] Supabase update failed:', e.message);
+      }
+    }
+    return res.json({ success: true, is_verified: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/clean-temp-database-records', requireAdmin, async (req, res) => {
   try {
     auditLog({ actorId: req.userSession && req.userSession.userId, actorRole: req.userSession && req.userSession.role, action: 'clean_temp_records', detail: 'bulk purge of temp store/user records' });
@@ -889,12 +918,33 @@ app.post('/api/push/send', async (req, res) => {
     if (!user_id || !title) return res.status(400).json({ error: 'Missing user_id or title' });
     const supabase = getSupabase();
     let subs = [];
-    if (supabase) {
-      const { data } = await supabase.from('push_subscriptions').select('*').eq('user_id', String(user_id));
-      subs = data || [];
-    } else {
+    if (String(user_id) === 'admin') {
+      let adminIds = [];
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('users').select('id').eq('role', 'admin');
+          adminIds = (data || []).map(u => String(u.id));
+        } catch (e) {}
+      }
       const ds = require('./data-store');
-      subs = (ds.get('push_subscriptions') || []).filter(s => String(s.user_id) === String(user_id));
+      const localAdmins = (ds.get('users') || []).filter(u => u.role === 'admin').map(u => String(u.id));
+      adminIds = [...new Set([...adminIds, ...localAdmins])];
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('push_subscriptions').select('*').in('user_id', adminIds);
+          subs = data || [];
+        } catch (e) {}
+      }
+      const localSubs = (ds.get('push_subscriptions') || []).filter(s => adminIds.includes(String(s.user_id)));
+      subs = [...subs, ...localSubs];
+    } else {
+      if (supabase) {
+        const { data } = await supabase.from('push_subscriptions').select('*').eq('user_id', String(user_id));
+        subs = data || [];
+      } else {
+        const ds = require('./data-store');
+        subs = (ds.get('push_subscriptions') || []).filter(s => String(s.user_id) === String(user_id));
+      }
     }
     if (!subs.length) return res.json({ sent: 0, message: 'No subscriptions for this user' });
     const payload = JSON.stringify({ title, body: body || '', url: url || './' });
@@ -1672,7 +1722,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         secondary_color: storeUpdates.secondary_color,
         tertiary_color: storeUpdates.tertiary_color,
         business_hours: storeUpdates.business_hours,
-        shipping_policy: storeUpdates.return_policy,
+        shipping_policy: body.shipping_policy || storeUpdates.return_policy,
         return_policy: storeUpdates.return_policy,
         facebook_url: storeUpdates.facebook,
         instagram_url: storeUpdates.instagram,
@@ -1703,7 +1753,11 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         const fileSaved = dataStore.saveToFile();
         
         console.log(`[POST] Saved ${table}/${record.id} to memory${fileSaved ? ' + db.json' : ' (file save failed, continuing with memory)'}`);
-        return res.status(201).json(serializeRecord(record));
+        const out = serializeRecord(record);
+        if (table === 'users' && typeof createSessionToken === 'function') {
+          out.token = createSessionToken(out.id, out.role);
+        }
+        return res.status(201).json(out);
       } catch (localErr) {
         console.error('[POST] Local store error:', table, localErr);
         return res.status(500).json({ error: localErr.message, backend: 'memory-cache' });
@@ -1724,14 +1778,22 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         store[table].push(record);
         const fileSaved = dataStore.saveToFile();
         console.log(`[POST] Fallback: saved ${table}/${record.id} to local store${fileSaved ? ' + db.json' : ' (memory only)'}`);
-        return res.status(201).json(serializeRecord(record));
+        const out = serializeRecord(record);
+        if (table === 'users' && typeof createSessionToken === 'function') {
+          out.token = createSessionToken(out.id, out.role);
+        }
+        return res.status(201).json(out);
       } catch (localErr) {
         console.error('[POST] Local fallback failed:', table, localErr);
         return res.status(500).json({ error: localErr.message, backend: 'supabase' });
       }
     }
     console.log(`[POST] Saved ${table}/${data.id} to Supabase`);
-    res.status(201).json(serializeRecord(data));
+    const out = serializeRecord(data);
+    if (table === 'users' && typeof createSessionToken === 'function') {
+      out.token = createSessionToken(out.id, out.role);
+    }
+    res.status(201).json(out);
   } catch (err) {
     console.error('[POST] Unexpected error:', err);
     res.status(500).json({ error: err.message, stack: err.stack });

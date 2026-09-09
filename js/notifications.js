@@ -42,8 +42,15 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
     created_at: new Date().toISOString()
   };
 
-  // Only update local notifications list and badge if target userId matches current user
-  if (App.currentUser && String(App.currentUser.id) === targetId) {
+  // Only update local notifications list and badge if target userId matches current user (or is admin/broadcast)
+  const isAdmin = App.currentUser?.role === 'admin';
+  const isForMe = App.currentUser && (
+    String(App.currentUser.id) === targetId ||
+    targetId === 'all' ||
+    targetId === 'global' ||
+    (isAdmin && targetId === 'admin')
+  );
+  if (isForMe) {
     App.notifications.unshift(notif);
     if (App.notifications.length > 100) App.notifications.pop();
     saveNotifs();
@@ -54,7 +61,7 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
   // notification was sent to the person currently signed in.
   try {
     await apiPost('notifications', notif);
-    if (App.currentUser && String(App.currentUser.id) === targetId && typeof fetchServerNotifications === 'function') {
+    if (isForMe && typeof fetchServerNotifications === 'function') {
       await fetchServerNotifications();
     }
   } catch (err) {
@@ -77,8 +84,14 @@ function renderNotifBadge() {
     badge.classList.add('hidden');
     return;
   }
+  const isAdmin = App.currentUser?.role === 'admin';
   // Count unread only for current user
-  const unread = App.notifications.filter(n => !n.is_read && (String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global')).length;
+  const unread = App.notifications.filter(n => !n.is_read && (
+    String(n.user_id) === uid ||
+    n.user_id === 'all' ||
+    n.user_id === 'global' ||
+    (isAdmin && n.user_id === 'admin')
+  )).length;
   if (unread > 0) {
     badge.textContent = unread > 99 ? '99+' : unread;
     badge.classList.remove('hidden');
@@ -105,6 +118,7 @@ async function fetchServerNotifications(bustCache = false) {
   if (isValid === false) return;
 
   const uid = String(App.currentUser.id);
+  const isAdmin = App.currentUser?.role === 'admin';
   try {
     let res;
     if (bustCache && typeof apiFetch === 'function') {
@@ -118,10 +132,10 @@ async function fetchServerNotifications(bustCache = false) {
     if (!res) return;
     const all = res?.data || (Array.isArray(res) ? res : []);
     
-    // Filter to current user OR global announcements
+    // Filter to current user OR global announcements OR admin notifications
     const serverNotifs = all.filter(n => {
       const nUid = String(n.user_id || '');
-      return nUid === uid || nUid === 'all' || nUid === 'global';
+      return nUid === uid || nUid === 'all' || nUid === 'global' || (isAdmin && nUid === 'admin');
     });
 
     const seen = new Set();
@@ -223,8 +237,9 @@ async function renderNotifications() {
   await fetchServerNotifications();
 
   const uid = String(App.currentUser.id);
+  const isAdmin = App.currentUser?.role === 'admin';
   const userNotifs = App.notifications
-    .filter(n => String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global')
+    .filter(n => String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global' || (isAdmin && n.user_id === 'admin'))
     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
   const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window;
@@ -271,7 +286,8 @@ function renderNotificationsLocal() {
       </div>`;
     return;
   }
-  let userNotifs = App.notifications.filter(n => String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global');
+  const isAdmin = App.currentUser?.role === 'admin';
+  let userNotifs = App.notifications.filter(n => String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global' || (isAdmin && n.user_id === 'admin'));
   userNotifs = userNotifs.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
   c.innerHTML = _buildNotifListHTML(userNotifs);
@@ -395,10 +411,11 @@ async function markNotifRead(notifId) {
     renderNotifBadge();
 
     // Patch server in background. Only personal notifications (user_id ===
-    // my id) can be patched server-side — global announcements belong to no
+    // my id or admin notifications for admin) can be patched server-side — global announcements belong to no
     // single user, so their read state is kept locally per device.
     const uid = App.currentUser?.id ? String(App.currentUser.id) : '';
-    if (notifId && uid && String(n.user_id || '') === uid) {
+    const isAdmin = App.currentUser?.role === 'admin';
+    if (notifId && uid && (String(n.user_id || '') === uid || (isAdmin && n.user_id === 'admin'))) {
       try {
         await apiPatch('notifications', notifId, { is_read: true });
       } catch (e) {
@@ -417,8 +434,9 @@ async function markNotifRead(notifId) {
 
 async function markAllRead() {
   const uid = App.currentUser?.id ? String(App.currentUser.id) : null;
+  const isAdmin = App.currentUser?.role === 'admin';
   App.notifications.forEach(n => {
-    if (!uid || String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global') n.is_read = true;
+    if (!uid || String(n.user_id) === uid || n.user_id === 'all' || n.user_id === 'global' || (isAdmin && n.user_id === 'admin')) n.is_read = true;
   });
   saveNotifs();
   renderNotifBadge();
@@ -432,9 +450,8 @@ async function markAllRead() {
         ? await apiFetch('notifications?limit=200')
         : await apiGet('notifications', `limit=200`);
       const all = res?.data || (Array.isArray(res) ? res : []);
-      // Only patch rows the user owns — global announcement rows can't be
-      // patched by non-admins (they belong to no single user).
-      const unread = all.filter(n => String(n.user_id) === uid && !n.is_read);
+      // Only patch rows the user owns or admin rows for admin
+      const unread = all.filter(n => (String(n.user_id) === uid || (isAdmin && n.user_id === 'admin')) && !n.is_read);
       await Promise.all(unread.map(n => apiPatch('notifications', n.id, { is_read: true })));
     } catch(e) { /* silent */ }
   }
@@ -444,8 +461,13 @@ async function clearAllNotifications() {
   if (!confirm('Clear all notifications? This cannot be undone.')) return;
 
   const uid = App.currentUser?.id ? String(App.currentUser.id) : null;
+  const isAdmin = App.currentUser?.role === 'admin';
   if (uid) {
-    App.notifications = App.notifications.filter(n => n.user_id && String(n.user_id) !== uid && n.user_id !== 'all' && n.user_id !== 'global');
+    App.notifications = App.notifications.filter(n => {
+      const u = String(n.user_id || '');
+      if (u === uid || u === 'all' || u === 'global' || (isAdmin && u === 'admin')) return false;
+      return true;
+    });
   } else {
     App.notifications = [];
   }
@@ -616,7 +638,8 @@ async function subscribeToPush() {
     });
     // Persist explicit preference on the user record so the choice survives reload
     try {
-      await apiPatch('users/' + encodeURIComponent(App.currentUser?.id || ''), { push_enabled: true });
+      const uid = App.currentUser?.id || '';
+      await apiPatch('users', uid, { push_enabled: true });
       if (App.currentUser) App.currentUser.push_enabled = true;
     } catch(e) { /* non-fatal — push still works for this session */ }
     showToast('Push notifications enabled 🔔', 'success');
@@ -639,7 +662,8 @@ async function unsubscribeFromPush() {
     }
     // Persist explicit preference on the user record so the choice survives reload
     try {
-      await apiPatch('users/' + encodeURIComponent(App.currentUser?.id || ''), { push_enabled: false });
+      const uid = App.currentUser?.id || '';
+      await apiPatch('users', uid, { push_enabled: false });
       if (App.currentUser) App.currentUser.push_enabled = false;
     } catch(e) { /* non-fatal */ }
     showToast('Push notifications disabled', 'info');

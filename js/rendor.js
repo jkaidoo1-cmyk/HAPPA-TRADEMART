@@ -721,7 +721,7 @@ function renderRendorVerify() {
       <div>
         <div style="font-weight:700;font-size:.875rem">Phone OTP Verification</div>
         <div style="font-size:.78rem;color:var(--text-muted)">${u.is_verified?'✅ Verified':'Pending — verify your phone number'}</div>
-        ${!u.is_verified ? `<button class="btn btn-warning btn-sm" style="margin-top:6px" onclick="resendOTP()">Resend OTP</button>` : ''}
+        ${!u.is_verified ? `<button class="btn btn-warning btn-sm" style="margin-top:6px" onclick="startRendorPhoneVerify()">Resend OTP</button>` : ''}
       </div>
     </div>
     <div class="verify-step ${u.id_verified?'done':(u.id_image?'done':'pending-step')}">

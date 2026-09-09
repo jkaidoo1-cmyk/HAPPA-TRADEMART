@@ -921,6 +921,13 @@ async function runPageInit(pageId) {
       case 'store-detail':     await renderStoreDetail(App.currentStoreId); break;
       case 'storefront':       await renderStorefront(App.currentStoreId); break;
       case 'store-admin':      if (typeof window.renderStorefrontAdminPortalPage === 'function') await window.renderStorefrontAdminPortalPage(App.currentStoreId); break;
+      case 'search':
+        const sInp = document.getElementById('nav-search-input');
+        if (sInp && sInp.value.trim() && typeof performSearch === 'function') {
+          await performSearch(sInp.value.trim());
+        }
+        break;
+      case 'order-confirmed':  break;
     }
     // Mark as loaded successfully
     App.loadedPages[cacheKey] = true;
@@ -1096,9 +1103,10 @@ function showPage(pageId, entityId = null) {
 function goBack() {
   const isStorefront = document.body.classList.contains('is-storefront-view') || App.currentPage === 'storefront';
   if (isStorefront) {
-    const sfModal = document.getElementById('sf-product-modal') || document.querySelector('.storefront-modal.active');
+    const sfModal = document.getElementById('storefront-product-modal') || document.getElementById('sf-product-modal') || document.querySelector('.storefront-modal.active');
     if (sfModal && sfModal.style.display !== 'none') {
-      sfModal.style.display = 'none';
+      if (typeof sfModal.remove === 'function') sfModal.remove();
+      else sfModal.style.display = 'none';
       return;
     }
     if (window.currentStorefrontTab && window.currentStorefrontTab !== 'home' && App.currentStoreId) {
@@ -1380,10 +1388,10 @@ function updateNavForUser() {
     topNav.style.display = isStorefront ? 'none' : '';
   }
 
-  // Cart button in top nav — only visible to buyers (or preview mode as buyer)
+  // Cart button in top nav — visible to buyers and guests
   const cartBtn   = document.querySelector('.nav-icon-btn[onclick*="cart"]');
   const cartBnav  = document.getElementById('bnav-cart');
-  const isBuyer   = role === 'buyer' || (isPreview && role === 'buyer');
+  const isBuyer   = role === 'buyer' || role === 'guest' || !App.currentUser || (isPreview && role === 'buyer');
 
   if (cartBtn)  cartBtn.style.display  = (isBuyer && !isStorefront) ? '' : 'none';
   if (cartBnav) cartBnav.style.display = (isBuyer && !isStorefront) ? '' : 'none';

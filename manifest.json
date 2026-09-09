@@ -3,7 +3,7 @@
   "short_name": "HAPPAMART",
   "description": "Ghana's multi-vendor marketplace — shop, sell and connect.",
   "start_url": "./index.html",
-  "scope": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "capture_links": "none",
   "handle_links": "none",

@@ -751,6 +751,34 @@ app.get('/api/auth/verify', (req, res) => {
   return res.json({ valid: true, userId: session.userId, role: session.role });
 });
 
+app.post('/api/auth/verify-phone', async (req, res) => {
+  try {
+    const session = getSessionUser(req);
+    const targetId = (session && session.userId) || (req.body && req.body.userId);
+    if (!targetId) return res.status(400).json({ error: 'User ID is required.' });
+
+    const db = loadDb();
+    const users = getTable(db, 'users');
+    const uIdx = users.findIndex(u => String(u.id) === String(targetId));
+    if (uIdx !== -1) {
+      users[uIdx].is_verified = true;
+      users[uIdx].updated_at = new Date().toISOString();
+      saveDb(db);
+    }
+    if (supabase) {
+      try {
+        await supabase.from('users').update({ is_verified: true, updated_at: new Date().toISOString() }).eq('id', String(targetId));
+      } catch (e) {
+        console.warn('[VerifyPhone] Supabase update failed:', e.message);
+      }
+    }
+    invalidateApiCache('users');
+    return res.json({ success: true, is_verified: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Push Notification API Routes ───────────────────────────
 // (Registered BEFORE the /api/:table catch-all — otherwise Express would treat
 // "push" as a table name and hijack /api/push/*, which was the root cause of
@@ -835,7 +863,13 @@ app.post('/api/push/send', async (req, res) => {
   const { user_id, title, body, url } = req.body || {};
   if (!user_id) return res.status(400).json({ error: 'user_id required.' });
   const db = loadDb();
-  const subs = (getTable(db, 'push_subscriptions') || []).filter(s => String(s.user_id) === String(user_id));
+  let subs = [];
+  if (String(user_id) === 'admin') {
+    const adminIds = (getTable(db, 'users') || []).filter(u => u.role === 'admin').map(u => String(u.id));
+    subs = (getTable(db, 'push_subscriptions') || []).filter(s => adminIds.includes(String(s.user_id)));
+  } else {
+    subs = (getTable(db, 'push_subscriptions') || []).filter(s => String(s.user_id) === String(user_id));
+  }
   const payload = JSON.stringify({ title: title || 'HAPPA TRADEMART', body: body || '', url: url || '/' });
 
   const results = await Promise.all(subs.map(async sub => {
@@ -1484,13 +1518,23 @@ app.post('/api/:table', async (req, res) => {
       const supaRecord = serializeRecord(body);
       const dbRecord = prepareRecordForDb(table, supaRecord);
       const { data, error } = await withSupaTimeout(supabase.from(table).insert(dbRecord).select().single(), 2000);
-      if (!error && data) return res.status(201).json(serializeRecord(data));
+      if (!error && data) {
+        const out = serializeRecord(data);
+        if (table === 'users' && typeof createSessionToken === 'function') {
+          out.token = createSessionToken(out.id, out.role);
+        }
+        return res.status(201).json(out);
+      }
     } catch (err) {
       console.warn(`[Supabase] ${table} insert fallback to db.json:`, err.message);
     }
   }
 
-  res.status(201).json(record);
+  const out = { ...record };
+  if (table === 'users' && typeof createSessionToken === 'function') {
+    out.token = createSessionToken(out.id, out.role);
+  }
+  res.status(201).json(out);
 });
 
 app.put('/api/:table/:id', async (req, res) => {
