@@ -335,42 +335,19 @@ async function saveProfileSettings(userId) {
   const phone  = document.getElementById('set-phone')?.value.trim();
   const loc    = document.getElementById('set-loc')?.value;
 
-  // WhatsApp order-notification settings (vendors only — the inputs only exist
-  // on the settings page when the user is a vendor/seller).
-  const waPhoneEl   = document.getElementById('set-wa-phone');
-  const waEnabledEl = document.getElementById('set-wa-enabled');
-  const waPhone    = waPhoneEl ? waPhoneEl.value.trim() : '';
-  const waEnabled  = waEnabledEl ? waEnabledEl.checked : false;
-
-  // Validation: WhatsApp number must start with + and contain only digits;
-  // enabling notifications requires a number.
-  if (waEnabled && waPhone && !/^\+[0-9]{7,15}$/.test(waPhone)) {
-    showToast('WhatsApp number must start with + and contain only digits (e.g. +23320xxxxxxx)', 'error', 4000);
-    setBtn('idle');
-    return;
-  }
-  if (waEnabled && !waPhone) {
-    showToast('Enter your WhatsApp number to enable order notifications', 'warning');
-    setBtn('idle');
-    return;
-  }
-
   // Snapshot for rollback
   const u = App.currentUser;
-  const snap = u ? { name: u.name, phone: u.phone, location: u.location, whatsapp_phone: u.whatsapp_phone, receive_order_notifications_on_whatsapp: u.receive_order_notifications_on_whatsapp } : null;
+  const snap = u ? { name: u.name, phone: u.phone, location: u.location } : null;
 
   // Optimistic local update
   if (u) {
     u.name = name; u.phone = phone; u.location = loc;
-    if (waPhoneEl) { u.whatsapp_phone = waPhone; u.receive_order_notifications_on_whatsapp = waEnabled ? true : false; }
     saveSessions();
     OptimisticUI.pulse(btn);
   }
 
   try {
     const patch = { name, phone, location: loc };
-    if (waPhoneEl) patch.whatsapp_phone = waPhone;
-    if (waPhoneEl) patch.receive_order_notifications_on_whatsapp = waEnabled ? true : false;
     await apiPatch('users', userId, patch);
     setBtn('saved');
     showToast('Profile updated ✅', 'success', 2000);
