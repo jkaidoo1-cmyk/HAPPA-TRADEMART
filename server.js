@@ -32,6 +32,16 @@ if (fs.existsSync(dotenvPath)) {
   });
 }
 
+// Warn if SESSION_SECRET is not set — in-memory sessions are per-process
+if (!String(process.env.SESSION_SECRET || '').trim()) {
+  console.warn('\n[Session] WARNING: SESSION_SECRET is not set.');
+  console.warn('[Session] The server will use in-memory session tokens which are lost on restart or across instances.');
+  console.warn('[Session] To fix: create a .env file with a long secret or set the environment variable in your host (Vercel/production)');
+  console.warn("[Session] Example (.env): SESSION_SECRET=replace_with_a_long_random_string_here\n");
+  console.warn('[Session] To generate a secure secret locally run:');
+  console.warn("  node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"\n");
+}
+
 const PORT = process.env.PORT || 9000;
 const DB_FILE = path.join(__dirname, 'db.json');
 const app = express();
@@ -837,7 +847,8 @@ app.post('/api/push/subscribe', async (req, res) => {
   db.push_subscriptions = db.push_subscriptions.filter(s => s.endpoint !== endpoint);
   db.push_subscriptions.push(rec);
   saveDb(db);
-  if (supabase) {
+
+  if (supabase) {
     try {
       await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
       await supabase.from('push_subscriptions').insert(rec);

@@ -18,6 +18,29 @@
    ```
 3. Open `http://localhost:9000` in your browser.
 
+### Session secret (important)
+
+This app uses HMAC-signed session tokens when `SESSION_SECRET` is set. Without it the server falls back to per-process in-memory sessions which are lost on restart or across instances (you'll be logged out unexpectedly).
+
+To run locally with a persistent, stateless token, create a `.env` file at the project root copying `.env.example` and set a long secret. You can generate one with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+Then add the line to `.env`:
+
+```
+SESSION_SECRET=the_generated_secret_here
+```
+
+On Windows PowerShell you can start the server with an env var inline:
+
+```powershell
+#$env:SESSION_SECRET='your_secret_here'
+node server.js
+```
+
 ### Option 2: Python backend
 
 If Node is unavailable, start the Python backend instead:

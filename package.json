@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "gen-secret": "node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
