@@ -146,7 +146,7 @@ async function submitDeposit() {
   if (method === 'mobile_money') {
     const network = document.getElementById('dep-network')?.value;
     const num     = document.getElementById('dep-momo-num')?.value.trim();
-    if (!num) { showToast('Enter your MoMo number', 'warning'); return; }
+    if (!num) { showToast('Enter your MoMo number', 'warning'); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Deposit'; } return; }
     await processDeposit(amount, method, network, num, `MOMO${Date.now()}`);
   } else {
     // Card – in real app Paystack popup would appear

@@ -69,10 +69,13 @@ async function renderRendorDashboard() {
   // ── Subscription status ───────────────────────────────────
   // rendor_sub_status: 'active' | 'expired' | null
   // Refresh user data from server so the dashboard always shows current subscription status.
+  // CRITICAL: preserve subscription fields locally — the server may strip them in some
+  // response paths, which causes "No active subscription" to flash after payment.
+  const subFields = { rendor_sub_status: u.rendor_sub_status, rendor_sub_plan: u.rendor_sub_plan, rendor_sub_expiry: u.rendor_sub_expiry };
   let freshUser = null;
   try { freshUser = await apiFetch('users/' + u.id); } catch (_) {}
   if (freshUser && !freshUser.error) {
-    Object.assign(u, freshUser);
+    Object.assign(u, freshUser, subFields);
     if (typeof saveSessions === 'function') saveSessions();
   }
   const subStatus  = u.rendor_sub_status || null;
@@ -383,9 +386,11 @@ async function renderRendorSubscription() {
   const el = document.getElementById('rendor-sub-content');
   if (!el) return;
   // Re-fetch fresh user data so subscription status is current.
+  // CRITICAL: preserve subscription fields locally — the server may strip them in some response paths.
+  const subFields = { rendor_sub_status: App.currentUser.rendor_sub_status, rendor_sub_plan: App.currentUser.rendor_sub_plan, rendor_sub_expiry: App.currentUser.rendor_sub_expiry };
   const fresh = await apiGet('users/' + App.currentUser.id).catch(() => null);
   if (fresh && !fresh.error) {
-    Object.assign(App.currentUser, fresh);
+    Object.assign(App.currentUser, fresh, subFields);
     if (typeof saveSessions === 'function') saveSessions();
   }
   const u = App.currentUser;
