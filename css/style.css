@@ -216,6 +216,9 @@ html.is-storefront-root body #main-content {
     z-index: 999 !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
   }
+  #nav-search-container.mobile-active ~ .nav-actions #top-nav-search-trigger {
+    opacity: 0; pointer-events: none;
+  }
   #nav-search-container.mobile-active input {
     background: var(--bg) !important;
   }

@@ -1723,10 +1723,14 @@ async function saveRendorCustomPrice(userId) {
     showToast('Enter a valid price or leave blank for global default.', 'warning');
     return;
   }
-  await apiPatch('users', userId, { rendor_sub_price_override: price });
+  const result = await apiPatch('users', userId, { rendor_sub_price_override: price });
   const u = (App.allUsers || []).find(u => u.id === userId);
   if (u) u.rendor_sub_price_override = price;
-  showToast(price !== null ? `Custom price set: GHS ${price.toFixed(2)}` : 'Reverted to global price', 'success');
+  if (!result && window.lastApiError) {
+    showToast('Server could not save the override — it will reset on page reload.', 'warning');
+  } else {
+    showToast(price !== null ? `Custom price set: GHS ${price.toFixed(2)}` : 'Reverted to global price', 'success');
+  }
   adminOpenRendorProfile(userId);
 }
 

@@ -441,7 +441,7 @@ async function renderRendorSubscription() {
   <div style="font-size:2rem;font-weight:900;color:#4c1d95;margin:8px 0 4px">GHS ${price.toFixed(2)}</div>
   <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:14px">GHS ${(price/duration).toFixed(2)}/month</div>
   <button class="btn" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.85rem;padding:10px;font-weight:700"
-          onclick="requestRendorSubscription(${price},${duration})">
+          onclick="guardClick(this, () => requestRendorSubscription(${price},${duration}))">
     <i class="fas fa-${subActive ? 'sync' : 'star'}"></i> ${subActive ? '🔄 Renew Now' : '⭐ Subscribe Now'}
   </button>
 </div>
@@ -482,7 +482,7 @@ async function requestRendorSubscription(total, months) {
   </div>
   <button class="btn btn-block" id="sub-confirm-btn"
           style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed"
-          onclick="confirmRendorSubscription(${total},${months})">
+          onclick="guardClick(this, () => confirmRendorSubscription(${total},${months}))">
     <i class="fas fa-lock"></i> Confirm &amp; Pay GHS ${total.toFixed(2)}
   </button>
   <button class="btn btn-ghost btn-block" onclick="closeModalForce()" style="margin-top:6px;color:var(--text-muted)">
@@ -535,10 +535,13 @@ async function confirmRendorSubscription(total, months) {
   }
 
   // Re-fetch full user data from server to sync derived fields (rendor_sub_active, etc.).
-  // Force a fresh fetch (not the cached promise) since the subscription just changed.
+  // CRITICAL: do NOT let the re-fetch overwrite the subscription fields we just set —
+  // the server's read policy strips rendor_sub_status/expiry from responses, which
+  // causes "No Active Subscription" to flash immediately after payment.
   const freshUser = await apiFetch('users/' + u.id).catch(() => null);
   if (freshUser && !freshUser.error) {
-    Object.assign(App.currentUser, freshUser);
+    const subFields = { rendor_sub_status: App.currentUser.rendor_sub_status, rendor_sub_plan: App.currentUser.rendor_sub_plan, rendor_sub_expiry: App.currentUser.rendor_sub_expiry };
+    Object.assign(App.currentUser, freshUser, subFields);
     if (typeof saveSessions === 'function') saveSessions();
   }
   // Also clear the users cache so any other pending re-fetches get fresh data.

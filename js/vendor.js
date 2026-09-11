@@ -1572,7 +1572,7 @@ async function showEditProductModal(productId) {
     </label>
     <p style="font-size:.72rem;color:#166534;margin:6px 0 0 24px;line-height:1.5">When enabled, buyers can type a note (e.g. color, size) when ordering this item.</p>
   </div>
-  <button class="btn btn-primary btn-block" onclick="saveProductEdit('${productId}')">
+  <button class="btn btn-primary btn-block" onclick="guardClick(this, () => saveProductEdit('${productId}'))">
     <i class="fas fa-save"></i> Save Changes
   </button>
 </div>`);
@@ -2862,7 +2862,7 @@ window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthl
 
         <div class="form-group" style="margin-bottom:16px">
           <label class="form-label" style="font-weight:700;font-size:.85rem">Select Subscription Duration (Months)</label>
-          <select class="form-control form-select" id="sf-sub-months-sel" onchange="
+          <select class="form-control form-select" id="sf-sub-months-sel" data-plan="${planKey}" onchange="
             const m = parseInt(this.value);
             const total = m * ${monthlyPrice};
             document.getElementById('sf-sub-total-display').textContent = 'GH₵ ' + total.toFixed(2);
@@ -3750,22 +3750,26 @@ window.updateSubModalTotal = function(storeId, storeName) {
 };
 
 window.confirmStorefrontSubscription = async function(storeId) {
+  // Support both modal formats: the full modal (#storefront-sub-modal) and the
+  // simple modal (#modal-sf-sub-pay) that showVendorStorefrontSubscriptionModal creates.
   const selectedPlan = document.querySelector('[name="sub-plan"]:checked');
-  const payMethod = document.querySelector('[name="sub-pay"]:checked');
-  const durationEl = document.getElementById('sub-duration');
-  if (!selectedPlan || !durationEl) return;
-  const payBtn = document.querySelector('#storefront-sub-modal button[onclick*="confirmStorefrontSubscription"]');
+  const payMethod = document.querySelector('[name="sub-pay"]:checked') || document.querySelector('[name="sf-sub-pay"]:checked');
+  const durationEl = document.getElementById('sub-duration') || document.getElementById('sf-sub-months-sel');
+  if (!durationEl) { showToast('No subscription modal open.', 'warning'); return; }
+  // The simple modal has no plan selector — the plan is pre-selected by the caller.
+  const planKey = selectedPlan ? selectedPlan.value : (durationEl.dataset.plan || 'growth');
+  const plan = STOREFRONT_PLANS[planKey] || STOREFRONT_PLANS.growth;
+  const payBtn = document.querySelector('#storefront-sub-modal button[onclick*="confirmStorefrontSubscription"]') || document.querySelector('#modal-sf-sub-pay button[onclick*="confirmStorefrontSubscription"]');
   if (payBtn) { payBtn.disabled = true; payBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing…'; }
 
-  const planKey = selectedPlan.value;
-  const plan = STOREFRONT_PLANS[planKey];
   const months = parseInt(durationEl.value, 10);
   const method = payMethod ? payMethod.value : 'momo';
 
   if (method === 'momo') {
-    const phone = document.getElementById('sub-momo-phone')?.value?.trim();
+    const phone = (document.getElementById('sub-momo-phone') || document.getElementById('sf-sub-momo-phone'))?.value?.trim();
     if (!phone || phone.replace(/\D/g,'').length < 9) {
       showToast('Please enter a valid MoMo phone number.', 'error');
+      if (payBtn) { payBtn.disabled = false; payBtn.innerHTML = '<i class="fas fa-lock"></i> Confirm & Pay'; }
       return;
     }
   }
@@ -3786,6 +3790,7 @@ window.confirmStorefrontSubscription = async function(storeId) {
   newEnd.setMonth(newEnd.getMonth() + months);
 
   document.getElementById('storefront-sub-modal')?.remove();
+  document.getElementById('modal-sf-sub-pay')?.remove();
   showToast(`Processing GH₵${total} payment via ${method === 'momo' ? 'MTN MoMo' : 'HAPPA Wallet'}...`, 'info');
 
   // Payment: server-side wallet engine deducts the balance (or records the MoMo

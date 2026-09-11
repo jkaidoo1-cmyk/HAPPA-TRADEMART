@@ -2634,10 +2634,10 @@ async function renderAdminStorefronts() {
       <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
-      <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="adminGrantSubscription('${s.id}')">
+      <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="guardClick(this, () => adminGrantSubscription('${s.id}'))">
         <i class="fas fa-gift"></i> Grant Sub
       </button>
-      <button class="btn btn-sm" style="background:#9a3412;color:#fff;border:none" onclick="adminRevokeSubscription('${s.id}')">
+      <button class="btn btn-sm" style="background:#9a3412;color:#fff;border:none" onclick="guardClick(this, () => adminRevokeSubscription('${s.id}'))">
         <i class="fas fa-times-circle"></i> Revoke Sub
       </button>
       <button class="btn btn-sm btn-danger" style="background:var(--danger);border:none;color:#fff" onclick="disableStorefront('${s.id}')">
@@ -2960,7 +2960,7 @@ async function adminGrantSubscription(sfId) {
     <label class="form-label">Free Months *</label>
     <input class="form-control" type="number" id="grant-months" min="1" max="24" value="1">
   </div>
-  <button class="btn btn-primary btn-block" onclick="_doAdminGrantSubscription('${sfId}')">
+  <button class="btn btn-primary btn-block" onclick="guardClick(this, () => _doAdminGrantSubscription('${sfId}'))">
     <i class="fas fa-gift"></i> Grant Subscription
   </button>
 </div>`);

@@ -773,7 +773,8 @@ app.post('/api/clean-temp-database-records', requireAdmin, async (req, res) => {
 });
 
 // ── Push Notification Endpoints ────────────────────────────
-const webpush = require('web-push');
+let webpush;
+try { webpush = require('web-push'); } catch(e) { console.warn('[Push] web-push not installed — push disabled:', e.message); webpush = null; }
 const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || 'BCLetiiU33SFCYX5amNxlNS02FVIL8CUiydQuMyaJRe1-QbklQj-PC0snLIAw7Yf719pdIPMZB3zWUrQvlK4eGw';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'd2MrJaDxfw8f7iyqx4gWsMYP8Lnh_dm7iMV6po049S8';
 const VAPID_CLAIMS = { subject: 'mailto:support@happamart.com' };

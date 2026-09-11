@@ -196,7 +196,7 @@ function startNotifPolling() {
   if (!App.currentUser) return;
   _notifPollTimer = setInterval(async () => {
     if (!App.currentUser) { stopNotifPolling(); return; }
-    await fetchServerNotifications();
+    await fetchServerNotifications(true); // bustCache=true so we never serve stale data
   }, 20000);
 }
 function stopNotifPolling() {

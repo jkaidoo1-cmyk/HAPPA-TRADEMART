@@ -6,7 +6,8 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
-const webpush = require('web-push');
+let webpush;
+try { webpush = require('web-push'); } catch(e) { console.warn('[Push] web-push module not installed — push disabled:', e.message); webpush = null; }
 
 // Shared session/auth module (HMAC-signed tokens or in-memory fallback)
 const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requireAdmin, revokeToken } = require('./lib/session');
@@ -859,7 +860,8 @@ app.post('/api/push/unsubscribe', async (req, res) => {
   return res.json({ ok: true, message: 'Unsubscribed successfully' });
 });
 
-app.post('/api/push/send', async (req, res) => {
+app.post('/api/push/send', requireAuth, async (req, res) => {
+  if (!webpush) return res.status(503).json({ error: 'Push service not available.' });
   const { user_id, title, body, url } = req.body || {};
   if (!user_id) return res.status(400).json({ error: 'user_id required.' });
   const db = loadDb();

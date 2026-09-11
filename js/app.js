@@ -1342,6 +1342,16 @@ function renderSettingsPage() {
       </div>
 
       <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><h3>🔔 Push Notifications</h3></div>
+        <div class="card-body">
+          <p style="font-size:.8rem;color:var(--text-muted);margin:0 0 12px">Get instant alerts on your device even when the app is closed.</p>
+          <div id="settings-push-status" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="font-size:.82rem">Loading...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
         <div class="card-header"><h3>🎧 Customer Care</h3></div>
         <div class="card-body">
           <p style="font-size:.8rem;color:var(--text-muted);margin:0 0 10px">Questions about your order, wallet, or store? Contact our support team or open a ticket.</p>
@@ -2025,18 +2035,7 @@ async function apiFetch(table, opts = {}) {
   const isWrite = method !== 'GET';
   try {
     let resp;
-    try {
-      resp = await fetch(url, { ...opts, headers });
-      if (!resp.ok && url.startsWith('/api/') && window.location.port !== '9000') {
-        resp = await fetch('http://localhost:9000' + url, { ...opts, headers });
-      }
-    } catch (netErr) {
-      if (url.startsWith('/api/') && window.location.port !== '9000') {
-        resp = await fetch('http://localhost:9000' + url, { ...opts, headers });
-      } else {
-        throw netErr;
-      }
-    }
+    resp = await fetch(url, { ...opts, headers });
     if (!resp || !resp.ok) {
       let errDetail = `HTTP ${resp ? resp.status : 'Error'}`;
       try {
@@ -3610,4 +3609,15 @@ async function initHeroBanners() {
     console.error('Failed to load hero banners', e);
   }
 }
+
+// ── Double-click / rapid-tap guard ─────────────────────────
+// Prevents duplicate submissions when buttons are tapped twice quickly.
+// Usage: onclick="guardClick(this, () => doThing())"
+function guardClick(btn, fn) {
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const restore = () => { btn.disabled = false; };
+  Promise.resolve().then(() => fn()).then(restore).catch(restore);
+}
+window.guardClick = guardClick;
 

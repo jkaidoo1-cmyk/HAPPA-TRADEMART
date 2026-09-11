@@ -520,16 +520,15 @@ async function placeOrder() {
   if (setBtn) setBtn('saved');
   _placingOrder = false;
 
-  // Trigger simulated order confirmation notification (Email, SMS, WhatsApp)
-  simulateOrderNotifications(orderData);
+  // Send in-app notification confirming the order was placed
+  try {
+    const u = App.currentUser;
+    if (u && u.id) {
+      addNotification(u.id, 'system', '🛒 Order Placed', `Your order ${packages[0]?.package_code || ''} has been placed successfully. You can track it from the cart page.`, '?page=cart');
+    }
+  } catch(e) {}
 }
 
-function simulateOrderNotifications(order) {
-  console.log(`[Notification] Sending Email to ${order.buyer_email}...`);
-  console.log(`[Notification] Sending SMS to ${order.buyer_phone}...`);
-  console.log(`[Notification] Sending WhatsApp notification to ${order.buyer_phone}...`);
-  showToast('Order Confirmation sent via Email, SMS & WhatsApp! 📲', 'info', 3000);
-}
 function renderOrderConfirmation(order, packages) {
   const c = document.getElementById('order-confirmed-content');
   if (!c) return;
