@@ -478,26 +478,32 @@ async function clearAllNotifications() {
 
   if (uid) {
     try {
-      // Direct fetch (no 30s apiCache) so we delete the true current set
+      // Direct fetch (no 30s apiCache) so we delete the true current set.
+      // Broadcast notifications (all/global) are visible to the user and should
+      // be removable as part of a clear-all action instead of being blocked by
+      // the access policy.
       const res = typeof apiFetch === 'function'
         ? await apiFetch('notifications?limit=200')
         : await apiGet('notifications', `limit=200`);
       const all = res?.data || (Array.isArray(res) ? res : []);
-      const mine = all.filter(n => String(n.user_id) === uid);
-      // Attempt delete for each server-side notification belonging to me.
-      const results = await Promise.allSettled(mine.map(n => apiDelete('notifications', n.id)));
+      const visible = all.filter(n => {
+        const u = String(n.user_id || '');
+        return u === uid || u === 'all' || u === 'global' || (isAdmin && u === 'admin');
+      });
+      const results = await Promise.allSettled(visible.map(n => apiDelete('notifications', n.id)));
       const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === null));
-      // Re-sync with server so any remaining notifications are reflected.
       await fetchServerNotifications(true);
       if (failed.length) {
         showToast('Some notifications could not be removed from the server — retrying in background', 'warning');
-        // Schedule a retry after short delay
         setTimeout(async () => {
           try {
             const res2 = await apiFetch('notifications?limit=200');
             const all2 = res2?.data || (Array.isArray(res2) ? res2 : []);
-            const mine2 = all2.filter(n => String(n.user_id) === uid);
-            await Promise.all(mine2.map(n => apiDelete('notifications', n.id)));
+            const visible2 = all2.filter(n => {
+              const u = String(n.user_id || '');
+              return u === uid || u === 'all' || u === 'global' || (isAdmin && u === 'admin');
+            });
+            await Promise.all(visible2.map(n => apiDelete('notifications', n.id)));
             await fetchServerNotifications(true);
             showToast('Server-side notifications synced', 'success');
           } catch (e) { /* silent */ }

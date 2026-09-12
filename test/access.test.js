@@ -107,6 +107,12 @@ test('access: admin-only tables are invisible to non-admins', () => {
   assert.equal(access.applyReadPolicy('order_notifications', rows, ADMIN).length, 1);
 });
 
+test('access: users may delete broadcast notifications they can already read', () => {
+  assert.equal(access.assertMutateAllowed('notifications', BUYER, { id: 'n-1', user_id: 'all' }, {}).ok, true);
+  assert.equal(access.assertMutateAllowed('notifications', BUYER, { id: 'n-2', user_id: 'global' }, {}).ok, true);
+  assert.equal(access.assertMutateAllowed('notifications', BUYER, { id: 'n-3', user_id: 'other-user' }, {}).ok, false);
+});
+
 test('access: public catalog tables are readable by everyone', () => {
   const rows = [{ id: 'pr1', name: 'Sneakers' }];
   assert.equal(access.applyReadPolicy('products', rows, null).length, 1);
