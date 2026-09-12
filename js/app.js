@@ -655,7 +655,7 @@ setInterval(() => {
   if (App.currentUser && App.currentUser.id) {
     verifySessionUser();
   }
-}, 5000);
+}, 30000); // every 30s — frequent enough to catch status changes, light enough to avoid churn
 
 document.addEventListener('visibilitychange', async () => {
   if (!document.hidden && App.currentUser && App.currentUser.id) {
@@ -668,6 +668,25 @@ document.addEventListener('visibilitychange', async () => {
     }
   }
 });
+
+// ── Sliding-window session refresh ─────────────────────────────
+// Every 30 minutes, silently ask the server for a fresh token so the
+// session never ages out while the user is actively visiting.
+setInterval(async () => {
+  if (!App.currentUser || !App.currentUser.id) return;
+  const token = getAuthToken();
+  if (!token) return;
+  try {
+    const res = await fetch(API + 'auth/refresh', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.token) setAuthToken(data.token);
+    }
+  } catch(_) {} // silent — not critical
+}, 30 * 60 * 1000); // every 30 minutes
 
 window.addEventListener('storage', (e) => {
   if (e.key === 'happa_logout_user_id' || e.key === 'happa_session') {
@@ -2012,8 +2031,8 @@ function setAuthToken(token) {
 // must not kick the user out.
 let _session401Count = 0;
 let _session401WindowStart = 0;
-const SESSION_401_THRESHOLD = 3;   // consecutive 401s needed
-const SESSION_401_WINDOW_MS  = 15000; // reset counter after 15s of no 401s
+const SESSION_401_THRESHOLD = 5;   // consecutive 401s needed — very tolerant of transient failures
+const SESSION_401_WINDOW_MS  = 60000; // reset counter after 60s of no 401s
 function _handleSessionExpired() {
   const now = Date.now();
   // Reset counter if the window has elapsed (no recent 401s)

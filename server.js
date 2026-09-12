@@ -754,6 +754,20 @@ app.post('/api/auth/logout', (req, res) => {
   return res.json({ success: true });
 });
 
+// Refresh a valid session token — extends the expiry by another period.
+// Auth endpoints are exempt from hasInvalidSession, so the old token can
+// still be presented even if the server considers it stale.
+app.post('/api/auth/refresh', (req, res) => {
+  const session = getSessionUser(req);
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session.' });
+  }
+  // Revoke the old token (in-memory mode) then issue a fresh one.
+  revokeToken(session.token);
+  const newToken = createSessionToken(session.userId, session.role);
+  return res.json({ token: newToken });
+});
+
 app.get('/api/auth/verify', (req, res) => {
   const session = getSessionUser(req);
   if (!session) {

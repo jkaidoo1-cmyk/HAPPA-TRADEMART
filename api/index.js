@@ -704,6 +704,15 @@ app.post('/api/auth/logout', (req, res) => {
   return res.json({ success: true });
 });
 
+// POST /api/auth/refresh — extends a valid session by issuing a fresh token.
+app.post('/api/auth/refresh', (req, res) => {
+  const session = getSessionUser(req);
+  if (!session) return res.status(401).json({ error: 'Invalid session.' });
+  revokeToken(session.token);
+  const newToken = createSessionToken(session.userId, session.role);
+  return res.json({ token: newToken });
+});
+
 // GET /api/auth/verify
 app.get('/api/auth/verify', (req, res) => {
   const session = getSessionUser(req);
