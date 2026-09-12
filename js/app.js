@@ -2007,12 +2007,28 @@ function setAuthToken(token) {
 // after a backend restart or serverless instance rotation). Without this
 // handler every authenticated read silently returns nothing or stale local
 // data — new notifications never appear until the user manually logs out
-// and back in. React once per burst of parallel 401s, then re-authenticate.
-let _sessionExpiredHandledAt = 0;
+// and back in. Require multiple consecutive 401s before logging out — a
+// single transient failure (cold start, network blip, Cloudflare challenge)
+// must not kick the user out.
+let _session401Count = 0;
+let _session401WindowStart = 0;
+const SESSION_401_THRESHOLD = 3;   // consecutive 401s needed
+const SESSION_401_WINDOW_MS  = 15000; // reset counter after 15s of no 401s
 function _handleSessionExpired() {
   const now = Date.now();
-  if (now - _sessionExpiredHandledAt < 30000) return;
-  _sessionExpiredHandledAt = now;
+  // Reset counter if the window has elapsed (no recent 401s)
+  if (now - _session401WindowStart > SESSION_401_WINDOW_MS) {
+    _session401Count = 0;
+    _session401WindowStart = now;
+  }
+  _session401Count++;
+  if (_session401Count < SESSION_401_THRESHOLD) {
+    console.warn(`[Session] 401 #${_session401Count}/${SESSION_401_THRESHOLD} — waiting for more confirmations before logout.`);
+    return; // not enough failures yet — keep the session alive
+  }
+  // Threshold reached — session is genuinely dead
+  console.warn('[Session] Multiple 401s confirmed — logging out.');
+  _session401Count = 0;
   try {
     if (typeof showToast === 'function') showToast('Your session has expired. Please sign in again.', 'warning');
   } catch(e) {}

@@ -22,6 +22,15 @@ const app = express();
 // Allow larger JSON payloads (product images are sent as base64 up to 5 images)
 app.use(express.json({ limit: '50mb' }));
 
+// Warn if SESSION_SECRET is not set — in-memory sessions are lost on every
+// serverless cold start, causing immediate logout after login.
+if (!String(process.env.SESSION_SECRET || '').trim()) {
+  console.warn('\n[Session] WARNING: SESSION_SECRET is not set.');
+  console.warn('[Session] Without it, session tokens are stored in per-process memory');
+  console.warn('[Session] and will be lost on every serverless cold start / redeploy.');
+  console.warn('[Session] Set SESSION_SECRET in your Vercel environment variables.\n');
+}
+
 // ── Dead-session detection ─────────────────────────────────────
 // A presented-but-invalid Bearer token is an explicit 401, never silent
 // anonymity: owner-only tables (notifications, wallet, …) would otherwise
