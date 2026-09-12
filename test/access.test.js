@@ -41,6 +41,31 @@ test('session: garbage / missing bearer is rejected', () => {
   assert.equal(session.getSessionUser({ headers: { authorization: 'Basic abc' } }), null);
 });
 
+test('session: signed tokens survive a restart when no secret is configured', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const secretPath = path.join(__dirname, '..', '.session-secret');
+  fs.rmSync(secretPath, { force: true });
+  delete process.env.SESSION_SECRET;
+
+  const freshSession = require('../lib/session');
+  const token = freshSession.createSessionToken('restart-user', 'vendor');
+  const req = { headers: { authorization: `Bearer ${token}` } };
+  const s = freshSession.getSessionUser(req);
+  assert.equal(s.userId, 'restart-user');
+  assert.equal(s.role, 'vendor');
+
+  delete require.cache[require.resolve('../lib/session')];
+  const restartedSession = require('../lib/session');
+  const restartedReq = { headers: { authorization: `Bearer ${token}` } };
+  const restarted = restartedSession.getSessionUser(restartedReq);
+  assert.equal(restarted.userId, 'restart-user');
+  assert.equal(restarted.role, 'vendor');
+
+  fs.rmSync(secretPath, { force: true });
+  process.env.SESSION_SECRET = OLD_SECRET;
+});
+
 process.env.SESSION_SECRET = OLD_SECRET;
 
 // ── lib/access: read policy ────────────────────────────────────
