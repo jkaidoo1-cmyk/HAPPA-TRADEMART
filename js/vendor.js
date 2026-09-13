@@ -7,27 +7,6 @@ async function renderVendorDashboard() {
     const c = document.getElementById('vendor-dashboard-content');
     if (!c) return;
     if (!App.currentUser) { showPage('auth'); return; }
-    console.debug('[renderVendorDashboard] start', { currentUser: App.currentUser });
-    // On-page debug panel for environments where DevTools aren't open
-    function _dbg(msg, obj) {
-      try {
-        const id = 'vendor-debug-panel';
-        let el = document.getElementById(id);
-        if (!el) {
-          el = document.createElement('div');
-          el.id = id;
-          el.style.cssText = 'font-size:12px;color:#333;background:#fff;border:1px solid #eee;padding:8px;margin:8px;border-radius:6px;max-height:160px;overflow:auto;';
-          el.innerHTML = '<strong>Vendor Debug</strong><div id="vendor-debug-items" style="font-family:monospace;font-size:11px;margin-top:6px"></div>';
-          c.insertAdjacentElement('afterbegin', el);
-        }
-        const items = document.getElementById('vendor-debug-items');
-        const entry = document.createElement('div');
-        entry.style.marginBottom = '6px';
-        entry.textContent = msg + (obj !== undefined ? (': ' + (typeof obj === 'string' ? obj : JSON.stringify(obj))) : '');
-        items.appendChild(entry);
-      } catch (e) { /* ignore */ }
-    }
-    _dbg('start', { currentUserId: App.currentUser && App.currentUser.id });
   // Accept both 'vendor' and legacy 'seller' role
   if (App.currentUser.role !== 'vendor' && App.currentUser.role !== 'seller') {
     c.innerHTML = '<div class="empty-state"><i class="fas fa-lock"></i><h3>Access Denied</h3><p>Vendor accounts only</p></div>';

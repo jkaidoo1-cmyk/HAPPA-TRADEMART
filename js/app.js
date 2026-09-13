@@ -3556,7 +3556,11 @@ window.autoCreateStoreForVendor = async function(vendor) {
   // 1. Double check if store already exists to prevent duplicate stores
   const storeRes = await apiGet('stores', 'limit=200').catch(() => null);
   const existing = (storeRes?.data || []).find(s => String(s.vendor_id) === String(vendor.id));
-  if (existing) return existing;
+  if (existing) {
+    if (_resolve) _resolve(existing);   // release the lock — never leave awaiters hanging
+    delete window._autoCreateStoreLock[vendor.id];
+    return existing;
+  }
 
   // 2. Build store properties
   const storeName = (vendor.preferred_store_name || '').trim() || `${vendor.name || 'New'}'s Store`;
@@ -3611,6 +3615,7 @@ window.autoCreateStoreForVendor = async function(vendor) {
     `Your store "${storeName}" has been successfully set up. You can customize details and upload product listings now.`);
 
   if (_resolve) _resolve(finalStore);
+  delete window._autoCreateStoreLock[vendor.id];   // release the lock for future calls
   return finalStore;
 };
 
