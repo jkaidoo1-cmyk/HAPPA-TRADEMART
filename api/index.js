@@ -269,7 +269,7 @@ function unpackProductMeta(record) {
   return out;
 }
 
-const STORE_UNPACK_COLS = ['logo_url', 'banner_url', 'slogan', 'name'];
+const STORE_UNPACK_COLS = ['logo_url', 'banner_url', 'slogan', 'name', 'layout'];
 
 function unpackStoreMeta(record) {
   if (!record || !looksLikeStoreRecord(record)) return record;
@@ -1080,6 +1080,7 @@ app.get('/api/:table', async (req, res) => {
           category: st.category || '',
           url_slug: extraSf.url_slug || st.slug || '',
           theme: extraSf.theme || st.theme || 'classic',
+          layout: extraSf.layout || st.layout || (st.extra && st.extra.layout) || 'grid',
           font_family: extraSf.font_family || st.font_family || 'Outfit',
           slogan: extraSf.slogan || st.slogan || '',
           about_us: extraSf.about_us || st.description || st.about_us || '',
@@ -1701,6 +1702,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       if (storeUpdates.banner_url) extraSf.banner_url = storeUpdates.banner_url;
       if (storeUpdates.name) extraSf.name = storeUpdates.name;
       if (storeUpdates.slogan) extraSf.slogan = storeUpdates.slogan;
+      if (storeUpdates.layout) extraSf.layout = storeUpdates.layout;
       storeUpdates.extra = extraSf;
 
       // Always persist locally (db.json is the source of truth and the GET list
@@ -1981,6 +1983,7 @@ app.put('/api/:table/:id', async (req, res) => {
       if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
       if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
       if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
+    if ('layout' in body) storeUpdates.layout = body.layout;
       storeUpdates.updated_at = new Date().toISOString();
 
       // Persist logo/banner in the `extra` JSONB field as a fallback —
@@ -2022,6 +2025,7 @@ app.put('/api/:table/:id', async (req, res) => {
         url_slug: updatedSt.slug || '',
         name: updatedSt.name || '',
         theme: updatedSt.theme || 'classic',
+        layout: updatedSt.layout || (updatedSt.extra && updatedSt.extra.layout) || 'grid',
         font_family: updatedSt.font_family || 'Outfit',
         slogan: updatedSt.slogan || '',
         about_us: updatedSt.description || updatedSt.about_us || '',
@@ -2181,6 +2185,7 @@ app.patch('/api/:table/:id', async (req, res) => {
       if ('subscription_end' in body) storeUpdates.subscription_end = body.subscription_end;
       if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
       if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
+      if ('layout' in body) storeUpdates.layout = body.layout;
 
       let extra = {};
       try {
@@ -2191,6 +2196,7 @@ app.patch('/api/:table/:id', async (req, res) => {
       if ('banner_url' in storeUpdates) extra.banner_url = storeUpdates.banner_url;
       if ('name' in storeUpdates) extra.name = storeUpdates.name;
       if ('slogan' in storeUpdates) extra.slogan = storeUpdates.slogan;
+      if ('layout' in storeUpdates) extra.layout = storeUpdates.layout;
       if ('only_show_on_storefront' in body) {
         extra.only_show_on_storefront = body.only_show_on_storefront === true || body.only_show_on_storefront === 'true';
       }
@@ -2226,6 +2232,7 @@ app.patch('/api/:table/:id', async (req, res) => {
         url_slug: updatedSt.slug || '',
         name: updatedSt.name || '',
         theme: updatedSt.theme || 'classic',
+        layout: updatedSt.layout || (updatedSt.extra && updatedSt.extra.layout) || 'grid',
         font_family: updatedSt.font_family || 'Outfit',
         slogan: updatedSt.slogan || '',
         about_us: updatedSt.description || updatedSt.about_us || '',

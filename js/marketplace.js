@@ -1290,6 +1290,10 @@ async function renderStorefront(id) {
 
     const theme = sf?.theme || s.theme || 'classic';
     const font_family = sf?.font_family || s.font_family || 'Outfit';
+    // Layout controls the page STRUCTURE (classic grid / info sidebar / showcase /
+    // compact bars). Theme only restyles it. Persisted on the store record.
+    const layout = sf?.layout || s.layout || (s.extra && s.extra.layout) || 'grid';
+    window._sfLayout = layout;
 
     // Dynamically load Google Font on demand if not already loaded (saves massive bandwidth and load time)
     if (font_family && font_family !== 'Outfit' && font_family !== 'Inter') {
@@ -1467,8 +1471,63 @@ async function renderStorefront(id) {
     `;
   }
 
+  // ── Layout-specific STRUCTURAL styles (theme only restyles) ──
+  let layoutStyles = '';
+  if (layout === 'sidebar') {
+    layoutStyles = `
+      #sf-layout-main { display: flex; align-items: stretch; }
+      #sf-layout-sidebar {
+        flex: 0 0 220px; max-width: 220px; background: color-mix(in srgb, ${secondaryColor} 10%, #ffffff);
+        border-right: 1px solid var(--border); padding: 16px 14px; font-size: .8rem; color: var(--text-light);
+        display: flex; flex-direction: column; gap: 14px;
+      }
+      #sf-layout-sidebar h4 { font-size: .78rem; font-weight: 800; color: ${primaryColor}; margin: 0 0 3px; display:flex; align-items:center; gap:6px; }
+      #sf-layout-sidebar .sb-block { padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
+      #sf-layout-sidebar .sb-block:last-child { border-bottom: none; }
+      #sf-layout-content { flex: 1; min-width: 0; }
+      @media (max-width: 720px) {
+        #sf-layout-main { flex-direction: column; }
+        #sf-layout-sidebar { flex: none; max-width: none; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; gap: 10px 18px; }
+        #sf-layout-sidebar .sb-block { flex: 1 1 40%; border-bottom: none; padding-bottom: 0; }
+      }
+    `;
+  } else if (layout === 'showcase') {
+    layoutStyles = `
+      #sf-showcase-hero { position: relative; height: 300px; overflow: hidden; display: flex; align-items: center; justify-content: center; text-align: center; }
+      #sf-showcase-hero img.sf-hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      #sf-showcase-hero .sf-hero-overlay {
+        position: absolute; inset: 0; background: linear-gradient(180deg, rgba(15,23,42,.25), rgba(15,23,42,.62));
+        display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
+      }
+      #sf-showcase-hero .sf-hero-overlay img { width: 72px; height: 72px; border-radius: 50%; border: 3px solid #fff; object-fit: cover; margin-bottom: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
+      #sf-showcase-hero h1 { color: #fff; font-size: 1.6rem; font-weight: 900; margin: 0; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
+      #sf-showcase-hero p { color: rgba(255,255,255,.94); font-size: .9rem; margin: 6px 0 0; font-style: italic; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+      .sf-spotlight { display: flex; gap: 16px; align-items: center; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin: 16px 12px 4px; box-shadow: var(--shadow-md); }
+      .sf-spotlight img, .sf-spotlight .sf-spot-emoji { width: 120px; height: 120px; flex: 0 0 120px; border-radius: 12px; object-fit: cover; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 2.6rem; }
+      .sf-spotlight .sf-spot-info { flex: 1; min-width: 0; }
+      .sf-spotlight .sf-spot-label { font-size: .68rem; font-weight: 800; color: ${primaryColor}; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+      .sf-spotlight .sf-spot-name { font-size: 1.05rem; font-weight: 800; color: var(--text); }
+      .sf-spotlight .sf-spot-price { font-size: 1.2rem; font-weight: 900; color: ${primaryColor}; margin: 4px 0 10px; }
+      @media (max-width: 560px) { .sf-spotlight img, .sf-spotlight .sf-spot-emoji { width: 84px; height: 84px; flex-basis: 84px; font-size: 2rem; } }
+    `;
+  } else if (layout === 'compact') {
+    layoutStyles = `
+      #sf-compact-bar {
+        display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--border);
+        position: sticky; top: 56px; z-index: 30;
+      }
+      #sf-compact-bar img { width: 38px; height: 38px; border-radius: 9px; object-fit: cover; border: 1px solid var(--border); }
+      #sf-compact-bar .cb-name { font-size: .95rem; font-weight: 900; line-height: 1.2; }
+      #sf-compact-bar .cb-slogan { font-size: .68rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+      #sf-layout-content .product-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
+      #sf-layout-content .product-card .product-name { font-size: .72rem !important; }
+      @media (max-width: 640px) { #sf-layout-content .product-grid { grid-template-columns: repeat(2, 1fr) !important; } #sf-compact-bar { top: 52px; } }
+    `;
+  }
+
   const customStyles = `
     <style id="store-custom-styles-${id}">
+      ${layoutStyles}
       ${themeStyles}
       #storefront-page-container .store-name-title { color: ${primaryColor} !important; }
       #storefront-page-container .store-slogan-text { color: ${primaryColor} !important; }
@@ -1570,13 +1629,79 @@ async function renderStorefront(id) {
     searchIconColor = 'var(--text-muted)';
   }
 
+  // ── Layout-specific structural blocks ──
+  let layoutHeroHTML = '';
+  let layoutSidebarHTML = '';
+  if (layout === 'showcase') {
+    layoutHeroHTML = `
+      <div id="sf-showcase-hero">
+        <img class="sf-hero-bg" src="${bannerSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://via.placeholder.com/900x400?text=Store+Banner'">
+        <div class="sf-hero-overlay">
+          <img src="${logoSrc}" alt="${escHtml(storeName)} logo" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+          <h1>${escHtml(storeName)} ${verifiedBadge}</h1>
+          <p>${escHtml(slogan)}</p>
+          <div style="display:flex;align-items:center;gap:14px;margin-top:8px;font-size:.72rem;color:rgba(255,255,255,.9)">
+            <span><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</span>
+            <span><i class="fas fa-star" style="color:#fbbf24"></i> ${(s.avg_rating || 5.0).toFixed ? (s.avg_rating || 5.0).toFixed(1) : '5.0'} (${s.review_count || 0})</span>
+          </div>
+        </div>
+      </div>`;
+  }
+  if (layout === 'sidebar') {
+    const vendorObjSb = (App.allUsers || []).find(u => String(u.id) === String(s.vendor_id)) || {};
+    layoutSidebarHTML = `
+      <aside id="sf-layout-sidebar">
+        <div class="sb-block">
+          <h4><i class="fas fa-info-circle"></i> About</h4>
+          <div>${escHtml(description)}</div>
+        </div>
+        <div class="sb-block">
+          <h4><i class="fas fa-clock"></i> Hours &amp; Contact</h4>
+          <div style="display:grid;gap:3px">
+            <div>${escHtml(business_hours)}</div>
+            <div><i class="fas fa-map-marker-alt" style="color:${primaryColor};width:14px"></i> ${s.location || '—'}</div>
+            ${(() => {
+              const em = s.email || vendorObjSb.email || '';
+              const ph = s.phone || vendorObjSb.phone || '';
+              return `${em ? `<div><i class="fas fa-envelope" style="color:${primaryColor};width:14px"></i> ${escHtml(em)}</div>` : ''}${ph ? `<div><i class="fas fa-phone" style="color:${primaryColor};width:14px"></i> ${escHtml(ph)}</div>` : ''}`;
+            })()}
+          </div>
+        </div>
+        <div class="sb-block">
+          <h4><i class="fas fa-shield-alt"></i> Policies</h4>
+          <div style="display:grid;gap:5px">
+            <div><strong style="color:var(--text)">Shipping:</strong> ${escHtml(shipping_policy)}</div>
+            <div><strong style="color:var(--text)">Returns:</strong> ${escHtml(return_policy)}</div>
+          </div>
+        </div>
+        ${socialLinksHTML ? `<div class="sb-block"><h4><i class="fas fa-share-alt"></i> Follow Us</h4>${socialLinksHTML}</div>` : ''}
+      </aside>`;
+  }
+
+  const compactBarHTML = layout === 'compact' ? `
+    <div id="sf-compact-bar">
+      <img src="${logoSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+      <div style="flex:1;min-width:0">
+        <div class="cb-name">${escHtml(storeName)} ${verifiedBadge}</div>
+        <div class="cb-slogan">${escHtml(slogan)}</div>
+      </div>
+      <span style="font-size:.68rem;font-weight:800;color:${primaryColor}"><i class="fas fa-star" style="color:#fbbf24"></i> ${(s.avg_rating || 5.0).toFixed ? (s.avg_rating || 5.0).toFixed(1) : '5.0'}</span>
+    </div>` : '';
+
+  // In showcase/compact layouts the standard header is replaced by the hero/brand bar;
+  // sidebar keeps the themed header on top (it carries the logo identity).
+  const headerOut = (layout === 'showcase') ? layoutHeroHTML
+                  : (layout === 'compact') ? ''
+                  : headerHTML;
+
   c.innerHTML = `
     <div id="storefront-page-container" style="position:relative">
       ${customStyles}
       ${adminToolbarHTML}
 
-      <!-- Banner at very top -->
-      ${headerHTML}
+      <!-- Banner at very top (layout-specific) -->
+      ${headerOut}
+      ${compactBarHTML}
 
       <!-- Search bar & Cart button toolbar directly below banner -->
       <div class="store-search-toolbar" style="${toolbarStyle}">
@@ -1594,8 +1719,10 @@ async function renderStorefront(id) {
         </button>
       </div>
 
-      <!-- Main Content Area -->
+      <!-- Main Content Area (sidebar layout wraps it with the info rail) -->
+      ${layout === 'sidebar' ? '<div id="sf-layout-main">' + layoutSidebarHTML + '<div id="sf-layout-content">' : ''}
       <div class="store-tab-content" id="store-tab-content"></div>
+      ${layout === 'sidebar' ? '</div></div>' : ''}
 
       <!-- Theme-Adaptive Storefront Footer (About, Contact, Policies, Social) -->
       <footer class="storefront-footer" style="${footerStyle}">
@@ -2820,6 +2947,8 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   const instagram_url = isStorefrontPage ? (sf?.instagram_url || s.instagram_url) : s.instagram_url;
   const youtube_url = isStorefrontPage ? (sf?.youtube_url || s.youtube_url) : s.youtube_url;
 
+  const sfLayout = window._sfLayout || 'grid';
+
   if (tabName === 'home') {
     const recent = [...storeProds].sort((a,b) => b.id.localeCompare(a.id)).slice(0, 4);
     const popular = [...storeProds].sort((a,b) => (b.views || 0) - (a.views || 0)).slice(0, 4);
@@ -2836,13 +2965,33 @@ window.switchStorefrontTab = async function(tabName, storeId) {
       `;
     };
 
+    // Showcase layout: spotlight the most popular product above the grid
+    let showcaseSpotlightHTML = '';
+    if (sfLayout === 'showcase' && popular.length) {
+      const sp = popular[0];
+      const spImg = (sp.images && sp.images[0]) || sp.image_url || '';
+      showcaseSpotlightHTML = `
+        <div class="sf-spotlight" onclick="openProduct('${sp.id}')" style="cursor:pointer">
+          ${spImg
+            ? `<img src="${spImg}" alt="${escHtml(sp.name)}" onerror="this.outerHTML='<div class=sf-spot-emoji>📦</div>'">`
+            : '<div class="sf-spot-emoji">📦</div>'}
+          <div class="sf-spot-info">
+            <div class="sf-spot-label">⭐ Store Spotlight</div>
+            <div class="sf-spot-name">${escHtml(sp.name)}</div>
+            <div class="sf-spot-price">GHS ${sp.price}</div>
+            <button class="btn btn-sm store-theme-btn" style="font-weight:800">View Product</button>
+          </div>
+        </div>`;
+    }
+
     contentEl.innerHTML = `
+      ${sfLayout === 'showcase' ? '' : `
       <div class="store-hero-banner">
         <h2 style="font-size:1.5rem;font-weight:900;margin-bottom:6px">${escHtml(slogan)}</h2>
         <p style="font-size:.85rem;opacity:.9">Best Offers & Quality Products</p>
         <button class="btn btn-sm btn-light" onclick="document.getElementById('all-store-products-${s.id}')?.scrollIntoView({behavior:'smooth'})" style="margin-top:10px;font-weight:700">Shop Now</button>
-      </div>
-
+      </div>`}
+      ${showcaseSpotlightHTML}
       ${renderSection('🔥 Popular Products', popular)}
       <div id="all-store-products-${s.id}">
         ${renderSection('🛍️ All Products', storeProds)}

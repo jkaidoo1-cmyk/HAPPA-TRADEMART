@@ -154,6 +154,8 @@ async function renderVendorDashboard() {
 
   // Helper variables for storefront configuration form to decouple from stores
   const sfTheme = myStorefront?.theme || myStore?.theme || 'classic';
+  const sfLayout = myStorefront?.layout || myStore?.layout || 'grid';
+  window.previewLayout = sfLayout;
   const sfPrimaryColor = myStorefront?.primary_color || myStore?.primary_color || '#e85d04';
   const sfSecondaryColor = myStorefront?.secondary_color || myStore?.secondary_color || '#faf9f6';
   const sfFontFamily = myStorefront?.font_family || myStore?.font_family || 'Outfit';
@@ -705,7 +707,60 @@ async function renderVendorDashboard() {
           <!-- Left Panel: Form Inputs -->
           <div style="flex:1.2;min-width:320px;display:flex;flex-direction:column;gap:16px">
             <div class="card">
-              <div class="card-header"><h3>🎨 Design & Colors</h3></div>
+              <div class="card-header"><h3>📐 Layout</h3></div>
+              <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+                <div>
+                  <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:6px">Page Layout (structure of your storefront)</label>
+                  <style>
+                    .layout-option {
+                      flex: 1;
+                      min-width: 140px;
+                      border: 2px solid var(--border);
+                      border-radius: 12px;
+                      padding: 10px 8px;
+                      text-align: center;
+                      cursor: pointer;
+                      display: block;
+                      transition: all 0.25s ease;
+                      background: transparent;
+                    }
+                    .layout-option:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+                    .layout-thumb {
+                      width: 100%; height: 54px; border-radius: 8px; border: 1.5px solid var(--border);
+                      display: flex; gap: 3px; padding: 5px; margin-bottom: 8px; background: #fff; box-sizing: border-box;
+                    }
+                    .layout-thumb i { display: block; border-radius: 3px; background: #dbeafe; }
+                    .layout-title { font-weight: 800; font-size: .8rem; margin-bottom: 2px; }
+                    .layout-desc { font-size: .63rem; color: var(--text-light); line-height: 1.35; }
+                  </style>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <label class="layout-option" style="border-color:${sfLayout === 'grid' ? 'var(--primary)' : 'var(--border)'};background:${sfLayout === 'grid' ? 'var(--primary-light)' : 'transparent'}" id="layout-label-grid" onclick="window.updateStoreLayout('grid')">
+                      <div class="layout-thumb"><i style="width:100%;height:12px"></i><i style="width:100%;flex:1"></i><i style="width:50%;height:10px;background:#fecaca"></i><i style="width:50%;height:10px;background:#fecaca"></i><i style="width:50%;height:10px;background:#fecaca"></i><i style="width:50%;height:10px;background:#fecaca"></i></div>
+                      <div class="layout-title">Classic Grid</div>
+                      <div class="layout-desc">Banner on top, full-width grid — the standard shop look</div>
+                    </label>
+                    <label class="layout-option" style="border-color:${sfLayout === 'sidebar' ? 'var(--primary)' : 'var(--border)'};background:${sfLayout === 'sidebar' ? 'var(--primary-light)' : 'transparent'}" id="layout-label-sidebar" onclick="window.updateStoreLayout('sidebar')">
+                      <div class="layout-thumb"><i style="width:34%;height:100%;background:#e9d5ff"></i><i style="flex:1;height:12px"></i><i style="flex:1;height:14px;background:#fecaca"></i><i style="flex:1;height:14px;background:#fecaca"></i></div>
+                      <div class="layout-title">Info Sidebar</div>
+                      <div class="layout-desc">Store info &amp; policies in a side panel next to products</div>
+                    </label>
+                    <label class="layout-option" style="border-color:${sfLayout === 'showcase' ? 'var(--primary)' : 'var(--border)'};background:${sfLayout === 'showcase' ? 'var(--primary-light)' : 'transparent'}" id="layout-label-showcase" onclick="window.updateStoreLayout('showcase')">
+                      <div class="layout-thumb"><i style="width:100%;height:45%"></i><i style="width:60%;height:30%;background:#fecaca"></i><i style="flex:1;height:30%;background:#fecaca"></i><i style="width:100%;flex:1;background:#e9d5ff"></i></div>
+                      <div class="layout-title">Showcase</div>
+                      <div class="layout-desc">Big hero banner with one spotlight product, then the rest</div>
+                    </label>
+                    <label class="layout-option" style="border-color:${sfLayout === 'compact' ? 'var(--primary)' : 'var(--border)'};background:${sfLayout === 'compact' ? 'var(--primary-light)' : 'transparent'}" id="layout-label-compact" onclick="window.updateStoreLayout('compact')">
+                      <div class="layout-thumb"><i style="width:18%;height:100%"></i><i style="flex:1;height:100%;background:#fecaca"></i><i style="flex:1;height:100%;background:#fecaca"></i><i style="flex:1;height:100%;background:#fecaca"></i><i style="flex:1;height:100%;background:#fecaca"></i><i style="flex:1;height:100%;background:#fecaca"></i></div>
+                      <div class="layout-title">Compact Bars</div>
+                      <div class="layout-desc">Slim header with a dense multi-column catalogue</div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><h3>🎨 Design &amp; Colors</h3></div>
               <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
                 
                 <!-- Theme Selector UI -->
@@ -3465,24 +3520,22 @@ window.updateStorefrontPreview = function() {
     prevFooterTextColor = '#9ca3af';
   }
 
-  // Combine full mockup view
+  // Combine full mockup view — the page STRUCTURE changes with the chosen layout
   previewBox.style.fontFamily = `'${font_family}', sans-serif`;
-  previewBox.innerHTML = `
-    ${themeStyles}
-    ${headerHTML}
-    
-    <!-- Tab list -->
+
+  const tabListHTML = `
     <div class="prev-tab-list" style="display:flex; text-align:center">
       <div class="prev-tab ${window.previewActiveTab === 'home' ? 'active' : ''}" onclick="window.setPreviewTab('home')">Home</div>
       <div class="prev-tab ${window.previewActiveTab === 'products' ? 'active' : ''}" onclick="window.setPreviewTab('products')">Products</div>
-    </div>
+    </div>`;
 
-    <!-- Active body content wrapper -->
-    <div class="prev-body-container" style="min-height:140px; font-family: inherit;">
-      ${bodyHTML}
-    </div>
+  const toolbarHTML = `
+    <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#fff; border-bottom:1px solid var(--border)">
+      <div style="flex:1; height:22px; border:1px solid var(--border); border-radius:14px; display:flex; align-items:center; padding:0 8px; color:var(--text-light); font-size:.58rem"><i class="fas fa-search" style="margin-right:5px"></i> Search products…</div>
+      <div style="width:22px; height:22px; border-radius:50%; background:${primary}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:.6rem"><i class="fas fa-shopping-cart"></i></div>
+    </div>`;
 
-    <!-- Live Theme-Adaptive Preview Footer -->
+  const footerHTML = `
     <footer style="${prevFooterStyle}">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px">
         <div style="font-weight:800; color:${prevFooterHeadingColor}; display:flex; align-items:center; gap:5px">
@@ -3492,7 +3545,135 @@ window.updateStorefrontPreview = function() {
           Powered by HAPPA TRADEMART
         </div>
       </div>
-    </footer>
+    </footer>`;
+
+  let composedHTML = '';
+  if (window.previewLayout === 'sidebar') {
+    // Info Sidebar: store info panel sits beside the products
+    const infoPanelHTML = `
+      <div style="padding:12px 10px; font-size:.62rem; color:var(--text-light); display:flex; flex-direction:column; gap:8px">
+        <div><div class="prev-about-title" style="font-weight:800; font-size:.66rem; margin-bottom:2px">About</div>${desc}</div>
+        <div><div class="prev-about-title" style="font-weight:800; font-size:.66rem; margin-bottom:2px">Hours</div>${escHtml(hours)}</div>
+        <div><div class="prev-about-title" style="font-weight:800; font-size:.66rem; margin-bottom:2px">Shipping</div>${escHtml(shipping)}</div>
+        <div><div class="prev-about-title" style="font-weight:800; font-size:.66rem; margin-bottom:2px">Returns</div>${escHtml(returns)}</div>
+      </div>`;
+    composedHTML = `
+      ${headerHTML}
+      ${toolbarHTML}
+      ${tabListHTML}
+      <div class="prev-body-container" style="display:flex; align-items:stretch; min-height:150px">
+        <div style="flex:0 0 34%; background:color-mix(in srgb, ${secondary} 12%, #ffffff); border-right:1px solid var(--border)">${infoPanelHTML}</div>
+        <div style="flex:1; min-width:0">
+          <div style="padding:10px">
+            <div class="prev-body-title" style="font-weight:800; font-size:.72rem; margin-bottom:6px">${window.previewActiveTab === 'products' ? 'All Products' : 'Featured'}</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
+              ${displayProducts.slice(0, 4).map(p => `
+                <div class="product-card">
+                  <div class="product-img" style="height:48px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; overflow:hidden">${getProductImageHTML(p)}</div>
+                  <div class="product-body" style="padding:4px 6px">
+                    <div class="product-name" style="font-size:.58rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                    <div class="product-price" style="font-size:.68rem">GHS ${p.price}</div>
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  } else if (window.previewLayout === 'showcase') {
+    // Showcase: tall hero banner with one spotlight product, then the grid
+    const spot = displayProducts[0];
+    const spotHTML = spot ? `
+      <div style="display:flex; gap:8px; align-items:center; padding:10px 12px">
+        <div class="product-img" style="width:74px; height:74px; flex:0 0 74px; display:flex; align-items:center; justify-content:center; font-size:1.6rem; overflow:hidden; border-radius:10px">${getProductImageHTML(spot)}</div>
+        <div style="flex:1; min-width:0">
+          <div style="font-size:.55rem; font-weight:800; color:${primary}; text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px">⭐ Spotlight</div>
+          <div class="product-name" style="font-weight:800; font-size:.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(spot.name)}</div>
+          <div class="product-price" style="font-size:.8rem; font-weight:800">GHS ${spot.price}</div>
+          <button class="prev-btn-theme" style="margin-top:4px; font-size:.55rem; padding:3px 10px">View Product</button>
+        </div>
+      </div>` : '';
+    composedHTML = `
+      <div style="position:relative; height:150px; overflow:hidden">
+        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+        <div style="position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.55)); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:10px">
+          <img src="${logoSrc}" style="width:44px; height:44px; border-radius:50%; border:2px solid #fff; object-fit:cover; margin-bottom:6px" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+          <h4 style="color:#fff; font-size:.85rem; font-weight:900; margin:0; text-shadow:0 1px 6px rgba(0,0,0,.5)">${storeName}</h4>
+          <p style="color:rgba(255,255,255,.92); font-size:.6rem; margin:3px 0 0 0; font-style:italic; text-shadow:0 1px 4px rgba(0,0,0,.5)">${slogan}</p>
+        </div>
+      </div>
+      ${toolbarHTML}
+      ${tabListHTML}
+      <div class="prev-body-container">
+        ${window.previewActiveTab === 'products' ? `
+          <div style="padding:12px">
+            <div class="prev-body-title" style="font-weight:800; font-size:.75rem; margin-bottom:8px">All Products <span style="font-weight:400; color:var(--text-muted); font-size:.65rem; margin-left:6px">${displayProducts.length} Items</span></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
+              ${displayProducts.slice(0, 4).map(p => `
+                <div class="product-card">
+                  <div class="product-img" style="height:60px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; overflow:hidden">${getProductImageHTML(p)}</div>
+                  <div class="product-body" style="padding:6px 8px">
+                    <div class="product-name" style="font-size:.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                    <div class="product-price" style="font-size:.75rem">GHS ${p.price}</div>
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>` : `
+          ${spotHTML}
+          <div style="padding:0 12px 12px">
+            <div class="prev-about-title" style="font-weight:800; font-size:.7rem; margin-bottom:6px">More Products</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
+              ${displayProducts.slice(1, 3).map(p => `
+                <div class="product-card">
+                  <div class="product-img" style="height:44px; display:flex; align-items:center; justify-content:center; font-size:1rem; overflow:hidden">${getProductImageHTML(p)}</div>
+                  <div class="product-body" style="padding:4px 6px">
+                    <div class="product-name" style="font-size:.56rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                    <div class="product-price" style="font-size:.66rem">GHS ${p.price}</div>
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>`}
+      </div>`;
+  } else if (window.previewLayout === 'compact') {
+    // Compact Bars: slim brand bar + dense multi-column catalogue
+    composedHTML = `
+      ${toolbarHTML}
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#fff; border-bottom:1px solid var(--border)">
+        <img src="${logoSrc}" style="width:30px; height:30px; border-radius:8px; object-fit:cover; border:1px solid var(--border)" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+        <div style="flex:1; min-width:0">
+          <div style="font-size:.72rem; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${storeName}</div>
+          <div style="font-size:.55rem; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${slogan}</div>
+        </div>
+        <div style="font-size:.55rem; color:${primary}; font-weight:800"><i class="fas fa-star" style="color:#fbbf24"></i> ${(myStore.avg_rating || 5.0).toFixed(1)}</div>
+      </div>
+      ${tabListHTML}
+      <div class="prev-body-container">
+        <div style="padding:10px">
+          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:5px">
+            ${displayProducts.slice(0, 6).map(p => `
+              <div class="product-card">
+                <div class="product-img" style="height:40px; display:flex; align-items:center; justify-content:center; font-size:1rem; overflow:hidden">${getProductImageHTML(p)}</div>
+                <div class="product-body" style="padding:3px 5px">
+                  <div class="product-name" style="font-size:.52rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                  <div class="product-price" style="font-size:.6rem">GHS ${p.price}</div>
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+  } else {
+    // Classic grid (default): header → tabs → body, stacked full-width
+    composedHTML = `
+      ${headerHTML}
+      ${tabListHTML}
+      <div class="prev-body-container" style="min-height:140px; font-family: inherit;">
+        ${bodyHTML}
+      </div>`;
+  }
+
+  previewBox.innerHTML = `
+    ${themeStyles}
+    ${composedHTML}
+    ${footerHTML}
   `;
 };
 
@@ -3533,6 +3714,23 @@ window.updateStoreTheme = function(themeName) {
   window.updateStorefrontPreview();
 };
 
+window.updateStoreLayout = function(layoutName) {
+  window.previewLayout = layoutName;
+  ['grid', 'sidebar', 'showcase', 'compact'].forEach(l => {
+    const label = document.getElementById('layout-label-' + l);
+    if (label) {
+      if (l === layoutName) {
+        label.style.borderColor = 'var(--primary)';
+        label.style.background = 'var(--primary-light)';
+      } else {
+        label.style.borderColor = 'var(--border)';
+        label.style.background = 'transparent';
+      }
+    }
+  });
+  window.updateStorefrontPreview();
+};
+
 
 
 window.createStorefrontDraft = async function(storeId) {
@@ -3552,6 +3750,7 @@ window.createStorefrontDraft = async function(storeId) {
     name: store.name || 'My Storefront',
     url_slug: store.slug || (store.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     theme: 'classic',
+    layout: 'grid',
     font_family: 'Outfit',
     primary_color: '#e85d04',
     secondary_color: '#0d0d0d',
@@ -3585,6 +3784,7 @@ window.saveVendorStoreSettings = async function(storeId) {
   const sfName = (document.getElementById('store-name')?.value || document.getElementById('store-display-name')?.value || store.name || '').trim();
   const sfSlug = (document.getElementById('store-slug')?.value || store.slug || '').trim();
   const theme = window.previewTheme || 'classic';
+  const layout = window.previewLayout || 'grid';
   const fontFamily = document.getElementById('store-font-family')?.value || document.getElementById('store-font')?.value || 'Outfit';
   const primaryColor = document.getElementById('store-primary-color')?.value || '#e85d04';
   const secondaryColor = document.getElementById('store-secondary-color')?.value || '#0d0d0d';
@@ -3608,6 +3808,7 @@ window.saveVendorStoreSettings = async function(storeId) {
     name: sfName,
     url_slug: sfSlug,
     theme: theme,
+    layout: layout,
     font_family: fontFamily,
     primary_color: primaryColor,
     secondary_color: secondaryColor,
@@ -3643,6 +3844,7 @@ window.saveVendorStoreSettings = async function(storeId) {
       name: sfName,
       slug: sfSlug,
       theme: theme,
+      layout: layout,
       font_family: fontFamily,
       primary_color: primaryColor,
       secondary_color: secondaryColor,

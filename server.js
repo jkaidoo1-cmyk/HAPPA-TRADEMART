@@ -375,7 +375,7 @@ function looksLikeStoreRecord(out) {
   ));
 }
 
-const STORE_UNPACK_COLS = ['logo_url', 'banner_url', 'slogan', 'name'];
+const STORE_UNPACK_COLS = ['logo_url', 'banner_url', 'slogan', 'name', 'layout'];
 
 function unpackStoreMeta(record) {
   if (!record || !looksLikeStoreRecord(record)) return record;
@@ -961,6 +961,7 @@ app.get('/api/:table', async (req, res) => {
         category: st.category || '',
         url_slug: extraSf.url_slug || st.slug || '',
         theme: extraSf.theme || st.theme || 'classic',
+        layout: extraSf.layout || st.layout || (st.extra && st.extra.layout) || 'grid',
         font_family: extraSf.font_family || st.font_family || 'Outfit',
         slogan: extraSf.slogan || st.slogan || '',
         about_us: extraSf.about_us || st.description || st.about_us || '',
@@ -1663,6 +1664,7 @@ app.put('/api/:table/:id', async (req, res) => {
     if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
     if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
     if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
+    if ('layout' in body) storeUpdates.layout = body.layout;
     storeUpdates.updated_at = new Date().toISOString();
 
     // Persist logo/banner in the `extra` JSONB field as a fallback
@@ -1672,6 +1674,7 @@ app.put('/api/:table/:id', async (req, res) => {
     if ('banner_url' in storeUpdates) extraSf.banner_url = storeUpdates.banner_url;
     if ('name' in storeUpdates) extraSf.name = storeUpdates.name;
     if ('slogan' in storeUpdates) extraSf.slogan = storeUpdates.slogan;
+    if ('layout' in storeUpdates) extraSf.layout = storeUpdates.layout;
     storeUpdates.extra = extraSf;
 
     if (supabase) {
@@ -1700,6 +1703,7 @@ app.put('/api/:table/:id', async (req, res) => {
       status: updatedSt.storefront_status || 'draft',
       url_slug: updatedSt.slug || '',
       theme: updatedSt.theme || 'classic',
+      layout: updatedSt.layout || (updatedSt.extra && updatedSt.extra.layout) || 'grid',
       font_family: updatedSt.font_family || 'Outfit',
       slogan: updatedSt.slogan || '',
       about_us: updatedSt.description || updatedSt.about_us || '',
@@ -1854,6 +1858,7 @@ app.patch('/api/:table/:id', async (req, res) => {
     if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
     if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
     if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
+    if ('layout' in body) storeUpdates.layout = body.layout;
     
     let extra = {};
     try {
@@ -1864,6 +1869,7 @@ app.patch('/api/:table/:id', async (req, res) => {
     if ('banner_url' in storeUpdates) extra.banner_url = storeUpdates.banner_url;
     if ('name' in storeUpdates) extra.name = storeUpdates.name;
     if ('slogan' in storeUpdates) extra.slogan = storeUpdates.slogan;
+    if ('layout' in storeUpdates) extra.layout = storeUpdates.layout;
     if ('only_show_on_storefront' in body) {
       extra.only_show_on_storefront = body.only_show_on_storefront === true || body.only_show_on_storefront === 'true';
     }
@@ -1897,6 +1903,7 @@ app.patch('/api/:table/:id', async (req, res) => {
       status: updatedSt.storefront_status || 'draft',
       url_slug: updatedSt.slug || '',
       theme: updatedSt.theme || 'classic',
+      layout: updatedSt.layout || (updatedSt.extra && updatedSt.extra.layout) || 'grid',
       font_family: updatedSt.font_family || 'Outfit',
       slogan: updatedSt.slogan || '',
       about_us: updatedSt.description || updatedSt.about_us || '',
