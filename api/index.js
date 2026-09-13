@@ -2412,12 +2412,14 @@ app.delete('/api/:table/:id', async (req, res) => {
 
 function getRecordCandidatesForTable(table, record, existingRecord) {
   const primary = prepareRecordForDb(table, record, existingRecord);
-  if (table !== 'products' && table !== 'stores') return [primary];
+  if (table !== 'products' && table !== 'stores' && table !== 'users') return [primary];
 
-  // For stores, logo_url/banner_url/slogan/name may not exist as columns —
-  // move them into the extra JSONB field so a second attempt can succeed.
+  // For stores/products/users, certain fields may not exist as real columns
+  // (they live in the jsonb `extra` instead on slim schemas). Move them out of
+  // the top-level payload so a second candidate can succeed if the first one
+  // fails with a missing-column error.
   const STORE_OPTIONAL_COLS = ['logo_url', 'banner_url', 'slogan', 'name'];
-  const optionalCols = table === 'products' ? PRODUCT_OPTIONAL_COLS : STORE_OPTIONAL_COLS;
+  const optionalCols = table === 'products' ? PRODUCT_OPTIONAL_COLS : table === 'users' ? USER_META_FIELDS : STORE_OPTIONAL_COLS;
 
   const slim = { ...primary };
   const extra = { ...parseExtraObject(slim.extra) };

@@ -22,19 +22,25 @@
       }
     })();
 
-    // ── One-time self-heal: clear any stale service-worker caches ──
-    // Fixes the "blank unstyled page" problem when the old SW serves a
-    // cached HTML that no longer references the current assets.
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        regs.forEach(r => r.unregister());
+    // ── One-time self-heal: clear stale service-worker caches on version bump ──
+    // Only runs once per SW version — kills old SW + caches, then re-registers.
+    // Previous code ran on EVERY page load, which killed the SW and broke
+    // background push notifications.
+    (function() {
+      if (!('serviceWorker' in navigator)) return;
+      var SW_VERSION = 'happa-v131';
+      var lastCleaned = localStorage.getItem('sw_selfheal_version');
+      if (lastCleaned === SW_VERSION) return; // already cleaned for this version
+      localStorage.setItem('sw_selfheal_version', SW_VERSION);
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(r) { r.unregister(); });
       });
       if (window.caches) {
-        caches.keys().then(keys => {
-          keys.forEach(k => caches.delete(k));
+        caches.keys().then(function(keys) {
+          keys.forEach(function(k) { caches.delete(k); });
         });
       }
-    }
+    })();
   </script>
 
   <!-- ── PWA Manifest ── -->

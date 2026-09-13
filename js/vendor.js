@@ -1330,112 +1330,159 @@ function _addProductModalHTML(storeId, vendorId, prev) {
   <span class="modal-title">Add New Product</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
-<div class="modal-body" style="overflow-y:auto;max-height:80vh">
+<div class="modal-body" style="overflow-y:auto;max-height:80vh;padding:0">
   <form onsubmit="submitAddProduct(event,'${storeId}','${vendorId}')">
-    <div class="form-group">
-      <label class="form-label">Product Images <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(up to 5 · first = cover)</span></label>
+
+    <!-- ── Image banner area ── -->
+    <div style="padding:14px 16px 0">
       <div id="new-p-img-slots" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
-        <button type="button" id="new-p-add-img-btn" onclick="_addProductImgSlot('new-p')" style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px dashed var(--border);border-radius:8px;padding:8px 14px;cursor:pointer;font-size:.8rem;color:var(--primary);font-weight:600">
-          <i class="fas fa-plus-circle"></i> Add Image
-        </button>
+      <button type="button" id="new-p-add-img-btn" onclick="_addProductImgSlot('new-p')"
+              style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--bg-secondary,#f3f4f6);border:1.5px dashed var(--border);border-radius:var(--radius-sm);padding:20px;cursor:pointer;font-size:.82rem;color:var(--primary);font-weight:600;transition:border-color .15s">
+        <i class="fas fa-cloud-upload-alt" style="font-size:1.2rem"></i> Add Product Images
+      </button>
+      <div style="font-size:.68rem;color:var(--text-muted);margin-top:4px;text-align:center">Up to 5 images · JPG, PNG or WEBP · Max 5MB each · First image = cover</div>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:14px 0"></div>
+
+    <!-- ── Fields ── -->
+    <div style="padding:0 16px 16px">
+
+      <!-- Name -->
+      <div style="margin-bottom:12px">
+        <label style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Product Name</label>
+        <input class="form-control" id="new-p-name" placeholder="e.g. Nike Air Max 90"
+               value="${escHtml(prev.name || '')}"
+               style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:.88rem;width:100%;box-shadow:none">
       </div>
-      <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">JPG, PNG or WEBP · Max 5MB each</div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Product Name <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(optional)</span></label>
-      <input class="form-control" id="new-p-name" placeholder="e.g. Nike Air Max 90" value="${escHtml(prev.name || '')}">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Description <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(optional)</span></label>
-      <textarea class="form-control" id="new-p-desc" rows="3" placeholder="Describe your product...">${escHtml(prev.desc || '')}</textarea>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-group">
-        <label class="form-label">Price (GHS) *</label>
-        <input class="form-control" id="new-p-price" type="number" min="1" step="0.01" required value="${prev.price || ''}">
+
+      <!-- Description -->
+      <div style="margin-bottom:12px">
+        <label style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Description</label>
+        <textarea class="form-control" id="new-p-desc" rows="3"
+                  placeholder="Describe your product..."
+                  style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:.85rem;width:100%;box-shadow:none;resize:vertical;min-height:80px;line-height:1.5">${escHtml(prev.desc || '')}</textarea>
       </div>
-      <div class="form-group">
-        <label class="form-label">Original Price</label>
-        <input class="form-control" id="new-p-orig" type="number" min="1" step="0.01" value="${prev.orig || ''}">
+
+      <!-- Price + Original Price -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Price (GHS) *</label>
+          <div style="display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--bg)">
+            <span style="padding:0 8px;font-size:.8rem;color:var(--text-muted);font-weight:700;border-right:1px solid var(--border)">GH₵</span>
+            <input class="form-control" id="new-p-price" type="number" min="1" step="0.01" required
+                   value="${prev.price || ''}" placeholder="0.00"
+                   style="border:none;box-shadow:none;padding:10px 8px;font-size:.88rem;font-weight:700;color:var(--primary);text-align:right;width:100%">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Original Price</label>
+          <div style="display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--bg)">
+            <span style="padding:0 8px;font-size:.8rem;color:var(--text-muted);font-weight:700;border-right:1px solid var(--border)">GH₵</span>
+            <input class="form-control" id="new-p-orig" type="number" min="1" step="0.01"
+                   value="${prev.orig || ''}" placeholder="0.00"
+                   style="border:none;box-shadow:none;padding:10px 8px;font-size:.88rem;text-align:right;width:100%">
+          </div>
+        </div>
       </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-group">
-        <label class="form-label">Stock Qty *</label>
-        <input class="form-control" id="new-p-stock" type="number" min="0" required value="${prev.stock != null ? prev.stock : ''}">
+
+      <!-- Stock + Weight -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Stock Qty *</label>
+          <input class="form-control" id="new-p-stock" type="number" min="0" required
+                 value="${prev.stock != null ? prev.stock : ''}" placeholder="0"
+                 style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:.88rem;width:100%;box-shadow:none">
+        </div>
+        <div>
+          <label style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Weight (kg)</label>
+          <input class="form-control" id="new-p-weight" type="number" step="0.1" min="0.1"
+                 value="${prev.weight || 0.5}" placeholder="0.5"
+                 style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:.88rem;width:100%;box-shadow:none">
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Weight (kg)</label>
-        <input class="form-control" id="new-p-weight" type="number" step="0.1" min="0.1" value="${prev.weight || 0.5}">
+
+      <!-- Category -->
+      <div style="margin-bottom:12px">
+        <label style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Category</label>
+        <select class="form-control form-select" id="new-p-cat"
+                style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:.85rem;width:100%;box-shadow:none;background:var(--bg)">
+          <option value="" ${!prev.cat?'selected':''}>Select category (optional)</option>
+          <optgroup label="Footwear">
+            <option ${prev.cat==='Sneakers'?'selected':''}>Sneakers</option>
+            <option ${prev.cat==='Sandals'?'selected':''}>Sandals</option>
+            <option ${prev.cat==='Boots'?'selected':''}>Boots</option>
+          </optgroup>
+          <optgroup label="Clothing">
+            <option ${prev.cat==='Clothing & Apparel'?'selected':''}>Clothing &amp; Apparel</option>
+          </optgroup>
+          <optgroup label="Electronics">
+            <option ${prev.cat==='Electronics'?'selected':''}>Electronics</option>
+            <option ${prev.cat==='Phones & Tablets'?'selected':''}>Phones &amp; Tablets</option>
+            <option ${prev.cat==='Computers & Laptops'?'selected':''}>Computers &amp; Laptops</option>
+            <option ${prev.cat==='Audio & Sound'?'selected':''}>Audio &amp; Sound</option>
+          </optgroup>
+          <optgroup label="Accessories & Jewellery">
+            <option ${prev.cat==='Accessories'?'selected':''}>Accessories</option>
+          </optgroup>
+          <optgroup label="Beauty">
+            <option ${prev.cat==='Skincare'?'selected':''}>Skincare</option>
+            <option ${prev.cat==='Makeup & Beauty'?'selected':''}>Makeup &amp; Beauty</option>
+            <option ${prev.cat==='Hair & Body'?'selected':''}>Hair &amp; Body</option>
+          </optgroup>
+          <optgroup label="Food & Drinks">
+            <option ${prev.cat==='Food & Drinks'?'selected':''}>Food &amp; Drinks</option>
+          </optgroup>
+          <optgroup label="Health & Fitness">
+            <option ${prev.cat==='Health & Wellness'?'selected':''}>Health &amp; Wellness</option>
+            <option ${prev.cat==='Sports & Fitness'?'selected':''}>Sports &amp; Fitness</option>
+          </optgroup>
+          <optgroup label="Home">
+            <option ${prev.cat==='Home & Living'?'selected':''}>Home &amp; Living</option>
+            <option ${prev.cat==='Kitchen & Dining'?'selected':''}>Kitchen &amp; Dining</option>
+          </optgroup>
+          <optgroup label="Others">
+            <option ${prev.cat==='Books & Stationery'?'selected':''}>Books &amp; Stationery</option>
+            <option ${prev.cat==='Toys & Games'?'selected':''}>Toys &amp; Games</option>
+            <option ${prev.cat==='Art & Crafts'?'selected':''}>Art &amp; Crafts</option>
+            <option ${prev.cat==='Automotive'?'selected':''}>Automotive</option>
+            <option ${prev.cat==='Pet Supplies'?'selected':''}>Pet Supplies</option>
+            <option ${prev.cat==='Services'?'selected':''}>Services</option>
+            <option ${prev.cat==='Other'?'selected':''}>Other</option>
+          </optgroup>
+        </select>
       </div>
+
+      <!-- Tags -->
+      <div style="margin-bottom:12px">
+        <label style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Tags <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+        <input class="form-control" id="new-p-tags"
+               placeholder="e.g. sneakers, sale, shoes"
+               value="${escHtml(prev.tags || '')}"
+               style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:.85rem;width:100%;box-shadow:none">
+      </div>
+
+      <!-- Toggles row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;background:var(--bg)">
+          <input type="checkbox" id="new-p-flash" ${prev.isFlash ? 'checked' : ''}
+                 style="accent-color:var(--primary);width:16px;height:16px">
+          <label for="new-p-flash" style="font-size:.8rem;font-weight:600;cursor:pointer">⚡ Flash Sale</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;border:1px solid #bbf7d0;border-radius:var(--radius-sm);padding:10px 12px;background:#f0fdf4">
+          <input type="checkbox" id="new-p-allow-note" ${prev.allowBuyerNote ? 'checked' : ''}
+                 style="accent-color:#16a34a;width:16px;height:16px">
+          <label for="new-p-allow-note" style="font-size:.8rem;font-weight:600;color:#166534;cursor:pointer">💬 Buyer Note</label>
+        </div>
+      </div>
+      <div style="font-size:.7rem;color:var(--text-muted);margin-top:-8px;margin-bottom:14px;padding-left:2px">Buyer Note lets customers add size/color preferences when ordering.</div>
+
+      <!-- Submit -->
+      <button class="btn btn-primary btn-block" type="submit"
+              style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;padding:12px;font-size:.9rem;font-weight:700;border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(124,58,237,.25)">
+        <i class="fas fa-plus-circle"></i> Add Product
+      </button>
     </div>
-    <div class="form-group">
-      <label class="form-label">Category</label>
-      <select class="form-control form-select" id="new-p-cat">
-        <option value="" ${!prev.cat?'selected':''}>Select category (optional)</option>
-        <optgroup label="Footwear">
-          <option ${prev.cat==='Sneakers'?'selected':''}>Sneakers</option>
-          <option ${prev.cat==='Sandals'?'selected':''}>Sandals</option>
-          <option ${prev.cat==='Boots'?'selected':''}>Boots</option>
-        </optgroup>
-        <optgroup label="Clothing">
-          <option ${prev.cat==='Clothing & Apparel'?'selected':''}>Clothing &amp; Apparel</option>
-        </optgroup>
-        <optgroup label="Electronics">
-          <option ${prev.cat==='Electronics'?'selected':''}>Electronics</option>
-          <option ${prev.cat==='Phones & Tablets'?'selected':''}>Phones &amp; Tablets</option>
-          <option ${prev.cat==='Computers & Laptops'?'selected':''}>Computers &amp; Laptops</option>
-          <option ${prev.cat==='Audio & Sound'?'selected':''}>Audio &amp; Sound</option>
-        </optgroup>
-        <optgroup label="Accessories & Jewellery">
-          <option ${prev.cat==='Accessories'?'selected':''}>Accessories</option>
-        </optgroup>
-        <optgroup label="Beauty">
-          <option ${prev.cat==='Skincare'?'selected':''}>Skincare</option>
-          <option ${prev.cat==='Makeup & Beauty'?'selected':''}>Makeup &amp; Beauty</option>
-          <option ${prev.cat==='Hair & Body'?'selected':''}>Hair &amp; Body</option>
-        </optgroup>
-        <optgroup label="Food & Drinks">
-          <option ${prev.cat==='Food & Drinks'?'selected':''}>Food &amp; Drinks</option>
-        </optgroup>
-        <optgroup label="Health & Fitness">
-          <option ${prev.cat==='Health & Wellness'?'selected':''}>Health &amp; Wellness</option>
-          <option ${prev.cat==='Sports & Fitness'?'selected':''}>Sports &amp; Fitness</option>
-        </optgroup>
-        <optgroup label="Home">
-          <option ${prev.cat==='Home & Living'?'selected':''}>Home &amp; Living</option>
-          <option ${prev.cat==='Kitchen & Dining'?'selected':''}>Kitchen &amp; Dining</option>
-        </optgroup>
-        <optgroup label="Others">
-          <option ${prev.cat==='Books & Stationery'?'selected':''}>Books &amp; Stationery</option>
-          <option ${prev.cat==='Toys & Games'?'selected':''}>Toys &amp; Games</option>
-          <option ${prev.cat==='Art & Crafts'?'selected':''}>Art &amp; Crafts</option>
-          <option ${prev.cat==='Automotive'?'selected':''}>Automotive</option>
-          <option ${prev.cat==='Pet Supplies'?'selected':''}>Pet Supplies</option>
-          <option ${prev.cat==='Services'?'selected':''}>Services</option>
-          <option ${prev.cat==='Other'?'selected':''}>Other</option>
-        </optgroup>
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Tags <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(optional, comma-separated)</span></label>
-      <input class="form-control" id="new-p-tags" placeholder="e.g. sneakers, sale, shoes" value="${escHtml(prev.tags || '')}">
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <input type="checkbox" id="new-p-flash" ${prev.isFlash ? 'checked' : ''}>
-      <label for="new-p-flash" style="font-size:.875rem;font-weight:600">⚡ Flash Sale Item</label>
-    </div>
-    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:var(--radius-md);padding:12px;margin-bottom:14px">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0">
-        <input type="checkbox" id="new-p-allow-note" ${prev.allowBuyerNote ? 'checked' : ''}>
-        <span style="font-size:.875rem;font-weight:700;color:#166534">💬 Allow Buyer to Add a Note</span>
-      </label>
-      <p style="font-size:.72rem;color:#166534;margin:6px 0 0 24px;line-height:1.5">When enabled, buyers can type a note (e.g. color, size) when ordering this item.</p>
-    </div>
-    <button class="btn btn-primary btn-block" type="submit">
-      <i class="fas fa-plus-circle"></i> Add Product
-    </button>
   </form>
 </div>`;
 }

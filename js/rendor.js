@@ -336,7 +336,7 @@ function rendorPostCardHTML(p) {
   <div class="card-body">
     ${p.image_url ? `
     <img src="${escHtml(p.image_url)}" alt=""
-         style="width:100%;height:168px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:10px"
+         style="width:100%;height:168px;object-fit:contain;border-radius:var(--radius-sm);margin-bottom:10px;background:#f8f9fa"
          onerror="this.style.display='none'">` : ''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
       <div style="flex:1;min-width:0">
@@ -788,7 +788,7 @@ function _showPostModal(post) {
        style="width:100%;height:168px;cursor:pointer;position:relative;overflow:hidden;border-bottom:1px solid var(--border);background:${hasExistingImg ? 'transparent' : 'var(--bg-secondary,#f3f4f6)'};display:flex;align-items:center;justify-content:center">
     <img id="post-prev-img"
          src="${hasExistingImg ? escHtml(post.image_url) : ''}"
-         style="width:100%;height:168px;object-fit:cover;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
+         style="width:100%;height:168px;object-fit:contain;position:absolute;top:0;left:0;background:#f8f9fa;${hasExistingImg?'':'display:none'}">
     <div id="post-img-placeholder"
          style="display:${hasExistingImg?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:1;text-align:center;padding:16px">
       <i class="fas fa-image" style="color:#7c3aed;font-size:1.8rem"></i>
@@ -828,20 +828,20 @@ function _showPostModal(post) {
         <span style="font-size:.72rem;color:var(--text-muted);white-space:nowrap">GHS</span>
         <input class="form-control" id="post-price" type="number" min="0" step="0.01"
                placeholder="0" value="${post?.price||''}"
-               style="width:64px;text-align:right;font-weight:800;color:#7c3aed;font-size:.9rem;padding:2px 4px;border:none;background:transparent;box-shadow:none;border-radius:6px">
+               style="width:64px;text-align:right;font-weight:800;color:#7c3aed;font-size:.9rem;padding:2px 4px;border:1px solid var(--border);background:transparent;box-shadow:none;border-radius:6px">
       </div>
     </div>
 
     <!-- Post title (same size/weight as published) -->
     <input class="form-control" id="post-title" placeholder="Post title — e.g. LinkedIn Profile Rewrite"
            value="${escHtml(post?.title||'')}"
-           style="font-weight:700;font-size:.95rem;border:none;padding:8px 0;margin-bottom:6px;background:transparent;box-shadow:none;color:var(--text);outline:none;width:100%">
+           style="font-weight:700;font-size:.95rem;border:1px solid var(--border);padding:8px;margin-bottom:6px;background:transparent;box-shadow:none;color:var(--text);outline:none;width:100%;border-radius:var(--radius-sm)">
 
     <!-- Category tag (same as published card) -->
     <div style="font-size:.74rem;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px">
       <i class="fas fa-tag" style="color:var(--text-light)"></i>
       <select class="form-control form-select" id="post-cat"
-              style="width:auto;border:none;padding:0;font-size:.74rem;color:var(--text-muted);background:transparent;box-shadow:none;margin:0;outline:none">
+              style="width:auto;border:1px solid var(--border);padding:4px 8px;font-size:.74rem;color:var(--text-muted);background:transparent;box-shadow:none;margin:0;outline:none;border-radius:var(--radius-sm)">
         <option value="">Select a category…</option>
         ${SERVICE_CATEGORIES.map(c => `<option value="${c}"${post?.category===c?' selected':''}>${c}</option>`).join('')}
       </select>
@@ -850,7 +850,7 @@ function _showPostModal(post) {
     <!-- Description (same font/line-height as published) -->
     <textarea class="form-control" id="post-desc" rows="5"
               placeholder="Describe your service, what clients get, your experience, turnaround time…"
-              style="font-size:.82rem;color:var(--text-light);line-height:1.6;border:none;padding:8px 0;background:transparent;box-shadow:none;resize:vertical;min-height:96px;color:var(--text-light);outline:none;width:100%">${escHtml(post?.description||'')}</textarea>
+              style="font-size:.82rem;color:var(--text-light);line-height:1.6;border:1px solid var(--border);padding:8px;background:transparent;box-shadow:none;resize:vertical;min-height:96px;color:var(--text-light);outline:none;width:100%;border-radius:var(--radius-sm)">${escHtml(post?.description||'')}</textarea>
 
     <!-- Status -->
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px">

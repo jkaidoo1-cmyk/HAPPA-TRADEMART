@@ -285,7 +285,7 @@ function rendorPostCardPublicHTML(post, rendor) {
 
     ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
 
-            style="width:100%;height:192px;object-fit:cover;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
+            style="width:100%;height:192px;object-fit:contain;border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:#f8f9fa"
 
             onerror="this.style.display='none'">`
 
@@ -549,7 +549,7 @@ async function renderProductDetail(id) {
 
   ${discount > 0 ? `<span style="position:absolute;top:12px;right:12px;background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:var(--radius-full)">${discount}% OFF</span>` : ''}
 
-  <img src="${images[0]}" alt="${escHtml(p.name)}"        style="width:100%;aspect-ratio:1;object-fit:cover;max-height:340px"
+  <img src="${images[0]}" alt="${escHtml(p.name)}"        style="width:100%;aspect-ratio:1;object-fit:contain;max-height:340px;background:#f8f9fa"
 
        onerror="this.src='https://via.placeholder.com/600x600?text=No+Image'">
 
@@ -1765,7 +1765,7 @@ function adminProductCardHTML(p) {
 
     ${flash}${soldOut}${hidden}
 
-    <img style="width:100%;height:140px;object-fit:cover;display:block"
+    <img style="width:100%;height:140px;object-fit:contain;display:block;background:#f8f9fa"
 
          src="${p.images?.[0]||'https://via.placeholder.com/300x300?text=No+Image'}"
 
@@ -2575,7 +2575,7 @@ function _rendorPublicPostCardHTML(post) {
 
     ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
 
-           style="width:100%;height:140px;object-fit:cover;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
+           style="width:100%;height:140px;object-fit:contain;border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:#f8f9fa"
 
            onerror="this.style.display='none'">`
 
@@ -3105,7 +3105,7 @@ window.openStorefrontProductModal = async function(productId) {
         <i class="fas fa-times"></i>
       </button>
       <div style="width:100%; height:200px; background:#f8f9fa; display:flex; align-items:center; justify-content:center; overflow:hidden">
-        <img src="${img}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://via.placeholder.com/400x300?text=Product'">
+        <img src="${img}" style="width:100%; height:100%; object-fit:contain;background:#f8f9fa" onerror="this.src='https://via.placeholder.com/400x300?text=Product'">
       </div>
       <div style="padding:20px; display:grid; gap:12px">
         <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name))}</h3>
