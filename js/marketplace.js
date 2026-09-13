@@ -283,11 +283,10 @@ function rendorPostCardPublicHTML(post, rendor) {
 
   const img      = post.image_url
 
-    ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
-
-            style="width:100%;height:192px;object-fit:contain;border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:#f8f9fa"
-
-            onerror="this.style.display='none'">`
+    ? `<div style="position:relative;width:100%;height:192px;overflow:hidden;border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:#f8f9fa">
+          <img src="${escHtml(post.image_url)}" aria-hidden="true" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;filter:blur(14px);transform:scale(1.15);opacity:.6" onerror="this.style.display='none'">
+          <img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}" style="position:relative;width:100%;height:100%;object-fit:contain;display:block" onerror="this.parentElement.style.display='none'">
+        </div>`
 
     : '';
 
@@ -545,13 +544,19 @@ async function renderProductDetail(id) {
 
 <div style="position:relative;background:#f3f4f6">
 
-  ${(p.is_flash_sale && !isStorefrontView) ? '<span class="flash-badge" style="top:12px;left:12px">FLASH</span>' : ''}
+  ${(p.is_flash_sale && !isStorefrontView) ? '<span class="flash-badge" style="position:absolute;z-index:2;top:12px;left:12px">FLASH</span>' : ''}
 
-  ${discount > 0 ? `<span style="position:absolute;top:12px;right:12px;background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:var(--radius-full)">${discount}% OFF</span>` : ''}
+  ${discount > 0 ? `<span style="position:absolute;z-index:2;top:12px;right:12px;background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:var(--radius-full)">${discount}% OFF</span>` : ''}
 
-  <img src="${images[0]}" alt="${escHtml(p.name)}"        style="width:100%;aspect-ratio:1;object-fit:contain;max-height:340px;background:#f8f9fa"
+  <div style="position:relative;width:100%;overflow:hidden;background:#f8f9fa">
+
+    <img src="${images[0]}" aria-hidden="true" class="blur-fill-bg" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;filter:blur(14px);transform:scale(1.15);opacity:.6" onerror="this.style.display='none'">
+
+    <img src="${images[0]}" alt="${escHtml(p.name)}" style="position:relative;display:block;width:100%;aspect-ratio:1;max-height:340px;object-fit:contain"
 
        onerror="this.src='https://via.placeholder.com/600x600?text=No+Image'">
+
+  </div>
 
   ${images.length > 1 ? `<div style="display:flex;gap:6px;padding:8px 12px;overflow-x:auto">
 
@@ -1765,7 +1770,9 @@ function adminProductCardHTML(p) {
 
     ${flash}${soldOut}${hidden}
 
-    <img style="width:100%;height:140px;object-fit:contain;display:block;background:#f8f9fa"
+    <img aria-hidden="true" src="${p.images?.[0]||'https://via.placeholder.com/300x300?text=No+Image'}" style="position:absolute;top:0;left:0;width:100%;height:140px;object-fit:cover;filter:blur(14px);transform:scale(1.15);opacity:.6" onerror="this.style.display='none'">
+
+    <img style="position:relative;width:100%;height:140px;object-fit:contain;display:block"
 
          src="${p.images?.[0]||'https://via.placeholder.com/300x300?text=No+Image'}"
 
@@ -2573,11 +2580,10 @@ function _rendorPublicPostCardHTML(post) {
 
   const img = post.image_url
 
-    ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
-
-           style="width:100%;height:140px;object-fit:contain;border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:#f8f9fa"
-
-           onerror="this.style.display='none'">`
+    ? `<div style="position:relative;width:100%;height:140px;overflow:hidden;border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:#f8f9fa">
+         <img src="${escHtml(post.image_url)}" aria-hidden="true" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;filter:blur(14px);transform:scale(1.15);opacity:.6" onerror="this.style.display='none'">
+         <img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}" style="position:relative;width:100%;height:140px;object-fit:contain;display:block" onerror="this.parentElement.style.display='none'">
+       </div>`
 
     : '';
 
@@ -3103,9 +3109,9 @@ window.openStorefrontProductModal = async function(productId) {
     <div style="background:#ffffff; border-radius:18px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.15); overflow:hidden; position:relative; animation: slideUp 0.3s ease;">
       <button onclick="document.getElementById('storefront-product-modal').remove()" style="position:absolute; top:12px; right:12px; border:none; background:rgba(0,0,0,0.5); color:#fff; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.8rem; z-index:10">
         <i class="fas fa-times"></i>
-      </button>
-      <div style="width:100%; height:200px; background:#f8f9fa; display:flex; align-items:center; justify-content:center; overflow:hidden">
-        <img src="${img}" style="width:100%; height:100%; object-fit:contain;background:#f8f9fa" onerror="this.src='https://via.placeholder.com/400x300?text=Product'">
+      </button>      <div style="position:relative; width:100%; height:200px; background:#f8f9fa; display:flex; align-items:center; justify-content:center; overflow:hidden">
+        <img src="${img}" aria-hidden="true" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; filter:blur(14px); transform:scale(1.15); opacity:.6" onerror="this.style.display='none'">
+        <img src="${img}" style="position:relative; width:100%; height:100%; object-fit:contain" onerror="this.src='https://via.placeholder.com/400x300?text=Product'">
       </div>
       <div style="padding:20px; display:grid; gap:12px">
         <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name))}</h3>
@@ -3914,7 +3920,12 @@ window.switchImg = function(thumbnailEl, imgUrl) {
   const container = thumbnailEl.closest('.page, .modal-content, .card');
   if (!container) return;
   const mainImg = container.querySelector('img[style*="max-height:340px"], .product-img');
-  if (mainImg) mainImg.src = imgUrl;
+  if (mainImg) {
+    mainImg.src = imgUrl;
+    // Keep the blurred fill backdrop in sync with the swapped image
+    const bg = mainImg.parentElement && mainImg.parentElement.querySelector('.blur-fill-bg');
+    if (bg) { bg.style.display = ''; bg.src = imgUrl; }
+  }
   const thumbs = container.querySelectorAll('img[onclick*="switchImg"]');
   thumbs.forEach(t => t.style.opacity = '0.6');
   thumbnailEl.style.opacity = '1';
