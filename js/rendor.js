@@ -335,10 +335,9 @@ function rendorPostCardHTML(p) {
 <div class="card" style="margin-bottom:12px" id="rendor-post-${p.id}">
   <div class="card-body">
     ${p.image_url ? `
-    <div style="position:relative;width:100%;height:168px;overflow:hidden;border-radius:var(--radius-sm);margin-bottom:10px;background:#f8f9fa">
-      <img src="${escHtml(p.image_url)}" aria-hidden="true" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;filter:blur(14px);transform:scale(1.15);opacity:.6" onerror="this.style.display='none'">
-      <img src="${escHtml(p.image_url)}" alt="" style="position:relative;width:100%;height:168px;object-fit:contain;display:block" onerror="this.parentElement.style.display='none'">
-    </div>` : ''}
+    <img src="${escHtml(p.image_url)}" alt=""
+         style="width:100%;height:168px;object-fit:fill;display:block;border-radius:var(--radius-sm);margin-bottom:10px"
+         onerror="this.style.display='none'">` : ''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.9rem">${escHtml(p.title)}</div>
@@ -787,12 +786,9 @@ function _showPostModal(post) {
   <!-- ── Image banner: full width, same size as published post ── -->
   <div id="post-img-upload-area"
        style="width:100%;height:168px;cursor:pointer;position:relative;overflow:hidden;border-bottom:1px solid var(--border);background:${hasExistingImg ? 'transparent' : 'var(--bg-secondary,#f3f4f6)'};display:flex;align-items:center;justify-content:center">
-    <img id="post-prev-img-bg" aria-hidden="true"
-         src="${hasExistingImg ? escHtml(post.image_url) : ''}"
-         style="width:100%;height:100%;object-fit:cover;filter:blur(14px);transform:scale(1.15);opacity:.6;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
     <img id="post-prev-img"
          src="${hasExistingImg ? escHtml(post.image_url) : ''}"
-         style="width:100%;height:168px;object-fit:contain;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
+         style="width:100%;height:168px;object-fit:fill;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
     <div id="post-img-placeholder"
          style="display:${hasExistingImg?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:1;text-align:center;padding:16px">
       <i class="fas fa-image" style="color:#7c3aed;font-size:1.8rem"></i>
@@ -897,11 +893,9 @@ function _syncPostModalImage() {
   const keep   = (document.getElementById('post-img-keep')?.value || '').trim();
   const src    = thumbSrc || b64 || keep;
   const banner = document.getElementById('post-prev-img');
-  const bgImg  = document.getElementById('post-prev-img-bg');
   const ph     = document.getElementById('post-img-placeholder');
   const btn    = document.getElementById('post-img-remove-btn');
   if (src && banner) { banner.src = src; banner.style.display = 'block'; }
-  if (bgImg) { bgImg.src = src; bgImg.style.display = src ? 'block' : 'none'; }
   if (ph)  ph.style.display = src ? 'none' : 'flex';
   if (btn) btn.style.display = src ? 'flex' : 'none';
 }
@@ -910,11 +904,9 @@ function _clearPostModalImage() {
   document.getElementById('post-img-keep').value = '';
   // Also clear the banner directly
   const banner = document.getElementById('post-prev-img');
-  const bgImg  = document.getElementById('post-prev-img-bg');
   const ph     = document.getElementById('post-img-placeholder');
   const btn    = document.getElementById('post-img-remove-btn');
   if (banner) { banner.src = ''; banner.style.display = 'none'; }
-  if (bgImg)  { bgImg.src = ''; bgImg.style.display = 'none'; }
   if (ph)     ph.style.display = 'flex';
   if (btn)    btn.style.display = 'none';
 }
