@@ -1818,39 +1818,146 @@ function showVerificationUploadModal(userId) {
   const isRendor = u.role === 'rendor';
   showModal(`
 <div class="modal-handle"></div>
-<div class="modal-header">
-  <span class="modal-title">${isRendor ? 'Rendor' : 'Vendor'} Verification Uploads</span>
-  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+<div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+  <div style="display:flex; align-items:center; gap: 12px;">
+    <div style="width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, var(--primary), #8b5cf6); color: white; display:flex; align-items:center; justify-content:center; font-size: 1.2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+      <i class="fas fa-shield-check"></i>
+    </div>
+    <span class="modal-title" style="font-size: 1.3rem; font-weight: 800; background: linear-gradient(135deg, var(--text), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${isRendor ? 'Rendor' : 'Vendor'} Verification</span>
+  </div>
+  <div class="modal-close" onclick="closeModalForce()" style="background: var(--surface); border-radius: 50%; width: 32px; height: 32px; display:flex; align-items:center; justify-content:center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.2s;"><i class="fas fa-times"></i></div>
 </div>
-<div class="modal-body" style="max-height:75vh;overflow-y:auto;padding-bottom:20px">
-  <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:14px;line-height:1.4">
-    Please upload the required verification items. All fields are mandatory to apply for ${isRendor ? 'rendor' : 'vendor'} verification.
-  </p>
+<div class="modal-body" style="max-height:75vh;overflow-y:auto;padding: 16px 24px 24px;">
+  <div style="background: linear-gradient(to right, rgba(var(--primary-rgb), 0.08), transparent); border-left: 3px solid var(--primary); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+    <p style="font-size:.85rem; color:var(--text); margin:0; line-height:1.5; font-weight: 500;">
+      Secure your account and unlock all features. All fields are mandatory to apply for ${isRendor ? 'rendor' : 'vendor'} verification.
+    </p>
+  </div>
+
+  <style>
+    .upload-card {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+      border: 1px solid var(--border);
+      transition: all 0.3s ease;
+    }
+    .upload-card:hover {
+      box-shadow: 0 8px 25px rgba(0,0,0,0.06);
+      transform: translateY(-2px);
+      border-color: var(--primary);
+    }
+    .upload-dropzone {
+      cursor: pointer;
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      text-align: center;
+      transition: all 0.3s ease;
+      background: var(--bg);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .upload-dropzone:hover {
+      border-color: var(--primary);
+      background: rgba(var(--primary-rgb), 0.02);
+    }
+    .upload-icon-wrapper {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(var(--primary-rgb), 0.1);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      margin-bottom: 12px;
+      transition: transform 0.3s ease;
+    }
+    .upload-dropzone:hover .upload-icon-wrapper {
+      transform: scale(1.1);
+    }
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      color: white;
+      border-radius: 50%;
+      font-size: 0.8rem;
+      font-weight: 800;
+      margin-right: 10px;
+      box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.3);
+    }
+    .submit-verif-btn {
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      color: white;
+      border: none;
+      padding: 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3);
+      transition: all 0.3s ease;
+      width: 100%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .submit-verif-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.4);
+    }
+    .submit-verif-btn:disabled {
+      background: var(--border);
+      color: var(--text-muted);
+      box-shadow: none;
+      transform: none;
+      cursor: not-allowed;
+    }
+  </style>
 
   <!-- 1. ID document -->
-  <div class="form-group" style="margin-bottom:14px">
-    <label class="form-label" style="font-weight:700">1. ID Document (Ghana Card / Passport / License)</label>
-    <div class="upload-area" id="id-upload-area" style="cursor:pointer;padding:12px;border:${u.id_image ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:100px;display:flex;flex-direction:column;justify-content:center;${u.id_image ? `background-image:url('${u.id_image}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
-      <div style="${u.id_image ? 'display:none;' : ''}">
-        <i class="fas fa-id-card" style="color:var(--primary);font-size:1.4rem;margin-bottom:4px"></i>
-        <p style="font-size:.78rem;margin:0">Tap to upload ID photo</p>
+  <div class="upload-card">
+    <div style="display:flex; align-items:center; margin-bottom: 12px;">
+      <span class="step-badge">1</span>
+      <label class="form-label" style="font-weight:800; margin:0; font-size: 1rem; color: var(--text);">Identity Document</label>
+    </div>
+    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px; margin-left: 34px;">Ghana Card, Passport, or Driver's License</p>
+    <div class="upload-dropzone" id="id-upload-area" style="min-height:160px; ${u.id_image ? `border-style:solid;border-color:var(--primary);background-image:url('${u.id_image}');background-size:cover;background-position:center;` : ''}">
+      <div style="${u.id_image ? 'display:none;' : 'display:flex;flex-direction:column;align-items:center;padding:20px;width:100%;'}">
+        <div class="upload-icon-wrapper"><i class="fas fa-id-card"></i></div>
+        <p style="font-size:0.9rem;font-weight:700;color:var(--text);margin:0;">Tap to upload ID</p>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin:6px 0 0;">JPG, PNG up to 15MB</p>
       </div>
     </div>
     <input type="file" id="id-doc-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'id-doc-preview', 'id-doc-thumb')">
     <img id="id-doc-thumb" src="${u.id_image || ''}" style="display:none">
   </div>
 
-  <!-- 2. Proof of Previous Sales (3 images) -->
-  <div class="form-group" style="margin-bottom:14px">
-    <label class="form-label" style="font-weight:700">2. ${isRendor ? 'Portfolio / Sample Work (Upload exactly 3 images)' : 'Proof of Previous Sales (Upload exactly 3 images)'}</label>
-    <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">${isRendor ? 'Screenshots of past projects, client feedback, or sample deliverables.' : 'Invoices, screenshots of customer chats, or package deliveries.'}</p>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+  <!-- 2. Proof of Previous Sales -->
+  <div class="upload-card">
+    <div style="display:flex; align-items:center; margin-bottom: 12px;">
+      <span class="step-badge">2</span>
+      <label class="form-label" style="font-weight:800; margin:0; font-size: 1rem; color: var(--text);">${isRendor ? 'Portfolio / Sample Work' : 'Proof of Previous Sales'}</label>
+    </div>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px;margin-left:34px;">${isRendor ? 'Upload exactly 3 images of past projects, client feedback, or sample deliverables.' : 'Upload exactly 3 images of invoices, customer chats, or package deliveries.'}</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
       <!-- Slot 1 -->
       <div>
-        <div class="upload-area" id="sales-1-area" style="cursor:pointer;padding:10px 4px;border:${u.proof_sales_1 ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:80px;display:flex;flex-direction:column;justify-content:center;${u.proof_sales_1 ? `background-image:url('${u.proof_sales_1}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
-          <div style="${u.proof_sales_1 ? 'display:none;' : ''}">
-            <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
-            <p style="font-size:.7rem;margin:0">Image 1</p>
+        <div class="upload-dropzone" id="sales-1-area" style="min-height:110px; ${u.proof_sales_1 ? `border-style:solid;border-color:var(--primary);background-image:url('${u.proof_sales_1}');background-size:cover;background-position:center;` : ''}">
+          <div style="${u.proof_sales_1 ? 'display:none;' : 'width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;'}">
+            <i class="fas fa-camera" style="color:var(--text-muted);font-size:1.4rem;margin-bottom:8px;opacity:0.7;"></i>
+            <span style="font-size:0.75rem;font-weight:600;color:var(--text-muted)">Image 1</span>
           </div>
         </div>
         <input type="file" id="sales-1-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-1-preview', 'sales-1-thumb')">
@@ -1858,10 +1965,10 @@ function showVerificationUploadModal(userId) {
       </div>
       <!-- Slot 2 -->
       <div>
-        <div class="upload-area" id="sales-2-area" style="cursor:pointer;padding:10px 4px;border:${u.proof_sales_2 ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:80px;display:flex;flex-direction:column;justify-content:center;${u.proof_sales_2 ? `background-image:url('${u.proof_sales_2}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
-          <div style="${u.proof_sales_2 ? 'display:none;' : ''}">
-            <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
-            <p style="font-size:.7rem;margin:0">Image 2</p>
+        <div class="upload-dropzone" id="sales-2-area" style="min-height:110px; ${u.proof_sales_2 ? `border-style:solid;border-color:var(--primary);background-image:url('${u.proof_sales_2}');background-size:cover;background-position:center;` : ''}">
+          <div style="${u.proof_sales_2 ? 'display:none;' : 'width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;'}">
+            <i class="fas fa-camera" style="color:var(--text-muted);font-size:1.4rem;margin-bottom:8px;opacity:0.7;"></i>
+            <span style="font-size:0.75rem;font-weight:600;color:var(--text-muted)">Image 2</span>
           </div>
         </div>
         <input type="file" id="sales-2-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-2-preview', 'sales-2-thumb')">
@@ -1869,10 +1976,10 @@ function showVerificationUploadModal(userId) {
       </div>
       <!-- Slot 3 -->
       <div>
-        <div class="upload-area" id="sales-3-area" style="cursor:pointer;padding:10px 4px;border:${u.proof_sales_3 ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:80px;display:flex;flex-direction:column;justify-content:center;${u.proof_sales_3 ? `background-image:url('${u.proof_sales_3}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
-          <div style="${u.proof_sales_3 ? 'display:none;' : ''}">
-            <i class="fas fa-receipt" style="color:var(--primary);font-size:1.1rem;margin-bottom:4px"></i>
-            <p style="font-size:.7rem;margin:0">Image 3</p>
+        <div class="upload-dropzone" id="sales-3-area" style="min-height:110px; ${u.proof_sales_3 ? `border-style:solid;border-color:var(--primary);background-image:url('${u.proof_sales_3}');background-size:cover;background-position:center;` : ''}">
+          <div style="${u.proof_sales_3 ? 'display:none;' : 'width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;'}">
+            <i class="fas fa-camera" style="color:var(--text-muted);font-size:1.4rem;margin-bottom:8px;opacity:0.7;"></i>
+            <span style="font-size:0.75rem;font-weight:600;color:var(--text-muted)">Image 3</span>
           </div>
         </div>
         <input type="file" id="sales-3-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'sales-3-preview', 'sales-3-thumb')">
@@ -1882,21 +1989,25 @@ function showVerificationUploadModal(userId) {
   </div>
 
   <!-- 3. Proof of link sharing -->
-  <div class="form-group" style="margin-bottom:18px">
-    <label class="form-label" style="font-weight:700">3. Proof of Link Sharing</label>
-    <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">Screenshot showing HAPPA website link shared to your status or group chat.</p>
-    <div class="upload-area" id="share-upload-area" style="cursor:pointer;padding:12px;border:${u.proof_share ? '1px solid var(--border)' : '2px dashed var(--border)'};border-radius:var(--radius-sm);text-align:center;min-height:100px;display:flex;flex-direction:column;justify-content:center;${u.proof_share ? `background-image:url('${u.proof_share}');background-size:contain;background-position:center;background-repeat:no-repeat;` : ''}">
-      <div style="${u.proof_share ? 'display:none;' : ''}">
-        <i class="fas fa-share-alt" style="color:var(--primary);font-size:1.4rem;margin-bottom:4px"></i>
-        <p style="font-size:.78rem;margin:0">Tap to upload screenshot</p>
+  <div class="upload-card">
+    <div style="display:flex; align-items:center; margin-bottom: 12px;">
+      <span class="step-badge">3</span>
+      <label class="form-label" style="font-weight:800; margin:0; font-size: 1rem; color: var(--text);">Proof of Link Sharing</label>
+    </div>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px;margin-left:34px;">Screenshot showing HAPPA website link shared to your status or group chat.</p>
+    <div class="upload-dropzone" id="share-upload-area" style="min-height:160px; ${u.proof_share ? `border-style:solid;border-color:var(--primary);background-image:url('${u.proof_share}');background-size:cover;background-position:center;` : ''}">
+      <div style="${u.proof_share ? 'display:none;' : 'display:flex;flex-direction:column;align-items:center;padding:20px;width:100%;'}">
+        <div class="upload-icon-wrapper"><i class="fas fa-share-nodes"></i></div>
+        <p style="font-size:0.9rem;font-weight:700;color:var(--text);margin:0;">Tap to upload screenshot</p>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin:6px 0 0;">JPG, PNG up to 15MB</p>
       </div>
     </div>
     <input type="file" id="share-file" accept="image/*" style="display:none" onchange="previewDocField(this, 'share-preview', 'share-thumb')">
     <img id="share-thumb" src="${u.proof_share || ''}" style="display:none">
   </div>
 
-  <button class="btn btn-primary btn-block" id="id-confirm-btn" onclick="submitVerificationDocuments('${userId}')" disabled>
-    <i class="fas fa-upload"></i> Submit Verification Documents
+  <button class="submit-verif-btn" id="id-confirm-btn" onclick="submitVerificationDocuments('${userId}')" disabled>
+    <i class="fas fa-paper-plane" style="margin-right: 10px;"></i> Submit Verification Documents
   </button>
 </div>`);
 
@@ -1923,12 +2034,12 @@ async function previewDocField(input, previewId, thumbId) {
     if (thumb) { thumb.src = base64; }
     
     const area = input.previousElementSibling;
-    if (area && area.classList.contains('upload-area')) {
+    if (area && (area.classList.contains('upload-area') || area.classList.contains('upload-dropzone'))) {
       area.style.backgroundImage = `url('${base64}')`;
-      area.style.backgroundSize = 'contain';
+      area.style.backgroundSize = 'cover';
       area.style.backgroundPosition = 'center';
       area.style.backgroundRepeat = 'no-repeat';
-      area.style.border = '1px solid var(--border)';
+      area.style.border = '2px solid var(--primary)';
       Array.from(area.children).forEach(c => c.style.display = 'none');
     }
     
@@ -1961,7 +2072,7 @@ async function submitVerificationDocuments(userId) {
   const btn = document.getElementById('id-confirm-btn');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 10px;"></i> Submitting...';
   }
 
   const idImage = document.getElementById('id-doc-thumb').src;
@@ -1997,7 +2108,7 @@ async function submitVerificationDocuments(userId) {
     showToast('Failed to submit documents: ' + (err?.message || 'Network error'), 'danger');
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-upload"></i> Submit Verification Documents';
+      btn.innerHTML = '<i class="fas fa-paper-plane" style="margin-right: 10px;"></i> Submit Verification Documents';
     }
   }
 }

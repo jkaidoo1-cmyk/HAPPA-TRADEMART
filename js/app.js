@@ -562,8 +562,20 @@ function loadSession() {
   updateCartBadge();
 }
 
+let _verifyInProgress = false;
 async function verifySessionUser() {
   if (!App.currentUser || !App.currentUser.id) return true;
+  // Deduplicate concurrent verify calls — prevents stacking 401s from
+  // overlapping heartbeat, visibility-change, and polling triggers.
+  if (_verifyInProgress) return true;
+  _verifyInProgress = true;
+  try {
+    return await _doVerifySessionUser();
+  } finally {
+    _verifyInProgress = false;
+  }
+}
+async function _doVerifySessionUser() {
   const uid = String(App.currentUser.id);
 
   // Verify by the account's own id — NEVER by scanning the `users` list.
@@ -592,6 +604,8 @@ async function verifySessionUser() {
 
   const prevStatus = App.currentUser.status;
   const prevRole   = App.currentUser.role;
+  const prevIdVerified = App.currentUser.id_verified;
+  const prevIsVerified = App.currentUser.is_verified;
 
   // Sync fresh user fields (e.g. status, role, is_verified, id_verified, wallet_balance)
   Object.assign(App.currentUser, me);
@@ -606,7 +620,7 @@ async function verifySessionUser() {
     }).catch(() => {});
   }
 
-  if (prevStatus !== me.status || prevRole !== me.role) {
+  if (prevStatus !== me.status || prevRole !== me.role || prevIdVerified !== me.id_verified || prevIsVerified !== me.is_verified) {
     updateNavForUser();
     App.loadedPages = {};
     if (typeof runPageInit === 'function') {
@@ -624,7 +638,7 @@ function startDashboardSyncPolling() {
   _dashboardSyncTimer = setInterval(async () => {
     if (document.hidden) return; // Pause polling when tab is inactive to save battery and network bandwidth
     if (!App.currentUser) { stopDashboardSyncPolling(); return; }
-    const syncPages = ['admin-dashboard', 'vendor-dashboard', 'vendor-orders', 'buyer-dashboard'];
+    const syncPages = ['admin-dashboard', 'vendor-dashboard', 'vendor-orders', 'buyer-dashboard', 'rendor-dashboard'];
     if (syncPages.includes(App.currentPage)) {
       apiCache.clear();
       App.isBackgroundRefresh = true;
@@ -655,7 +669,7 @@ setInterval(() => {
   if (App.currentUser && App.currentUser.id) {
     verifySessionUser();
   }
-}, 30000); // every 30s — frequent enough to catch status changes, light enough to avoid churn
+}, 5 * 60 * 1000); // every 5 min — catches status changes without hammering the server
 
 document.addEventListener('visibilitychange', async () => {
   if (!document.hidden && App.currentUser && App.currentUser.id) {
@@ -2031,9 +2045,10 @@ function setAuthToken(token) {
 // must not kick the user out.
 let _session401Count = 0;
 let _session401WindowStart = 0;
-const SESSION_401_THRESHOLD = 5;   // consecutive 401s needed — very tolerant of transient failures
-const SESSION_401_WINDOW_MS  = 60000; // reset counter after 60s of no 401s
-function _handleSessionExpired() {
+const SESSION_401_THRESHOLD = 10;   // consecutive 401s needed — very tolerant of transient failures
+const SESSION_401_WINDOW_MS  = 300000; // reset counter after 5 min of no 401s
+let _sessionRefreshInProgress = false;
+async function _handleSessionExpired() {
   const now = Date.now();
   // Reset counter if the window has elapsed (no recent 401s)
   if (now - _session401WindowStart > SESSION_401_WINDOW_MS) {
@@ -2045,8 +2060,33 @@ function _handleSessionExpired() {
     console.warn(`[Session] 401 #${_session401Count}/${SESSION_401_THRESHOLD} — waiting for more confirmations before logout.`);
     return; // not enough failures yet — keep the session alive
   }
-  // Threshold reached — session is genuinely dead
-  console.warn('[Session] Multiple 401s confirmed — logging out.');
+  // Threshold reached — attempt a token refresh before giving up
+  if (!_sessionRefreshInProgress) {
+    _sessionRefreshInProgress = true;
+    try {
+      const oldToken = getAuthToken();
+      if (oldToken) {
+        const res = await fetch(API + 'auth/refresh', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${oldToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.token) {
+            setAuthToken(data.token);
+            _session401Count = 0;
+            _sessionRefreshInProgress = false;
+            console.log('[Session] Token refreshed successfully — session restored.');
+            return; // session saved!
+          }
+        }
+      }
+    } catch(_) {} finally {
+      _sessionRefreshInProgress = false;
+    }
+  }
+  // Refresh failed — session is genuinely dead
+  console.warn('[Session] Multiple 401s confirmed and refresh failed — logging out.');
   _session401Count = 0;
   try {
     if (typeof showToast === 'function') showToast('Your session has expired. Please sign in again.', 'warning');
@@ -2092,7 +2132,7 @@ async function apiFetch(table, opts = {}) {
     // session (expired/rotated). Re-authenticate — never serve stale local
     // data as if it were live.
     if (e && e.status === 401 && token) {
-      _handleSessionExpired();
+      await _handleSessionExpired();
       return null;
     }
     // Writes (POST/PATCH/PUT/DELETE) must NEVER silently fall back to localStorage
