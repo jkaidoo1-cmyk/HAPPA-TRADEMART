@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    HAPPA TRADEMART — Vendor Dashboard
    ============================================================ */
 
@@ -4037,5 +4037,6 @@ window.isStorefrontSubscriptionActive = function(store) {
   if (!store.subscription_end) return false;
   return new Date(store.subscription_end) > new Date();
 };
+
 
 
