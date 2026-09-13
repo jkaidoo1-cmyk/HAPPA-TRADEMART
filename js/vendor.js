@@ -179,6 +179,10 @@ async function renderVendorDashboard() {
   const growthPrice  = parseFloat(myStorefront?.plan_prices?.growth  || myStore?.plan_prices?.growth  || defaultGrowthPrice);
   const proPrice     = parseFloat(myStorefront?.plan_prices?.pro     || myStore?.plan_prices?.pro     || defaultProPrice);
 
+  // Referral reward is a percentage of the item's vendor amount (same tiers the
+  // payout in orders.js uses) — never a fixed amount.
+  const refPct = (typeof getEffectiveReferralCommissionPct === 'function') ? getEffectiveReferralCommissionPct(100) : 3;
+
   const activeTabId = (App.activeTab && App.activeTab['vendor-dashboard']) || 'vendor-overview';
 
     c.innerHTML = `
@@ -444,7 +448,7 @@ async function renderVendorDashboard() {
           </div>
           <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
             <div style="width:22px;height:22px;border-radius:50%;background:#f59e0b;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">5</div>
-            <div style="color:var(--text)">Referrals earn <strong>GH₵ ${refAmt.toFixed(2)}</strong> per approved item they buy — paid to their wallet</div>
+            <div style="color:var(--text)">Referrals earn <strong>${refPct}% of each approved item's value</strong> — paid to their wallet</div>
           </div>
         </div>
       </div>
