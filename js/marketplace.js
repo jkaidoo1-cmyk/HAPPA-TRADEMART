@@ -285,7 +285,7 @@ function rendorPostCardPublicHTML(post, rendor) {
 
     ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
 
-            style="width:100%;height:192px;object-fit:fill;display:block;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
+            style="width:100%;height:230px;object-fit:fill;display:block;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
 
             onerror="this.style.display='none'">`
 
@@ -2575,7 +2575,7 @@ function _rendorPublicPostCardHTML(post) {
 
     ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
 
-           style="width:100%;height:140px;object-fit:fill;display:block;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
+           style="width:100%;height:168px;object-fit:fill;display:block;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
 
            onerror="this.style.display='none'">`
 

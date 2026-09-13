@@ -335,8 +335,7 @@ function rendorPostCardHTML(p) {
 <div class="card" style="margin-bottom:12px" id="rendor-post-${p.id}">
   <div class="card-body">
     ${p.image_url ? `
-    <img src="${escHtml(p.image_url)}" alt=""
-         style="width:100%;height:168px;object-fit:fill;display:block;border-radius:var(--radius-sm);margin-bottom:10px"
+    <img src="${escHtml(p.image_url)}" alt=""          style="width:100%;height:202px;object-fit:fill;display:block;border-radius:var(--radius-sm);margin-bottom:10px"
          onerror="this.style.display='none'">` : ''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
       <div style="flex:1;min-width:0">
@@ -784,11 +783,9 @@ function _showPostModal(post) {
 <div class="modal-body" style="overflow-y:auto;max-height:80vh">
 
   <!-- ── Image banner: full width, same size as published post ── -->
-  <div id="post-img-upload-area"
-       style="width:100%;height:168px;cursor:pointer;position:relative;overflow:hidden;border-bottom:1px solid var(--border);background:${hasExistingImg ? 'transparent' : 'var(--bg-secondary,#f3f4f6)'};display:flex;align-items:center;justify-content:center">
+  <div id="post-img-upload-area"        style="width:100%;height:202px;cursor:pointer;position:relative;overflow:hidden;border-bottom:1px solid var(--border);background:${hasExistingImg ? 'transparent' : 'var(--bg-secondary,#f3f4f6)'};display:flex;align-items:center;justify-content:center">
     <img id="post-prev-img"
-         src="${hasExistingImg ? escHtml(post.image_url) : ''}"
-         style="width:100%;height:168px;object-fit:fill;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
+         src="${hasExistingImg ? escHtml(post.image_url) : ''}"          style="width:100%;height:202px;object-fit:fill;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
     <div id="post-img-placeholder"
          style="display:${hasExistingImg?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:1;text-align:center;padding:16px">
       <i class="fas fa-image" style="color:#7c3aed;font-size:1.8rem"></i>
