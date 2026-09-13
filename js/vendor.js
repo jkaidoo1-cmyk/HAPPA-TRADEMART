@@ -193,22 +193,25 @@ async function renderVendorDashboard() {
     ${!u.is_verified ? `<div class="verify-banner"><i class="fas fa-exclamation-triangle"></i><p>Please verify your phone number to unlock all features</p></div>` : ''}
     ${!u.id_verified ? `<div class="verify-banner" style="background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c;cursor:pointer" onclick="switchTab('vendor-verify')"><i class="fas fa-id-card" style="color:#ea580c"></i><p>Upload your ID to complete vendor verification</p></div>` : ''}
 
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon" style="background:#fef9c3"><i class="fas fa-box" style="color:#ca8a04"></i></div>
-        <div class="stat-value">${myProducts.filter(p=>p.status==='active').length}</div>
-        <div class="stat-label">Active Products</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-shopping-bag" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">${activeVendorPkgs.length}</div>
-        <div class="stat-label">Active Orders</div>
-      </div>
-      <div class="stat-card" style="background:${rejectedVendorPkgs.length ? '#fff5f5' : '#f9fafb'};border-color:${rejectedVendorPkgs.length ? '#fca5a5' : '#e5e7eb'}">
-        <div class="stat-icon" style="background:${rejectedVendorPkgs.length ? '#fee2e2' : '#f3f4f6'}"><i class="fas fa-ban" style="color:${rejectedVendorPkgs.length ? 'var(--danger)' : '#9ca3af'}"></i></div>
-        <div class="stat-value">${rejectedVendorPkgs.length}</div>
-        <div class="stat-label">Rejected Orders</div>
-      </div>
+    <div class="stats-grid">          <div class="admin-action-btn" onclick="showPage('vendor-my-store')">
+          <i class="fas fa-store"></i><span>My Store</span>
+        </div>
+        <div class="admin-action-btn" onclick="showAddProductModal('${myStore?.id||''}','${u.id}')">
+          <i class="fas fa-plus-circle"></i><span>Add Product</span>
+        </div>
+        <div class="admin-action-btn" onclick="showBulkAddPanel('${myStore?.id||''}','${u.id}')" style="position:relative">
+          <i class="fas fa-layer-group"></i><span>Bulk Add</span>
+          <span style="position:absolute;top:4px;right:4px;background:var(--primary);color:#fff;font-size:.5rem;font-weight:800;padding:1px 4px;border-radius:20px;line-height:1.4">NEW</span>
+        </div>
+        <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=vendor-wallet]'),'vendor-wallet');renderWalletHistory('vendor-txn-list');if(typeof renderVendorChart==='function'&&window._vendorSalesPackages)renderVendorChart(window._vendorSalesPackages)">
+          <i class="fas fa-chart-line"></i><span>Analytics</span>
+        </div>
+        <div class="admin-action-btn" onclick="showPage('vendor-orders')">
+          <i class="fas fa-shopping-bag"></i><span>Orders</span>
+        </div>
+        <div class="admin-action-btn" onclick="showPage('support')">
+          <i class="fas fa-headset"></i><span>Help &amp; Support</span>
+        </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-wallet" style="color:var(--success)"></i></div>
         <div class="stat-value">GHS ${parseFloat(u.wallet_balance||0).toFixed(0)}</div>
@@ -219,24 +222,24 @@ async function renderVendorDashboard() {
     <!-- Quick Actions -->
     <div style="margin-bottom:16px">
       <h3 style="font-size:.9rem;font-weight:700;margin-bottom:10px">Quick Actions</h3>
-      <div class="admin-actions-grid">
-        <div class="admin-action-btn" onclick="showPage('vendor-my-store')">
+      <div class="action-links">
+        <div class="action-link" onclick="showPage('vendor-my-store')">
           <i class="fas fa-store"></i><span>My Store</span>
         </div>
-        <div class="admin-action-btn" onclick="showAddProductModal('${myStore?.id||''}','${u.id}')">
+        <div class="action-link" onclick="showAddProductModal('${myStore?.id||''}','${u.id}')">
           <i class="fas fa-plus-circle"></i><span>Add Product</span>
         </div>
-        <div class="admin-action-btn" onclick="showBulkAddPanel('${myStore?.id||''}','${u.id}')" style="position:relative">
+        <div class="action-link" onclick="showBulkAddPanel('${myStore?.id||''}','${u.id}')" style="position:relative">
           <i class="fas fa-layer-group"></i><span>Bulk Add</span>
-          <span style="position:absolute;top:4px;right:4px;background:var(--primary);color:#fff;font-size:.5rem;font-weight:800;padding:1px 4px;border-radius:20px;line-height:1.4">NEW</span>
+          <span style="position:absolute;top:2px;right:6px;background:var(--primary);color:#fff;font-size:.55rem;font-weight:800;padding:1px 5px;border-radius:10px;line-height:1.3">NEW</span>
         </div>
-        <div class="admin-action-btn" onclick="showPage('vendor-orders')">
+        <div class="action-link" onclick="showPage('vendor-orders')">
           <i class="fas fa-shopping-bag"></i><span>Orders</span>
         </div>
-        <div class="admin-action-btn" onclick="switchTab(document.querySelector('[onclick*=vendor-wallet]'),'vendor-wallet');renderWalletHistory('vendor-txn-list');if(typeof renderVendorChart==='function'&&window._vendorSalesPackages)renderVendorChart(window._vendorSalesPackages)">
+        <div class="action-link" onclick="switchTab(document.querySelector('[onclick*=vendor-wallet]'),'vendor-wallet');renderWalletHistory('vendor-txn-list');if(typeof renderVendorChart==='function'&&window._vendorSalesPackages)renderVendorChart(window._vendorSalesPackages)">
           <i class="fas fa-chart-line"></i><span>Analytics</span>
         </div>
-        <div class="admin-action-btn" onclick="showPage('support')">
+        <div class="action-link" onclick="showPage('support')">
           <i class="fas fa-headset"></i><span>Help &amp; Support</span>
         </div>
       </div>
@@ -433,7 +436,11 @@ async function renderVendorDashboard() {
           </div>
           <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">4</div>
-            <div style="color:var(--text-light)">The more referrals you get, the more people see your store — boosting your sales and reach!</div>
+            <div style="color:var(--text-light)">The more referrals you get, the more people see your store — boosting your sales and reach</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
+            <div style="width:22px;height:22px;border-radius:50%;background:#f59e0b;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">5</div>
+            <div style="color:var(--text)">Referrals earn <strong>GH₵ ${refAmt.toFixed(2)}</strong> per approved item they buy — paid to their wallet</div>
           </div>
         </div>
       </div>
@@ -584,8 +591,7 @@ async function renderVendorDashboard() {
         ${myStorefront.status === 'approved_pending_payment' ? `
           <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:18px;margin-bottom:16px">
             <div style="font-weight:800;font-size:1.05rem;color:#166534;margin-bottom:6px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Storefront Layout Approved!</div>
-            <div style="font-size:.84rem;color:#14532d;line-height:1.5;margin-bottom:18px">
-              Your storefront layout has been approved by admin. Select a subscription plan below to choose your duration and activate your live URL.
+            <div style="font-size:.84rem;color:#14532d;line-height:1.5;margin-bottom:18px">                  Your storefront layout has been approved by admin. Select a subscription plan below to choose your duration and pay to activate your live URL.
             </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;max-width:900px">
               <!-- Starter Plan -->

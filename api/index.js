@@ -931,13 +931,15 @@ app.post('/api/push/migrate', requireAuth, async (req, res) => {
 });
 
 // POST /api/push/send — send push notification to a user (internal use)
-app.post('/api/push/send', async (req, res) => {
+app.post('/api/push/send', requireAuth, async (req, res) => {
   try {
     const { user_id, title, body, url } = req.body || {};
     if (!user_id || !title) return res.status(400).json({ error: 'Missing user_id or title' });
+    if (!webpush) return res.status(503).json({ error: 'Push service not configured.' });
     const supabase = getSupabase();
     let subs = [];
-    if (String(user_id) === 'admin') {
+    const uid = String(user_id);
+    if (uid === 'admin' || uid === 'all' || uid === 'global') {
       let adminIds = [];
       if (supabase) {
         try {

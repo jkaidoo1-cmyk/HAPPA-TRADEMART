@@ -42,13 +42,15 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
     created_at: new Date().toISOString()
   };
 
-  // Only update local notifications list and badge if target userId matches current user (or is admin/broadcast)
+  // Only update local notifications list and badge if the target is the current
+  // signed-in user, or it is a broadcast announcement, or the current user is
+  // the admin and the notification was targeted at the admin account.
   const isAdmin = App.currentUser?.role === 'admin';
   const isForMe = App.currentUser && (
     String(App.currentUser.id) === targetId ||
     targetId === 'all' ||
     targetId === 'global' ||
-    (isAdmin && targetId === 'admin')
+    (isAdmin && String(targetId) === 'admin')
   );
   if (isForMe) {
     App.notifications.unshift(notif);
@@ -716,9 +718,13 @@ function _urlBase64ToUint8Array(base64String) {
 // ── Send push from client (calls server endpoint) ───────────
 async function sendPushToUser(userId, title, body, url) {
   try {
-    await apiPost('push/send', { user_id: userId, title, body, url });
+    await apiFetch('push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, title, body: body || '', url: url || './' })
+    });
   } catch(e) {
-    console.warn('[Push] sendPushToUser failed:', e);
+    console.warn('[Push] sendPushToUser failed for', userId, ':', e && (e.status || e.message));
   }
 }
 

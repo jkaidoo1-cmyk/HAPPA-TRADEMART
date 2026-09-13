@@ -886,6 +886,17 @@ function switchAdminProfileTab(type, tab) {
     }
     document.querySelectorAll('.ap-r-tab-content').forEach(el => el.style.display = 'none');
     document.getElementById('ap-r-' + tab).style.display = 'block';
+
+    // Rendor profile tabs carry live data the admin needs to see after a save:
+    // the subscription-price input, the actions buttons, etc. Re-render only the
+    // info tab on switch, because that tab hosts the editable price input and the
+    // subscription summary; the actions tab is static per render.
+    if (type === 'rendor' && tab === 'info') {
+      const id = window.currentAdminRendorId;
+      if (id && typeof adminOpenRendorProfile === 'function') {
+        adminOpenRendorProfile(id);
+      }
+    }
   }
 }
 
@@ -1726,6 +1737,20 @@ async function saveRendorCustomPrice(userId) {
   const result = await apiPatch('users', userId, { rendor_sub_price_override: price });
   const u = (App.allUsers || []).find(u => u.id === userId);
   if (u) u.rendor_sub_price_override = price;
+
+  // Re-fetch the rendor's fresh record so the persisted override is reflected in
+  // the admin UI and in any in-memory rendor objects other flows may be using.
+  // The local optimistic set above is enough for this panel, but the rendor's
+  // own subscription UI reads from the rendor record, not from App.allUsers.
+  try {
+    if (typeof apiFetch === 'function') {
+      const fresh = await apiFetch('users/' + userId);
+      if (fresh && fresh.rendor_sub_price_override !== undefined) {
+        if (u) u.rendor_sub_price_override = fresh.rendor_sub_price_override;
+      }
+    }
+  } catch (_) {}
+
   if (!result && window.lastApiError) {
     showToast('Server could not save the override — it will reset on page reload.', 'warning');
   } else {

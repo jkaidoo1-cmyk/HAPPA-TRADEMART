@@ -17,7 +17,7 @@ const MOMO_NETWORKS  = ['MTN Mobile Money', 'Vodafone Cash', 'AirtelTigo Money']
 const BANKS_GH       = ['GCB Bank', 'Ecobank Ghana', 'Fidelity Bank', 'Standard Chartered', 'Absa Ghana', 'Cal Bank', 'Stanbic Bank', 'Access Bank'];
 const MIN_DEPOSIT    = 1;
 const MIN_WITHDRAWAL = 10;
-const MAX_WITHDRAWAL_PENDING = 1; // max simultaneous pending withdrawals
+const MAX_WITHDRAWAL_PENDING = 3; // max simultaneous pending withdrawals  ← must match Admin Settings default (max_pending_withdrawals=3)
 
 // ─────────────────────────────────────────────────────────────
 // DEPOSIT MODAL (buyers & vendors)

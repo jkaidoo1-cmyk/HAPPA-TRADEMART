@@ -1168,6 +1168,24 @@ html.is-storefront-root body #main-content {
 .admin-action-btn i { font-size: 1.5rem; color: var(--primary); }
 .admin-action-btn span { font-size: 0.8rem; font-weight: 600; color: var(--text); }
 
+/* Vendor/rendor Quick Actions row — single full-width flex line with icon + label */
+.action-links { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+.action-link {
+  display: flex; align-items: center; gap: 8px;
+  background: #fff; border: 1.5px solid var(--border);
+  border-radius: var(--radius-md); padding: 10px 14px;
+  cursor: pointer; transition: all var(--transition);
+  font-size: 0.82rem; font-weight: 600; color: var(--text); text-decoration: none;
+  flex: 0 1 auto; min-width: 0;
+}
+.action-link:hover { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+.action-link i { font-size: 1.05rem; color: var(--primary); flex-shrink: 0; }
+.action-link span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 640px) {
+  .action-links { gap: 12px; }
+  .action-link { padding: 11px 18px; font-size: 0.85rem; }
+}
+
 /* Rendor dashboard quick actions — even 3-tile flow that wraps gracefully */
 .rendor-quick-actions { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 

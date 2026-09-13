@@ -366,7 +366,7 @@ async function submitOrderReview(storeId, packageId) {
     flagged:       false
   });
 
-  await apiPatch('packages', packageId, { has_review: true });
+  closeModalForce();
 
   // Update store avg_rating
   const storeRes = await apiFetch('stores/' + storeId);

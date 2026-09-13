@@ -336,7 +336,7 @@ function rendorPostCardHTML(p) {
   <div class="card-body">
     ${p.image_url ? `
     <img src="${escHtml(p.image_url)}" alt=""
-         style="width:100%;height:140px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:10px"
+         style="width:100%;height:168px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:10px"
          onerror="this.style.display='none'">` : ''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
       <div style="flex:1;min-width:0">
@@ -781,27 +781,31 @@ function _showPostModal(post) {
   <span class="modal-title">${isEdit ? '✏️ Edit Post' : '➕ New Post'}</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
-<div class="modal-body" style="overflow-y:auto;max-height:80vh;padding:0">
+<div class="modal-body" style="overflow-y:auto;max-height:80vh">
 
   <!-- ── Image banner: full width, same size as published post ── -->
-  <div id="post-img-upload-area" onclick="document.getElementById('post-img-file').click()"
-       style="width:100%;height:160px;display:flex;align-items:center;justify-content:center;flex-direction:column;cursor:pointer;background:var(--bg-secondary,#f3f4f6);border-bottom:1px solid var(--border);position:relative;overflow:hidden">
-    <img id="post-prev-img" src="${hasExistingImg ? escHtml(post.image_url) : ''}"
-         style="width:100%;height:160px;object-fit:cover;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
-    <div id="post-img-placeholder" style="display:${hasExistingImg?'none':'flex'};flex-direction:column;align-items:center;gap:4px;z-index:1">
-      <i class="fas fa-image" style="color:#7c3aed;font-size:1.6rem"></i>
-      <p style="margin:0;font-size:.82rem;font-weight:600;color:var(--text)">Tap to add a photo</p>
-      <p style="margin:0;font-size:.7rem;color:var(--text-muted)">JPG, PNG or WEBP · Max 5 MB</p>
+  <div id="post-img-upload-area"
+       style="width:100%;height:168px;cursor:pointer;position:relative;overflow:hidden;border-bottom:1px solid var(--border);background:${hasExistingImg ? 'transparent' : 'var(--bg-secondary,#f3f4f6)'};display:flex;align-items:center;justify-content:center">
+    <img id="post-prev-img"
+         src="${hasExistingImg ? escHtml(post.image_url) : ''}"
+         style="width:100%;height:168px;object-fit:cover;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
+    <div id="post-img-placeholder"
+         style="display:${hasExistingImg?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:1;text-align:center;padding:16px">
+      <i class="fas fa-image" style="color:#7c3aed;font-size:1.8rem"></i>
+      <p style="margin:0;font-size:.85rem;font-weight:600;color:var(--text)">Tap to add a photo</p>
+      <p style="margin:0;font-size:.72rem;color:var(--text-muted)">JPG, PNG or WEBP · up to 5 MB</p>
     </div>
-    <button id="post-img-remove-btn" type="button" onclick="event.stopPropagation();_clearPostModalImage()"
-            style="${hasExistingImg?'':'display:none'};position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.8rem;z-index:3">
+    <button id="post-img-remove-btn" type="button"
+            onclick="event.stopPropagation();_clearPostModalImage()"
+            style="${hasExistingImg?'':'display:none'};position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;z-index:3;transition:background .15s">
       <i class="fas fa-times"></i>
     </button>
+    <input type="file" id="post-img-file" accept="image/*" style="display:none"
+           onchange="previewProductImage(this,'post-img-preview','post-img-b64', true)">
   </div>
 
-  <!-- Hidden elements for previewProductImage compatibility (must match its expected IDs) -->
-  <input type="file" id="post-img-file" accept="image/*" style="display:none"
-         onchange="previewProductImage(this,'post-img-preview','post-img-b64', true)">
+  <!-- Hidden thumbnail surface previewProductImage writes to — kept invisible so
+       the existing utility still works; the banner syncs from it via MutationObserver. -->
   <div id="post-img-preview" style="display:none">
     <img id="post-img-thumb" style="width:0;height:0;position:absolute;opacity:0">
   </div>
@@ -809,53 +813,58 @@ function _showPostModal(post) {
   <input type="hidden" id="post-img-keep" value="${hasExistingImg ? escHtml(post.image_url) : ''}">
 
   <!-- ── Card body: fields at exact positions and sizes of published post ── -->
-  <div style="padding:12px">
+  <div style="padding:14px 16px">
     <!-- Rendor identity row: avatar + name + price -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#5b21b6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;color:#fff;flex-shrink:0">${avatar}</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#5b21b6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.05rem;color:#fff;flex-shrink:0;box-shadow:0 2px 6px rgba(124,58,237,.25)">${avatar}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:.85rem;display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+        <div style="font-weight:700;font-size:.88rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           ${escHtml(displayName)}
           ${u.id_verified ? '<span style="display:inline-flex;align-items:center;gap:3px;font-size:.68rem;background:#ede9fe;color:#7c3aed;border-radius:20px;padding:1px 7px;font-weight:700"><i class="fas fa-check-circle"></i> Verified</span>' : ''}
         </div>
-        <div style="font-size:.72rem;color:var(--text-muted)"><i class="fas fa-briefcase"></i> ${escHtml(u.rendor_service_cat || catTag || 'Service')}</div>
+        <div style="font-size:.74rem;color:var(--text-muted);margin-top:2px"><i class="fas fa-briefcase" style="margin-right:3px;color:var(--text-light)"></i> ${escHtml(u.rendor_service_cat || catTag || 'Service')}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-        <span style="font-size:.78rem;color:var(--text-muted);white-space:nowrap">GHS</span>
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px 8px">
+        <span style="font-size:.72rem;color:var(--text-muted);white-space:nowrap">GHS</span>
         <input class="form-control" id="post-price" type="number" min="0" step="0.01"
                placeholder="0" value="${post?.price||''}"
-               style="width:72px;text-align:right;font-weight:800;color:#7c3aed;font-size:.9rem;padding:4px 6px;border-radius:6px">
+               style="width:64px;text-align:right;font-weight:800;color:#7c3aed;font-size:.9rem;padding:2px 4px;border:none;background:transparent;box-shadow:none;border-radius:6px">
       </div>
     </div>
+
     <!-- Post title (same size/weight as published) -->
     <input class="form-control" id="post-title" placeholder="Post title — e.g. LinkedIn Profile Rewrite"
            value="${escHtml(post?.title||'')}"
-           style="font-weight:700;font-size:.95rem;border:none;padding:0;margin-bottom:4px;background:transparent;box-shadow:none;color:var(--text)">
+           style="font-weight:700;font-size:.95rem;border:none;padding:8px 0;margin-bottom:6px;background:transparent;box-shadow:none;color:var(--text);outline:none;width:100%">
+
     <!-- Category tag (same as published card) -->
-    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px;display:flex;align-items:center;gap:6px">
-      <i class="fas fa-tag"></i>
+    <div style="font-size:.74rem;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+      <i class="fas fa-tag" style="color:var(--text-light)"></i>
       <select class="form-control form-select" id="post-cat"
-              style="width:auto;border:none;padding:0;font-size:.72rem;color:var(--text-muted);background:transparent;box-shadow:none;margin:0;display:inline">
-        <option value="">Select…</option>
+              style="width:auto;border:none;padding:0;font-size:.74rem;color:var(--text-muted);background:transparent;box-shadow:none;margin:0;outline:none">
+        <option value="">Select a category…</option>
         ${SERVICE_CATEGORIES.map(c => `<option value="${c}"${post?.category===c?' selected':''}>${c}</option>`).join('')}
       </select>
     </div>
+
     <!-- Description (same font/line-height as published) -->
-    <textarea class="form-control" id="post-desc" rows="4"
+    <textarea class="form-control" id="post-desc" rows="5"
               placeholder="Describe your service, what clients get, your experience, turnaround time…"
-              style="font-size:.82rem;color:var(--text-light);line-height:1.6;border:none;padding:0;background:transparent;box-shadow:none;resize:vertical;min-height:80px">${escHtml(post?.description||'')}</textarea>
+              style="font-size:.82rem;color:var(--text-light);line-height:1.6;border:none;padding:8px 0;background:transparent;box-shadow:none;resize:vertical;min-height:96px;color:var(--text-light);outline:none;width:100%">${escHtml(post?.description||'')}</textarea>
+
     <!-- Status -->
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
-      <span style="font-size:.75rem;color:var(--text-muted)"><i class="fas fa-eye"></i> Status</span>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px">
+      <span style="font-size:.75rem;color:var(--text-muted)"><i class="fas fa-eye" style="margin-right:4px"></i> Status</span>
       <select class="form-control form-select" id="post-status"
-              style="width:auto;border-radius:6px;padding:3px 8px;font-size:.75rem;margin:0">
+              style="width:auto;border-radius:6px;padding:3px 10px;font-size:.75rem;margin:0;outline:none">
         <option value="active"${(!post||post.status==='active')?' selected':''}>Active</option>
         <option value="paused"${post?.status==='paused'?' selected':''}>Paused</option>
       </select>
     </div>
+
     <!-- Publish button -->
     <button class="btn btn-block" id="post-save-btn" onclick="savePost('${post?.id||''}')"
-            style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;margin-top:12px">
+            style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;margin-top:14px;padding:11px;font-size:.92rem;box-shadow:0 4px 12px rgba(124,58,237,.25)">
       <i class="fas fa-save"></i> ${isEdit ? 'Update Post' : 'Publish Post'}
     </button>
   </div>
@@ -868,6 +877,11 @@ function _showPostModal(post) {
       thumb, { attributes: true, attributeFilter: ['src'] }
     );
   }
+  const addBtn = document.getElementById('post-img-upload-area');
+  if (addBtn) addBtn.addEventListener('click', () => {
+    const fileInput = document.getElementById('post-img-file');
+    if (fileInput) fileInput.click();
+  });
 }
 
 // ── Sync image banner with thumbnail / hidden inputs ─────────
