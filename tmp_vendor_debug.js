@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    HAPPA TRADEMART — Vendor Dashboard
    ============================================================ */
 
@@ -962,13 +962,6 @@ async function renderVendorDashboard() {
       window.updateStorefrontPreview();
     }
   }, 200);
-  } catch (err) {
-    console.error('[renderVendorDashboard] Error:', err);
-    try {
-      const c = document.getElementById('vendor-dashboard-content');
-      if (c) c.innerHTML = `<div class="empty-state" style="padding:24px"><i class="fas fa-exclamation-triangle"></i><h3>Something went wrong</h3><p>Open the developer console for details.</p></div>`;
-    } catch (e) {}
-  }
 }
 
 function renderVendorChart(packages = []) {
@@ -993,7 +986,13 @@ function renderVendorChart(packages = []) {
       const mappedIdx = dayIdx === 0 ? 6 : dayIdx - 1;
       if (mappedIdx >= 0 && mappedIdx < 7) {
         data[mappedIdx] += parseFloat(p.gross_amount || p.vendor_amount || 0);
-      }
+        } catch (err) {
+          console.error('[renderVendorDashboard] Error:', err);
+          try {
+            const c = document.getElementById('vendor-dashboard-content');
+            if (c) c.innerHTML = `<div class="empty-state" style="padding:24px"><i class="fas fa-exclamation-triangle"></i><h3>Something went wrong</h3><p>Open the developer console for details.</p></div>`;
+          } catch (e) {}
+        }
     }
   });
 
@@ -4062,5 +4061,6 @@ window.isStorefrontSubscriptionActive = function(store) {
   if (!store.subscription_end) return false;
   return new Date(store.subscription_end) > new Date();
 };
+
 
 
