@@ -1830,6 +1830,62 @@ app.put('/api/:table/:id', async (req, res) => {
     if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
     const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
 
+    // Server-side convenience: when callers supply a months value but do not
+    // include an explicit expiry, compute the subscription expiry by
+    // extending from the current expiry (if in the future) or from now.
+    // This guarantees renewals are added on top of remaining days.
+    try {
+      const now = Date.now();
+      // Users: rendor subscription claims (admin confirmations or helper calls)
+      if (table === 'users') {
+        const months = Number(body.sub_payment_months || (body.rendor_sub_plan && parseInt(String(body.rendor_sub_plan).replace(/[^0-9]/g, ''), 10)));
+        const activating = body.rendor_sub_status === 'active' || body.sub_payment_status === 'confirmed';
+        if (months && activating && !('rendor_sub_expiry' in body)) {
+          let existingUser = null;
+          const supabase = getSupabase();
+          if (supabase) {
+            try {
+              const { data } = await supabase.from('users').select('rendor_sub_expiry').eq('id', id).maybeSingle();
+              if (data) existingUser = serializeRecord(data);
+            } catch (e) {}
+          }
+          if (!existingUser) {
+            try { dataStore.ensureTable('users'); existingUser = (dataStore.getStore().users || []).find(u => String(u.id) === String(id)) || null; } catch (e) { existingUser = null; }
+          }
+          const curMs = Number(existingUser && existingUser.rendor_sub_expiry);
+          const startFrom = Number.isFinite(curMs) && curMs > now ? curMs : now;
+          const newExpiry = new Date(startFrom + months * 30 * 86400000);
+          body.rendor_sub_expiry = String(newExpiry.getTime());
+          body.rendor_sub_status = 'active';
+        }
+      }
+
+      // Stores / storefronts: extend subscription_end when months provided
+      if (table === 'stores' || table === 'storefronts') {
+        const months = Number(body.subscription_months);
+        if (months && !('subscription_end' in body)) {
+          let existingStore = null;
+          const supabase = getSupabase();
+          if (supabase) {
+            try {
+              const { data } = await supabase.from('stores').select('subscription_end').eq('id', id).maybeSingle();
+              if (data) existingStore = serializeRecord(data);
+            } catch (e) {}
+          }
+          if (!existingStore) {
+            try { dataStore.ensureTable('stores'); existingStore = (dataStore.getStore().stores || []).find(s => String(s.id) === String(id)) || null; } catch (e) { existingStore = null; }
+          }
+          const currentEnd = existingStore && existingStore.subscription_end ? new Date(existingStore.subscription_end) : null;
+          const startFrom = (currentEnd && currentEnd.getTime() > now) ? currentEnd : new Date(now);
+          const newEnd = new Date(startFrom);
+          newEnd.setMonth(newEnd.getMonth() + months);
+          body.subscription_end = newEnd.toISOString();
+          body.subscription_start = body.subscription_start || startFrom.toISOString();
+          body.subscription_status = 'active';
+        }
+      }
+    } catch (e) {}
+
     // ── Access control (storefronts are checked in their branch after the
     // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──
     if (table !== 'storefronts') {
