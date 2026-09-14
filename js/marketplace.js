@@ -1117,6 +1117,15 @@ function storefrontPageIsRendered(c) {
 }
 
 async function renderStorefront(id) {
+  // ── PWA guard: storefront pages never render inside the installed app ──
+  // Covers direct calls (admin panel buttons, retry buttons) that bypass showPage.
+  if (typeof isPwaMode === 'function' && isPwaMode()) {
+    openStorefrontInBrowser('storefront', id);
+    const cPwa = document.getElementById('storefront-content');
+    if (cPwa) cPwa.innerHTML = `<div class="empty-state" style="padding:50px 20px;text-align:center"><i class="fas fa-external-link-alt" style="font-size:2.2rem;color:var(--primary);margin-bottom:12px"></i><h3 style="font-size:1.05rem;font-weight:800">Opening in your browser…</h3><p style="font-size:.82rem;color:var(--text-muted);margin-top:4px">Storefronts are not available inside the app. If nothing opened, tap the link again.</p></div>`;
+    return;
+  }
+
   let c = document.getElementById('storefront-content');
   if (!c) {
     const sfPage = document.getElementById('page-storefront');
@@ -1290,9 +1299,12 @@ async function renderStorefront(id) {
 
     const theme = sf?.theme || s.theme || 'classic';
     const font_family = sf?.font_family || s.font_family || 'Outfit';
-    // Layout controls the page STRUCTURE (classic grid / info sidebar / showcase /
-    // compact bars). Theme only restyles it. Persisted on the store record.
-    const layout = sf?.layout || s.layout || (s.extra && s.extra.layout) || 'grid';
+    // Layout controls the page STRUCTURE (classic grid / showcase / compact bars).
+    // Theme only restyles it. Persisted on the store record.
+    // 'sidebar' was removed (it duplicated the footer info) — stores saved with it
+    // fall back to the classic grid.
+    const _savedLayout = sf?.layout || s.layout || (s.extra && s.extra.layout) || 'grid';
+    const layout = _savedLayout === 'sidebar' ? 'grid' : _savedLayout;
     window._sfLayout = layout;
 
     // Dynamically load Google Font on demand if not already loaded (saves massive bandwidth and load time)
@@ -1473,25 +1485,7 @@ async function renderStorefront(id) {
 
   // ── Layout-specific STRUCTURAL styles (theme only restyles) ──
   let layoutStyles = '';
-  if (layout === 'sidebar') {
-    layoutStyles = `
-      #sf-layout-main { display: flex; align-items: stretch; }
-      #sf-layout-sidebar {
-        flex: 0 0 220px; max-width: 220px; background: color-mix(in srgb, ${secondaryColor} 10%, #ffffff);
-        border-right: 1px solid var(--border); padding: 16px 14px; font-size: .8rem; color: var(--text-light);
-        display: flex; flex-direction: column; gap: 14px;
-      }
-      #sf-layout-sidebar h4 { font-size: .78rem; font-weight: 800; color: ${primaryColor}; margin: 0 0 3px; display:flex; align-items:center; gap:6px; }
-      #sf-layout-sidebar .sb-block { padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
-      #sf-layout-sidebar .sb-block:last-child { border-bottom: none; }
-      #sf-layout-content { flex: 1; min-width: 0; }
-      @media (max-width: 720px) {
-        #sf-layout-main { flex-direction: column; }
-        #sf-layout-sidebar { flex: none; max-width: none; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; gap: 10px 18px; }
-        #sf-layout-sidebar .sb-block { flex: 1 1 40%; border-bottom: none; padding-bottom: 0; }
-      }
-    `;
-  } else if (layout === 'showcase') {
+  if (layout === 'showcase') {
     layoutStyles = `
       #sf-showcase-hero { position: relative; height: 300px; overflow: hidden; display: flex; align-items: center; justify-content: center; text-align: center; }
       #sf-showcase-hero img.sf-hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -1512,16 +1506,19 @@ async function renderStorefront(id) {
     `;
   } else if (layout === 'compact') {
     layoutStyles = `
+      /* Bar + search/cart toolbar stick together so search & cart never scroll away */
+      #sf-compact-sticky { position: sticky; top: var(--nav-h, 56px); z-index: 30; }
+      body.is-storefront-view #sf-compact-sticky,
+      html.is-storefront-root body #sf-compact-sticky { top: 0; }
       #sf-compact-bar {
         display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--border);
-        position: sticky; top: 56px; z-index: 30;
       }
       #sf-compact-bar img { width: 38px; height: 38px; border-radius: 9px; object-fit: cover; border: 1px solid var(--border); }
       #sf-compact-bar .cb-name { font-size: .95rem; font-weight: 900; line-height: 1.2; }
       #sf-compact-bar .cb-slogan { font-size: .68rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
-      #sf-layout-content .product-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
-      #sf-layout-content .product-card .product-name { font-size: .72rem !important; }
-      @media (max-width: 640px) { #sf-layout-content .product-grid { grid-template-columns: repeat(2, 1fr) !important; } #sf-compact-bar { top: 52px; } }
+      #storefront-page-container .product-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
+      #storefront-page-container .product-card .product-name { font-size: .72rem !important; }
+      @media (max-width: 640px) { #storefront-page-container .product-grid { grid-template-columns: repeat(2, 1fr) !important; } }
     `;
   }
 
@@ -1631,7 +1628,6 @@ async function renderStorefront(id) {
 
   // ── Layout-specific structural blocks ──
   let layoutHeroHTML = '';
-  let layoutSidebarHTML = '';
   if (layout === 'showcase') {
     layoutHeroHTML = `
       <div id="sf-showcase-hero">
@@ -1647,37 +1643,6 @@ async function renderStorefront(id) {
         </div>
       </div>`;
   }
-  if (layout === 'sidebar') {
-    const vendorObjSb = (App.allUsers || []).find(u => String(u.id) === String(s.vendor_id)) || {};
-    layoutSidebarHTML = `
-      <aside id="sf-layout-sidebar">
-        <div class="sb-block">
-          <h4><i class="fas fa-info-circle"></i> About</h4>
-          <div>${escHtml(description)}</div>
-        </div>
-        <div class="sb-block">
-          <h4><i class="fas fa-clock"></i> Hours &amp; Contact</h4>
-          <div style="display:grid;gap:3px">
-            <div>${escHtml(business_hours)}</div>
-            <div><i class="fas fa-map-marker-alt" style="color:${primaryColor};width:14px"></i> ${s.location || '—'}</div>
-            ${(() => {
-              const em = s.email || vendorObjSb.email || '';
-              const ph = s.phone || vendorObjSb.phone || '';
-              return `${em ? `<div><i class="fas fa-envelope" style="color:${primaryColor};width:14px"></i> ${escHtml(em)}</div>` : ''}${ph ? `<div><i class="fas fa-phone" style="color:${primaryColor};width:14px"></i> ${escHtml(ph)}</div>` : ''}`;
-            })()}
-          </div>
-        </div>
-        <div class="sb-block">
-          <h4><i class="fas fa-shield-alt"></i> Policies</h4>
-          <div style="display:grid;gap:5px">
-            <div><strong style="color:var(--text)">Shipping:</strong> ${escHtml(shipping_policy)}</div>
-            <div><strong style="color:var(--text)">Returns:</strong> ${escHtml(return_policy)}</div>
-          </div>
-        </div>
-        ${socialLinksHTML ? `<div class="sb-block"><h4><i class="fas fa-share-alt"></i> Follow Us</h4>${socialLinksHTML}</div>` : ''}
-      </aside>`;
-  }
-
   const compactBarHTML = layout === 'compact' ? `
     <div id="sf-compact-bar">
       <img src="${logoSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
@@ -1688,8 +1653,7 @@ async function renderStorefront(id) {
       <span style="font-size:.68rem;font-weight:800;color:${primaryColor}"><i class="fas fa-star" style="color:#fbbf24"></i> ${(s.avg_rating || 5.0).toFixed ? (s.avg_rating || 5.0).toFixed(1) : '5.0'}</span>
     </div>` : '';
 
-  // In showcase/compact layouts the standard header is replaced by the hero/brand bar;
-  // sidebar keeps the themed header on top (it carries the logo identity).
+  // In showcase/compact layouts the standard header is replaced by the hero/brand bar.
   const headerOut = (layout === 'showcase') ? layoutHeroHTML
                   : (layout === 'compact') ? ''
                   : headerHTML;
@@ -1701,6 +1665,7 @@ async function renderStorefront(id) {
 
       <!-- Banner at very top (layout-specific) -->
       ${headerOut}
+      ${layout === 'compact' ? '<div id="sf-compact-sticky">' : ''}
       ${compactBarHTML}
 
       <!-- Search bar & Cart button toolbar directly below banner -->
@@ -1718,11 +1683,10 @@ async function renderStorefront(id) {
           <span id="store-cart-badge-${s.id}" style="position: absolute; top: -4px; right: -4px; background: #ef4444; color: #ffffff; border-radius: 10px; padding: 1px 5px; font-size: 0.6rem; font-weight: 900; display: none; min-width: 16px; text-align: center; border: 1.5px solid #ffffff;">0</span>
         </button>
       </div>
+      ${layout === 'compact' ? '</div>' : ''}
 
-      <!-- Main Content Area (sidebar layout wraps it with the info rail) -->
-      ${layout === 'sidebar' ? '<div id="sf-layout-main">' + layoutSidebarHTML + '<div id="sf-layout-content">' : ''}
+      <!-- Main Content Area -->
       <div class="store-tab-content" id="store-tab-content"></div>
-      ${layout === 'sidebar' ? '</div></div>' : ''}
 
       <!-- Theme-Adaptive Storefront Footer (About, Contact, Policies, Social) -->
       <footer class="storefront-footer" style="${footerStyle}">
@@ -2985,7 +2949,7 @@ window.switchStorefrontTab = async function(tabName, storeId) {
     }
 
     contentEl.innerHTML = `
-      ${sfLayout === 'showcase' ? '' : `
+      ${(sfLayout === 'showcase' || sfLayout === 'compact') ? '' : `
       <div class="store-hero-banner">
         <h2 style="font-size:1.5rem;font-weight:900;margin-bottom:6px">${escHtml(slogan)}</h2>
         <p style="font-size:.85rem;opacity:.9">Best Offers & Quality Products</p>
@@ -3899,6 +3863,11 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
 };
 
 window.renderStorefrontAdminPortal = function(storeId) {
+  // ── PWA guard: the vendor admin portal is storefront content too ──
+  if (typeof isPwaMode === 'function' && isPwaMode()) {
+    openStorefrontInBrowser('store-admin', storeId);
+    return;
+  }
   const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
@@ -3938,6 +3907,11 @@ window.accessStorefrontDashboard = function(storeId) {
 };
 
 window.renderStorefrontAdminPortalPage = async function(storeId) {
+  // ── PWA guard: vendor portal is storefront content, never render in-app ──
+  if (typeof isPwaMode === 'function' && isPwaMode()) {
+    openStorefrontInBrowser('store-admin', storeId);
+    return;
+  }
   const s = App.allStores.find(st => String(st.id) === String(storeId));
   if (!s) return;
 

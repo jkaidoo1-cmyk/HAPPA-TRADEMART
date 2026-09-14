@@ -154,7 +154,9 @@ async function renderVendorDashboard() {
 
   // Helper variables for storefront configuration form to decouple from stores
   const sfTheme = myStorefront?.theme || myStore?.theme || 'classic';
-  const sfLayout = myStorefront?.layout || myStore?.layout || 'grid';
+  // 'sidebar' layout was removed — treat any saved legacy value as the classic grid
+  const sfLayoutRaw = myStorefront?.layout || myStore?.layout || 'grid';
+  const sfLayout = sfLayoutRaw === 'sidebar' ? 'grid' : sfLayoutRaw;
   window.previewLayout = sfLayout;
   const sfPrimaryColor = myStorefront?.primary_color || myStore?.primary_color || '#e85d04';
   const sfSecondaryColor = myStorefront?.secondary_color || myStore?.secondary_color || '#faf9f6';
@@ -739,11 +741,6 @@ async function renderVendorDashboard() {
                       <div class="layout-title">Classic Grid</div>
                       <div class="layout-desc">Banner on top, full-width grid — the standard shop look</div>
                     </label>
-                    <label class="layout-option" style="border-color:${sfLayout === 'sidebar' ? 'var(--primary)' : 'var(--border)'};background:${sfLayout === 'sidebar' ? 'var(--primary-light)' : 'transparent'}" id="layout-label-sidebar" onclick="window.updateStoreLayout('sidebar')">
-                      <div class="layout-thumb"><i style="width:34%;height:100%;background:#e9d5ff"></i><i style="flex:1;height:12px"></i><i style="flex:1;height:14px;background:#fecaca"></i><i style="flex:1;height:14px;background:#fecaca"></i></div>
-                      <div class="layout-title">Info Sidebar</div>
-                      <div class="layout-desc">Store info &amp; policies in a side panel next to products</div>
-                    </label>
                     <label class="layout-option" style="border-color:${sfLayout === 'showcase' ? 'var(--primary)' : 'var(--border)'};background:${sfLayout === 'showcase' ? 'var(--primary-light)' : 'transparent'}" id="layout-label-showcase" onclick="window.updateStoreLayout('showcase')">
                       <div class="layout-thumb"><i style="width:100%;height:45%"></i><i style="width:60%;height:30%;background:#fecaca"></i><i style="flex:1;height:30%;background:#fecaca"></i><i style="width:100%;flex:1;background:#e9d5ff"></i></div>
                       <div class="layout-title">Showcase</div>
@@ -994,7 +991,7 @@ async function renderVendorDashboard() {
   // Render chart and load referral history
   window._vendorSalesPackages = myPackages;
   setTimeout(() => {
-    renderVendorChart(myPackages);
+    try { renderVendorChart(myPackages); } catch(e) { console.warn('[vendor] chart render failed:', e); }
     loadVendorReferralHistory(u.id);
     if (typeof window.updateStorefrontPreview === 'function') {
       window.updateStorefrontPreview();
@@ -1004,7 +1001,7 @@ async function renderVendorDashboard() {
     console.error('[renderVendorDashboard] Error:', err);
     try {
       const c = document.getElementById('vendor-dashboard-content');
-      if (c) c.innerHTML = `<div class="empty-state" style="padding:24px"><i class="fas fa-exclamation-triangle"></i><h3>Something went wrong</h3><p>Open the developer console for details.</p></div>`;
+      if (c) c.innerHTML = `<div class="empty-state" style="padding:28px 20px"><i class="fas fa-exclamation-triangle"></i><h3>Something went wrong</h3><p style="font-size:.8rem;color:var(--text-muted);word-break:break-word;max-width:420px;margin:8px auto 0">${escHtml(err && err.message ? err.message : String(err))}</p><button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="renderVendorDashboard()"><i class="fas fa-redo"></i> Try Again</button></div>`;
     } catch (e) {}
   }
 }
@@ -1037,6 +1034,12 @@ function renderVendorChart(packages = []) {
 
   const roundedData = data.map(v => parseFloat(v.toFixed(2)));
 
+  // Chart.js loads from a CDN — if it's blocked or failed to load, degrade
+  // gracefully instead of throwing and killing the dashboard.
+  if (typeof Chart === 'undefined') {
+    canvas.outerHTML = '<div style="padding:28px;text-align:center;color:var(--text-muted);font-size:.82rem"><i class="fas fa-chart-bar" style="font-size:1.6rem;display:block;margin-bottom:8px;opacity:.5"></i>Weekly sales chart unavailable (chart library failed to load)</div>';
+    return;
+  }
   if (window._vendorChart) window._vendorChart.destroy();
   window._vendorChart = new Chart(canvas, {
     type: 'bar',
@@ -3548,38 +3551,7 @@ window.updateStorefrontPreview = function() {
     </footer>`;
 
   let composedHTML = '';
-  if (window.previewLayout === 'sidebar') {
-    // Info Sidebar: store info panel sits beside the products
-    const infoPanelHTML = `
-      <div style="padding:12px 10px; font-size:.62rem; color:var(--text-light); display:flex; flex-direction:column; gap:8px">
-        <div><div class="prev-about-title" style="font-weight:800; font-size:.66rem; margin-bottom:2px">About</div>${desc}</div>
-        <div><div class="prev-about-title" style="font-weight:800; font-size:.66rem; margin-bottom:2px">Hours</div>${escHtml(hours)}</div>
-        <div><div class="prev-about-title" style="font-weight:800; font-size:.66rem; margin-bottom:2px">Shipping</div>${escHtml(shipping)}</div>
-        <div><div class="prev-about-title" style="font-weight:800; font-size:.66rem; margin-bottom:2px">Returns</div>${escHtml(returns)}</div>
-      </div>`;
-    composedHTML = `
-      ${headerHTML}
-      ${toolbarHTML}
-      ${tabListHTML}
-      <div class="prev-body-container" style="display:flex; align-items:stretch; min-height:150px">
-        <div style="flex:0 0 34%; background:color-mix(in srgb, ${secondary} 12%, #ffffff); border-right:1px solid var(--border)">${infoPanelHTML}</div>
-        <div style="flex:1; min-width:0">
-          <div style="padding:10px">
-            <div class="prev-body-title" style="font-weight:800; font-size:.72rem; margin-bottom:6px">${window.previewActiveTab === 'products' ? 'All Products' : 'Featured'}</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
-              ${displayProducts.slice(0, 4).map(p => `
-                <div class="product-card">
-                  <div class="product-img" style="height:48px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; overflow:hidden">${getProductImageHTML(p)}</div>
-                  <div class="product-body" style="padding:4px 6px">
-                    <div class="product-name" style="font-size:.58rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
-                    <div class="product-price" style="font-size:.68rem">GHS ${p.price}</div>
-                  </div>
-                </div>`).join('')}
-            </div>
-          </div>
-        </div>
-      </div>`;
-  } else if (window.previewLayout === 'showcase') {
+  if (window.previewLayout === 'showcase') {
     // Showcase: tall hero banner with one spotlight product, then the grid
     const spot = displayProducts[0];
     const spotHTML = spot ? `
@@ -3634,9 +3606,8 @@ window.updateStorefrontPreview = function() {
           </div>`}
       </div>`;
   } else if (window.previewLayout === 'compact') {
-    // Compact Bars: slim brand bar + dense multi-column catalogue
+    // Compact Bars: slim brand bar + search/cart row + dense multi-column catalogue
     composedHTML = `
-      ${toolbarHTML}
       <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#fff; border-bottom:1px solid var(--border)">
         <img src="${logoSrc}" style="width:30px; height:30px; border-radius:8px; object-fit:cover; border:1px solid var(--border)" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
         <div style="flex:1; min-width:0">
@@ -3645,6 +3616,7 @@ window.updateStorefrontPreview = function() {
         </div>
         <div style="font-size:.55rem; color:${primary}; font-weight:800"><i class="fas fa-star" style="color:#fbbf24"></i> ${(myStore.avg_rating || 5.0).toFixed(1)}</div>
       </div>
+      ${toolbarHTML}
       ${tabListHTML}
       <div class="prev-body-container">
         <div style="padding:10px">
@@ -3661,9 +3633,10 @@ window.updateStorefrontPreview = function() {
         </div>
       </div>`;
   } else {
-    // Classic grid (default): header → tabs → body, stacked full-width
+    // Classic grid (default): header → search/cart → tabs → body, stacked full-width
     composedHTML = `
       ${headerHTML}
+      ${toolbarHTML}
       ${tabListHTML}
       <div class="prev-body-container" style="min-height:140px; font-family: inherit;">
         ${bodyHTML}
@@ -3716,7 +3689,7 @@ window.updateStoreTheme = function(themeName) {
 
 window.updateStoreLayout = function(layoutName) {
   window.previewLayout = layoutName;
-  ['grid', 'sidebar', 'showcase', 'compact'].forEach(l => {
+  ['grid', 'showcase', 'compact'].forEach(l => {
     const label = document.getElementById('layout-label-' + l);
     if (label) {
       if (l === layoutName) {
@@ -3784,7 +3757,7 @@ window.saveVendorStoreSettings = async function(storeId) {
   const sfName = (document.getElementById('store-name')?.value || document.getElementById('store-display-name')?.value || store.name || '').trim();
   const sfSlug = (document.getElementById('store-slug')?.value || store.slug || '').trim();
   const theme = window.previewTheme || 'classic';
-  const layout = window.previewLayout || 'grid';
+  const layout = (window.previewLayout === 'sidebar' ? 'grid' : window.previewLayout) || 'grid';
   const fontFamily = document.getElementById('store-font-family')?.value || document.getElementById('store-font')?.value || 'Outfit';
   const primaryColor = document.getElementById('store-primary-color')?.value || '#e85d04';
   const secondaryColor = document.getElementById('store-secondary-color')?.value || '#0d0d0d';

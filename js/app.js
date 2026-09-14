@@ -256,17 +256,33 @@ window.addEventListener('DOMContentLoaded', () => {
                     (isStorefrontPage ? (startupHash.startsWith('#storefront/') ? startupHash.substring(12) : null) : null);
 
   if (isDirectStorefront) {
+    // ── PWA guard (startup) ─────────────────────────────────
+    // A storefront/store-admin link opened in the installed app must never put
+    // the PWA into storefront mode. Hand off to the real browser; the PWA
+    // itself falls back to its home page.
+    if (isPwaMode()) {
+      openStorefrontInBrowser(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug);
+      App.isStandaloneStorefront = false;
+    } else {
     App.isStandaloneStorefront = true;
     document.body.classList.add('is-storefront-view');
     document.documentElement.classList.add('is-storefront-root');
+    }
     const splash = document.getElementById('pwa-splash-screen');
     if (splash) splash.remove();
     App.currentStoreId = storeSlug;
-    showPage(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug);
-    try {
-      history.replaceState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
-      history.pushState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
-    } catch(e) {}
+    if (isPwaMode()) {
+      // Clean the URL so the PWA doesn't loop back into this branch on reload,
+      // then show home inside the app (the browser tab has the storefront).
+      try { history.replaceState({ page: 'home' }, '', window.location.origin + '/'); } catch(e) {}
+      showPage('home');
+    } else {
+      showPage(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug);
+      try {
+        history.replaceState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
+        history.pushState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
+      } catch(e) {}
+    }
   } else {
     loadHomeData().then(() => { initAdBanners('home'); initHeroBanners(); });
   }
@@ -853,7 +869,9 @@ function updatePWAManifest(name, logoUrl, themeColor) {
                            currentHash.includes('store-admin') || 
                            currentHash.includes('store/') || 
                            currentSearch.includes('storefront') || 
-                           currentSearch.includes('store=');
+                           currentSearch.includes('store=') ||
+                           window.location.pathname.startsWith('/storefront/') ||
+                           window.location.pathname.startsWith('/store-admin/');
 
   if (isStorefrontView) {
     // Completely suppress PWA manifest on storefront views
@@ -969,27 +987,62 @@ async function runPageInit(pageId) {
   }
 }
 
+// ── PWA Storefront Guard (shared helpers) ─────────────────────
+// Storefront pages/links must never render inside the installed PWA shell —
+// they always open in the user's real browser. All entry points (showPage,
+// renderStorefront, admin portal, startup routing, <a> clicks) funnel through
+// these two helpers.
+function isPwaMode() {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.matchMedia('(display-mode: fullscreen)').matches ||
+         window.navigator.standalone === true;
+}
+window.isPwaMode = isPwaMode;
+
+let _sfHandoffLastUrl = '';
+let _sfHandoffAt = 0;
+function openStorefrontInBrowser(kind, entityId) {
+  const slugGuess = String(entityId || '');
+  const sf = (App.allStorefronts || []).find(
+    s => String(s.store_id) === slugGuess || String(s.id) === slugGuess || String(s.url_slug) === slugGuess
+  );
+  const slug = (sf && sf.url_slug) || slugGuess;
+  const targetPath = kind === 'store-admin' ? `/store-admin/${slug}` : `/storefront/${slug}`;
+  const targetUrl = window.location.origin + targetPath;
+
+  // Dedupe per URL within a short window: startup + click + showPage can all
+  // fire for one navigation — don't spawn multiple tabs for the same store.
+  // (Different stores always get their own tab.)
+  const now = Date.now();
+  if (targetUrl === _sfHandoffLastUrl && now - _sfHandoffAt < 1200) return false;
+  _sfHandoffLastUrl = targetUrl;
+  _sfHandoffAt = now;
+
+  try { showToast('Storefronts are standalone — opening in a new tab…', 'info'); } catch (e) {}
+  window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  return true;
+}
+window.openStorefrontInBrowser = openStorefrontInBrowser;
+
 function showPage(pageId, entityId = null) {
   // ── PWA Storefront Guard ─────────────────────────────────────
   // When running as an installed PWA (standalone/fullscreen), storefront pages
   // must open in the real browser — never inside the PWA shell.
-  const isPWA = window.matchMedia('(display-mode: standalone)').matches ||
-                window.matchMedia('(display-mode: fullscreen)').matches ||
-                window.navigator.standalone === true;
+  const isPWA = isPwaMode();
   const isStorefrontTarget = pageId === 'storefront' || pageId === 'store-admin';
-  if (isPWA && isStorefrontTarget && entityId) {
-    // Build the storefront URL and open in the browser
-    const sf = (App.allStorefronts || []).find(
-      s => String(s.store_id) === String(entityId) || String(s.id) === String(entityId)
-    );
-    const slug = sf?.url_slug || entityId;
-    const baseOrigin = window.location.origin;
-    const targetPath = pageId === 'store-admin'
-      ? `/store-admin/${slug}`
-      : `/storefront/${slug}`;
-    const targetUrl = baseOrigin + targetPath;
-    window.open(targetUrl, '_blank', 'noopener,noreferrer');
-    return;
+  if (isPWA && isStorefrontTarget) {
+    if (entityId) {
+      openStorefrontInBrowser(pageId, entityId);
+    } else {
+      // No target id (e.g. showPage('storefront') from a generic button) —
+      // there is nothing to deep-link to; keep the PWA on the home page.
+      pageId = 'home';
+    }
+    if (pageId === 'home' || pageId === 'auth') {
+      // fall through and show the replacement page inside the PWA
+    } else {
+      return;
+    }
   }
 
   // Block any attempts to navigate away to main marketplace pages when viewing a standalone storefront
@@ -998,6 +1051,20 @@ function showPage(pageId, entityId = null) {
       console.warn(`[Standalone Storefront] Blocked navigation to main site page "${pageId}".`);
       return;
     }
+  }
+
+  // ── Standalone Storefront Handoff ─────────────────────────
+  // Storefront pages are standalone websites — they must never render inside
+  // the main site shell (PWA *or* browser). Any attempt opens the storefront's
+  // own URL in a new tab instead. (The startup block sets is-storefront-view
+  // itself, so the class check above already covers that case.)
+  if (isStorefrontTarget && !document.body.classList.contains('is-storefront-view')) {
+    if (entityId) {
+      openStorefrontInBrowser(pageId, entityId);
+      return;
+    }
+    // No target id — nothing to deep-link to; fall through to home.
+    pageId = 'home';
   }
 
   if (pageId === 'storefront' || pageId === 'store-admin') {
