@@ -1271,6 +1271,10 @@ async function renderStorefront(id) {
       if (storefrontPageIsRendered(c)) {
         return;
       }
+      // Brand the tab with the vendor's identity even on the construction page
+      if (typeof updatePWAManifest === 'function') {
+        updatePWAManifest(sf?.name || s.name, sf?.logo_url || s.logo_url || '/images/icon-192.png', sf?.primary_color || s.primary_color || '#e85d04');
+      }
       c.innerHTML = `
         <div class="empty-state" style="padding: 60px 20px; text-align: center;">
           <div style="font-size: 3.5rem; margin-bottom: 16px;">🏪</div>
@@ -1688,57 +1692,10 @@ async function renderStorefront(id) {
       <!-- Main Content Area -->
       <div class="store-tab-content" id="store-tab-content"></div>
 
-      <!-- Theme-Adaptive Storefront Footer (About, Contact, Policies, Social) -->
-      <footer class="storefront-footer" style="${footerStyle}">
-        <div class="sf-footer-grid" style="max-width:1100px; margin:0 auto; font-size:.72rem">
-          
-          <!-- Left Side: About + Hours & Contact directly under it -->
-          <div style="display:flex; flex-direction:column; gap:10px">
-            <div>
-              <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
-                <i class="fas fa-store" style="color:${primaryColor}"></i> About ${escHtml(s.name)}
-              </h4>
-              <p style="line-height:1.35; color:${footerTextColor}; margin-bottom:4px">${escHtml(description)}</p>
-              ${socialLinksHTML}
-            </div>
-
-            <div>
-              <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
-                <i class="fas fa-clock" style="color:${primaryColor}"></i> Hours & Contact
-              </h4>
-              <div style="display:grid; gap:4px; color:${footerTextColor}">
-                <div><i class="fas fa-calendar-alt" style="width:16px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
-                <div><i class="fas fa-map-marker-alt" style="width:16px; color:${primaryColor}"></i> ${s.location || '—'}</div>
-                ${(() => {
-                  const vendorObj = (App.allUsers || []).find(u => String(u.id) === String(s.vendor_id)) || {};
-                  const storeEmail = s.email || vendorObj.email || '';
-                  const storePhone = s.phone || vendorObj.phone || '';
-                  let contactHTML = '';
-                  if (storeEmail) contactHTML += `<div><i class="fas fa-envelope" style="width:16px; color:${primaryColor}"></i> ${escHtml(storeEmail)}</div>`;
-                  if (storePhone) contactHTML += `<div><i class="fas fa-phone" style="width:16px; color:${primaryColor}"></i> ${escHtml(storePhone)}</div>`;
-                  return contactHTML;
-                })()}
-              </div>
-            </div>
-          </div>
-
-          <!-- Right Side: Store Policies -->
-          <div>
-            <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
-              <i class="fas fa-shield-alt" style="color:${primaryColor}"></i> Store Policies
-            </h4>
-            <div style="display:grid; gap:6px; color:${footerTextColor}">
-              <div><strong style="color:${footerHeadingColor}">Shipping:</strong><br>${escHtml(shipping_policy)}</div>
-              <div style="margin-top:4px"><strong style="color:${footerHeadingColor}">Returns:</strong><br>${escHtml(return_policy)}</div>
-            </div>
-          </div>
-
-        </div>
-
-        <div style="border-top:1px solid ${footerDividerColor}; margin-top:8px; padding-top:6px; text-align:center; color:${footerTextColor}; font-size:.65rem">
-          © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
-        </div>
-      </footer>
+      <!-- Bottom bar: © Powered by HAPPA TRADEMART -->
+      <div style="text-align:center; padding:10px 12px 18px; font-size:.65rem; color:var(--text-muted); border-top:1px solid var(--border); margin-top:12px">
+        © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
+      </div>
     </div>
   `;
 

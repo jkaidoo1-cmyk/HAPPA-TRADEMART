@@ -271,6 +271,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const splash = document.getElementById('pwa-splash-screen');
     if (splash) splash.remove();
     App.currentStoreId = storeSlug;
+    // Instant tab title from the slug while the storefront data loads
+    // (renderStorefront replaces it with the exact vendor-set name).
+    if (storeSlug && !isPwaMode()) {
+      document.title = String(storeSlug).replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
     if (isPwaMode()) {
       // Clean the URL so the PWA doesn't loop back into this branch on reload,
       // then show home inside the app (the browser tab has the storefront).
@@ -861,6 +866,21 @@ function injectSkeletonLoaders(pageId) {
   }
 }
 
+// Swap the browser tab favicon (and related icon metas) to the given logo.
+// Passing the default HAPPA icon restores the stock branding.
+function _setBrowserIcon(logoUrl) {
+  if (!logoUrl) return;
+  let full = logoUrl;
+  if (!full.startsWith('http') && !full.startsWith('data:')) {
+    full = window.location.origin + (full.startsWith('/') ? full : '/' + full);
+  }
+  document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]').forEach(l => {
+    try { l.setAttribute('href', full); } catch(e) {}
+  });
+  const tile = document.querySelector('meta[name="msapplication-TileImage"]');
+  if (tile) tile.setAttribute('content', full);
+}
+
 function updatePWAManifest(name, logoUrl, themeColor) {
   const currentHash = window.location.hash || '';
   const currentSearch = window.location.search || '';
@@ -878,6 +898,8 @@ function updatePWAManifest(name, logoUrl, themeColor) {
     const manifestLink = document.querySelector('link[rel="manifest"]');
     if (manifestLink) manifestLink.remove();
     if (name) document.title = name;
+    // Show the vendor's own logo in the browser tab while on their storefront
+    _setBrowserIcon(logoUrl);
     return;
   }
 
@@ -904,6 +926,9 @@ function updatePWAManifest(name, logoUrl, themeColor) {
       fullLogoUrl = window.location.origin + '/' + logoUrl;
     }
   }
+  // Keep the tab icon in sync (reset path passes the stock HAPPA icon,
+  // which restores the default branding)
+  _setBrowserIcon(fullLogoUrl);
 
   const dynamicManifest = {
     name: name,

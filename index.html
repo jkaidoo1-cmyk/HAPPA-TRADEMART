@@ -28,7 +28,7 @@
     // background push notifications.
     (function() {
       if (!('serviceWorker' in navigator)) return;
-      var SW_VERSION = 'happa-v136';
+      var SW_VERSION = 'happa-v141';
       var lastCleaned = localStorage.getItem('sw_selfheal_version');
       if (lastCleaned === SW_VERSION) return; // already cleaned for this version
       localStorage.setItem('sw_selfheal_version', SW_VERSION);

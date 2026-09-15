@@ -684,32 +684,84 @@ async function renderVendorDashboard() {
           </div>
         ` : ''}
 
-        <!-- ── Customization Form Header with Action Buttons ── -->
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-          <h3 style="font-size:1rem;font-weight:700">Storefront Customization</h3>
-          <div style="display:flex;gap:8px">
-            ${myStorefront.status !== 'pending_approval' ? `
-              <button class="btn btn-sm btn-primary" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-                <i class="fas fa-save"></i> Save Settings
-              </button>
-            ` : ''}
-            ${(myStorefront.status === 'draft' || myStorefront.status === 'rejected') ? `
-              <button class="btn btn-sm btn-success" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
-                <i class="fas fa-paper-plane"></i> Send Request
-              </button>
-            ` : ''}
+        <!-- ── Storefront Studio ── -->
+        <style>
+          .sfsec{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden}
+          .sfsec-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
+          .sfsec-h h3{margin:0;font-size:.9rem;font-weight:800}
+          .sfsec-h p{margin:0;font-size:.68rem;color:var(--text-light)}
+          .sfsec-ico{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex:none}
+          .sfsec-b{padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+          .sflbl{display:block;font-size:.72rem;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--text-light);margin-bottom:6px}
+          .sfswatch{width:34px;height:34px;border-radius:50%;cursor:pointer;border:2.5px solid #fff;box-shadow:0 0 0 1.5px var(--border),0 2px 6px rgba(0,0,0,.1);transition:transform .15s}
+          .sfswatch:hover{transform:scale(1.15)}
+          .sftile{position:relative;border:1.5px dashed var(--border);border-radius:12px;background:var(--bg);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80px;transition:all .2s}
+          .sftile:hover{border-color:var(--primary);background:var(--primary-light)}
+          .sftile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+          .sftile .sftag{position:relative;z-index:2;font-size:.62rem;font-weight:800;background:rgba(255,255,255,.88);color:var(--text);padding:4px 12px;border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+          .sfdevbtn{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:4px 8px;font-size:.65rem;font-weight:800;cursor:pointer;color:var(--text-light);transition:all .15s}
+          .sfdevbtn.on{border-color:var(--primary);color:var(--primary);background:var(--primary-light)}
+        </style>
+        <div style="background:linear-gradient(135deg,${sfPrimaryColor}18 0%,${sfPrimaryColor}08 100%);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <h3 style="font-size:1.1rem;font-weight:900;margin:0 0 2px"><i class="fas fa-palette" style="color:var(--primary)"></i> Storefront Studio</h3>
+              <div style="font-size:.72rem;color:var(--text-light)">Design your store — changes preview live as you type.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);border-radius:20px;padding:5px 10px;font-size:.7rem;cursor:pointer" onclick="navigator.clipboard.writeText('${window.location.origin}/#storefront/${sfSlug}');showToast('Link copied! 📋','success')" title="Copy storefront link">
+                <i class="fas fa-link" style="color:var(--primary);font-size:.65rem"></i>
+                <span style="font-weight:700;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${window.location.origin}/#storefront/${sfSlug}</span>
+                <i class="fas fa-copy" style="color:var(--text-light);font-size:.6rem"></i>
+              </div>
+              ${myStorefront.status !== 'pending_approval' ? `
+                <button class="btn btn-sm btn-primary" style="box-shadow:0 2px 8px ${sfPrimaryColor}40" onclick="window.saveVendorStoreSettings('${myStore.id}')">
+                  <i class="fas fa-save"></i> Save
+                </button>
+              ` : ''}
+              ${(myStorefront.status === 'draft' || myStorefront.status === 'rejected') ? `
+                <button class="btn btn-sm" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
+                  <i class="fas fa-paper-plane"></i> Submit
+                </button>
+              ` : ''}
+            </div>
           </div>
         </div>
 
         <div id="sf-status-card" style="margin-bottom:8px"></div>
 
         <!-- ── Customization Form Body (always visible when storefront exists) ── -->
-        <div class="storefront-split-wrap" style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start${myStorefront.status === 'pending_approval' ? ';opacity:.7;pointer-events:none' : ''}">
+        <div style="display:flex;flex-direction:column;gap:20px;${myStorefront.status === 'pending_approval' ? 'opacity:.7;pointer-events:none;' : ''}">
           
-          <!-- Left Panel: Form Inputs -->
-          <div style="flex:1.2;min-width:320px;display:flex;flex-direction:column;gap:16px">
+          <!-- Top: Live Preview -->
+          <div style="width:100%;max-width:420px;margin:0 auto">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="font-size:.7rem;font-weight:800;color:var(--text-light);display:flex;align-items:center;gap:6px;letter-spacing:.3px">
+                <i class="fas fa-eye" style="color:var(--primary)"></i> LIVE PREVIEW
+              </div>
+              <div style="display:flex;gap:4px">
+                <button class="sfdevbtn on" id="sfdev-phone" onclick="window.sfPreviewDevice('mobile')"><i class="fas fa-mobile-alt"></i></button>
+                <button class="sfdevbtn" id="sfdev-full" onclick="window.sfPreviewDevice('full')"><i class="fas fa-desktop"></i></button>
+              </div>
+            </div>
+            <div class="card" style="overflow:hidden;border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow-md)">
+              <div style="background:#f1f5f9;padding:8px 12px;display:flex;align-items:center;gap:8px">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span>
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981"></span>
+                <span style="font-size:.7rem;color:#64748b;font-weight:700;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="preview-url-bar">${window.location.origin}/#storefront/${myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || ''}</span>
+              </div>
+              <div id="sf-preview-shell" style="max-width:375px;margin:0 auto;transition:max-width .3s ease;overflow:hidden;border-left:1px solid var(--border);border-right:1px solid var(--border);background:#f8f9fa;max-height:480px;position:relative;overflow-y:auto !important">
+                <div id="storefront-live-preview-box" style="min-height:100%"></div>
+              </div>
+            </div>
+            <div style="margin-top:6px;text-align:center;font-size:.65rem;color:var(--text-light)"><i class="fas fa-sync-alt" style="margin-right:3px"></i> Edits sync here in real time</div>
+          </div>
+
+          <!-- Bottom: Form Inputs -->
+          <div style="display:flex;flex-direction:column;gap:16px">
             <div class="card">
-              <div class="card-header"><h3>📐 Layout</h3></div>
+              <div class="sfsec-h"><div class="sfsec-ico" style="background:#eff6ff;color:#2563eb"><i class="fas fa-ruler-combined"></i></div><div><h3>📐 Layout</h3><p>Page structure buyers land on</p></div></div>
               <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:6px">Page Layout (structure of your storefront)</label>
@@ -757,7 +809,7 @@ async function renderVendorDashboard() {
             </div>
 
             <div class="card">
-              <div class="card-header"><h3>🎨 Design &amp; Colors</h3></div>
+              <div class="sfsec-h"><div class="sfsec-ico" style="background:#fef3c7;color:#d97706"><i class="fas fa-paint-brush"></i></div><div><h3>🎨 Design &amp; Colors</h3><p>Theme, palette, typography &amp; assets</p></div></div>
               <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
                 
                 <!-- Theme Selector UI -->
@@ -886,7 +938,7 @@ async function renderVendorDashboard() {
             </div>
 
             <div class="card">
-              <div class="card-header"><h3>📝 Store Info & Policies</h3></div>
+              <div class="sfsec-h"><div class="sfsec-ico" style="background:#dcfce7;color:#16a34a"><i class="fas fa-file-alt"></i></div><div><h3>📝 Store Info &amp; Policies</h3><p>Shown in your storefront footer</p></div></div>
               <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">About Us / Description</label>
@@ -908,7 +960,7 @@ async function renderVendorDashboard() {
             </div>
 
             <div class="card">
-              <div class="card-header"><h3>🔗 Social Links</h3></div>
+              <div class="sfsec-h"><div class="sfsec-ico" style="background:#ede9fe;color:#7c3aed"><i class="fab fa-facebook"></i></div><div><h3>🔗 Social Links</h3><p>Connect your social profiles</p></div></div>
               <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
                 <div style="display:flex;align-items:center;gap:8px">
                   <i class="fab fa-facebook" style="color:#1877f2;width:20px;text-align:center"></i>
@@ -926,7 +978,7 @@ async function renderVendorDashboard() {
             </div>
 
             <div class="card">
-              <div class="card-header"><h3>🔍 SEO & Search Optimization</h3></div>
+              <div class="sfsec-h"><div class="sfsec-ico" style="background:#e0f2fe;color:#0284c7"><i class="fas fa-search"></i></div><div><h3>🔍 SEO &amp; Search</h3><p>Store URL and search snippet</p></div></div>
               <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Store Slug / Friendly URL</label>
@@ -953,24 +1005,6 @@ async function renderVendorDashboard() {
                   <i class="fas fa-paper-plane"></i> Send Request
                 </button>
               ` : ''}
-            </div>
-          </div>
-          
-          <!-- Right Panel: Live Mock Preview -->
-          <div style="flex:1;min-width:300px;position:sticky;top:80px;align-self:start">
-            <div style="font-size:0.75rem;font-weight:700;color:var(--text-light);margin-bottom:6px;display:flex;align-items:center;gap:6px">
-              <i class="fas fa-eye" style="color:var(--primary)"></i> Live Mock Preview
-            </div>
-            <div class="card" style="overflow:hidden;border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow-md)">
-              <div class="card-header" style="background:#f1f5f9;padding:10px 14px;display:flex;align-items:center;gap:8px">
-                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span>
-                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>
-                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981"></span>
-                <span style="font-size:0.75rem;color:#64748b;font-weight:700;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="preview-url-bar">${window.location.origin}/#storefront/${myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || ''}</span>
-              </div>
-              <div class="card-body" style="padding:0;background:#f8f9fa;max-height:480px;position:relative;overflow-y:scroll !important" id="storefront-live-preview-box">
-                <!-- Rendered dynamically -->
-              </div>
             </div>
           </div>
           
@@ -3704,7 +3738,14 @@ window.updateStoreLayout = function(layoutName) {
   window.updateStorefrontPreview();
 };
 
-
+window.sfPreviewDevice = function(mode) {
+  const shell = document.getElementById('sf-preview-shell');
+  if (shell) shell.style.maxWidth = mode === 'mobile' ? '375px' : '100%';
+  const phone = document.getElementById('sfdev-phone');
+  const full = document.getElementById('sfdev-full');
+  if (phone) phone.classList.toggle('on', mode === 'mobile');
+  if (full) full.classList.toggle('on', mode === 'full');
+};
 
 window.createStorefrontDraft = async function(storeId) {
   const store = (App.allStores || []).find(s => s && String(s.id) === String(storeId)) || App.myStore;

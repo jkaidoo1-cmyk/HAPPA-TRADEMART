@@ -919,6 +919,20 @@ function adminPackageRowHTML(rawPkg, allUsers) {
       </div>
     </div>
 
+    <!-- Customer Delivery Contact (admin dispatches deliveries and needs this) -->
+    ${(pkg.buyer_name || pkg.buyer_phone || pkg.delivery_address || pkg.delivery_location || pkg.delivery_phone) ? `
+    <div style="margin-bottom:12px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:var(--radius-sm);padding:10px 12px">
+      <div style="font-size:.72rem;font-weight:800;color:#1e40af;margin-bottom:6px;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.4px">
+        <i class="fas fa-address-card" style="color:#2563eb"></i> Customer Delivery Details
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem">
+        <div><span style="color:#1e3a8a;opacity:.75">Name:</span> <strong style="color:#1e3a8a">${escHtml(pkg.buyer_name || pkg.delivery_name || (buyer && buyer.name) || '—')}</strong></div>
+        <div><span style="color:#1e3a8a;opacity:.75">Phone:</span> <a href="tel:${escHtml(pkg.buyer_phone || pkg.delivery_phone || (buyer && buyer.phone) || '')}" style="color:#2563eb;font-weight:700;text-decoration:underline"><i class="fas fa-phone-alt"></i> ${escHtml(pkg.buyer_phone || pkg.delivery_phone || (buyer && buyer.phone) || '—')}</a></div>
+        <div style="grid-column:1/-1"><span style="color:#1e3a8a;opacity:.75">Location:</span> <strong style="color:#1e3a8a"><i class="fas fa-map-marker-alt" style="color:#e85d04"></i> ${escHtml(pkg.delivery_location || pkg.dest_location || '—')}</strong></div>
+        <div style="grid-column:1/-1"><span style="color:#1e3a8a;opacity:.75">Address / Landmark:</span> <strong style="color:#1e3a8a">${escHtml(pkg.delivery_address || pkg.notes || 'No landmark provided')}</strong></div>
+      </div>
+    </div>` : ''}
+
     <!-- Status grid -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div style="padding:8px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);text-align:center">

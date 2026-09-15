@@ -2475,6 +2475,25 @@ app.delete('/api/:table/:id', async (req, res) => {
 
 function getRecordCandidatesForTable(table, record, existingRecord) {
   const primary = prepareRecordForDb(table, record, existingRecord);
+  if (table === 'packages' || table === 'orders') {
+    // Orders/packages: if the Supabase table is slimmer than expected, a full
+    // insert fails with a missing-column error and the record would fall back
+    // to the ephemeral serverless filesystem — effectively LOST. A second
+    // candidate with only the guaranteed core columns keeps the write in
+    // Supabase; every order-management field is already packed into `extra`.
+    const core = ['id', 'code', 'buyer_id', 'vendor_id', 'store_id', 'status', 'total', 'created_at', 'updated_at', 'extra'];
+    const slim = {};
+    for (const col of core) {
+      if (col in primary && primary[col] !== undefined) slim[col] = primary[col];
+    }
+    if (!('code' in slim) && primary.package_code !== undefined) slim.code = primary.package_code;
+    slim.extra = parseExtraObject(primary.extra);
+    for (const key of table === 'packages' ? PACKAGE_META_FIELDS : ORDER_META_FIELDS) {
+      if (primary[key] !== undefined) slim.extra[key] = primary[key];
+    }
+    const same = JSON.stringify(primary) === JSON.stringify(slim);
+    return same ? [primary] : [primary, slim];
+  }
   if (table !== 'products' && table !== 'stores' && table !== 'users') return [primary];
 
   // For stores/products/users, certain fields may not exist as real columns

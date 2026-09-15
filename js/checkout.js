@@ -20,28 +20,30 @@ function renderCheckout() {
 
   const sat = getNextSaturday();
 
-  let guestFormHTML = '';
-  if (isGuest) {
-    guestFormHTML = `
+  // EVERY buyer (guest or logged-in) gets an editable contact form. Logged-in
+  // users were previously silent — their order carried whatever was on their
+  // profile, so a profile missing phone/address produced orders with no buyer
+  // info for the vendor to fulfill. Prefill from the profile; let them edit.
+  const guestFormHTML = `
       <div class="card" style="margin-bottom:14px">
-        <div class="card-header"><h3>👤 Guest Customer Details</h3></div>
+        <div class="card-header"><h3>👤 ${isGuest ? 'Guest Customer' : 'Delivery Contact'} Details</h3></div>
         <div class="card-body">
           <div class="form-group">
             <label class="form-label">Full Name</label>
-            <input class="form-control" id="guest-name" placeholder="John Doe" required>
+            <input class="form-control" id="guest-name" placeholder="John Doe" value="${escHtml(u.name || '')}" required>
           </div>
           <div class="form-group">
             <label class="form-label">Phone Number</label>
-            <input class="form-control" id="guest-phone" type="tel" placeholder="e.g. 0244123456" required>
+            <input class="form-control" id="guest-phone" type="tel" placeholder="e.g. 0244123456" value="${escHtml(u.phone || '')}" required>
           </div>
+          ${isGuest ? `
           <div class="form-group">
             <label class="form-label">Email Address</label>
             <input class="form-control" id="guest-email" type="email" placeholder="john@example.com" required>
-          </div>
+          </div>` : ''}
         </div>
       </div>
     `;
-  }
 
   c.innerHTML = `
 <div style="padding:16px">
