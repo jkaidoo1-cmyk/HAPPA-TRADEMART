@@ -38,6 +38,14 @@ async function loadAdminSettings() {
   const res = await apiGet('settings', 'limit=200');
   const rows = res?.data || [];
 
+  // If the fetch failed entirely (apiFetch returns null), do NOT populate the
+  // form with hardcoded defaults — an accidental "Save All" would then wipe
+  // real settings with defaults. Keep whatever is on screen and warn.
+  if (!res) {
+    showToast('⚠️ Could not load settings from the server. Values shown may be stale.', 'error');
+    return;
+  }
+
   for (const cfg of SETTINGS_CONFIG) {
     const row = rows.find(r => r.key === cfg.key);
     const val = row ? row.value : cfg.default;
@@ -86,49 +94,71 @@ async function loadAdminSettings() {
 }
 
 // ── Save all settings to DB ───────────────────────────────
+// Every write below must actually land: apiFetch returns null when the server
+// rejects a save (e.g. Supabase quota / 5xx), so a plain `await` would show
+// "Settings saved successfully!" while nothing was persisted. Count real
+// failures and report them honestly instead.
 async function saveAdminSettings(e) {
   e.preventDefault();
 
   const btn = e.target?.querySelector('[type=submit]');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; }
 
-  // Fetch existing settings once
-  const res   = await apiGet('settings', 'limit=100');
-  const rows  = res?.data || [];
+  const fail = (msg) => {
+    showToast(msg || '⚠️ Some settings could not be saved. Check your connection and try again.', 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save All Settings'; }
+  };
+
+  // Fetch existing settings once — must succeed, otherwise we cannot upsert
+  // and saving would blindly POST duplicates
+  const res = await apiGet('settings', 'limit=100');
+  const rows = res?.data || [];
+  if (!rows.length && !res) { await fail(); return; }
 
   const upsert = async (key, value) => {
     const existing = rows.find(r => r.key === key);
     if (existing) {
-      await apiPatch('settings', existing.id, { value: String(value), updated_at: new Date().toISOString() });
+      const out = await apiPatch('settings', existing.id, { value: String(value), updated_at: new Date().toISOString() });
+      return !!out;
     } else {
-      await apiPost('settings', {
+      const out = await apiPost('settings', {
         key,
         value:      String(value),
         label:      key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         type:       'text',
         updated_at: new Date().toISOString()
       });
+      return !!out;
     }
   };
 
   // Read and save every field
   const saves = SETTINGS_CONFIG.map(cfg => {
     const el = document.getElementById(cfg.id);
-    if (!el) return Promise.resolve();
+    if (!el) return Promise.resolve(true);
     const val = cfg.type === 'checkbox' ? String(el.checked) : el.value;
     return upsert(cfg.key, val);
   });
 
-  await Promise.all(saves);
+  const results = await Promise.all(saves);
+  const failed = results.filter(r => r === false).length;
 
   // Save commission tiers
-  await saveCommissionTiers(rows);
+  const tiersOk = await saveCommissionTiers(rows);
 
   // Save hero banners
-  await upsert('hero_banners', JSON.stringify(_heroBanners));
+  const heroOk = await upsert('hero_banners', JSON.stringify(_heroBanners));
 
   // Save coupons
-  await upsert('coupons', JSON.stringify(_coupons));
+  const couponsOk = await upsert('coupons', JSON.stringify(_coupons));
+
+  const extraFailed = [tiersOk, heroOk, couponsOk].filter(ok => ok === false).length;
+  const totalFailed = failed + extraFailed;
+
+  if (totalFailed > 0) {
+    await fail(`${totalFailed} setting${totalFailed > 1 ? 's' : ''} failed to save. Check your connection and try again.`);
+    return;
+  }
 
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save All Settings'; }
 
@@ -277,13 +307,14 @@ async function saveCommissionTiers(existingRows) {
     if (!tiers || !tiers.length) return;
     const value    = JSON.stringify(tiers);
     const existing = rows.find(r => r.key === key);
-    if (existing) await apiPatch('settings', existing.id, { value, updated_at: new Date().toISOString() });
-    else          await apiPost('settings', { key, value, label: key.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), type: 'json', updated_at: new Date().toISOString() });
+    if (existing) return !!(await apiPatch('settings', existing.id, { value, updated_at: new Date().toISOString() }));
+    return !!(await apiPost('settings', { key, value, label: key.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), type: 'json', updated_at: new Date().toISOString() }));
   };
-  await Promise.all([
+  const out = await Promise.all([
     upsertTier('commission_tiers',          _commissionTiers),
     upsertTier('referral_commission_tiers', _referralCommissionTiers)
   ]);
+  return out.every(ok => ok !== false);
 }
 
 // ── Runtime helper: get effective commission pct for a price ─
