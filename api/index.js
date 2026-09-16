@@ -549,12 +549,14 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
 
     // Load users from Supabase (primary) + local db.json (fallback), merge by id
     let supaUsers = [];
+    let supaFailed = false; // DB unreachable → fail honestly with 503, never fake "Invalid credentials"
     const supabase = getSupabase();
     if (supabase) {
       try {
         const { data, error } = await supabase.from('users').select('*');
-        if (!error && data) supaUsers = data.map(serializeRecord);
-      } catch (err) {}
+        if (error) supaFailed = true;
+        else if (data) supaUsers = data.map(serializeRecord);
+      } catch (err) { supaFailed = true; }
     }
 
     // Always also check local db.json (admin lives here if not in Supabase)
@@ -576,7 +578,13 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
       u.status !== 'deleted'
     );
 
+    const isLocalOnly = !supaUsers.some(u => String(u.id) === String(user.id));
+
     if (!user) {
+      if (supaFailed) {
+        // The user may exist in the unreachable DB — do NOT report bad credentials.
+        return res.status(503).json({ error: 'Service temporarily unavailable — the database could not be reached. Please try again in a few minutes.' });
+      }
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
@@ -590,6 +598,10 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     // Plaintext fallback removed: only bcrypt-hashed passwords are accepted.
 
     if (!isValidPassword) {
+      if (supaFailed && !isLocalOnly) {
+        // Record came from (or also lives in) an unreachable DB — the hash we checked may be stale.
+        return res.status(503).json({ error: 'Service temporarily unavailable — the database could not be reached. Please try again in a few minutes.' });
+      }
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
@@ -795,8 +807,11 @@ app.post('/api/clean-temp-database-records', requireAdmin, async (req, res) => {
 // ── Push Notification Endpoints ────────────────────────────
 let webpush;
 try { webpush = require('web-push'); } catch(e) { console.warn('[Push] web-push not installed — push disabled:', e.message); webpush = null; }
-const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || 'BCLetiiU33SFCYX5amNxlNS02FVIL8CUiydQuMyaJRe1-QbklQj-PC0snLIAw7Yf719pdIPMZB3zWUrQvlK4eGw';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'd2MrJaDxfw8f7iyqx4gWsMYP8Lnh_dm7iMV6po049S8';
+const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+  console.warn('[Push] VAPID keys not configured — set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to enable push notifications.');
+}
 const VAPID_CLAIMS = { subject: 'mailto:support@happamart.com' };
 
 try {
@@ -938,6 +953,7 @@ app.post('/api/push/send', requireAuth, async (req, res) => {
     const { user_id, title, body, url } = req.body || {};
     if (!user_id || !title) return res.status(400).json({ error: 'Missing user_id or title' });
     if (!webpush) return res.status(503).json({ error: 'Push service not configured.' });
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return res.status(503).json({ error: 'Push is not configured: VAPID keys missing on the server. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.' });
     const supabase = getSupabase();
     let subs = [];
     const uid = String(user_id);

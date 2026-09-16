@@ -615,11 +615,13 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
 
   const cleanEmail = String(email).trim().toLowerCase();
   let supaUsers = [];
+  let supaFailed = false; // DB unreachable → fail honestly with 503, never fake "Invalid credentials"
   if (supabase) {
     try {
       const { data, error } = await supabase.from('users').select('*');
-      if (!error && data) supaUsers = data.map(serializeRecord);
-    } catch (err) {}
+      if (error) supaFailed = true;
+      else if (data) supaUsers = data.map(serializeRecord);
+    } catch (err) { supaFailed = true; }
   }
   const db = loadDb();
   const localUsers = getTable(db, 'users').map(serializeRecord);
@@ -637,7 +639,13 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     u.status !== 'deleted'
   );
 
+  const isLocalOnly = !supaUsers.some(u => String(u.id) === String(user.id));
+
   if (!user) {
+    if (supaFailed) {
+      // The user may exist in the unreachable DB — do NOT report bad credentials.
+      return res.status(503).json({ error: 'Service temporarily unavailable — the database could not be reached. Please try again in a few minutes.' });
+    }
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
 
@@ -651,6 +659,10 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   }
 
   if (!isValidPassword) {
+    if (supaFailed && !isLocalOnly) {
+      // Record came from (or also lives in) an unreachable DB — the hash we checked may be stale.
+      return res.status(503).json({ error: 'Service temporarily unavailable — the database could not be reached. Please try again in a few minutes.' });
+    }
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
 

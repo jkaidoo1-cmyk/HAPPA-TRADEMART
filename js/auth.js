@@ -494,7 +494,14 @@ async function doLogin(e) {
   });
 
   if (!authRes || authRes.error || !authRes.user || !authRes.token) {
-    showToast(authRes?.error || 'Invalid email or password. Please try again.', 'error');
+    // Distinguish "bad credentials" from "service down" — don't blame the user
+    // when the database is unreachable (e.g. Supabase quota/pause).
+    const lastErr = String(window.lastApiError || '');
+    if (lastErr.includes('503') || /temporarily unavailable|could not be reached/i.test(lastErr)) {
+      showToast('The service is temporarily unavailable. Please try again in a few minutes.', 'warning');
+    } else {
+      showToast(authRes?.error || 'Invalid email or password. Please try again.', 'error');
+    }
     resetBtn();
     return;
   }
