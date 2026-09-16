@@ -1445,6 +1445,56 @@ app.post('/api/:table', async (req, res) => {
     Object.assign(body, access.sanitizeUserCreate(body));
   }
 
+  // Service posts: only rendors with an active subscription may publish, and
+  // the post's rendor_id is ALWAYS the session user. Previously the client's
+  // rendor_id was trusted, so any logged-in user (or even an anonymous
+  // caller) could publish posts impersonating another rendor.
+  if (table === 'services' && !access.isAdmin(viewer)) {
+    if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    if (String(viewer.role) !== 'rendor') {
+      return res.status(403).json({ error: 'Only rendors can publish service posts.' });
+    }
+    let rendorUser = null;
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('users').select('*').eq('id', String(viewer.userId)).maybeSingle();
+        if (data) rendorUser = serializeRecord(data);
+      } catch (e) {}
+    }
+    if (!rendorUser) {
+      const dbR = loadDb();
+      rendorUser = getTable(dbR, 'users').find(u => String(u.id) === String(viewer.userId)) || null;
+    }
+    const expMs = Number(rendorUser && rendorUser.rendor_sub_expiry);
+    const subActive = !!rendorUser && rendorUser.rendor_sub_status === 'active' &&
+      Number.isFinite(expMs) && expMs > 0 && expMs > Date.now();
+    if (!subActive) {
+      return res.status(403).json({ error: 'An active subscription is required to publish posts. Please subscribe from your dashboard.' });
+    }
+    body.rendor_id = String(viewer.userId);
+    if (!['active', 'paused'].includes(String(body.status || ''))) body.status = 'active';
+  }
+
+  // Store slugs are the public storefront URL — they must be globally unique.
+  // Without this check any vendor could claim another store's URL slug and
+  // hijack its traffic, with resolution order deciding who wins.
+  if (table === 'stores') {
+    const newSlug = String(body.slug || '').trim().toLowerCase();
+    if (newSlug) {
+      const dbSlug = loadDb();
+      let clash = getTable(dbSlug, 'stores').find(s => String(s.slug || '').toLowerCase() === newSlug) || null;
+      if (!clash && supabase) {
+        try {
+          const { data } = await supabase.from('stores').select('id, slug').eq('slug', newSlug).limit(1);
+          if (data && data.length) clash = data[0];
+        } catch (e) {}
+      }
+      if (clash && String(clash.id) !== String(body.id || '')) {
+        return res.status(409).json({ error: 'That store link is already taken. Please choose a different one.' });
+      }
+    }
+  }
+
   // ── Server-enforced ownership + revenue recording ─────────────────────────
   // Orders/packages are created by the checkout flows: the buyer is always the
   // session user (or an anonymous guest_* id). A logged-in user must never be
@@ -1467,6 +1517,24 @@ app.post('/api/:table', async (req, res) => {
         store = getTable(dbL, 'stores').find(s => String(s.id) === String(body.store_id)) || null;
       }
       if (store && store.vendor_id) body.vendor_id = String(store.vendor_id);
+    }
+
+    // Storefront orders: derive ALL money amounts from the items. The client's
+    // vendor_amount/platform_fee are never trusted — a crafted request could
+    // otherwise mint free money via /api/wallet/storefront-payout. Buyer pays
+    // items-subtotal + 1% platform fee; the vendor earns the item subtotal.
+    const isStorefrontRow = String(body.order_source || '') === 'storefront' || !!body.storefront_id;
+    if (table === 'packages' && isStorefrontRow) {
+      const items = Array.isArray(body.items) ? body.items : [];
+      const r2Loc = n => Math.round((Number(n) || 0) * 100) / 100;
+      const gross = r2Loc(items.reduce((s, i) => s + (parseFloat(i && i.price) || 0) * (parseInt(i && i.qty) || 1), 0));
+      const fee = r2Loc(gross * 0.01);
+      body.gross_amount = gross;
+      body.vendor_amount = gross;
+      body.platform_fee = fee;
+      body.total_amount = r2Loc(gross + fee);
+      body.commission_amount = 0;
+      body.items_count = items.reduce((n, i) => n + (parseInt(i && i.qty) || 1), 0);
     }
   }
 
@@ -1565,7 +1633,7 @@ app.post('/api/:table', async (req, res) => {
   res.status(201).json(out);
 });
 
-app.put('/api/:table/:id', async (req, res) => {
+app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
   let table = req.params.table;
   const id = req.params.id;
   if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
@@ -1600,6 +1668,11 @@ app.put('/api/:table/:id', async (req, res) => {
     if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
       try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
     }
+  }
+
+  // Service posts: a rendor can never reassign a post to another rendor.
+  if (table === 'services' && viewer && !access.isAdmin(viewer)) {
+    body.rendor_id = String(viewer.userId);
   }
 
   if (table === 'storefronts') {
@@ -1758,7 +1831,7 @@ app.put('/api/:table/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/:table/:id', async (req, res) => {
+app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
   let table = req.params.table;
   const id = req.params.id;
   if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
@@ -1794,6 +1867,25 @@ app.patch('/api/:table/:id', async (req, res) => {
     try {
       body.password_hash = await bcrypt.hash(body.password_hash, 10);
     } catch(e) {}
+  }
+
+  // Store slugs stay globally unique on edit too — a PATCH must never be able
+  // to steal another store's public URL.
+  if (table === 'stores' && 'slug' in body) {
+    const newSlug = String(body.slug || '').trim().toLowerCase();
+    if (newSlug) {
+      const dbSlug = loadDb();
+      let clash = getTable(dbSlug, 'stores').find(s => String(s.slug || '').toLowerCase() === newSlug) || null;
+      if (!clash && supabase) {
+        try {
+          const { data } = await supabase.from('stores').select('id, slug').eq('slug', newSlug).limit(1);
+          if (data && data.length) clash = data[0];
+        } catch (e) {}
+      }
+      if (clash && String(clash.id) !== String(id)) {
+        return res.status(409).json({ error: 'That store link is already taken. Please choose a different one.' });
+      }
+    }
   }
 
   if (table === 'storefronts') {
@@ -1977,7 +2069,7 @@ app.patch('/api/:table/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/:table/:id', async (req, res) => {
+app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
   const table = req.params.table;
   const id = req.params.id;
   invalidateApiCache(table); // Clear server GET cache so next read excludes deleted record

@@ -379,8 +379,8 @@ ${Object.values(storeGroups).map(sg => `
   </div>
   ${sg.items.map(item => `
   <div class="cart-item">
-    <img class="cart-item-img" src="${item.image||'https://via.placeholder.com/80x80?text=P'}"
-         alt="${escHtml(item.name)}" onerror="this.src='https://via.placeholder.com/80x80?text=P'">
+    <img class="cart-item-img" src="${item.image||'https://placehold.co/80x80?text=P'}"
+         alt="${escHtml(item.name)}" onerror="this.src='https://placehold.co/80x80?text=P'">
     <div class="cart-item-info">
       <div class="cart-item-name">${escHtml(itemDisplayName(item.name))}</div>
       <div class="cart-item-store"><i class="fas fa-store"></i> ${escHtml(item.store_name)}</div>

@@ -128,7 +128,7 @@ async function showSearchSuggestions(q) {
     html += `<div style="padding:8px 14px;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Products</div>`;
     html += matchedProducts.map(p => `
     <div class="search-suggestion" onclick="openProduct('${p.id}');hideSearchDropdown()">
-      <img src="${p.images?.[0]||'https://via.placeholder.com/30x30?text=P'}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src='https://via.placeholder.com/30x30?text=P'">
+      <img src="${p.images?.[0]||'https://placehold.co/30x30?text=P'}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src='https://placehold.co/30x30?text=P'">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${highlight(p.name||'', q)}</div>
         <div style="font-size:.72rem;color:var(--text-muted)">GHS ${p.price} · ${p.location}</div>
@@ -140,7 +140,7 @@ async function showSearchSuggestions(q) {
     html += `<div style="padding:8px 14px 4px;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Stores</div>`;
     html += matchedStores.map(s => `
     <div class="search-suggestion" onclick="openStore('${s.id}');hideSearchDropdown()">
-      <img src="${s.logo_url||'https://via.placeholder.com/30x30?text=S'}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src='https://via.placeholder.com/30x30?text=S'">
+      <img src="${s.logo_url||'https://placehold.co/30x30?text=S'}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src='https://placehold.co/30x30?text=S'">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:.85rem">${highlight(s.name||'', q)}</div>
         <div style="font-size:.72rem;color:var(--text-muted)">${s.category} · ${s.location}</div>

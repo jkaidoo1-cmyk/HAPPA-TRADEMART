@@ -239,10 +239,10 @@ async function showPackageDetailModal(packageId) {
       <div style="font-weight:700;font-size:.85rem;margin-bottom:10px">Items in this Package</div>
       ${(pkg.items||[]).map(i=>{
         const title = i.name && i.name.trim() ? escHtml(i.name) : `Item #${i.id || 'unnamed'}`;
-        const img = itemImage(i) || 'https://via.placeholder.com/50x50?text=Item';
+        const img = itemImage(i) || 'https://placehold.co/50x50?text=Item';
         return `
         <div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
-          <img src="${img}" alt="${title}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://via.placeholder.com/50x50?text=Item'">
+          <img src="${img}" alt="${title}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://placehold.co/50x50?text=Item'">
           <div style="flex:1;min-width:0">
             <div style="font-size:.84rem;font-weight:700">${title}</div>
             <div style="font-size:.72rem;color:var(--text-muted)">Qty: ${i.qty || 1} · Unit: GHS ${(parseFloat(i.price)||0).toFixed(2)} ${i.id ? `· ID: ${escHtml(String(i.id))}` : ''}</div>
@@ -920,7 +920,7 @@ function adminPackageRowHTML(rawPkg, allUsers) {
     </div>
 
     <!-- Customer Delivery Contact (admin dispatches deliveries and needs this) -->
-    ${(pkg.buyer_name || pkg.buyer_phone || pkg.delivery_address || pkg.delivery_location || pkg.delivery_phone) ? `
+    ${(pkg.buyer_name || pkg.buyer_phone || pkg.delivery_address || pkg.delivery_location || pkg.delivery_phone || (buyer && (buyer.name || buyer.phone))) ? `
     <div style="margin-bottom:12px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:var(--radius-sm);padding:10px 12px">
       <div style="font-size:.72rem;font-weight:800;color:#1e40af;margin-bottom:6px;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.4px">
         <i class="fas fa-address-card" style="color:#2563eb"></i> Customer Delivery Details
@@ -1105,10 +1105,10 @@ function packageDetailHTML(rawPkg) {
       </div>
       ${(pkg.items||[]).map(i=>{
         const itemTitle = i.name && i.name.trim() ? escHtml(i.name) : `Item #${i.id || 'unnamed'}`;
-        const itemImg = itemImage(i) || 'https://via.placeholder.com/60x60?text=Item';
+        const itemImg = itemImage(i) || 'https://placehold.co/60x60?text=Item';
         return `
         <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:#fff">
-          <img src="${itemImg}" alt="${itemTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://via.placeholder.com/60x60?text=Item'">
+          <img src="${itemImg}" alt="${itemTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://placehold.co/60x60?text=Item'">
           <div style="flex:1;min-width:0">
             <div style="font-size:.83rem;font-weight:700;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               ${itemTitle}

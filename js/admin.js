@@ -839,9 +839,9 @@ function adminStoreRowHTML(s, allUsers) {
 <div class="card" style="margin-bottom:10px" id="store-row-${s.id}">
   <div class="card-body">
     <div style="display:flex;align-items:flex-start;gap:10px">
-      <img src="${s.logo_url||'https://via.placeholder.com/50x50?text=S'}"
+      <img src="${s.logo_url||'https://placehold.co/50x50?text=S'}"
            style="width:46px;height:46px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
-           onerror="this.src='https://via.placeholder.com/50x50?text=S'">
+           onerror="this.src='https://placehold.co/50x50?text=S'">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.9rem">${escHtml(s.name)}</div>
         <div style="font-size:.75rem;color:var(--text-muted)">
@@ -1937,7 +1937,7 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
     ${store ? `
     <div style="background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px 12px">
       <div style="display:flex;align-items:center;gap:10px">
-        <img src="${store.logo_url||'https://via.placeholder.com/40x40?text=S'}" style="width:38px;height:38px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0" onerror="this.src='https://via.placeholder.com/40x40?text=S'">
+        <img src="${store.logo_url||'https://placehold.co/40x40?text=S'}" style="width:38px;height:38px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0" onerror="this.src='https://placehold.co/40x40?text=S'">
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:.85rem">${escHtml(store.name)}</div>
           <div style="font-size:.73rem;color:var(--text-muted)">${store.location} · ${store.category||'General'}</div>

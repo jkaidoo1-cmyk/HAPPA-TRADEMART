@@ -76,7 +76,6 @@ async function renderVendorDashboard() {
 
   let stores   = validVendorId ? allStores.filter(s => s && s.vendor_id && String(s.vendor_id).trim() === validVendorId) : [];
   let myStore  = stores[0] || null;
-  console.debug('[renderVendorDashboard] stores found', { storesCount: allStores.length, myStore });
   
   // If no store exists for this vendor, auto-create one
   if (!myStore && validVendorId) {
@@ -97,14 +96,12 @@ async function renderVendorDashboard() {
     const prodRes = await apiGet('products', `search=${myStore.id}&limit=100`);
     myProducts = (prodRes?.data || []).filter(p => String(p.store_id) === String(myStore.id));
     App.allProducts = [ ...(App.allProducts || []).filter(p => String(p.store_id) !== String(myStore.id)), ...myProducts];
-    console.debug('[renderVendorDashboard] myProducts', { count: myProducts.length });
   }
 
   // Fetch orders/packages for vendor
   // Use vendor_id field filter for reliable package fetching
   const pkgRes = await apiGet('packages', `vendor_id=${encodeURIComponent(u.id)}`);
   const myPackages = (pkgRes?.data || (Array.isArray(pkgRes) ? pkgRes : [])).filter(p => String(p.vendor_id) === String(u.id));
-  console.debug('[renderVendorDashboard] myPackages', { count: myPackages.length });
 
   const activeVendorPkgs   = myPackages.filter(p => p.vendor_status !== 'rejected' && p.status !== 'cancelled');
   const rejectedVendorPkgs = myPackages.filter(p => p.vendor_status === 'rejected' || p.status === 'cancelled');
@@ -378,7 +375,7 @@ async function renderVendorDashboard() {
         ${myProducts.sort((a,b)=>(b.sold_count||0)-(a.sold_count||0)).slice(0,5).map((p,i) => `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
           <span style="font-weight:700;color:var(--text-muted);width:16px">${i+1}</span>
-          <img src="${p.images?.[0]||'https://via.placeholder.com/40x40?text=P'}" style="width:36px;height:36px;border-radius:6px;object-fit:cover" onerror="this.src='https://via.placeholder.com/40x40?text=P'">
+          <img src="${p.images?.[0]||'https://placehold.co/40x40?text=P'}" style="width:36px;height:36px;border-radius:6px;object-fit:cover" onerror="this.src='https://placehold.co/40x40?text=P'">
           <div style="flex:1;font-size:.82rem"><strong>${escHtml(p.name)}</strong><br><span style="color:var(--text-muted)">${p.sold_count||0} sold · GHS ${p.price}</span></div>
           <span style="font-weight:700;color:var(--primary)">GHS ${((p.sold_count||0)*p.price).toFixed(0)}</span>
         </div>`).join('')}
@@ -1129,8 +1126,8 @@ function vendorProductRowHTML(p) {
   return `
 <div class="card" style="margin-bottom:10px">
   <div class="card-body" style="display:flex;gap:10px;align-items:flex-start">
-    <img src="${p.images?.[0]||'https://via.placeholder.com/70x70?text=P'}" style="width:64px;height:64px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
-         onerror="this.src='https://via.placeholder.com/70x70?text=P'">
+    <img src="${p.images?.[0]||'https://placehold.co/70x70?text=P'}" style="width:64px;height:64px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
+         onerror="this.src='https://placehold.co/70x70?text=P'">
     <div style="flex:1;min-width:0">
       <div style="font-weight:700;font-size:.875rem;margin-bottom:2px">${escHtml(p.name)}</div>
       <div style="font-size:.78rem;color:var(--text-muted)">GHS ${p.price} · ${p.sold_count||0} sold · ${p.views||0} views</div>
@@ -2252,8 +2249,8 @@ async function showAvailableStores() {
   <div class="card" style="margin-bottom:12px">
     <div class="card-body">
       <div style="display:flex;gap:10px;align-items:center">
-        <img src="${s.logo_url||'https://via.placeholder.com/50x50?text=S'}" style="width:44px;height:44px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
-             onerror="this.src='https://via.placeholder.com/50x50?text=S'">
+        <img src="${s.logo_url||'https://placehold.co/50x50?text=S'}" style="width:44px;height:44px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
+             onerror="this.src='https://placehold.co/50x50?text=S'">
         <div style="flex:1">
           <div style="font-weight:700;font-size:.9rem">${escHtml(s.name)}</div>
           <div style="font-size:.75rem;color:var(--text-muted)">${s.location}</div>
@@ -2913,7 +2910,7 @@ function _bapRemoveSlot(cardIdx, slotIdx) {
         if (hid && _bap.drafts[cardIdx]) {
           _bap.drafts[cardIdx].b64 = hid.value;
           const coverImg = document.querySelector(`#bap-card-${cardIdx} .bap-draft-img-wrap img`);
-          if (coverImg) coverImg.src = hid.value || 'https://via.placeholder.com/80?text=No+Image';
+          if (coverImg) coverImg.src = hid.value || 'https://placehold.co/80?text=No+Image';
         }
       }
     });
@@ -3337,10 +3334,10 @@ window.updateStorefrontPreview = function() {
     headerHTML = `
       <div style="position:relative; text-align:center; padding-bottom:12px; background:#fff; border-bottom:1px solid var(--border)">
         <div style="width:100%; height:90px; background:${secondary}; display:flex; align-items:center; justify-content:center; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://placehold.co/800x300?text=Banner'">
         </div>
         <div style="margin:-30px auto 6px auto; width:64px; height:64px; border-radius:50%; border:3px solid #fff; background:#fff; overflow:hidden; box-shadow:var(--shadow-md); position:relative; z-index:2">
-          <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+          <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://placehold.co/100?text=Logo'">
         </div>
         <h4 style="font-size:1rem; font-weight:900; margin:0; color:var(--text); text-transform:uppercase">${storeName}</h4>
         <div style="font-size:0.65rem; color:var(--text-light); font-weight:700; margin-top:2px"><i class="fas fa-star" style="color:#fbbf24"></i> ${(myStore.avg_rating || 5.0).toFixed(1)} (${myStore.review_count || 0} reviews)</div>
@@ -3372,13 +3369,13 @@ window.updateStorefrontPreview = function() {
     headerHTML = `
       <div style="position:relative; overflow:hidden; min-height:165px; display:flex; align-items:center; justify-content:center; padding:20px 10px;">
         <!-- Full-screen hero banner in background -->
-        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" onerror="this.src='https://placehold.co/800x300?text=Banner'">
         <div style="position:absolute; inset:0; background:rgba(15, 23, 42, 0.45); z-index:1;"></div>
         
         <!-- Frosted Glass Card overlay containing logo, title, slogan -->
         <div style="position:relative; z-index:2; width:88%; background:color-mix(in srgb, ${secondary} 20%, rgba(255, 255, 255, 0.7)); backdrop-filter:blur(16px) saturate(180%); -webkit-backdrop-filter:blur(16px) saturate(180%); border:1px solid rgba(255, 255, 255, 0.4); border-radius:14px; padding:16px 12px 12px 12px; text-align:center; box-shadow:0 8px 32px 0 rgba(0, 0, 0, 0.08);">
           <div style="display:flex; justify-content:center; margin-top:-38px; margin-bottom:8px;">
-            <img src="${logoSrc}" style="width:48px; height:48px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px rgba(0,0,0,0.15); object-fit:cover; background:#fff" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+            <img src="${logoSrc}" style="width:48px; height:48px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px rgba(0,0,0,0.15); object-fit:cover; background:#fff" onerror="this.src='https://placehold.co/100?text=Logo'">
           </div>
           <h4 style="font-family:'Outfit', 'Inter', sans-serif; font-size:0.9rem; font-weight:800; margin:0; color:var(--text); letter-spacing:0.5px">${storeName}</h4>
           <p style="font-size:0.68rem; color:var(--text-muted); margin:4px 0 0 0; font-weight:500; font-style:italic;">${slogan}</p>
@@ -3415,12 +3412,12 @@ window.updateStorefrontPreview = function() {
       <div style="background:var(--neu-bg); padding:12px; display:flex; flex-direction:column; align-items:center; position:relative; border-bottom: none">
         <!-- Neumorphic Banner Inset Frame -->
         <div style="width:100%; height:90px; background:var(--neu-bg); padding:4px; box-shadow: inset 1px 1px 3px rgba(165,175,190,0.25), inset -1px -1px 3px #ffffff; border-radius:12px; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" onerror="this.src='https://placehold.co/800x300?text=Banner'">
         </div>
         
         <!-- Raised Profile Logo -->
         <div style="width:58px; height:58px; border-radius:50%; background:var(--neu-bg); display:flex; align-items:center; justify-content:center; box-shadow: 2px 2px 5px rgba(165,175,190,0.25), -2px -2px 5px #ffffff; padding: 4px; margin-top:-28px; position:relative; z-index:2">
-          <img src="${logoSrc}" style="width:100%; height:100%; border-radius:50%; object-fit:cover" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+          <img src="${logoSrc}" style="width:100%; height:100%; border-radius:50%; object-fit:cover" onerror="this.src='https://placehold.co/100?text=Logo'">
         </div>
         
         <div style="text-align:center; margin-top:6px">
@@ -3454,11 +3451,11 @@ window.updateStorefrontPreview = function() {
     headerHTML = `
       <div style="position:relative">
         <div style="width:100%; height:90px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://placehold.co/800x300?text=Banner'">
         </div>
         <div style="padding:10px; background:#fff; border-bottom:1px solid var(--border)">
           <div style="display:flex; align-items:flex-start; gap:8px; margin-top:-22px">
-            <img src="${logoSrc}" style="width:40px; height:40px; border-radius:8px; border:2px solid #fff; object-fit:cover; box-shadow:var(--shadow-sm)" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+            <img src="${logoSrc}" style="width:40px; height:40px; border-radius:8px; border:2px solid #fff; object-fit:cover; box-shadow:var(--shadow-sm)" onerror="this.src='https://placehold.co/100?text=Logo'">
             <div style="flex:1; padding-top:14px">
               <h4 style="font-size:0.8rem; font-weight:800; margin:0">${storeName}</h4>
               <div style="font-size:0.65rem; color:var(--text-muted); margin-top:1px"><i class="fas fa-star" style="color:#fbbf24"></i> ${(myStore.avg_rating || 5.0).toFixed(1)} (${myStore.review_count || 0} reviews)</div>
@@ -3600,9 +3597,9 @@ window.updateStorefrontPreview = function() {
       </div>` : '';
     composedHTML = `
       <div style="position:relative; height:150px; overflow:hidden">
-        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" onerror="this.src='https://placehold.co/800x300?text=Banner'">
         <div style="position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.55)); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:10px">
-          <img src="${logoSrc}" style="width:44px; height:44px; border-radius:50%; border:2px solid #fff; object-fit:cover; margin-bottom:6px" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+          <img src="${logoSrc}" style="width:44px; height:44px; border-radius:50%; border:2px solid #fff; object-fit:cover; margin-bottom:6px" onerror="this.src='https://placehold.co/100?text=Logo'">
           <h4 style="color:#fff; font-size:.85rem; font-weight:900; margin:0; text-shadow:0 1px 6px rgba(0,0,0,.5)">${storeName}</h4>
           <p style="color:rgba(255,255,255,.92); font-size:.6rem; margin:3px 0 0 0; font-style:italic; text-shadow:0 1px 4px rgba(0,0,0,.5)">${slogan}</p>
         </div>
@@ -3643,7 +3640,7 @@ window.updateStorefrontPreview = function() {
     // Compact Bars: slim brand bar + search/cart row + dense multi-column catalogue
     composedHTML = `
       <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#fff; border-bottom:1px solid var(--border)">
-        <img src="${logoSrc}" style="width:30px; height:30px; border-radius:8px; object-fit:cover; border:1px solid var(--border)" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+        <img src="${logoSrc}" style="width:30px; height:30px; border-radius:8px; object-fit:cover; border:1px solid var(--border)" onerror="this.src='https://placehold.co/100?text=Logo'">
         <div style="flex:1; min-width:0">
           <div style="font-size:.72rem; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${storeName}</div>
           <div style="font-size:.55rem; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${slogan}</div>
@@ -3813,6 +3810,18 @@ window.saveVendorStoreSettings = async function(storeId) {
   const metaDesc = (document.getElementById('store-meta-desc')?.value || '').trim();
   const bannerUrl = (document.getElementById('store-banner-url')?.value || store.banner_url || '').trim();
   const logoUrl = (document.getElementById('store-logo-url')?.value || store.logo_url || '').trim();
+
+  // Slug is the public /storefront/<slug> URL — reject duplicates BEFORE saving
+  // so the vendor gets a clear message instead of a mystery 409 failure.
+  const cleanSlug = sfSlug.toLowerCase();
+  const slugTaken = (App.allStores || []).some(s =>
+    s && String(s.id) !== String(store.id) && String(s.slug || '').toLowerCase() === cleanSlug && cleanSlug !== ''
+  );
+  if (slugTaken) {
+    showToast('That store link is already taken by another store. Please pick a different one.', 'error', 4500);
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Settings'; }
+    return;
+  }
 
   showToast('Saving storefront settings...', 'info');
 

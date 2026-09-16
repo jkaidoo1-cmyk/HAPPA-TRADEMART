@@ -22,6 +22,8 @@ const app = express();
 // Allow larger JSON payloads (product images are sent as base64 up to 5 images)
 app.use(express.json({ limit: '50mb' }));
 
+function r2Server(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
 // Warn if SESSION_SECRET is not set — in-memory sessions are lost on every
 // serverless cold start, causing immediate logout after login.
 if (!String(process.env.SESSION_SECRET || '').trim()) {
@@ -1563,6 +1565,59 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       Object.assign(body, access.sanitizeUserCreate(body));
     }
 
+    // Service posts: only rendors with an active subscription may publish, and
+    // the post's rendor_id is ALWAYS the session user. Previously the client's
+    // rendor_id was trusted, so any logged-in user (or anonymous caller) could
+    // publish posts impersonating another rendor.
+    if (table === 'services' && !access.isAdmin(viewer)) {
+      if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+      if (String(viewer.role) !== 'rendor') {
+        return res.status(403).json({ error: 'Only rendors can publish service posts.' });
+      }
+      let rendorUser = null;
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('users').select('*').eq('id', String(viewer.userId)).maybeSingle();
+          if (data) rendorUser = serializeRecord(data);
+        } catch (e) {}
+      }
+      if (!rendorUser) {
+        dataStore.ensureTable('users');
+        rendorUser = (dataStore.getStore().users || []).find(u => String(u.id) === String(viewer.userId)) || null;
+      }
+      const expMs = Number(rendorUser && rendorUser.rendor_sub_expiry);
+      const subActive = !!rendorUser && rendorUser.rendor_sub_status === 'active' &&
+        Number.isFinite(expMs) && expMs > 0 && expMs > Date.now();
+      if (!subActive) {
+        return res.status(403).json({ error: 'An active subscription is required to publish posts. Please subscribe from your dashboard.' });
+      }
+      body.rendor_id = String(viewer.userId);
+      if (!['active', 'paused'].includes(String(body.status || ''))) body.status = 'active';
+    }
+
+    // Store slugs are the public storefront URL — they must be globally unique.
+    // Without this check any vendor could claim another store's URL slug and
+    // hijack its traffic, with resolution order deciding who wins.
+    if (table === 'stores') {
+      const newSlug = String(body.slug || '').trim().toLowerCase();
+      if (newSlug) {
+        let clash = null;
+        if (supabase) {
+          try {
+            const { data } = await supabase.from('stores').select('id, slug').eq('slug', newSlug).limit(1);
+            if (data && data.length) clash = data[0];
+          } catch (e) {}
+        }
+        if (!clash) {
+          dataStore.ensureTable('stores');
+          clash = (dataStore.getStore().stores || []).find(s => String(s.slug || '').toLowerCase() === newSlug) || null;
+        }
+        if (clash && String(clash.id) !== String(body.id || '')) {
+          return res.status(409).json({ error: 'That store link is already taken. Please choose a different one.' });
+        }
+      }
+    }
+
     // ── Server-enforced ownership + revenue recording ───────────────────────
     // Orders/packages are created by the checkout flows: the buyer is always the
     // session user (or an anonymous guest_* id). A logged-in user must never be
@@ -1585,6 +1640,25 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
           store = (dataStore.getStore().stores || []).find(s => String(s.id) === String(body.store_id)) || null;
         }
         if (store && store.vendor_id) body.vendor_id = String(store.vendor_id);
+      }
+
+      // Storefront orders: derive ALL money amounts from the items the server
+      // now owns. vendor_amount/platform_fee/gross_amount previously came from
+      // the request body, so anyone with an account could POST a fake package
+      // (vendor_amount: 9999) and then trigger /api/wallet/storefront-payout
+      // to mint free money into the store vendor's wallet. The buyer pays
+      // items-subtotal + 1% platform fee; the vendor earns the item subtotal.
+      const isStorefrontRow = String(body.order_source || '') === 'storefront' || !!body.storefront_id;
+      if (table === 'packages' && isStorefrontRow) {
+        const items = Array.isArray(body.items) ? body.items : [];
+        const gross = r2Server(items.reduce((s, i) => s + (parseFloat(i && i.price) || 0) * (parseInt(i && i.qty) || 1), 0));
+        const fee = r2Server(gross * 0.01);
+        body.gross_amount = gross;
+        body.vendor_amount = gross;
+        body.platform_fee = fee;
+        body.total_amount = r2Server(gross + fee);
+        body.commission_amount = 0;
+        body.items_count = items.reduce((n, i) => n + (parseInt(i && i.qty) || 1), 0);
       }
     }
 
@@ -1824,7 +1898,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
 });
 
 // PUT /api/:table/:id  — full replace
-app.put('/api/:table/:id', async (req, res) => {
+app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
   try {
     const supabase = getSupabase();
     let table = req.params.table;
@@ -1909,6 +1983,11 @@ app.put('/api/:table/:id', async (req, res) => {
       }
       const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
       if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+    }
+
+    // Service posts: a rendor can never reassign a post to another rendor.
+    if (table === 'services' && !access.isAdmin(viewer)) {
+      body.rendor_id = String(viewer.userId);
     }
 
     // Hash user passwords server-side
@@ -2085,7 +2164,7 @@ app.put('/api/:table/:id', async (req, res) => {
 });
 
 // PATCH /api/:table/:id  — partial update
-app.patch('/api/:table/:id', async (req, res) => {
+app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
   try {
     const supabase = getSupabase();
     let table = req.params.table;
@@ -2123,6 +2202,28 @@ app.patch('/api/:table/:id', async (req, res) => {
         try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
       }
       global.userCache = {};
+    }
+
+    // Store slugs stay globally unique on edit too — a PATCH must never be able
+    // to steal another store's public URL.
+    if (table === 'stores' && 'slug' in body) {
+      const newSlug = String(body.slug || '').trim().toLowerCase();
+      if (newSlug) {
+        let clash = null;
+        if (supabase) {
+          try {
+            const { data } = await supabase.from('stores').select('id, slug').eq('slug', newSlug).limit(1);
+            if (data && data.length) clash = data[0];
+          } catch (e) {}
+        }
+        if (!clash) {
+          dataStore.ensureTable('stores');
+          clash = (dataStore.getStore().stores || []).find(s => String(s.slug || '').toLowerCase() === newSlug) || null;
+        }
+        if (clash && String(clash.id) !== String(id)) {
+          return res.status(409).json({ error: 'That store link is already taken. Please choose a different one.' });
+        }
+      }
     }
 
     const record = serializeRecord(body);
@@ -2330,7 +2431,7 @@ app.patch('/api/:table/:id', async (req, res) => {
 });
 
 // DELETE /api/:table/:id  — delete record
-app.delete('/api/:table/:id', async (req, res) => {
+app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
   try {
     const supabase = getSupabase();
     const table = req.params.table;
@@ -2479,20 +2580,24 @@ function getRecordCandidatesForTable(table, record, existingRecord) {
     // Orders/packages: if the Supabase table is slimmer than expected, a full
     // insert fails with a missing-column error and the record would fall back
     // to the ephemeral serverless filesystem — effectively LOST. A second
-    // candidate with only the guaranteed core columns keeps the write in
-    // Supabase; every order-management field is already packed into `extra`.
-    const core = ['id', 'code', 'buyer_id', 'vendor_id', 'store_id', 'status', 'total', 'created_at', 'updated_at', 'extra'];
-    const slim = {};
-    for (const col of core) {
-      if (col in primary && primary[col] !== undefined) slim[col] = primary[col];
+    // candidate drops ONLY columns that are safely recoverable on read
+    // (promotion from `extra` via unpackPackageMeta), so the write survives
+    // schema drift without ever creating a data-incomplete order.
+    if (table === 'packages') {
+      // Recoverable via extra: delivery contact (all in PACKAGE_META_FIELDS).
+      // delivery_fee is always 0 platform-wide; notes duplicates the address.
+      const DROPPABLE = ['delivery_fee', 'delivery_name', 'delivery_phone',
+        'delivery_address', 'delivery_location', 'notes'];
+      const slim = { ...primary };
+      let removed = false;
+      for (const k of DROPPABLE) {
+        if (k in slim) { delete slim[k]; removed = true; }
+      }
+      return removed ? [primary, slim] : [primary];
     }
-    if (!('code' in slim) && primary.package_code !== undefined) slim.code = primary.package_code;
-    slim.extra = parseExtraObject(primary.extra);
-    for (const key of table === 'packages' ? PACKAGE_META_FIELDS : ORDER_META_FIELDS) {
-      if (primary[key] !== undefined) slim.extra[key] = primary[key];
-    }
-    const same = JSON.stringify(primary) === JSON.stringify(slim);
-    return same ? [primary] : [primary, slim];
+    // orders: every real column carries data that is NOT recoverable from
+    // extra (delivery_* ∉ ORDER_META_FIELDS), so no safe slim exists.
+    return [primary];
   }
   if (table !== 'products' && table !== 'stores' && table !== 'users') return [primary];
 

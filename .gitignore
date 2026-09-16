@@ -4,6 +4,10 @@ npm-debug.log*
 .env
 
 # Sensitive / local-only data — never commit these
+.db.json
+.session-secret
+.env.backup-preview
+.env.*
 db.json
 scratch/
 supabase_proxy.py

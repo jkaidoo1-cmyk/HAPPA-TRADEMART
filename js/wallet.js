@@ -25,7 +25,34 @@ const MAX_WITHDRAWAL_PENDING = 3; // max simultaneous pending withdrawals  ← m
 function showDepositModal() {
   if (!App.currentUser) { showPage('auth'); return; }
   const u = App.currentUser;
+  const isAdmin = u.role === 'admin';
 
+  if (!isAdmin) {
+    // Non-admins: wallet deposits require admin approval (MoMo gateway pending).
+    showModal(`
+<div class="modal-handle"></div>
+<div class="modal-header">
+  <span class="modal-title">💰 Top Up Wallet</span>
+  <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
+</div>
+<div class="modal-body">
+  <div style="background:linear-gradient(135deg,var(--secondary),#16213e);border-radius:var(--radius-md);padding:14px 16px;color:#fff;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:.75rem;opacity:.75">Current Balance</div>
+      <div style="font-size:1.4rem;font-weight:800">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
+    </div>
+    <i class="fas fa-wallet" style="font-size:1.8rem;opacity:.5"></i>
+  </div>
+  <div style="text-align:center;padding:20px 0">
+    <i class="fas fa-lock" style="font-size:2rem;color:var(--primary);margin-bottom:12px"></i>
+    <p style="font-size:.9rem;color:var(--text);margin-bottom:8px"><strong>Deposits are being upgraded</strong></p>
+    <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:16px">Wallet top-up is temporarily managed by admin while we integrate secure mobile money payments. Please contact the platform admin to add funds to your wallet.</p>
+  </div>
+</div>`);
+    return;
+  }
+
+  // Admin: full deposit form
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">

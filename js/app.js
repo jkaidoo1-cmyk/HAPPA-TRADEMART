@@ -1636,14 +1636,14 @@ async function renderVendorMyStorePage() {
 <div style="padding-bottom:20px">
   <!-- Banner -->
   <div style="position:relative">
-    <img src="${freshStore.banner_url||'https://via.placeholder.com/800x200?text=Store+Banner'}"
+    <img src="${freshStore.banner_url||'https://placehold.co/800x200?text=Store+Banner'}"
          style="width:100%;height:140px;object-fit:cover"
-         onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
+         onerror="this.src='https://placehold.co/800x200?text=Store+Banner'">
     <!-- Logo overlay -->
     <div style="position:absolute;bottom:-28px;left:16px;width:60px;height:60px;border-radius:50%;border:3px solid #fff;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15)">
-      <img src="${freshStore.logo_url||'https://via.placeholder.com/80x80?text=Logo'}"
+      <img src="${freshStore.logo_url||'https://placehold.co/80x80?text=Logo'}"
            style="width:100%;height:100%;object-fit:cover"
-           onerror="this.src='https://via.placeholder.com/80x80?text=S'">
+           onerror="this.src='https://placehold.co/80x80?text=S'">
     </div>
   </div>
 
@@ -2895,13 +2895,13 @@ function _pcSlide(btn, dir) {
 }
 
 function _pcSlideshowHTML(images, altText) {
-  const imgs = (images && images.length) ? images : ['https://via.placeholder.com/300x300?text=No+Image'];
+  const imgs = (images && images.length) ? images : ['https://placehold.co/300x300?text=No+Image'];
   if (imgs.length === 1) {
-    return `<img class="product-img" src="${imgs[0]}" alt="${altText}" loading="lazy" onerror="this.src='https://via.placeholder.com/300x300?text=No+Image'">`;
+    return `<img class="product-img" src="${imgs[0]}" alt="${altText}" loading="lazy" onerror="this.src='https://placehold.co/300x300?text=No+Image'">`;
   }
   const slidesHTML = imgs.map((src, i) =>
     `<div class="pc-slide${i === 0 ? ' active' : ''}">
-      <img src="${src}" alt="${altText} ${i+1}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/300x300?text=No+Image'">
+      <img src="${src}" alt="${altText} ${i+1}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/300x300?text=No+Image'">
     </div>`
   ).join('');
   const dotsHTML = imgs.map((_, i) =>
@@ -3017,8 +3017,8 @@ function productCardSmall(p) {
 // ── Helper: Store Card HTML ───────────────────────────────
 function storeCardHTML(s, compact = false) {
   const stars = renderStars(s.avg_rating || 0);
-  const banner = s.banner_url || 'https://via.placeholder.com/800x200?text=Store+Banner';
-  const logo   = s.logo_url  || 'https://via.placeholder.com/100x100?text=Logo';
+  const banner = s.banner_url || 'https://placehold.co/800x200?text=Store+Banner';
+  const logo   = s.logo_url  || 'https://placehold.co/100x100?text=Logo';
   const storeName = s.name || s.slug || 'Store';
   const storeLoc  = s.location || '';
   if (compact) {
@@ -3026,8 +3026,8 @@ function storeCardHTML(s, compact = false) {
     return `
 <div class="store-card store-card-compact" onclick="openStore('${s.id}')">
   <div class="store-banner-wrap">
-    <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
-    <img class="store-logo store-logo-compact" src="${logo}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+    <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x200?text=Store+Banner'">
+    <img class="store-logo store-logo-compact" src="${logo}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/100x100?text=Logo'">
   </div>
   <div class="store-info">
     <div class="store-name">${escHtml(storeName)}</div>
@@ -3041,8 +3041,8 @@ function storeCardHTML(s, compact = false) {
   }
   return `
 <div class="store-card" onclick="openStore('${s.id}')">
-  <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" onerror="this.src='https://via.placeholder.com/800x200?text=Store+Banner'">
-  <img class="store-logo" src="${logo}" alt="${escHtml(storeName)}" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+  <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" onerror="this.src='https://placehold.co/800x200?text=Store+Banner'">
+  <img class="store-logo" src="${logo}" alt="${escHtml(storeName)}" onerror="this.src='https://placehold.co/100x100?text=Logo'">
   <div class="store-info">
     <div class="store-name">${escHtml(storeName)}</div>
     <div class="store-cat">${s.category || ''}</div>

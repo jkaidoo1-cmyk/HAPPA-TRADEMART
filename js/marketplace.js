@@ -511,7 +511,7 @@ async function renderProductDetail(id) {
 
   const stockMsg   = p.stock_qty === 0 ? 'Out of Stock' : p.stock_qty <= 3 ? `Only ${p.stock_qty} left!` : `${p.stock_qty} in stock`;
 
-  const images = p.images?.length ? p.images : ['https://via.placeholder.com/600x600?text=No+Image'];
+  const images = p.images?.length ? p.images : ['https://placehold.co/600x600?text=No+Image'];
 
 
 
@@ -551,11 +551,11 @@ async function renderProductDetail(id) {
 
   <img src="${images[0]}" alt="${escHtml(p.name)}" style="width:100%;aspect-ratio:1;max-height:340px;object-fit:fill;display:block"
 
-       onerror="this.src='https://via.placeholder.com/600x600?text=No+Image'">
+       onerror="this.src='https://placehold.co/600x600?text=No+Image'">
 
   ${images.length > 1 ? `<div style="display:flex;gap:6px;padding:8px 12px;overflow-x:auto">
 
-    ${images.map((img,i) => `<img src="${img}" onclick="switchImg(this,'${img}')" style="width:56px;height:56px;border-radius:6px;object-fit:cover;cursor:pointer;opacity:${i===0?'1':'0.6'}" onerror="this.src='https://via.placeholder.com/60x60?text=img'">`).join('')}
+    ${images.map((img,i) => `<img src="${img}" onclick="switchImg(this,'${img}')" style="width:56px;height:56px;border-radius:6px;object-fit:cover;cursor:pointer;opacity:${i===0?'1':'0.6'}" onerror="this.src='https://placehold.co/60x60?text=img'">`).join('')}
 
   </div>` : ''}
 
@@ -709,11 +709,11 @@ ${store.id ? `
 
   <div class="card-body" style="display:flex;align-items:center;gap:12px">
 
-    <img src="${store.logo_url||'https://via.placeholder.com/60x60?text=Store'}" alt="${escHtml(store.name || store.slug || 'Store')}"
+    <img src="${store.logo_url||'https://placehold.co/60x60?text=Store'}" alt="${escHtml(store.name || store.slug || 'Store')}"
 
          style="width:48px;height:48px;border-radius:var(--radius-sm);object-fit:cover"
 
-         onerror="this.src='https://via.placeholder.com/60x60?text=S'">
+         onerror="this.src='https://placehold.co/60x60?text=S'">
 
     <div style="flex:1">
 
@@ -1000,12 +1000,12 @@ async function renderStoreDetail(id) {
   const headerHTML = `
     <div style="position:relative;background:#f8f9fa">
       <img src="${bannerSrc}" alt="${escHtml(storeName)}" 
-           style="width:100%;height:140px;object-fit:cover;" onerror="this.src='https://via.placeholder.com/800x300?text=Store+Banner'">
+           style="width:100%;height:140px;object-fit:cover;" onerror="this.src='https://placehold.co/800x300?text=Store+Banner'">
       <div style="padding:12px 16px;background:#fff;border-bottom:1px solid var(--border);position:relative">
         <div style="display:flex;align-items:flex-start;gap:12px;margin-top:-35px">
           <img src="${logoSrc}" alt="${escHtml(storeName)}"
                style="width:64px;height:64px;border-radius:12px;border:3px solid #fff;object-fit:cover;box-shadow:var(--shadow-sm)"
-               onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+               onerror="this.src='https://placehold.co/100x100?text=Logo'">
           <div style="flex:1;padding-top:25px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
               <h1 style="font-size:1.1rem;font-weight:800;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text)">
@@ -1363,10 +1363,10 @@ async function renderStorefront(id) {
       <div style="position:relative; text-align:center; padding-bottom:12px; background:#fff; border-bottom:1px solid var(--border)">
 
         <div style="width:100%; height:130px; background:${secondaryColor}; display:flex; align-items:center; justify-content:center; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://placehold.co/800x300?text=Banner'">
         </div>
         <div style="margin:-40px auto 6px auto; width:80px; height:80px; border-radius:50%; border:3px solid #fff; background:#fff; overflow:hidden; box-shadow:var(--shadow-md); position:relative; z-index:2">
-          <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+          <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://placehold.co/100?text=Logo'">
         </div>
         <h4 class="store-name-title" style="font-size:1.2rem; font-weight:900; margin:0; text-transform:uppercase">${storeName} ${verifiedBadge}</h4>
         <div class="store-location-tag" style="font-size:0.7rem; font-weight:700; margin-top:2px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</div>
@@ -1396,13 +1396,13 @@ async function renderStorefront(id) {
       <div style="position:relative; overflow:hidden; min-height:190px; display:flex; align-items:center; justify-content:center; padding:25px 10px;">
 
         <!-- Full-screen hero banner in background -->
-        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" loading="lazy" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" loading="lazy" onerror="this.src='https://placehold.co/800x300?text=Banner'">
         <div style="position:absolute; inset:0; background:rgba(15, 23, 42, 0.45); z-index:1;"></div>
         
         <!-- Frosted Glass Card overlay containing logo, title, slogan -->
         <div style="position:relative; z-index:2; width:88%; background:color-mix(in srgb, ${secondaryColor} 20%, rgba(255, 255, 255, 0.7)); backdrop-filter:blur(16px) saturate(180%); -webkit-backdrop-filter:blur(16px) saturate(180%); border:1px solid rgba(255, 255, 255, 0.4); border-radius:14px; padding:16px 12px 12px 12px; text-align:center; box-shadow:0 8px 32px 0 rgba(0, 0, 0, 0.08);">
           <div style="display:flex; justify-content:center; margin-top:-38px; margin-bottom:8px;">
-            <img src="${logoSrc}" style="width:58px; height:58px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px rgba(0,0,0,0.15); object-fit:cover; background:#fff" loading="lazy" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+            <img src="${logoSrc}" style="width:58px; height:58px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px rgba(0,0,0,0.15); object-fit:cover; background:#fff" loading="lazy" onerror="this.src='https://placehold.co/100?text=Logo'">
           </div>
           <h4 class="store-name-title" style="font-family:'Outfit', 'Inter', sans-serif; font-size:1.15rem; font-weight:800; margin:0; letter-spacing:0.5px">${storeName} ${verifiedBadge}</h4>
           <p class="store-slogan-text" style="font-size:0.75rem; margin:4px 0 0 0; font-weight:500; font-style:italic;">${slogan}</p>
@@ -1434,12 +1434,12 @@ async function renderStorefront(id) {
 
         <!-- Neumorphic Banner Inset Frame -->
         <div style="width:100%; height:110px; background:color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); padding:4px; box-shadow: inset 1px 1px 3px rgba(165,175,190,0.25), inset -1px -1px 3px #ffffff; border-radius:12px; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" loading="lazy" onerror="this.src='https://via.placeholder.com/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" loading="lazy" onerror="this.src='https://placehold.co/800x300?text=Banner'">
         </div>
         
         <!-- Raised Profile Logo -->
         <div style="width:68px; height:68px; border-radius:50%; background:color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); display:flex; align-items:center; justify-content:center; box-shadow: 2px 2px 5px rgba(165,175,190,0.25), -2px -2px 5px #ffffff; padding: 4px; margin-top:-28px; position:relative; z-index:2">
-          <img src="${logoSrc}" style="width:100%; height:100%; border-radius:50%; object-fit:cover" loading="lazy" onerror="this.src='https://via.placeholder.com/100?text=Logo'">
+          <img src="${logoSrc}" style="width:100%; height:100%; border-radius:50%; object-fit:cover" loading="lazy" onerror="this.src='https://placehold.co/100?text=Logo'">
         </div>
         
         <div style="text-align:center; margin-top:6px">
@@ -1466,12 +1466,12 @@ async function renderStorefront(id) {
       <div style="position:relative;background:#f8f9fa">
 
         <img src="${bannerSrc}" alt="${escHtml(storeName)}" 
-             style="width:100%;height:180px;object-fit:cover;" onerror="this.src='https://via.placeholder.com/800x300?text=Store+Banner'">
+             style="width:100%;height:180px;object-fit:cover;" onerror="this.src='https://placehold.co/800x300?text=Store+Banner'">
         <div style="padding:16px;background:#fff;border-bottom:1px solid var(--border);position:relative">
           <div style="display:flex;align-items:flex-start;gap:12px;margin-top:-45px">
             <img src="${logoSrc}" alt="${escHtml(storeName)}"
                  style="width:80px;height:80px;border-radius:12px;border:3px solid #fff;object-fit:cover;box-shadow:var(--shadow-sm)"
-                 onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+                 onerror="this.src='https://placehold.co/100x100?text=Logo'">
             <div style="flex:1;padding-top:35px">
               <h1 class="store-name-title" style="font-size:1.25rem;font-weight:800;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 ${escHtml(storeName)} ${verifiedBadge}
@@ -1635,9 +1635,9 @@ async function renderStorefront(id) {
   if (layout === 'showcase') {
     layoutHeroHTML = `
       <div id="sf-showcase-hero">
-        <img class="sf-hero-bg" src="${bannerSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://via.placeholder.com/900x400?text=Store+Banner'">
+        <img class="sf-hero-bg" src="${bannerSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://placehold.co/900x400?text=Store+Banner'">
         <div class="sf-hero-overlay">
-          <img src="${logoSrc}" alt="${escHtml(storeName)} logo" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+          <img src="${logoSrc}" alt="${escHtml(storeName)} logo" onerror="this.src='https://placehold.co/100x100?text=Logo'">
           <h1>${escHtml(storeName)} ${verifiedBadge}</h1>
           <p>${escHtml(slogan)}</p>
           <div style="display:flex;align-items:center;gap:14px;margin-top:8px;font-size:.72rem;color:rgba(255,255,255,.9)">
@@ -1649,7 +1649,7 @@ async function renderStorefront(id) {
   }
   const compactBarHTML = layout === 'compact' ? `
     <div id="sf-compact-bar">
-      <img src="${logoSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://via.placeholder.com/100x100?text=Logo'">
+      <img src="${logoSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://placehold.co/100x100?text=Logo'">
       <div style="flex:1;min-width:0">
         <div class="cb-name">${escHtml(storeName)} ${verifiedBadge}</div>
         <div class="cb-slogan">${escHtml(slogan)}</div>
@@ -1815,11 +1815,11 @@ function adminProductCardHTML(p) {
 
     <img style="width:100%;height:140px;object-fit:fill;display:block"
 
-         src="${p.images?.[0]||'https://via.placeholder.com/300x300?text=No+Image'}"
+         src="${p.images?.[0]||'https://placehold.co/300x300?text=No+Image'}"
 
          alt="${escHtml(p.name)}" loading="lazy"
 
-         onerror="this.src='https://via.placeholder.com/300x300?text=No+Image'">
+         onerror="this.src='https://placehold.co/300x300?text=No+Image'">
 
   </div>
 
@@ -3174,7 +3174,7 @@ window.openStorefrontProductModal = async function(productId) {
       <button onclick="document.getElementById('storefront-product-modal').remove()" style="position:absolute; top:12px; right:12px; border:none; background:rgba(0,0,0,0.5); color:#fff; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.8rem; z-index:10">
         <i class="fas fa-times"></i>
       </button>      <div style="width:100%; height:200px; background:#f8f9fa; overflow:hidden">
-        <img src="${img}" style="width:100%; height:100%; object-fit:fill; display:block" onerror="this.src='https://via.placeholder.com/400x300?text=Product'">
+        <img src="${img}" style="width:100%; height:100%; object-fit:fill; display:block" onerror="this.src='https://placehold.co/400x300?text=Product'">
       </div>
       <div style="padding:20px; display:grid; gap:12px">
         <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name))}</h3>

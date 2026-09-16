@@ -284,12 +284,19 @@ async function placeOrder() {
   const sat      = getNextSaturday();
 
   let buyerId = App.currentUser ? App.currentUser.id : 'guest_' + Date.now();
-  let buyerName = App.currentUser ? App.currentUser.name : document.getElementById('guest-name')?.value || 'Guest Customer';
-  let buyerPhone = App.currentUser ? App.currentUser.phone : document.getElementById('guest-phone')?.value || '0000000000';
-  let buyerEmail = App.currentUser ? App.currentUser.email : document.getElementById('guest-email')?.value || 'guest@happamart.com';
+  // Read buyer contact from the checkout form for EVERYONE (the form is now
+  // rendered for guests and logged-in buyers alike, prefilled from profile).
+  // Previously logged-in buyers skipped the form entirely, so an order could
+  // silently carry a stale/empty profile phone with no way to correct it.
+  const formName  = document.getElementById('guest-name')?.value.trim()  || '';
+  const formPhone = document.getElementById('guest-phone')?.value.trim()  || '';
+  const formEmail = document.getElementById('guest-email')?.value.trim()  || '';
+  let buyerName  = formName  || (App.currentUser ? App.currentUser.name  : 'Guest Customer');
+  let buyerPhone = formPhone || (App.currentUser ? App.currentUser.phone  : '0000000000');
+  let buyerEmail = formEmail || (App.currentUser ? App.currentUser.email : 'guest@happamart.com');
 
   if (!buyerName || !buyerPhone || !buyerEmail) {
-    showToast('Please fill in all guest details', 'warning');
+    showToast('Please fill in your name and phone number', 'warning');
     _placingOrder = false;
     if (btn) btn.disabled = false;
     if (setBtn) setBtn('idle');

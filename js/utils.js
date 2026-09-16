@@ -101,7 +101,7 @@ async function copyToClipboard(text) {
 // ── Image error handler ────────────────────────────────────
 document.addEventListener('error', (e) => {
   if (e.target.tagName === 'IMG') {
-    e.target.src = 'https://via.placeholder.com/200x200?text=No+Image';
+    e.target.src = 'https://placehold.co/200x200?text=No+Image';
   }
 }, true);
 
