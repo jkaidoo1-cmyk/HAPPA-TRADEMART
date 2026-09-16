@@ -24,6 +24,11 @@ const SETTINGS_CONFIG = [
   // Rendor subscription (single price — admin can override per rendor)
   { key: 'rendor_sub_price',           id: 'setting-rendor-sub-price',           type: 'number',   default: '30'  },
   { key: 'rendor_sub_months',          id: 'setting-rendor-sub-months',          type: 'number',   default: '1'   },
+  // Storefront subscription (per-plan global prices — admin can override per
+  // storefront during the approval review modal)
+  { key: 'storefront_price_starter',   id: 'setting-sf-price-starter',           type: 'number',   default: '50'  },
+  { key: 'storefront_price_growth',    id: 'setting-sf-price-growth',            type: 'number',   default: '100' },
+  { key: 'storefront_price_pro',       id: 'setting-sf-price-pro',               type: 'number',   default: '200' },
   // Note: announcement fields are loaded separately (outside the form) via loadAdminSettings
   // but saved via sendAnnouncement() / clearAnnouncement()
 ];

@@ -1163,7 +1163,7 @@ function packageRowHTML(pkg) {
 // NOTE: packageDetailHTML is defined in js/orders.js
 
 // ── Add Product Modal ──────────────────────────────────────
-function showAddProductModal(storeId, vendorId) {
+async function showAddProductModal(storeId, vendorId) {
   // Block product uploads for unapproved vendors
   if (App.currentUser && App.currentUser.status === 'pending_approval') {
     showToast('Your vendor account is still pending approval. You cannot add products yet.', 'warning');
@@ -1188,7 +1188,7 @@ function showAddProductModal(storeId, vendorId) {
     const planName = planKey.charAt(0).toUpperCase() + planKey.slice(1);
     showToast(`Your ${planName} plan allows up to ${maxAllowed} products (${currentCount}/${maxAllowed} used). Please upgrade your plan to upload more products.`, 'warning', 5000);
     if (typeof window.openStorefrontUpgradeModal === 'function') {
-      const prices = { starter: 50, growth: 100, pro: 200 };
+      const prices = await _getSfUpgradePrices(store);
       window.openStorefrontUpgradeModal(store.id, planKey, prices[planKey] || 50);
     }
     return;
@@ -2956,7 +2956,7 @@ async function _bapSubmitAll() {
       const planName = planKey.charAt(0).toUpperCase() + planKey.slice(1);
       showToast(`Your ${planName} plan limit of ${maxAllowed} products is reached. Please upgrade to upload more.`, 'warning', 5000);
       if (typeof window.openStorefrontUpgradeModal === 'function') {
-        const prices = { starter: 50, growth: 100, pro: 200 };
+        const prices = await _getSfUpgradePrices(store);
         window.openStorefrontUpgradeModal(store.id, planKey, prices[planKey] || 50);
       }
       return;
@@ -3943,22 +3943,38 @@ const _STOREFRONT_PLANS_DEFAULTS = {
 // Product limits per plan (used by showAddProductModal)
 const STOREFRONT_PRODUCT_LIMITS = { starter: 100, growth: 200, pro: Infinity };
 // Resolve storefront plan prices: admin-set plan_prices on the storefront record
-// take priority, then fallback to default prices.
-function _getSfPlanPrices(sfOrStore) {
+// take priority, then the global settings (storefront_price_*), then defaults.
+function _getSfPlanPrices(sfOrStore, globalPrices) {
   const pp = sfOrStore?.plan_prices || {};
+  const g = globalPrices || {};
   return {
-    starter: parseFloat(pp.starter) || 50,
-    growth:  parseFloat(pp.growth)  || 100,
-    pro:     parseFloat(pp.pro)     || 200
+    starter: parseFloat(pp.starter) || parseFloat(g.starter) || 50,
+    growth:  parseFloat(pp.growth)  || parseFloat(g.growth)  || 100,
+    pro:     parseFloat(pp.pro)     || parseFloat(g.pro)     || 200
   };
 }
-function _getSfPlans(store) {
-  const prices = _getSfPlanPrices(store);
+// Fetch the global storefront plan prices from admin settings (with fallbacks).
+async function _getGlobalSfPrices() {
+  return {
+    starter: parseFloat(await getSetting('storefront_price_starter', '50')) || 50,
+    growth:  parseFloat(await getSetting('storefront_price_growth', '100')) || 100,
+    pro:     parseFloat(await getSetting('storefront_price_pro', '200')) || 200
+  };
+}
+function _getSfPlans(store, globalPrices) {
+  const prices = _getSfPlanPrices(store, globalPrices);
   const plans = {};
   for (const [k, v] of Object.entries(_STOREFRONT_PLANS_DEFAULTS)) {
     plans[k] = { ...v, price: prices[k] || v.price };
   }
   return plans;
+}
+// Helper for upgrade prompts: per-store plan_prices → global settings → defaults.
+async function _getSfUpgradePrices(store) {
+  const sfRecord = (App.allStorefronts || []).find(sf => String(sf.store_id) === String(store?.id));
+  const priceSource = sfRecord?.plan_prices ? sfRecord : (store || {});
+  const globalPrices = await _getGlobalSfPrices();
+  return _getSfPlanPrices(priceSource, globalPrices);
 }
 // Mutable reference updated at render time so all helpers use current prices
 let STOREFRONT_PLANS = _getSfPlans({});
@@ -4019,15 +4035,17 @@ window.getSubscriptionBannerHTML = function(store) {
     </div>`;
 };
 
-window.openStorefrontSubscribeModal = function(storeId, preSelectedPlan, price) {
+window.openStorefrontSubscribeModal = async function(storeId, preSelectedPlan, price) {
   const existing = document.getElementById('storefront-sub-modal');
   if (existing) existing.remove();
 
   const store = (App.allStores || []).find(s => String(s.id) === String(storeId)) || {};
-  // Prefer plan_prices from the storefront record (set by admin) over the store object
+  // Prefer plan_prices from the storefront record (set by admin) over the store object,
+  // then the global storefront_price_* settings, then the hardcoded defaults.
   const sfRecord = (App.allStorefronts || []).find(sf => String(sf.store_id) === String(storeId));
   const priceSource = sfRecord?.plan_prices ? sfRecord : store;
-  STOREFRONT_PLANS = _getSfPlans(priceSource);
+  const globalPrices = await _getGlobalSfPrices();
+  STOREFRONT_PLANS = _getSfPlans(priceSource, globalPrices);
   const plan = STOREFRONT_PLANS[preSelectedPlan] || STOREFRONT_PLANS.growth;
 
   const html = `

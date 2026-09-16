@@ -1441,8 +1441,22 @@ app.post('/api/:table', async (req, res) => {
   if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
   // Anonymous signup must never mint an admin, set a wallet balance, or
   // self-verify. Admins (creating users via the panel) keep full control.
+  // The admin-approval guarantee lives server-side: vendor/rendor status comes
+  // from the vendor_auto_approve SETTING, never from the request body.
   if (table === 'users' && !access.isAdmin(viewer)) {
-    Object.assign(body, access.sanitizeUserCreate(body));
+    let autoApprove = false;
+    try {
+      if (supabase) {
+        const { data } = await supabase.from('settings').select('value').eq('key', 'vendor_auto_approve').maybeSingle();
+        if (data) autoApprove = String(data.value) === 'true';
+      }
+      if (!autoApprove) {
+        const dbS = loadDb();
+        const row = getTable(dbS, 'settings').find(r => r.key === 'vendor_auto_approve');
+        autoApprove = !!(row && String(row.value) === 'true');
+      }
+    } catch (e) {}
+    Object.assign(body, access.sanitizeUserCreate(body, { autoApprove }));
   }
 
   // Service posts: only rendors with an active subscription may publish, and

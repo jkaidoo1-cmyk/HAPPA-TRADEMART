@@ -1561,8 +1561,15 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
     // Anonymous signup must never mint an admin, set a wallet balance, or
     // self-verify. Admins creating users via the panel keep full control.
+    // The admin-approval guarantee lives server-side: vendor/rendor status comes
+    // from the vendor_auto_approve SETTING, never from the request body.
     if (table === 'users' && !access.isAdmin(viewer)) {
-      Object.assign(body, access.sanitizeUserCreate(body));
+      let autoApprove = false;
+      try {
+        const raw = await walletAdapter().getSetting('vendor_auto_approve', 'false');
+        autoApprove = String(raw) === 'true';
+      } catch (e) {}
+      Object.assign(body, access.sanitizeUserCreate(body, { autoApprove }));
     }
 
     // Service posts: only rendors with an active subscription may publish, and

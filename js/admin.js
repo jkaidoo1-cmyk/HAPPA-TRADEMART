@@ -621,6 +621,30 @@ async function renderAdminDashboard() {
         </div>
       </div>
 
+      <!-- 3d. Storefront Subscription -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header">
+          <h3>🏪 Storefront Subscription</h3>
+        </div>
+        <div class="card-body">
+          <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:12px">Default monthly prices vendors pay for their storefront plans. When approving a storefront request you can override these per vendor — otherwise these global prices apply to everyone.</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">🌱 Starter — GHS/mo</label>
+              <input class="form-control" id="setting-sf-price-starter" type="number" min="0" step="0.01" value="50">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">🚀 Growth — GHS/mo</label>
+              <input class="form-control" id="setting-sf-price-growth" type="number" min="0" step="0.01" value="100">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">💎 Pro — GHS/mo</label>
+              <input class="form-control" id="setting-sf-price-pro" type="number" min="0" step="0.01" value="200">
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 4. Referral Programme -->
       <div class="card" style="margin-bottom:14px">
         <div class="card-header">
