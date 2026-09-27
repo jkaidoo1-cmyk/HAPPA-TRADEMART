@@ -204,14 +204,15 @@ self.addEventListener('push', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || './';
+  const rawUrl = event.notification.data?.url || './';
+  const targetUrl = new URL(rawUrl, self.location.origin).href;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
       // Focus existing window if open, otherwise open new one
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.focus();
-          if (targetUrl && targetUrl !== './') client.navigate(targetUrl);
+          if (rawUrl && rawUrl !== './') client.navigate(targetUrl);
           return;
         }
       }

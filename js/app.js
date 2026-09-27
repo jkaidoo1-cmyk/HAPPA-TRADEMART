@@ -256,38 +256,22 @@ window.addEventListener('DOMContentLoaded', () => {
                     (isStorefrontPage ? (startupHash.startsWith('#storefront/') ? startupHash.substring(12) : null) : null);
 
   if (isDirectStorefront) {
-    // ── PWA guard (startup) ─────────────────────────────────
-    // A storefront/store-admin link opened in the installed app must never put
-    // the PWA into storefront mode. Hand off to the real browser; the PWA
-    // itself falls back to its home page.
-    if (isPwaMode()) {
-      openStorefrontInBrowser(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug);
-      App.isStandaloneStorefront = false;
-    } else {
     App.isStandaloneStorefront = true;
     document.body.classList.add('is-storefront-view');
     document.documentElement.classList.add('is-storefront-root');
-    }
     const splash = document.getElementById('pwa-splash-screen');
     if (splash) splash.remove();
     App.currentStoreId = storeSlug;
     // Instant tab title from the slug while the storefront data loads
     // (renderStorefront replaces it with the exact vendor-set name).
-    if (storeSlug && !isPwaMode()) {
+    if (storeSlug) {
       document.title = String(storeSlug).replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     }
-    if (isPwaMode()) {
-      // Clean the URL so the PWA doesn't loop back into this branch on reload,
-      // then show home inside the app (the browser tab has the storefront).
-      try { history.replaceState({ page: 'home' }, '', window.location.origin + '/'); } catch(e) {}
-      showPage('home');
-    } else {
-      showPage(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug);
-      try {
-        history.replaceState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
-        history.pushState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
-      } catch(e) {}
-    }
+    showPage(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug);
+    try {
+      history.replaceState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
+      history.pushState({ page: isStoreAdmin ? 'store-admin' : 'storefront', entityId: storeSlug, tab: 'home' }, '', window.location.href);
+    } catch(e) {}
   } else {
     loadHomeData().then(() => { initAdBanners('home'); initHeroBanners(); });
   }
@@ -1050,48 +1034,6 @@ function openStorefrontInBrowser(kind, entityId) {
 window.openStorefrontInBrowser = openStorefrontInBrowser;
 
 function showPage(pageId, entityId = null) {
-  // ── PWA Storefront Guard ─────────────────────────────────────
-  // When running as an installed PWA (standalone/fullscreen), storefront pages
-  // must open in the real browser — never inside the PWA shell.
-  const isPWA = isPwaMode();
-  const isStorefrontTarget = pageId === 'storefront' || pageId === 'store-admin';
-  if (isPWA && isStorefrontTarget) {
-    if (entityId) {
-      openStorefrontInBrowser(pageId, entityId);
-    } else {
-      // No target id (e.g. showPage('storefront') from a generic button) —
-      // there is nothing to deep-link to; keep the PWA on the home page.
-      pageId = 'home';
-    }
-    if (pageId === 'home' || pageId === 'auth') {
-      // fall through and show the replacement page inside the PWA
-    } else {
-      return;
-    }
-  }
-
-  // Block any attempts to navigate away to main marketplace pages when viewing a standalone storefront
-  if (document.body.classList.contains('is-storefront-view')) {
-    if (pageId !== 'storefront' && pageId !== 'store-admin' && pageId !== 'auth' && pageId !== 'cart') {
-      console.warn(`[Standalone Storefront] Blocked navigation to main site page "${pageId}".`);
-      return;
-    }
-  }
-
-  // ── Standalone Storefront Handoff ─────────────────────────
-  // Storefront pages are standalone websites — they must never render inside
-  // the main site shell (PWA *or* browser). Any attempt opens the storefront's
-  // own URL in a new tab instead. (The startup block sets is-storefront-view
-  // itself, so the class check above already covers that case.)
-  if (isStorefrontTarget && !document.body.classList.contains('is-storefront-view')) {
-    if (entityId) {
-      openStorefrontInBrowser(pageId, entityId);
-      return;
-    }
-    // No target id — nothing to deep-link to; fall through to home.
-    pageId = 'home';
-  }
-
   if (pageId === 'storefront' || pageId === 'store-admin') {
     const splash = document.getElementById('pwa-splash-screen');
     if (splash) splash.remove();

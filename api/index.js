@@ -76,9 +76,20 @@ app.response.json = function (body) {
   return _origResJson.call(this, scrubSensitive(body));
 };
 
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:9000,http://127.0.0.1:9000,http://localhost:3000')
+  .split(',').map(s => s.trim());
+
 // ── CORS + security headers ────────────────────────────────────
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin) {
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+    }
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Service-Worker-Allowed', '/');
@@ -825,27 +836,56 @@ app.post('/api/clean-temp-database-records', requireAdmin, async (req, res) => {
 // ── Push Notification Endpoints ────────────────────────────
 let webpush;
 try { webpush = require('web-push'); } catch(e) { console.warn('[Push] web-push not installed — push disabled:', e.message); webpush = null; }
-const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || '';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
-if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-  console.warn('[Push] VAPID keys not configured — set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to enable push notifications.');
-}
-const VAPID_CLAIMS = { subject: 'mailto:support@happamart.com' };
 
-try {
-  webpush.setVapidDetails(VAPID_CLAIMS.subject, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-} catch(e) { console.warn('[Push] VAPID setup failed:', e.message); }
+let vapidKeys = null;
+function initVapidKeysApi() {
+  if (!webpush) return;
+  const envPub = (process.env.VAPID_PUBLIC_KEY || '').trim();
+  const envPriv = (process.env.VAPID_PRIVATE_KEY || '').trim();
+  if (envPub && envPriv) {
+    vapidKeys = { publicKey: envPub, privateKey: envPriv };
+  } else {
+    try {
+      const store = dataStore.getStore();
+      const settings = store.settings || [];
+      const pub = (settings.find(s => s && s.key === 'vapid_public_key') || {}).value;
+      const priv = (settings.find(s => s && s.key === 'vapid_private_key') || {}).value;
+      if (pub && priv) {
+        vapidKeys = { publicKey: pub, privateKey: priv };
+      } else {
+        vapidKeys = webpush.generateVAPIDKeys();
+        if (vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey) {
+          dataStore.ensureTable('settings');
+          store.settings.push({ id: 'set-vapid-pub', key: 'vapid_public_key', value: vapidKeys.publicKey, updated_at: new Date().toISOString() });
+          store.settings.push({ id: 'set-vapid-priv', key: 'vapid_private_key', value: vapidKeys.privateKey, updated_at: new Date().toISOString() });
+          dataStore.saveToFile();
+        }
+      }
+    } catch (e) {
+      try { vapidKeys = webpush.generateVAPIDKeys(); } catch (err) {}
+    }
+  }
+
+  if (vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey) {
+    try {
+      webpush.setVapidDetails('mailto:support@happamart.com', vapidKeys.publicKey, vapidKeys.privateKey);
+      console.log('[Push] VAPID push service initialized 🔔');
+    } catch (e) {
+      console.warn('[Push] VAPID setup failed:', e.message);
+    }
+  }
+}
+initVapidKeysApi();
 
 // Auto-create push_subscriptions table if it doesn't exist
 (async () => {
   try {
     const supabase = getSupabase();
     if (supabase) {
-      // Try a lightweight query — if the table doesn't exist, create it
       const { error } = await supabase.from('push_subscriptions').select('endpoint').limit(1);
       if (error && error.message && error.message.includes('does not exist')) {
         console.log('[Push] Creating push_subscriptions table...');
-        const { error: createErr } = await supabase.rpc('exec_sql', {
+        await supabase.rpc('exec_sql', {
           query: `CREATE TABLE IF NOT EXISTS push_subscriptions (
             endpoint TEXT PRIMARY KEY,
             keys JSONB DEFAULT '{}',
@@ -856,13 +896,6 @@ try {
           ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
           CREATE POLICY IF NOT EXISTS "Service role full access" ON push_subscriptions FOR ALL USING (true) WITH CHECK (true);`
         }).catch(() => null);
-        if (createErr) {
-          console.warn('[Push] Auto-create table failed. Run migrations/001_push_subscriptions.sql in Supabase SQL Editor.');
-        } else {
-          console.log('[Push] push_subscriptions table created successfully.');
-        }
-      } else {
-        console.log('[Push] push_subscriptions table exists.');
       }
     }
   } catch(e) {
@@ -870,9 +903,95 @@ try {
   }
 })();
 
+async function dispatchPushNotificationApi({ user_id, title, body, url }) {
+  if (!webpush || !vapidKeys || !vapidKeys.publicKey || !vapidKeys.privateKey) {
+    return { ok: false, sentCount: 0, reason: 'webpush not configured' };
+  }
+  const targetId = String(user_id || '').trim();
+  if (!targetId || !title) return { ok: false, sentCount: 0, reason: 'Missing user_id or title' };
+
+  const supabase = getSupabase();
+  let subs = [];
+
+  if (targetId === 'all' || targetId === 'global') {
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('push_subscriptions').select('*');
+        if (Array.isArray(data)) subs.push(...data);
+      } catch (e) {}
+    }
+    const local = dataStore.getStore().push_subscriptions || [];
+    subs.push(...local);
+  } else if (targetId === 'admin') {
+    let adminIds = [];
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('users').select('id').eq('role', 'admin');
+        adminIds = (data || []).map(u => String(u.id));
+      } catch (e) {}
+    }
+    const localAdmins = (dataStore.getStore().users || []).filter(u => u.role === 'admin').map(u => String(u.id));
+    adminIds = [...new Set([...adminIds, ...localAdmins])];
+
+    if (supabase && adminIds.length) {
+      try {
+        const { data } = await supabase.from('push_subscriptions').select('*').in('user_id', adminIds);
+        if (Array.isArray(data)) subs.push(...data);
+      } catch (e) {}
+    }
+    const local = dataStore.getStore().push_subscriptions || [];
+    subs.push(...local.filter(s => adminIds.includes(String(s.user_id))));
+  } else {
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('push_subscriptions').select('*').eq('user_id', targetId);
+        if (Array.isArray(data)) subs.push(...data);
+      } catch (e) {}
+    }
+    const local = dataStore.getStore().push_subscriptions || [];
+    subs.push(...local.filter(s => String(s.user_id) === targetId));
+  }
+
+  // Deduplicate by endpoint
+  const seen = new Set();
+  subs = subs.filter(s => {
+    if (!s || !s.endpoint || seen.has(s.endpoint)) return false;
+    seen.add(s.endpoint);
+    return true;
+  });
+
+  if (!subs.length) return { ok: true, sentCount: 0 };
+
+  const payload = JSON.stringify({ title, body: body || '', url: url || './' });
+  let sentCount = 0;
+
+  await Promise.all(subs.map(async sub => {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
+      sentCount++;
+    } catch (err) {
+      if (err && (err.statusCode === 410 || err.statusCode === 404)) {
+        if (supabase) {
+          try { await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); } catch (e) {}
+        }
+        const store = dataStore.getStore();
+        if (Array.isArray(store.push_subscriptions)) {
+          store.push_subscriptions = store.push_subscriptions.filter(s => s.endpoint !== sub.endpoint);
+          dataStore.saveToFile();
+        }
+      }
+    }
+  }));
+
+  return { ok: true, sentCount };
+}
+
 // GET /api/push/vapid-key — return public VAPID key for client subscription
 app.get('/api/push/vapid-key', (req, res) => {
-  res.json({ publicKey: VAPID_PUBLIC_KEY });
+  if (!vapidKeys || !vapidKeys.publicKey) {
+    return res.status(500).json({ error: 'VAPID key not configured.' });
+  }
+  res.json({ publicKey: vapidKeys.publicKey });
 });
 
 // POST /api/push/subscribe — store a push subscription
@@ -890,16 +1009,15 @@ app.post('/api/push/subscribe', async (req, res) => {
       created_at: new Date().toISOString()
     };
     if (supabase) {
-      // Upsert: delete existing for this endpoint, then insert
       await supabase.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
       const { error } = await supabase.from('push_subscriptions').insert(subRecord);
       if (error) console.warn('[Push] Supabase insert failed:', error.message);
     } else {
-      const ds = require('./data-store');
-      const subs = ds.get('push_subscriptions') || [];
+      const subs = dataStore.getStore().push_subscriptions || [];
       const filtered = subs.filter(s => s.endpoint !== subscription.endpoint);
       filtered.push(subRecord);
-      ds.set('push_subscriptions', filtered);
+      dataStore.getStore().push_subscriptions = filtered;
+      dataStore.saveToFile();
     }
     res.json({ success: true });
   } catch(err) {
@@ -917,9 +1035,9 @@ app.post('/api/push/unsubscribe', async (req, res) => {
     if (supabase) {
       await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
     } else {
-      const ds = require('./data-store');
-      const subs = ds.get('push_subscriptions') || [];
-      ds.set('push_subscriptions', subs.filter(s => s.endpoint !== endpoint));
+      const subs = dataStore.getStore().push_subscriptions || [];
+      dataStore.getStore().push_subscriptions = subs.filter(s => s.endpoint !== endpoint);
+      dataStore.saveToFile();
     }
     res.json({ success: true });
   } catch(err) {
@@ -928,8 +1046,7 @@ app.post('/api/push/unsubscribe', async (req, res) => {
 });
 
 // POST /api/push/migrate — reassign an existing subscription endpoint to the
-// currently authenticated user (useful when subscriptions were created while
-// the user was anonymous and need to be attached to their account on login).
+// currently authenticated user
 app.post('/api/push/migrate', requireAuth, async (req, res) => {
   try {
     const { endpoint } = req.body || {};
@@ -937,26 +1054,19 @@ app.post('/api/push/migrate', requireAuth, async (req, res) => {
     const userId = String(req.userSession.userId);
     const supabase = getSupabase();
     if (supabase) {
-      // Update any rows for this endpoint that are anonymous (or null) to the
-      // authenticated user's id. Use a safe delete+insert to avoid unique-key
-      // conflicts with primary endpoint key.
-      const { data } = await supabase.from('push_subscriptions').select('*').eq('endpoint', endpoint).limit(1);
-      if (data && data.length) {
-        await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
-      }
-      const subRecord = { endpoint, keys: {}, user_id: userId, created_at: new Date().toISOString() };
+      await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+      const subRecord = { endpoint, keys: req.body.keys || {}, user_id: userId, created_at: new Date().toISOString() };
       await supabase.from('push_subscriptions').insert(subRecord).catch(() => {});
     } else {
-      const ds = require('./data-store');
-      const subs = ds.get('push_subscriptions') || [];
+      const subs = dataStore.getStore().push_subscriptions || [];
       const idx = subs.findIndex(s => s.endpoint === endpoint);
       if (idx !== -1) {
         subs[idx].user_id = userId;
       } else {
-        subs.push({ endpoint, keys: {}, user_id: userId, created_at: new Date().toISOString() });
+        subs.push({ endpoint, keys: req.body.keys || {}, user_id: userId, created_at: new Date().toISOString() });
       }
-      ds.set('push_subscriptions', subs);
-      ds.saveToFile();
+      dataStore.getStore().push_subscriptions = subs;
+      dataStore.saveToFile();
     }
     res.json({ ok: true });
   } catch (err) {
@@ -965,86 +1075,16 @@ app.post('/api/push/migrate', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/push/send — send push notification to a user (internal use)
+// POST /api/push/send — send push notification to a user
 app.post('/api/push/send', requireAuth, async (req, res) => {
   try {
     const { user_id, title, body, url } = req.body || {};
     if (!user_id || !title) return res.status(400).json({ error: 'Missing user_id or title' });
-    if (!webpush) return res.status(503).json({ error: 'Push service not configured.' });
-    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return res.status(503).json({ error: 'Push is not configured: VAPID keys missing on the server. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.' });
-    const supabase = getSupabase();
-    let subs = [];
-    const uid = String(user_id);
-    if (uid === 'admin' || uid === 'all' || uid === 'global') {
-      let adminIds = [];
-      if (supabase) {
-        try {
-          const { data } = await supabase.from('users').select('id').eq('role', 'admin');
-          adminIds = (data || []).map(u => String(u.id));
-        } catch (e) {}
-      }
-      const ds = require('./data-store');
-      const localAdmins = (ds.get('users') || []).filter(u => u.role === 'admin').map(u => String(u.id));
-      adminIds = [...new Set([...adminIds, ...localAdmins])];
-      if (supabase) {
-        try {
-          const { data } = await supabase.from('push_subscriptions').select('*').in('user_id', adminIds);
-          subs = data || [];
-        } catch (e) {}
-      }
-      const localSubs = (ds.get('push_subscriptions') || []).filter(s => adminIds.includes(String(s.user_id)));
-      subs = [...subs, ...localSubs];
-    } else {
-      if (supabase) {
-        const { data } = await supabase.from('push_subscriptions').select('*').eq('user_id', String(user_id));
-        subs = data || [];
-      } else {
-        const ds = require('./data-store');
-        subs = (ds.get('push_subscriptions') || []).filter(s => String(s.user_id) === String(user_id));
-      }
+    const result = await dispatchPushNotificationApi({ user_id, title, body, url });
+    if (!result.ok && result.reason) {
+      return res.status(503).json({ error: result.reason });
     }
-    if (!subs.length) return res.json({ sent: 0, message: 'No subscriptions for this user' });
-    const payload = JSON.stringify({ title, body: body || '', url: url || './' });
-    // Send notifications in parallel to avoid slow sequential waits
-    const sendPromises = subs.map(sub =>
-      webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload)
-        .then(() => ({ endpoint: sub.endpoint, success: true }))
-        .catch(err => ({ endpoint: sub.endpoint, success: false, err }))
-    );
-
-    const settled = await Promise.allSettled(sendPromises);
-    let sent = 0, failed = 0;
-    const failedEndpoints = [];
-    for (const r of settled) {
-      if (r.status === 'fulfilled') {
-        const val = r.value;
-        if (val && val.success) {
-          sent++;
-        } else {
-          failed++;
-          const err = val && val.err;
-          if (err && (err.statusCode === 404 || err.statusCode === 410)) failedEndpoints.push(val && val.endpoint);
-          console.warn(`[Push] Send failed for ${String(val && val.endpoint).substring(0,50)}...: ${err && (err.statusCode || err.message)}`);
-        }
-      } else {
-        // Promise rejected unexpectedly
-        failed++;
-        console.warn('[Push] Unexpected send error:', r.reason && (r.reason.message || r.reason));
-      }
-    }
-    // Clean up expired subscriptions
-    if (failedEndpoints.length) {
-      if (supabase) {
-        for (const ep of failedEndpoints) {
-          await supabase.from('push_subscriptions').delete().eq('endpoint', ep);
-        }
-      } else {
-        const ds = require('./data-store');
-        const all = ds.get('push_subscriptions') || [];
-        ds.set('push_subscriptions', all.filter(s => !failedEndpoints.includes(s.endpoint)));
-      }
-    }
-    res.json({ sent, failed, total: subs.length });
+    res.json({ sent: result.sentCount, total: result.sentCount });
   } catch(err) {
     console.error('[Push] Send error:', err.message);
     res.status(500).json({ error: 'Failed to send push notification' });
@@ -1914,7 +1954,12 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     if (table === 'users') {
       if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
       if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
-        try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
+        try {
+          body.password_hash = await bcrypt.hash(body.password_hash, 10);
+        } catch (e) {
+          console.error('[Auth] Failed to hash password:', e.message);
+          return res.status(500).json({ error: 'Failed to process password update.' });
+        }
       }
     }
 
@@ -2098,6 +2143,15 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
 
     const record = serializeRecord(body);
 
+    if (table === 'notifications' && record && record.user_id && record.title) {
+      dispatchPushNotificationApi({
+        user_id: record.user_id,
+        title: record.title,
+        body: record.message || '',
+        url: record.action_url || './'
+      }).catch(err => console.warn('[Push] Auto dispatch error:', err.message));
+    }
+
     if (!supabase) {
       // In-memory/file-backed path
       try {
@@ -2258,7 +2312,12 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (table === 'users') {
       if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
       if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
-        try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
+        try {
+          body.password_hash = await bcrypt.hash(body.password_hash, 10);
+        } catch (e) {
+          console.error('[Auth] Failed to hash password:', e.message);
+          return res.status(500).json({ error: 'Failed to process password update.' });
+        }
       }
     }
 
@@ -2467,7 +2526,12 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (table === 'users') {
       if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
       if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
-        try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
+        try {
+          body.password_hash = await bcrypt.hash(body.password_hash, 10);
+        } catch (e) {
+          console.error('[Auth] Failed to hash password:', e.message);
+          return res.status(500).json({ error: 'Failed to process password update.' });
+        }
       }
       global.userCache = {};
     }

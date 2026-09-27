@@ -1117,15 +1117,6 @@ function storefrontPageIsRendered(c) {
 }
 
 async function renderStorefront(id) {
-  // ── PWA guard: storefront pages never render inside the installed app ──
-  // Covers direct calls (admin panel buttons, retry buttons) that bypass showPage.
-  if (typeof isPwaMode === 'function' && isPwaMode()) {
-    openStorefrontInBrowser('storefront', id);
-    const cPwa = document.getElementById('storefront-content');
-    if (cPwa) cPwa.innerHTML = `<div class="empty-state" style="padding:50px 20px;text-align:center"><i class="fas fa-external-link-alt" style="font-size:2.2rem;color:var(--primary);margin-bottom:12px"></i><h3 style="font-size:1.05rem;font-weight:800">Opening in your browser…</h3><p style="font-size:.82rem;color:var(--text-muted);margin-top:4px">Storefronts are not available inside the app. If nothing opened, tap the link again.</p></div>`;
-    return;
-  }
-
   let c = document.getElementById('storefront-content');
   if (!c) {
     const sfPage = document.getElementById('page-storefront');
@@ -3820,11 +3811,6 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
 };
 
 window.renderStorefrontAdminPortal = function(storeId) {
-  // ── PWA guard: the vendor admin portal is storefront content too ──
-  if (typeof isPwaMode === 'function' && isPwaMode()) {
-    openStorefrontInBrowser('store-admin', storeId);
-    return;
-  }
   const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
 
@@ -3864,11 +3850,6 @@ window.accessStorefrontDashboard = function(storeId) {
 };
 
 window.renderStorefrontAdminPortalPage = async function(storeId) {
-  // ── PWA guard: vendor portal is storefront content, never render in-app ──
-  if (typeof isPwaMode === 'function' && isPwaMode()) {
-    openStorefrontInBrowser('store-admin', storeId);
-    return;
-  }
   const s = App.allStores.find(st => String(st.id) === String(storeId));
   if (!s) return;
 

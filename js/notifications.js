@@ -70,10 +70,9 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
     console.warn('Failed to upload notification to server:', err);
   }
 
-  // Trigger browser push notification (fire-and-forget, non-blocking)
-  if (typeof sendPushToUser === 'function' && targetId && String(targetId) !== 'all' && String(targetId) !== 'global') {
-    sendPushToUser(targetId, title, message, actionUrl || './');
-  }
+  // Push delivery is owned by the server: inserting the notification row above
+  // triggers server-side dispatch (see auto-dispatch in server.js / api/index.js).
+  // Calling /api/push/send here as well would deliver every push twice.
 }
 window.addNotification = addNotification;
 

@@ -823,28 +823,124 @@ app.post('/api/auth/verify-phone', async (req, res) => {
 // "push" as a table name and hijack /api/push/*, which was the root cause of
 // push notifications never working.)
 let vapidKeys = null;
-try {
-  const db = loadDb();
-  const pub = (getTable(db, 'settings') || []).find(s => s.key === 'vapid_public_key')?.value;
-  const priv = (getTable(db, 'settings') || []).find(s => s.key === 'vapid_private_key')?.value;
-  if (pub && priv) {
-    vapidKeys = { publicKey: pub, privateKey: priv };
+function initVapidKeysServer() {
+  if (!webpush) return;
+  const envPub = (process.env.VAPID_PUBLIC_KEY || '').trim();
+  const envPriv = (process.env.VAPID_PRIVATE_KEY || '').trim();
+  if (envPub && envPriv) {
+    vapidKeys = { publicKey: envPub, privateKey: envPriv };
   } else {
-    vapidKeys = webpush.generateVAPIDKeys();
-    if (db && Array.isArray(db.settings)) {
-      db.settings.push({ id: 'set-vapid-pub', key: 'vapid_public_key', value: vapidKeys.publicKey, updated_at: new Date().toISOString() });
-      db.settings.push({ id: 'set-vapid-priv', key: 'vapid_private_key', value: vapidKeys.privateKey, updated_at: new Date().toISOString() });
-      saveDb(db);
+    try {
+      const db = loadDb();
+      const pub = (getTable(db, 'settings') || []).find(s => s.key === 'vapid_public_key')?.value;
+      const priv = (getTable(db, 'settings') || []).find(s => s.key === 'vapid_private_key')?.value;
+      if (pub && priv) {
+        vapidKeys = { publicKey: pub, privateKey: priv };
+      } else {
+        vapidKeys = webpush.generateVAPIDKeys();
+        if (vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey && db && Array.isArray(db.settings)) {
+          db.settings.push({ id: 'set-vapid-pub', key: 'vapid_public_key', value: vapidKeys.publicKey, updated_at: new Date().toISOString() });
+          db.settings.push({ id: 'set-vapid-priv', key: 'vapid_private_key', value: vapidKeys.privateKey, updated_at: new Date().toISOString() });
+          saveDb(db);
+        }
+      }
+    } catch (e) {
+      try { vapidKeys = webpush.generateVAPIDKeys(); } catch (err) {}
     }
   }
-} catch(e) {
-  try { vapidKeys = webpush.generateVAPIDKeys(); } catch(err) {}
-}
 
-if (vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey) {
-  try {
-    webpush.setVapidDetails('mailto:support@happatrademart.com', vapidKeys.publicKey, vapidKeys.privateKey);
-  } catch(e) {}
+  if (vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey) {
+    try {
+      webpush.setVapidDetails('mailto:support@happatrademart.com', vapidKeys.publicKey, vapidKeys.privateKey);
+      console.log('[Push] VAPID push service initialized successfully 🔔');
+    } catch (e) {
+      console.warn('[Push] VAPID setup failed:', e.message);
+    }
+  }
+}
+initVapidKeysServer();
+
+async function dispatchPushNotification({ user_id, title, body, url }) {
+  if (!webpush || !vapidKeys || !vapidKeys.publicKey || !vapidKeys.privateKey) {
+    return { ok: false, sentCount: 0, reason: 'webpush not configured' };
+  }
+  const targetId = String(user_id || '').trim();
+  if (!targetId || !title) return { ok: false, sentCount: 0, reason: 'Missing user_id or title' };
+
+  let subs = [];
+  const db = loadDb();
+
+  if (targetId === 'all' || targetId === 'global') {
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('push_subscriptions').select('*');
+        if (Array.isArray(data)) subs.push(...data);
+      } catch (e) {}
+    }
+    const localSubs = Array.isArray(db.push_subscriptions) ? db.push_subscriptions : [];
+    subs.push(...localSubs);
+  } else if (targetId === 'admin') {
+    let adminIds = [];
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('users').select('id').eq('role', 'admin');
+        adminIds = (data || []).map(u => String(u.id));
+      } catch (e) {}
+    }
+    const localAdmins = (getTable(db, 'users') || []).filter(u => u.role === 'admin').map(u => String(u.id));
+    adminIds = [...new Set([...adminIds, ...localAdmins])];
+
+    if (supabase && adminIds.length) {
+      try {
+        const { data } = await supabase.from('push_subscriptions').select('*').in('user_id', adminIds);
+        if (Array.isArray(data)) subs.push(...data);
+      } catch (e) {}
+    }
+    const localSubs = Array.isArray(db.push_subscriptions) ? db.push_subscriptions : [];
+    subs.push(...localSubs.filter(s => adminIds.includes(String(s.user_id))));
+  } else {
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('push_subscriptions').select('*').eq('user_id', targetId);
+        if (Array.isArray(data)) subs.push(...data);
+      } catch (e) {}
+    }
+    const localSubs = Array.isArray(db.push_subscriptions) ? db.push_subscriptions : [];
+    subs.push(...localSubs.filter(s => String(s.user_id) === targetId));
+  }
+
+  // Deduplicate by endpoint
+  const seen = new Set();
+  subs = subs.filter(s => {
+    if (!s || !s.endpoint || seen.has(s.endpoint)) return false;
+    seen.add(s.endpoint);
+    return true;
+  });
+
+  if (!subs.length) return { ok: true, sentCount: 0 };
+
+  const payload = JSON.stringify({ title, body: body || '', url: url || './' });
+  let sentCount = 0;
+
+  await Promise.all(subs.map(async sub => {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
+      sentCount++;
+    } catch (err) {
+      if (err && (err.statusCode === 410 || err.statusCode === 404)) {
+        const freshDb = loadDb();
+        if (Array.isArray(freshDb.push_subscriptions)) {
+          freshDb.push_subscriptions = freshDb.push_subscriptions.filter(s => s.endpoint !== sub.endpoint);
+          saveDb(freshDb);
+        }
+        if (supabase) {
+          try { await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); } catch (e) {}
+        }
+      }
+    }
+  }));
+
+  return { ok: true, sentCount };
 }
 
 app.get('/api/push/vapid-key', (req, res) => {
@@ -899,34 +995,47 @@ app.post('/api/push/unsubscribe', async (req, res) => {
   return res.json({ ok: true, message: 'Unsubscribed successfully' });
 });
 
-app.post('/api/push/send', requireAuth, async (req, res) => {
-  if (!webpush) return res.status(503).json({ error: 'Push service not available.' });
-  const { user_id, title, body, url } = req.body || {};
-  if (!user_id) return res.status(400).json({ error: 'user_id required.' });
-  const db = loadDb();
-  let subs = [];
-  if (String(user_id) === 'admin') {
-    const adminIds = (getTable(db, 'users') || []).filter(u => u.role === 'admin').map(u => String(u.id));
-    subs = (getTable(db, 'push_subscriptions') || []).filter(s => adminIds.includes(String(s.user_id)));
-  } else {
-    subs = (getTable(db, 'push_subscriptions') || []).filter(s => String(s.user_id) === String(user_id));
-  }
-  const payload = JSON.stringify({ title: title || 'HAPPA TRADEMART', body: body || '', url: url || '/' });
-
-  const results = await Promise.all(subs.map(async sub => {
-    try {
-      await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
-      return true;
-    } catch(err) {
-  if (err.statusCode === 410 || err.statusCode === 404) {
-        db.push_subscriptions = (db.push_subscriptions || []).filter(s => s.endpoint !== sub.endpoint);
-        saveDb(db);
-      }
-      return false;
+app.post('/api/push/migrate', requireAuth, async (req, res) => {
+  try {
+    const { endpoint } = req.body || {};
+    if (!endpoint) return res.status(400).json({ error: 'Endpoint required.' });
+    const userId = String(req.userSession.userId);
+    const rec = {
+      endpoint,
+      keys: req.body.keys || {},
+      user_id: userId,
+      created_at: new Date().toISOString()
+    };
+    const db = loadDb();
+    if (!Array.isArray(db.push_subscriptions)) db.push_subscriptions = [];
+    const idx = db.push_subscriptions.findIndex(s => s.endpoint === endpoint);
+    if (idx !== -1) {
+      db.push_subscriptions[idx].user_id = userId;
+    } else {
+      db.push_subscriptions.push(rec);
     }
-  }));
+    saveDb(db);
 
-  return res.json({ ok: true, sentCount: results.filter(Boolean).length });
+    if (supabase) {
+      try {
+        await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+        await supabase.from('push_subscriptions').insert(rec);
+      } catch (e) {}
+    }
+    return res.json({ ok: true, message: 'Subscription migrated' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Migration failed' });
+  }
+});
+
+app.post('/api/push/send', requireAuth, async (req, res) => {
+  const { user_id, title, body, url } = req.body || {};
+  if (!user_id || !title) return res.status(400).json({ error: 'user_id and title required.' });
+  const result = await dispatchPushNotification({ user_id, title, body, url });
+  if (!result.ok && result.reason) {
+    return res.status(503).json({ error: result.reason });
+  }
+  return res.json({ ok: true, sentCount: result.sentCount });
 });
 
 // NOTE: push routes are registered ABOVE this catch-all, otherwise Express
@@ -1335,7 +1444,7 @@ app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/:table', async (req, res) => {
+app.post('/api/:table', writeRateLimiter, async (req, res) => {
   let table = req.params.table;
   // Set by the packages branch of the money block below; consumed by the
   // "Atomic stock reservation" block just before the insert.
@@ -1812,6 +1921,15 @@ app.post('/api/:table', async (req, res) => {
   rows.push(record);
   saveDb(db);
 
+  if (table === 'notifications' && record && record.user_id && record.title) {
+    dispatchPushNotification({
+      user_id: record.user_id,
+      title: record.title,
+      body: record.message || '',
+      url: record.action_url || './'
+    }).catch(err => console.warn('[Push] Auto dispatch error:', err.message));
+  }
+
   if (table === 'settings') {
     auditLog({ actorId: viewer && viewer.userId, actorRole: viewer && viewer.role, action: 'settings_write', table: 'settings', targetId: record.id });
   }
@@ -1877,7 +1995,12 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
   if (table === 'users') {
     if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
     if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
-      try { body.password_hash = await bcrypt.hash(body.password_hash, 10); } catch (e) {}
+      try {
+        body.password_hash = await bcrypt.hash(body.password_hash, 10);
+      } catch (e) {
+        console.error('[Auth] Failed to hash password:', e.message);
+        return res.status(500).json({ error: 'Failed to process password update.' });
+      }
     }
   }
 

@@ -1813,18 +1813,9 @@ async function sendAnnouncement() {
     ));
   }
 
-  // Also deliver browser push to every user who has a stored push subscription.
-  // Fire-and-forget per-user push in parallel batches — failures are logged server-side,
-  // never block the announcement flow.
-  if (typeof sendPushToUser === 'function') {
-    for (let i = 0; i < allUsers.length; i += BATCH) {
-      const batch = allUsers.slice(i, i + BATCH);
-      await Promise.all(batch.map(u =>
-        sendPushToUser(u.id, `${icon} Platform Announcement`, text)
-          .catch(() => {}) // never let one bad push stall the broadcast
-      ));
-    }
-  }
+  // Push delivery is owned by the server: every notification insert above
+  // triggers server-side dispatch (auto-dispatch in server.js / api/index.js),
+  // so a client-side sendPushToUser loop here would push each user twice.
 
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Announcement'; }
   const msg = document.getElementById('announcement-sent-msg');
@@ -2622,7 +2613,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:16px 0 8px"><i class="fas fa-clock" style="color:#d97706"></i> Storefront Requests (${pending.length})</h3>`;
   if (pending.length) {
     html += pending.map(s => renderItemHTML(s, 'Pending Review', '#fef3c7', '#d97706', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront', '${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm btn-primary" onclick="showAdminStorefrontReviewModal('${s.id}')">
@@ -2640,7 +2631,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-wallet" style="color:#0ea5e9"></i> Pending Payment (${pendingPayment.length})</h3>`;
   if (pendingPayment.length) {
     html += pendingPayment.map(s => renderItemHTML(s, 'Awaiting Payment', '#e0f2fe', '#0284c7', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront', '${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm btn-danger" style="background:var(--danger);border:none;color:#fff" onclick="disableStorefront('${s.id}')">
@@ -2655,7 +2646,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Approved & Live Storefronts (${approved.length})</h3>`;
   if (approved.length) {
     html += approved.map(s => renderItemHTML(s, 'Live', '#d1fae5', '#065f46', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront', '${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="guardClick(this, () => adminGrantSubscription('${s.id}'))">
@@ -2676,7 +2667,7 @@ async function renderAdminStorefronts() {
   html += `<h3 style="font-size:.9rem;font-weight:800;margin:24px 0 8px"><i class="fas fa-folder-open" style="color:var(--text-muted)"></i> Draft/Inactive Storefronts (${draft.length})</h3>`;
   if (draft.length) {
     html += draft.map(s => renderItemHTML(s, 'Draft / Inactive', '#f3f4f6', 'var(--text-muted)', `
-      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront'); renderStorefront('${s.store_id}')">
+      <button class="btn btn-sm btn-outline" style="color:var(--primary);border-color:var(--primary)" onclick="showPage('storefront', '${s.store_id}')">
         <i class="fas fa-eye"></i> Preview
       </button>
       <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="adminGrantSubscription('${s.id}')">
@@ -2741,7 +2732,7 @@ window.showAdminStorefrontReviewModal = async function(sfId) {
             <div><strong>Business Hours:</strong> ${escHtml(sf.business_hours || 'N/A')}</div>
             <div><strong>Theme:</strong> ${sf.theme || 'classic'} (${sf.primary_color || '#e85d04'})</div>
           </div>
-          <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="showPage('storefront'); renderStorefront('${sf.store_id}'); closeModal('modal-sf-review');">
+          <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="showPage('storefront', '${sf.store_id}'); closeModal('modal-sf-review');">
             <i class="fas fa-external-link-alt"></i> Preview Full Storefront Live
           </button>
         </div>
