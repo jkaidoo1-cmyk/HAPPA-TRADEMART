@@ -20,7 +20,11 @@ const access = require('../lib/access');
 
 const app = express();
 // Allow larger JSON payloads (product images are sent as base64 up to 5 images)
-app.use(express.json({ limit: '50mb' }));
+// 15mb matches the dev server (server.js) — the same payload must be accepted
+// in both environments. This caps request bodies (guide §: bounded input) and
+// still fits the heaviest legitimate write: a product/store save carrying
+// several base64 images. 50mb was needlessly large for a JSON API.
+app.use(express.json({ limit: '15mb' }));
 
 function r2Server(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 
@@ -107,6 +111,20 @@ function getSupabase() {
 // ── Helpers ───────────────────────────────────────────────────
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// Cap a single Supabase call at `ms`. This was referenced in seven places but
+// never defined — the resulting ReferenceError was silently swallowed by the
+// surrounding try/catch blocks, so those fallbacks never raced a timeout.
+function withSupaTimeout(promise, ms = 2500) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Supabase request timeout')), ms);
+  });
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    timeout
+  ]);
 }
 
 // Best-effort audit log for privileged actions (dataStore + Supabase mirror).
@@ -1380,6 +1398,7 @@ app.get('/api/:table/:id', async (req, res) => {
 // POST /api/:table  — create record
 // ── Server-side wallet engine (the only writer of balance-changing ledger rows) ──
 const wallet = require('../lib/wallet');
+const commerce = require('../lib/commerce');
 
 function walletAdapter() {
   const findPkg = (list, id) => (list || []).find(p =>
@@ -1566,8 +1585,32 @@ app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
 });
 
 app.post('/api/:table', writeRateLimiter, async (req, res) => {
+  // Package side-effect tracking (guide §7/§8): pkgSale is set by the money
+  // block, pkgApplied records stock reserved before the insert so a crash can
+  // give it back, and supaRef keeps the client reachable from the catch.
+  let pkgSale = null;
+  let pkgApplied = null;
+  let pkgLocalMirrored = false;
+  let supaRef = null;
+  const releaseReservedStock = async () => {
+    if (!pkgApplied || !pkgApplied.length) return;
+    console.error('[POST] Releasing', pkgApplied.length, 'stock reservation(s) whose row was never written.');
+    try {
+      if (pkgLocalMirrored) {
+        dataStore.ensureTable('products');
+        commerce.restoreLocalDecrement(dataStore.getStore().products || [], pkgApplied);
+        dataStore.saveToFile();
+      }
+    } catch (e) { console.error('[POST] local stock restore failed:', e.message); }
+    if (supaRef) {
+      try { await commerce.restoreStock(supaRef, pkgApplied, { withTimeout: withSupaTimeout }); }
+      catch (e) { console.error('[POST] supabase stock restore failed:', e.message); }
+    }
+    pkgApplied = null;
+  };
   try {
     const supabase = getSupabase();
+    supaRef = supabase;
     let table = req.params.table;
     const body = req.body || {};
 
@@ -1575,6 +1618,28 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     const viewer = access.getAccessContext(req);
     const allowed = access.assertPostAllowed(table, viewer, body);
     if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+
+    // ── Idempotent replay guard — runs BEFORE any side effects ───────────
+    // Re-POSTing an existing order/package id returns the original row without
+    // re-running money derivation, coupon usage, stock decrement or stats, so a
+    // client retry can never apply an effect twice (guide §8 idempotency).
+    if (table === 'orders' || table === 'packages') {
+      if (!body.id) body.id = generateId();
+      body.id = String(body.id);
+      let dupRow = null;
+      if (supabase) {
+        try {
+          const { data } = await withSupaTimeout(supabase.from(table).select('*').eq('id', String(body.id)).limit(1), 2000);
+          if (data && data[0]) dupRow = data[0];
+        } catch (e) {}
+      }
+      if (!dupRow) {
+        dataStore.ensureTable(table);
+        dupRow = (dataStore.getStore()[table] || []).find(r => String(r.id) === String(body.id)) || null;
+      }
+      if (dupRow) return res.status(200).json(serializeRecord(dupRow));
+    }
+
     // Anonymous signup must never mint an admin, set a wallet balance, or
     // self-verify. Admins creating users via the panel keep full control.
     // The admin-approval guarantee lives server-side: vendor/rendor status comes
@@ -1616,6 +1681,12 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       }
       body.rendor_id = String(viewer.userId);
       if (!['active', 'paused'].includes(String(body.status || ''))) body.status = 'active';
+    }
+
+    // Product rows must carry sane numbers (guide §3 strict request schemas).
+    if (table === 'products') {
+      const pv = commerce.validateProductBody(body);
+      if (!pv.ok) return res.status(400).json({ error: pv.error });
     }
 
     // Store slugs are the public storefront URL — they must be globally unique.
@@ -1665,25 +1736,135 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         if (store && store.vendor_id) body.vendor_id = String(store.vendor_id);
       }
 
-      // Storefront orders: derive ALL money amounts from the items the server
-      // now owns. vendor_amount/platform_fee/gross_amount previously came from
-      // the request body, so anyone with an account could POST a fake package
-      // (vendor_amount: 9999) and then trigger /api/wallet/storefront-payout
-      // to mint free money into the store vendor's wallet. The buyer pays
-      // items-subtotal + 1% platform fee; the vendor earns the item subtotal.
-      const isStorefrontRow = String(body.order_source || '') === 'storefront' || !!body.storefront_id;
-      if (table === 'packages' && isStorefrontRow) {
-        const items = Array.isArray(body.items) ? body.items : [];
-        const gross = r2Server(items.reduce((s, i) => s + (parseFloat(i && i.price) || 0) * (parseInt(i && i.qty) || 1), 0));
-        const fee = r2Server(gross * 0.01);
-        body.gross_amount = gross;
-        body.vendor_amount = gross;
-        body.platform_fee = fee;
-        body.total_amount = r2Server(gross + fee);
-        body.commission_amount = 0;
-        body.items_count = items.reduce((n, i) => n + (parseInt(i && i.qty) || 1), 0);
+    const isStorefrontRow = String(body.order_source || '') === 'storefront' || !!body.storefront_id;
+    const rawItems = Array.isArray(body.items) ? body.items : [];
+    if (!rawItems.length) {
+      return res.status(400).json({ error: 'An order must contain at least one item.' });
+    }
+
+    // ── Authoritative money derivation (guide §6) ─────────────────────────
+    // Prices, commission, fees, discount and totals are recomputed HERE from
+    // product rows and server-side settings. Client-sent amounts are
+    // display-only and never trusted — a crafted request could otherwise mint
+    // money via vendor_amount / commission_amount / platform_fee.
+    const productIds = [...new Set(rawItems.map(i => String((i && (i.product_id || i.id)) || '')).filter(Boolean))];
+    const productsById = new Map();
+    if (productIds.length) {
+      if (supabase) {
+        try {
+          const { data, error } = await withSupaTimeout(supabase.from('products').select('*').in('id', productIds), 2500);
+          if (!error && Array.isArray(data)) data.forEach(p => productsById.set(String(p.id), serializeRecord(p)));
+        } catch (e) {}
+      }
+      dataStore.ensureTable('products');
+      for (const pid of productIds) {
+        if (productsById.has(pid)) continue;
+        const row = (dataStore.getStore().products || []).find(x => String(x.id) === pid);
+        if (row) productsById.set(pid, row);
       }
     }
+    const resolved = commerce.resolveItems(rawItems, productsById, { adminBypass: access.isAdmin(viewer) });
+    if (!resolved.ok) return res.status(409).json({ error: resolved.error });
+    body.items = resolved.items;
+
+    if (table === 'packages') {
+      // Refuse to oversell: every product's stock must cover its quantity.
+      const stockCheck = commerce.stockRequirements(resolved.items, productsById);
+      if (!stockCheck.ok) return res.status(409).json({ error: stockCheck.error });
+
+      const money = commerce.packageMoney(resolved.items, { storefront: isStorefrontRow });
+      body.gross_amount = money.gross;
+      body.vendor_amount = money.vendorAmount;
+      body.commission_amount = money.commission;
+      body.platform_fee = money.platformFee;
+      body.total_amount = money.totalAmount;
+      body.items_count = money.itemCount;
+      body.delivery_fee = 0; // delivery is disabled platform-wide — never client-set
+
+      // Stock decrement + store stats are DEFERRED: they run after the replay
+      // guard and just before the row is written ("Atomic stock reservation"
+      // below), so a retried POST never decrements twice and a refused sale
+      // leaves no side effects behind.
+      pkgSale = { reqs: stockCheck.reqs, money, storeId: body.store_id || '' };
+    }
+
+    if (table === 'orders') {
+      // Discount is recomputed/validated from server-side records; an
+      // unverifiable coupon rejects the order (409) rather than charging a
+      // different amount than the buyer saw.
+      let discount = 0;
+      const couponCode = String(body.coupon_code || '').trim().toUpperCase();
+      if (couponCode) {
+        const ctx = { viewerId: viewer ? String(viewer.userId) : '' };
+        let couponRow = null;
+        dataStore.ensureTable('settings');
+        couponRow = (dataStore.getStore().settings || []).find(r => r.key === 'coupons') || null;
+        if (!couponRow && supabase) {
+          try {
+            const { data, error } = await withSupaTimeout(supabase.from('settings').select('*').eq('key', 'coupons').limit(1), 2000);
+            if (!error && data && data[0]) couponRow = serializeRecord(data[0]);
+          } catch (e) {}
+        }
+        try { ctx.coupons = couponRow && couponRow.value ? JSON.parse(couponRow.value) : []; } catch (e) { ctx.coupons = []; }
+        if (couponCode.startsWith('REF-') && viewer) {
+          const txns = [];
+          if (supabase) {
+            try {
+              const { data } = await withSupaTimeout(supabase.from('wallet_transactions').select('*').eq('user_id', String(viewer.userId)).limit(500), 2500);
+              if (Array.isArray(data)) data.forEach(t => txns.push(serializeRecord(t)));
+            } catch (e) {}
+          }
+          if (!txns.length) {
+            dataStore.ensureTable('wallet_transactions');
+            (dataStore.getStore().wallet_transactions || []).forEach(t => { if (String(t.user_id) === String(viewer.userId)) txns.push(t); });
+          }
+          let uRow = null;
+          if (supabase) {
+            try {
+              const { data } = await withSupaTimeout(supabase.from('users').select('*').eq('id', String(viewer.userId)).maybeSingle(), 2000);
+              if (data) uRow = serializeRecord(data);
+            } catch (e) {}
+          }
+          if (!uRow) {
+            dataStore.ensureTable('users');
+            uRow = (dataStore.getStore().users || []).find(u => String(u.id) === String(viewer.userId)) || null;
+          }
+          ctx.txns = txns;
+          ctx.user = uRow;
+        }
+        const cd = commerce.computeDiscount(couponCode, resolved.subtotal, ctx);
+        if (cd.error) return res.status(409).json({ error: cd.error });
+        discount = cd.discount;
+        // Count the redemption server-side so max_uses is actually enforced
+        // (the client's settings PATCH was admin-only and silently failed).
+        if (cd.countUse && cd.coupon) {
+          try {
+            const list = JSON.parse((couponRow && couponRow.value) || '[]');
+            const target = Array.isArray(list) ? list.find(x => x && String(x.code || '').trim().toUpperCase() === couponCode) : null;
+            if (target) {
+              target.used_count = (parseInt(target.used_count, 10) || 0) + 1;
+              if (viewer) {
+                target.used_by = Array.isArray(target.used_by) ? target.used_by : [];
+                if (!target.used_by.includes(String(viewer.userId))) target.used_by.push(String(viewer.userId));
+              }
+              const newVal = JSON.stringify(list);
+              const lrow = (dataStore.getStore().settings || []).find(r => r.key === 'coupons');
+              if (lrow) { lrow.value = newVal; lrow.updated_at = new Date().toISOString(); dataStore.saveToFile(); }
+              if (supabase && couponRow && couponRow.id) {
+                supabase.from('settings').update({ value: newVal, updated_at: new Date().toISOString() }).eq('id', String(couponRow.id)).then(() => {}).catch(() => {});
+              }
+            }
+          } catch (e) {}
+        }
+      }
+      const totals = commerce.orderTotals(resolved.items, { storefront: isStorefrontRow, discount });
+      body.subtotal = totals.subtotal;
+      body.platform_fee = totals.platformFee;
+      body.delivery_fee = totals.deliveryFee;
+      body.discount = totals.discount;
+      body.total = totals.total;
+    }
+  }
 
     // Main-site orders: record the platform fee revenue server-side (storefront
     // orders record it via /api/wallet/storefront-payout instead).
@@ -1862,6 +2043,59 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     body.id = String(body.id);
     if (!body.created_at) body.created_at = new Date().toISOString();
     body.updated_at = new Date().toISOString();
+
+    // ── Atomic stock reservation (guide §7: no oversell) ─────────────────────
+    // After the replay guard, before the row is written. Supabase: conditional
+    // compare-and-swap UPDATE that only lands while stock_qty still equals the
+    // validated value, so concurrent purchases cannot both take the last unit.
+    // Local store: synchronous all-or-nothing decrement. Refusals answer 409
+    // (out of stock) or 503 (storage unavailable) — never a silent oversell.
+    if (pkgSale) {
+      let applied = [];
+      if (pkgSale.reqs.length) {
+        if (supabase) {
+          const dec = await commerce.atomicStockDecrement(supabase, pkgSale.reqs, { withTimeout: withSupaTimeout });
+          if (!dec.ok) return res.status(dec.conflict ? 409 : 503).json({ error: dec.error });
+          applied = dec.applied;
+          // Mirror the authoritative Supabase result into the local store.
+          try {
+            dataStore.ensureTable('products');
+            const prows = dataStore.getStore().products || [];
+            let mirrored = false;
+            for (const a of applied) {
+              const lrow = prows.find(x => String(x.id) === a.pid);
+              if (lrow) { Object.assign(lrow, a.patch); mirrored = true; }
+            }
+            if (mirrored) { dataStore.saveToFile(); pkgLocalMirrored = true; }
+          } catch (e) { console.error('[POST] stock mirror failed:', e.message); }
+        } else {
+          dataStore.ensureTable('products');
+          const dec = commerce.applyLocalDecrement(dataStore.getStore().products || [], pkgSale.reqs);
+          if (!dec.ok) return res.status(dec.conflict ? 409 : 503).json({ error: dec.error });
+          applied = dec.applied;
+          if (applied.length) { dataStore.saveToFile(); pkgLocalMirrored = true; }
+        }
+      }
+
+      // Store sales stats — server-owned, counted only for a sale whose stock
+      // was actually reserved.
+      if (pkgSale.storeId) {
+        try {
+          dataStore.ensureTable('stores');
+          const stRow = (dataStore.getStore().stores || []).find(s => String(s.id) === String(pkgSale.storeId));
+          if (stRow) {
+            stRow.total_sales = Math.round(((parseFloat(stRow.total_sales) || 0) + pkgSale.money.gross) * 100) / 100;
+            stRow.total_orders = (parseInt(stRow.total_orders, 10) || 0) + 1;
+            dataStore.saveToFile();
+            if (supabase) {
+              supabase.from('stores').update({ total_sales: stRow.total_sales, total_orders: stRow.total_orders }).eq('id', String(pkgSale.storeId)).then(() => {}).catch(() => {});
+            }
+          }
+        } catch (e) {}
+      }
+      pkgApplied = applied;
+    }
+
     const record = serializeRecord(body);
 
     if (!supabase) {
@@ -1880,6 +2114,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         return res.status(201).json(out);
       } catch (localErr) {
         console.error('[POST] Local store error:', table, localErr);
+        await releaseReservedStock();
         return res.status(500).json({ error: localErr.message, backend: 'memory-cache' });
       }
     }
@@ -1905,6 +2140,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         return res.status(201).json(out);
       } catch (localErr) {
         console.error('[POST] Local fallback failed:', table, localErr);
+        await releaseReservedStock();
         return res.status(500).json({ error: localErr.message, backend: 'supabase' });
       }
     }
@@ -1916,6 +2152,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     res.status(201).json(out);
   } catch (err) {
     console.error('[POST] Unexpected error:', err);
+    await releaseReservedStock();
     res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
@@ -2006,6 +2243,10 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
       }
       const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
       if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+      if (table === 'products') {
+        const pv = commerce.validateProductBody(body);
+        if (!pv.ok) return res.status(400).json({ error: pv.error });
+      }
     }
 
     // Service posts: a rendor can never reassign a post to another rendor.
@@ -2216,6 +2457,10 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
       }
       const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
       if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+      if (table === 'products') {
+        const pv = commerce.validateProductBody(body);
+        if (!pv.ok) return res.status(400).json({ error: pv.error });
+      }
     }
 
     // Hash user passwords server-side

@@ -369,7 +369,8 @@ async function placeOrder() {
   if (!order) {
     if (setBtn) setBtn('failed');
     setTimeout(() => { if (setBtn) setBtn('idle'); }, 2000);
-    showToast('Order failed. Please try again.', 'error', 5000);
+    const realErr = String(window.lastApiError || '').replace(/^Server rejected the save: /, '').replace(/^HTTP \d+: /, '');
+    showToast(realErr || 'Order failed. Please try again.', 'error', 5000);
     _placingOrder = false;
     if (btn) btn.disabled = false;
     return;
@@ -388,38 +389,9 @@ async function placeOrder() {
   // REF- personal-referral coupon usage is tracked server-side on order POST
   // (referral_commission_used is admin-managed — the client cannot patch it).
 
-  // Update coupon usage if a standard coupon was applied.
-  // Increment used_count for EVERY redemption (logged-in or guest) so max_uses
-  // is enforced even for guest checkouts; used_by only records logged-in users
-  // to prevent per-user reuse.
-  if (savedCoupon && !savedCoupon.is_referral) {
-    try {
-      const res = await apiGet('settings', 'key=coupons');
-      const couponRow = res?.data?.find(r => r.key === 'coupons');
-      if (couponRow && couponRow.value) {
-        let coupons = JSON.parse(couponRow.value);
-        let updated = false;
-        coupons = coupons.map(c => {
-          if (String(c.code).trim().toUpperCase() === String(savedCoupon.code).trim().toUpperCase()) {
-            c.used_count = (parseInt(c.used_count) || 0) + 1;
-            if (App.currentUser) {
-              c.used_by = c.used_by || [];
-              if (!c.used_by.includes(App.currentUser.id)) {
-                c.used_by.push(App.currentUser.id);
-              }
-            }
-            updated = true;
-          }
-          return c;
-        });
-        if (updated) {
-          await apiPatch('settings', couponRow.id, { value: JSON.stringify(coupons), updated_at: new Date().toISOString() });
-        }
-      }
-    } catch(e) {
-      console.error('Failed to update coupon usage:', e);
-    }
-  }
+  // Standard coupon usage (used_count / used_by) is counted server-side when
+  // the order row is created — the client's settings PATCH was admin-only and
+  // silently failed, so max_uses was never actually enforced before.
 
   // Create packages with complete buyer and delivery metadata
   const storeGroups = groupByVendor(savedCart);
@@ -460,6 +432,7 @@ async function placeOrder() {
       is_intercity: itemLoc !== dest
     });
     if (pkg) packages.push(pkg);
+    else { showToast('An item in your cart just sold out — that part of the order could not be created.', 'error', 6000); }
 
     // Notify vendor
     addNotification(items[0].vendor_id, 'order', '🛒 New Order!', `Package ${pCode}: ${items.length} item(s) ordered`, '');
@@ -474,10 +447,9 @@ async function placeOrder() {
           const oldOrders = parseInt(storeObj.total_orders) || 0;
           const updatedSales = oldSales + grossAmt;
           const updatedOrders = oldOrders + 1;
-          await apiPatch('stores', storeId, {
-            total_sales: updatedSales,
-            total_orders: updatedOrders
-          }).catch(() => {});
+          // total_sales/total_orders are incremented server-side when the
+          // package is created — this client PATCH was rejected by ownership
+          // checks (403) and silently failed anyway.
           
           const localStore = (App.allStores || []).find(s => String(s.id) === String(storeId));
           if (localStore) {
@@ -501,13 +473,9 @@ async function placeOrder() {
       const newStatus = isSoldOut ? 'sold_out' : (prod?.status === 'sold_out' ? 'active' : (prod?.status || 'active'));
       const newSold = currentSold + item.qty;
 
-      await apiPatch('products', item.id, {
-        stock_qty: newQty,
-        total_sold: newSold,
-        sold_count: newSold,
-        status: newStatus,
-        is_available: !isSoldOut
-      });
+      // Stock and sold counters are decremented server-side when the package
+      // is created — this client PATCH was rejected by ownership checks (403)
+      // and silently failed, which is why stock never actually fell before.
       if (prod) {
         prod.stock_qty = newQty;
         prod.total_sold = newSold;

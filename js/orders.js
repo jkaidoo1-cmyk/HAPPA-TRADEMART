@@ -762,28 +762,13 @@ async function finalizePackageDelivery(pkg, packageId, newStatus) {
       }
     }
 
-    // NOTE: store total_sales + total_orders are already incremented at checkout (checkout.js).
+    // NOTE: store total_sales + total_orders and product total_sold/sold_count
+    // are all incremented server-side when the package is created.
     // Do NOT increment again here — that would double-count every sale.
 
-
-    // Update product total_sold counts
-    if (Array.isArray(pkg.items)) {
-      for (const item of pkg.items) {
-        const pId = item.id || item.product_id;
-        if (pId) {
-          try {
-            let pObj = await apiFetch('products/' + pId);
-            if (pObj && pObj.data) pObj = Array.isArray(pObj.data) ? pObj.data[0] : pObj.data;
-            if (pObj) {
-              const oldSold = parseInt(pObj.total_sold || pObj.sold_count) || 0;
-              await apiPatch('products', pId, {
-                total_sold: oldSold + (parseInt(item.qty) || 1)
-              }).catch(() => {});
-            }
-          } catch(e){}
-        }
-      }
-    }
+    // (Removed) product total_sold update at delivery: the server increments
+    // sold counters when the package is created, so a delivery-time increment
+    // would double-count. The reject flow above still restores stock/sold.
 
     // ── Auto-delete sold-out products once all deliveries are complete ──
     // A product that reached 0 stock is kept in the DB only while orders for it
