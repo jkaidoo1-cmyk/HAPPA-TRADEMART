@@ -16,7 +16,7 @@ const dataStore = require('./data-store');
 
 // Shared session/auth module (HMAC-signed tokens via SESSION_SECRET, or
 // in-memory fallback) and the shared API access-control layer.
-const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requireAdmin, revokeToken } = require('../lib/session');
+const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requireAdmin, revokeToken, equalizeLoginTiming } = require('../lib/session');
 const access = require('../lib/access');
 const otp = require('../lib/otp');
 const notify = require('../lib/notify');
@@ -712,6 +712,13 @@ app.post('/api/auth/login', loginIpRateLimiter, loginEmailRateLimiter, loginRate
       (u.email?.toLowerCase() === cleanEmail || u.phone === cleanEmail) &&
       u.status !== 'deleted'
     );
+
+    // Unknown account: spend the same bcrypt time as a real check so response
+    // latency cannot enumerate registered emails. This is the production login
+    // path, so the equalization has to live here and not only in server.js.
+    if (!user) {
+      await equalizeLoginTiming(password);
+    }
 
     if (!user) {
       if (supaFailed) {

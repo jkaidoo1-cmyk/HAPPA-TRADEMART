@@ -10,7 +10,7 @@ let webpush;
 try { webpush = require('web-push'); } catch(e) { console.warn('[Push] web-push module not installed — push disabled:', e.message); webpush = null; }
 
 // Shared session/auth module (HMAC-signed tokens or in-memory fallback)
-const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requireAdmin, revokeToken } = require('./lib/session');
+const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requireAdmin, revokeToken, equalizeLoginTiming } = require('./lib/session');
 
 // Shared API access-control (read scrubbing, ownership rules, audit log)
 const access = require('./lib/access');
@@ -768,10 +768,10 @@ app.post('/api/auth/login', loginIpRateLimiter, loginEmailRateLimiter, loginRate
     u.status !== 'deleted'
   ) || null; // never undefined — guards the user.id dereference below
 
-  // Dummy hash comparison for unknown emails: equalizes response time so an
-  // attacker cannot enumerate registered accounts by timing the login call.
+  // Unknown account: spend the same bcrypt time as a real check so response
+  // latency cannot enumerate registered emails (shared with api/index.js).
   if (!user) {
-    await bcrypt.compare(password, '$2a$10$CwTycUXWue0Thq9StjUM0uJ8TuKx0fOgrcVnTTpA6Vh8HhV1GhG7O').catch(() => {});
+    await equalizeLoginTiming(password);
   }
 
   if (!user) {

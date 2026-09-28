@@ -44,6 +44,7 @@ const VAPID_MARKER = 'SEC_TEST_PRIVATE_KEY_DO_NOT_LEAK';
   }
 })();
 
+const bcrypt = require('bcryptjs');
 const session = require('../lib/session');
 const access = require('../lib/access');
 
@@ -450,4 +451,43 @@ test('#10: a user row links referrer and referred', () => {
   assert.equal(notifyLib.recordLinksBoth(row, 'users', 'u-referred', 'u-referrer'), true);
   assert.equal(notifyLib.recordLinksBoth(row, 'users', 'u-referrer', 'u-referred'), true);
   assert.equal(notifyLib.recordLinksBoth(row, 'users', 'u-referred', 'u-stranger'), false);
+});
+
+// Login timing equalization (#18). An unknown account must cost the same bcrypt
+// comparison as a known one, or response latency enumerates registered emails.
+// It used to live inline in server.js only, leaving the production login route
+// (api/index.js) enumerable, so the call is now a shared helper.
+
+test('#18: equalizeLoginTiming spends a real bcrypt comparison', async () => {
+  assert.equal(typeof session.equalizeLoginTiming, 'function');
+  const start = Date.now();
+  await session.equalizeLoginTiming('anything-at-all');
+  const elapsed = Date.now() - start;
+  // A cost-10 comparison takes tens of milliseconds; a no-op takes ~0.
+  assert.ok(elapsed >= 5, `expected a real comparison, took ${elapsed}ms`);
+});
+
+test('#18: equalizeLoginTiming never throws and never matches', async () => {
+  for (const v of [null, undefined, '', 0, {}, [1, 2]]) {
+    await session.equalizeLoginTiming(v);
+  }
+  const hash = session.DUMMY_PASSWORD_HASH || '';
+  assert.ok(hash.startsWith('$2a$') || hash.startsWith('$2b$'), 'the dummy hash must be a bcrypt hash');
+  assert.notEqual(await bcrypt.compare('anything-at-all', hash), true);
+});
+
+test('#18: BOTH login routes equalize timing', () => {
+  // Drift guard: the dummy compare was added to one server and not the other,
+  // which is how the production path stayed enumerable. Assert the source of
+  // each login route calls the shared helper.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const file of ['server.js', 'api/index.js']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+    const loginAt = src.indexOf("app.post('/api/auth/login'");
+    assert.ok(loginAt > -1, `${file}: login route not found`);
+    // Only inspect the login handler, not the whole file.
+    const handler = src.slice(loginAt, loginAt + 4000);
+    assert.ok(/equalizeLoginTiming\(password\)/.test(handler), `${file}: the login route must equalize unknown-account timing`);
+  }
 });
