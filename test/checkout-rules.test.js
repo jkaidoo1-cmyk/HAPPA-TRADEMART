@@ -22,6 +22,38 @@ const path = require('node:path');
 const net = require('node:net');
 
 const ROOT = path.join(__dirname, '..');
+
+// Match the session secret the spawned server will use (server.js loads .env at
+// startup, then lib/session falls back to the persisted .session-secret file),
+// so tokens minted here validate there. Needed because the replay guard now
+// only returns an order row to its own buyer/vendor (#13).
+(function resolveFromEnvFile() {
+  const envFile = path.join(ROOT, '.env');
+  if (!fs.existsSync(envFile)) return;
+  for (const line of fs.readFileSync(envFile, 'utf-8').split('\n')) {
+    const trimmed = line.trim();
+    const eq = trimmed.indexOf('=');
+    if (eq > 0 && trimmed.slice(0, eq).trim() === 'SESSION_SECRET') {
+      const value = trimmed.slice(eq + 1).trim().replace(/^['"]|['"]$/g, '');
+      if (value) process.env.SESSION_SECRET = value;
+    }
+  }
+})();
+
+const session = require('../lib/session');
+let SESSION_SECRET = String(process.env.SESSION_SECRET || '').trim();
+if (!SESSION_SECRET) {
+  try { SESSION_SECRET = fs.readFileSync(path.join(ROOT, '.session-secret'), 'utf-8').trim(); } catch (e) {}
+  if (SESSION_SECRET) process.env.SESSION_SECRET = SESSION_SECRET;
+}
+
+// The checkout flows below act as one signed-in buyer so the replay guard can
+// recognise them as the order's owner.
+const BUYER_ID = 'rules-buyer';
+function buyerHeaders() {
+  return { Authorization: `Bearer ${session.createSessionToken(BUYER_ID, 'buyer')}` };
+}
+
 let tmpDir = null;
 let child = null;
 let base = '';
@@ -40,7 +72,7 @@ function freePort() {
 async function api(p, opts = {}) {
   const res = await fetch(base + p, {
     method: opts.method || 'GET',
-    headers: { 'Content-Type': 'application/json' },
+    headers: Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {}),
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   let data = null;
@@ -86,7 +118,7 @@ before(async () => {
   base = `http://127.0.0.1:${port}/api`;
   child = spawn(process.execPath, ['server.js'], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), HAPPA_DB_FILE: testDb },
+    env: { ...process.env, PORT: String(port), HAPPA_DB_FILE: testDb, SESSION_SECRET },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let log = '';
@@ -114,6 +146,7 @@ test('package POST derives money server-side and ignores client amounts', async 
   const before = await getStore();
   const res = await api('/packages', {
     method: 'POST',
+    headers: buyerHeaders(),
     body: {
       id: 'rules-pkg-1',
       store_id: 'store-msku253he58z',
@@ -150,9 +183,10 @@ test('package POST derives money server-side and ignores client amounts', async 
   assert.ok(Math.abs((Number(afterStore.total_sales) || 0) - ((Number(before.total_sales) || 0) + 300)) < 0.01);
 });
 
-test('replaying the same package id is a no-op', async () => {
+test('replaying the same package id is a no-op for its owner', async () => {
   const res = await api('/packages', {
     method: 'POST',
+    headers: buyerHeaders(), // the same buyer as the original order
     body: {
       id: 'rules-pkg-1', // same id → replay
       store_id: 'store-msku253he58z',
@@ -171,6 +205,16 @@ test('replaying the same package id is a no-op', async () => {
   assert.equal(Number(p.stock_qty), 3, 'replay must not re-decrement stock');
   const st = await getStore();
   assert.equal(Number(st.total_orders), 1, 'replay must not double-count stats');
+
+  // (#13) An anonymous caller has no identity to prove, so a guessed id must
+  // not hand back the stored order (buyer name, phone, address, totals).
+  const anon = await api('/packages', {
+    method: 'POST',
+    body: { id: 'rules-pkg-1', store_id: 'store-msku253he58z', items: [{ id: 'prod-diag-1', qty: 2 }] }
+  });
+  assert.equal(anon.status, 409);
+  assert.equal(anon.data && anon.data.items, undefined, 'an anonymous replay must not leak the order');
+  assert.equal(anon.data && anon.data.gross_amount, undefined);
 });
 
 test('overselling is refused with 409 and leaves no side effects', async () => {

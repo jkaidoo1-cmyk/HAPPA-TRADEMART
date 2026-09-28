@@ -99,13 +99,19 @@ before(async () => {
   db.users = (db.users || []).filter(u => !isFixture(u && u.id));
   db.stores = (db.stores || []).filter(s => !isFixture(s && s.id));
   db.products = (db.products || []).filter(p => !isFixture(p && p.id));
+  db.packages = (db.packages || []).filter(p => !isFixture(p && p.id));
   db.settings = (db.settings || []).filter(s => !String((s && s.key) || '').startsWith('vapid_'));
 
   const hash = '$2b$10$0123456789012345678901234567890123456789012345678901';
   db.users.push(
     { id: 'sec-vendor-1', name: 'Sec Vendor One', email: 'sec-vendor-1@test.com', role: 'vendor', status: 'active', password_hash: hash },
     { id: 'sec-vendor-2', name: 'Sec Vendor Two', email: 'sec-vendor-2@test.com', role: 'vendor', status: 'active', password_hash: hash },
-    { id: 'sec-buyer-1', name: 'Sec Buyer One', email: 'sec-buyer-1@test.com', role: 'buyer', status: 'active', password_hash: hash }
+    { id: 'sec-buyer-1', name: 'Sec Buyer One', email: 'sec-buyer-1@test.com', role: 'buyer', status: 'active', password_hash: hash },
+    { id: 'sec-admin-1', name: 'Sec Admin One', email: 'sec-admin-1@test.com', role: 'admin', status: 'active', password_hash: hash }
+  );
+  // A package is the shared record that authorizes buyer↔vendor notifications.
+  db.packages.push(
+    { id: 'sec-pkg-1', buyer_id: 'sec-buyer-1', vendor_id: 'sec-vendor-1', package_code: 'PKG-SEC-1', status: 'received' }
   );
   db.stores.push(
     { id: 'store-sec-1', name: 'Sec Store One', slug: 'sec-store-one', vendor_id: 'sec-vendor-1', status: 'active' },
@@ -316,4 +322,132 @@ test('#9: notification patches only carry is_read and updated_at', () => {
   const out = access.sanitizeNotificationPatch({ title: 'evil', user_id: 'someone-else', is_read: true, amount: 9 });
   assert.deepEqual(Object.keys(out).sort(), ['is_read', 'updated_at']);
   assert.equal(out.is_read, true);
+});
+
+// ── /api/notify: the narrow notification endpoint (#10) ─────────────
+// The notifications TABLE stays server/admin-only because a client insert
+// auto-dispatches a web-push. These tests pin the replacement path: the caller
+// may address themselves, an admin, or the other party on a shared record —
+// nothing else.
+
+const notifyLib = require('../lib/notify');
+
+test('#10: /api/notify rejects anonymous self-alerts', async () => {
+  const res = await api('/notify', {
+    method: 'POST',
+    body: { to: 'sec-buyer-1', type: 'system', title: 'Hi', message: 'hello' }
+  });
+  assert.equal(res.status, 401, JSON.stringify(res.data));
+});
+
+test('#10: /api/notify lets a user notify themselves', async () => {
+  const res = await api('/notify', {
+    method: 'POST',
+    headers: auth('sec-buyer-1', 'buyer'),
+    body: { to: 'sec-buyer-1', type: 'order', title: 'Order placed', message: 'All good' }
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.data));
+  assert.equal(res.data && res.data.user_id, 'sec-buyer-1');
+  const stored = (readDb().notifications || []).find(n => n && n.title === 'Order placed');
+  assert.ok(stored, 'the notification is persisted by the server');
+});
+
+test('#10: /api/notify refuses an unrelated recipient', async () => {
+  const res = await api('/notify', {
+    method: 'POST',
+    headers: auth('sec-vendor-2', 'vendor'),
+    body: { to: 'sec-buyer-1', type: 'order', title: 'Phishing', message: 'Pay me' }
+  });
+  assert.equal(res.status, 403, JSON.stringify(res.data));
+  assert.equal((readDb().notifications || []).filter(n => n && n.title === 'Phishing').length, 0);
+});
+
+test('#10: /api/notify allows the other party on a shared package', async () => {
+  const res = await api('/notify', {
+    method: 'POST',
+    headers: auth('sec-vendor-1', 'vendor'),
+    body: {
+      to: 'sec-buyer-1', type: 'order', title: 'Order received',
+      message: 'We are preparing it', ref: { table: 'packages', id: 'sec-pkg-1' }
+    }
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.data));
+
+  // The same ref must not authorize a vendor who is not on the package.
+  const forged = await api('/notify', {
+    method: 'POST',
+    headers: auth('sec-vendor-2', 'vendor'),
+    body: {
+      to: 'sec-buyer-1', type: 'order', title: 'Forged',
+      message: 'not yours', ref: { table: 'packages', id: 'sec-pkg-1' }
+    }
+  });
+  assert.equal(forged.status, 403, JSON.stringify(forged.data));
+});
+
+test('#10: /api/notify only lets admins broadcast', async () => {
+  const shooter = await api('/notify', {
+    method: 'POST',
+    headers: auth('sec-buyer-1', 'buyer'),
+    body: { to: 'all', type: 'promotion', title: 'Free money', message: 'click here' }
+  });
+  assert.equal(shooter.status, 403, JSON.stringify(shooter.data));
+
+  const admin = await api('/notify', {
+    method: 'POST',
+    headers: auth('sec-admin-1', 'admin'),
+    body: { to: 'sec-buyer-1', type: 'system', title: 'Wallet adjusted', message: 'GHS 10 added' }
+  });
+  assert.equal(admin.status, 201, JSON.stringify(admin.data));
+});
+
+test('#10: anonymous callers may only escalate to admins', async () => {
+  const ok = await api('/notify', {
+    method: 'POST',
+    body: { to: 'admin', type: 'support', title: 'Password reset request', message: 'phone 000' }
+  });
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+
+  const staff = await api('/notify', {
+    method: 'POST',
+    body: { to: 'sec-admin-1', type: 'support', title: 'Signup alert', message: 'new user' }
+  });
+  assert.equal(staff.status, 201, JSON.stringify(staff.data));
+
+  const relay = await api('/notify', {
+    method: 'POST',
+    body: { to: 'sec-buyer-1', type: 'phishing', title: 'Reset your wallet', message: 'click' }
+  });
+  assert.equal(relay.status, 401, JSON.stringify(relay.data));
+  assert.equal((readDb().notifications || []).filter(n => n && n.title === 'Reset your wallet').length, 0);
+});
+
+test('#10: notify bodies are clamped to fixed field limits', () => {
+  const long = 'x'.repeat(5000);
+  const clean = notifyLib.sanitizeNotifyBody({ to: 'sec-buyer-1', type: 'NOT-A-TYPE', title: long, message: long, action_url: long });
+  assert.equal(clean.ok, true);
+  assert.equal(clean.value.type, 'system', 'unknown types fall back to system');
+  assert.equal(clean.value.title.length, notifyLib.MAX_TITLE);
+  assert.equal(clean.value.message.length, notifyLib.MAX_MESSAGE);
+
+  assert.equal(notifyLib.sanitizeNotifyBody({ to: '', title: 'x' }).ok, false);
+  assert.equal(notifyLib.sanitizeNotifyBody({ to: 'sec-buyer-1', title: '   ' }).ok, false);
+
+  // A ref pointing at a table that does not link users is discarded, and an
+  // unrelated pair is then refused.
+  const bogus = notifyLib.sanitizeNotifyBody({ to: 'sec-buyer-1', title: 'x', ref: { table: 'products', id: 'prod-sec-1' } });
+  assert.equal(bogus.value.ref, null);
+  const denied = notifyLib.authorizeNotify({
+    viewer: { userId: 'sec-vendor-2', role: 'vendor' },
+    value: bogus.value, recipientIsAdmin: false, sharedEntity: false
+  });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.status, 403);
+});
+
+test('#10: a user row links referrer and referred', () => {
+  const row = { id: 'u-referred', referred_by: 'u-referrer' };
+  assert.equal(notifyLib.recordLinksBoth(row, 'users', 'u-referred', 'u-referrer'), true);
+  assert.equal(notifyLib.recordLinksBoth(row, 'users', 'u-referrer', 'u-referred'), true);
+  assert.equal(notifyLib.recordLinksBoth(row, 'users', 'u-referred', 'u-stranger'), false);
 });

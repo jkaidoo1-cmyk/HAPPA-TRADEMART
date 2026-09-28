@@ -14,6 +14,8 @@ const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requ
 
 // Shared API access-control (read scrubbing, ownership rules, audit log)
 const access = require('./lib/access');
+const otp = require('./lib/otp');
+const notify = require('./lib/notify');
 
 
 // Load environment variables from .env if present
@@ -79,6 +81,33 @@ const writeRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 600,
   message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// (#12) Login throttling in layers. Keying only on IP+email lets one IP spray
+// unlimited addresses and lets rotating IPs hammer a single account, so the
+// per-IP and per-account buckets are enforced separately from the pair.
+const loginIpRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => ipKeyGenerator(String(req.ip || '')),
+  message: { error: 'Too many login attempts from this network. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+const loginEmailRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  // Hashed: raw emails must not sit in limiter memory, and the key is never an
+  // IP so no IPv6 normalization is needed here.
+  keyGenerator: (req) => {
+    const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+    return crypto.createHash('sha256').update(`email:${email}`).digest('hex');
+  },
+  message: { error: 'Too many login attempts for this account. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -385,6 +414,19 @@ async function productStoreOwnership(viewer, storeId) {
   return owner === uid ? 'own' : 'foreign';
 }
 
+// Does a user with this id exist? Used to validate a referral's referrer.
+async function userExistsById(userId) {
+  const uid = String(userId || '').trim();
+  if (!uid) return false;
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from('users').select('id').eq('id', uid).limit(1), 2000);
+      if (data && data[0]) return true;
+    } catch (e) {}
+  }
+  return getTable(loadDb(), 'users').some(u => String(u.id) === uid);
+}
+
 const JSONB_COLS = new Set([
   'images', 'keywords', 'rendor_tags', 'gallery_images', 'items', 'extra', 'pages', 'store_ids', 'store_budgets', 'plan_prices', 'messages'
 ]);
@@ -689,7 +731,7 @@ app.get('/api', (req, res) => {
 });
 
 // ── Auth Endpoints ──────────────────────────────────────────
-app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
+app.post('/api/auth/login', loginIpRateLimiter, loginEmailRateLimiter, loginRateLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
@@ -700,10 +742,12 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   let supaFailed = false; // DB unreachable → fail honestly with 503, never fake "Invalid credentials"
   if (supabase) {
     try {
-      // (#21) Fetch only the row that matches this email — the old select('*')
-      // pulled the whole users table on every login (billed egress; the likely
-      // cause of the recurring Supabase 402 quota errors).
-      const { data, error } = await supabase.from('users').select('*').eq('email', cleanEmail).limit(1);
+      // (#21) Fetch only the row that matches this identifier — the old
+      // select('*') pulled the whole users table on every login (billed egress;
+      // the likely cause of the recurring Supabase 402 quota errors). The login
+      // form accepts an email OR a phone number, so query the matching column.
+      const identifierColumn = cleanEmail.includes('@') ? 'email' : 'phone';
+      const { data, error } = await supabase.from('users').select('*').eq(identifierColumn, cleanEmail).limit(1);
       if (error) supaFailed = true;
       else if (data) supaUsers = data.map(serializeRecord);
     } catch (err) { supaFailed = true; }
@@ -730,8 +774,6 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     await bcrypt.compare(password, '$2a$10$CwTycUXWue0Thq9StjUM0uJ8TuKx0fOgrcVnTTpA6Vh8HhV1GhG7O').catch(() => {});
   }
 
-  const isLocalOnly = !!(user && supaUsers.some(u => String(u.id) === String(user.id)));
-
   if (!user) {
     if (supaFailed) {
       // The user may exist in the unreachable DB — do NOT report bad credentials.
@@ -750,8 +792,9 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   }
 
   if (!isValidPassword) {
-    if (supaFailed && !isLocalOnly) {
-      // Record came from (or also lives in) an unreachable DB — the hash we checked may be stale.
+    if (supaFailed) {
+      // The database was unreachable, so the hash we compared against may be a
+      // stale local mirror rather than a genuine mismatch — say so honestly.
       return res.status(503).json({ error: 'Service temporarily unavailable — the database could not be reached. Please try again in a few minutes.' });
     }
     return res.status(401).json({ error: 'Invalid email or password.' });
@@ -886,6 +929,73 @@ app.get('/api/auth/verify', (req, res) => {
   return res.json({ valid: true, userId: session.userId, role: session.role });
 });
 
+// ── OTP storage (#1) ────────────────────────────────────────
+// Supabase when configured (so codes and attempt counts are shared and survive
+// restarts), db.json otherwise. Same contract as api/index.js.
+function otpStore() {
+  const localStore = () => { const d = loadDb(); if (!Array.isArray(d.otps)) d.otps = []; return d; };
+  return {
+    async countOtpsSince(userId, purpose, sinceMs) {
+      if (supabase) {
+        try {
+          const { count, error } = await supabase.from('otps')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', String(userId)).eq('purpose', purpose)
+            .gte('created_at', new Date(sinceMs).toISOString());
+          if (!error) return count || 0;
+        } catch (e) { /* fall back to the local mirror */ }
+      }
+      const d = localStore();
+      return d.otps.filter(r => String(r.user_id) === String(userId) && r.purpose === purpose && new Date(r.created_at).getTime() >= sinceMs).length;
+    },
+    async clearPendingOtps(userId, purpose) {
+      const now = new Date().toISOString();
+      if (supabase) {
+        try {
+          await supabase.from('otps').update({ consumed_at: now })
+            .eq('user_id', String(userId)).eq('purpose', purpose).is('consumed_at', null);
+        } catch (e) {}
+      }
+      const d = localStore();
+      for (const r of d.otps) {
+        if (String(r.user_id) === String(userId) && r.purpose === purpose && r.consumed_at == null) r.consumed_at = now;
+      }
+      saveDb(d);
+    },
+    async insertOtp(row) {
+      if (supabase) {
+        try { await supabase.from('otps').insert(row); } catch (e) { console.warn('[OTP] Supabase insert failed:', e && e.message); }
+      }
+      const d = localStore();
+      d.otps = d.otps.filter(r => String(r.id) !== String(row.id));
+      d.otps.push(row);
+      saveDb(d);
+    },
+    async findPendingOtp(userId, purpose) {
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('otps').select('*')
+            .eq('user_id', String(userId)).eq('purpose', purpose).is('consumed_at', null)
+            .order('created_at', { ascending: false }).limit(1);
+          if (!error && data && data[0]) return serializeRecord(data[0]);
+        } catch (e) {}
+      }
+      const d = localStore();
+      return d.otps
+        .filter(r => String(r.user_id) === String(userId) && r.purpose === purpose && r.consumed_at == null)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+    },
+    async updateOtp(id, patch) {
+      if (supabase) {
+        try { await supabase.from('otps').update(patch).eq('id', String(id)); } catch (e) {}
+      }
+      const d = localStore();
+      const row = d.otps.find(r => String(r.id) === String(id));
+      if (row) { Object.assign(row, patch); saveDb(d); }
+    }
+  };
+}
+
 // ── Phone OTP: issue + verify (#1) ──────────────────────────
 // POST /api/auth/request-otp — issues a code for the SESSION user's phone.
 // Stored bcrypt-hashed with a 5-minute expiry and a 5-attempt cap; delivered
@@ -898,24 +1008,19 @@ app.post('/api/auth/request-otp', writeRateLimiter, async (req, res) => {
     const db = loadDb();
     const me = getTable(db, 'users').find(u => String(u.id) === String(session.userId));
     if (!me || !me.phone) return res.status(400).json({ error: 'Add a phone number to your account first.' });
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const code_hash = await bcrypt.hash(code, 8);
-    const row = {
-      id: 'otp-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100),
-      user_id: String(session.userId),
-      purpose: 'verify_phone',
-      code_hash,
-      attempts: 0,
-      created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-      consumed_at: null
-    };
-    if (!Array.isArray(db.otps)) db.otps = [];
-    db.otps = db.otps.filter(r => !(r.user_id === row.user_id && r.purpose === 'verify_phone' && !r.consumed_at));
-    db.otps.push(row);
-    saveDb(db);
+    const store = otpStore();
+    const code = otp.generateCode(); // crypto.randomInt — never Math.random
+    const issued = await otp.issueOtp(store, { userId: session.userId, codeHash: await bcrypt.hash(code, 8) });
+    if (!issued.ok) return res.status(issued.status).json({ error: issued.error });
     const sent = await sendSms(String(me.phone), `Your HAPPA TRADEMART verification code is ${code}. It expires in 5 minutes.`);
-    return res.json({ success: true, delivered: sent.ok, channel: sent.channel });
+    // 'server-log' means no SMS provider is configured: the code was printed to
+    // the server console (local dev only), so it is still deliverable — but if
+    // nothing reached the user at all, burn it so it cannot be used later.
+    const delivered = sent.ok || sent.channel === 'server-log';
+    if (!delivered) {
+      await store.updateOtp(issued.row.id, { consumed_at: new Date().toISOString() });
+    }
+    return res.json({ success: true, delivered, channel: sent.channel });
   } catch (err) {
     return res.status(500).json({ error: 'Could not start verification. Try again.' });
   }
@@ -934,24 +1039,17 @@ app.post('/api/auth/verify-phone', async (req, res) => {
     // server issued (hash-stored, 5-min expiry, max 5 attempts) is presented.
     // With no SMS provider configured the code is logged server-side so local
     // development still works; it is never returned in any API response.
-    const dbO = loadDb();
-    const otpRows = getTable(dbO, 'otps') || [];
-    const now = Date.now();
-    const otpRow = otpRows.filter(r => r.purpose === 'verify_phone').sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .find(r => r.user_id === String(targetId) && r.consumed_at == null && now - new Date(r.created_at).getTime() < 10 * 60 * 1000);
+    const store = otpStore();
+    const otpRow = await otp.findPendingOtp(store, { userId: targetId });
     if (!otpRow) return res.status(400).json({ error: 'No verification code pending. Request a new one.' });
-    if (otpRow.expires_at && now > new Date(otpRow.expires_at).getTime()) {
-      return res.status(400).json({ error: 'Code expired. Request a new one.' });
-    }
-    if ((otpRow.attempts || 0) >= 5) return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
+    if (otp.isExpired(otpRow)) return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    if (otp.isLockedOut(otpRow)) return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
     const codeOk = typeof otpRow.code_hash === 'string' && otpRow.code_hash.startsWith('$2') && await bcrypt.compare(String(body.code || ''), otpRow.code_hash);
     if (!codeOk) {
-      otpRow.attempts = (otpRow.attempts || 0) + 1;
-      saveDb(dbO);
+      await store.updateOtp(otpRow.id, { attempts: (otpRow.attempts || 0) + 1 });
       return res.status(400).json({ error: 'Incorrect code.' });
     }
-    otpRow.consumed_at = new Date().toISOString();
-    saveDb(dbO);
+    await store.updateOtp(otpRow.id, { consumed_at: new Date().toISOString() });
 
     const db = loadDb();
     const users = getTable(db, 'users');
@@ -1196,6 +1294,101 @@ app.post('/api/push/send', requireAuth, requireAdmin, async (req, res) => {
     return res.status(503).json({ error: result.reason });
   }
   return res.json({ ok: true, sentCount: result.sentCount });
+});
+
+// (#10) Narrow notification endpoint. The notifications TABLE itself is
+// server/admin-only, because inserting a row auto-dispatches a web-push and a
+// client-open insert therefore acted as an open push relay. That broke the
+// ~59 buyer/vendor alerts the frontend used to create itself, so this route
+// restores them: the caller names a recipient, and the server checks the caller
+// is allowed to address that person (self, an admin, or the other party on a
+// shared order/package/ticket/referral/campaign), builds the row itself with
+// fixed field limits, then dispatches the push exactly once.
+const notifyRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 120,
+  keyGenerator: (req) => {
+    const v = access.getAccessContext(req);
+    const key = v && v.userId ? `u:${v.userId}` : `ip:${ipKeyGenerator(String(req.ip || ''))}`;
+    return crypto.createHash('sha256').update(key).digest('hex');
+  },
+  message: { error: 'Too many notifications sent. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Recipients may be addressed by user id or by the 'admin' pseudo-recipient.
+// Escalations to staff ('admin', or a specific staff account) are allowed for
+// every caller, including the anonymous signup / password-reset flows.
+async function notifyRecipientIsAdmin(userId) {
+  const id = String(userId || '');
+  if (!id || id === notify.ADMIN_TARGET) return true;
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from('users').select('id,role').eq('id', id).limit(1), 2000);
+      if (Array.isArray(data) && data[0]) return String(data[0].role || '') === 'admin';
+    } catch (e) { /* fall through to the local store */ }
+  }
+  const row = (getTable(loadDb(), 'users') || []).find(u => String(u.id) === id);
+  return !!(row && String(row.role) === 'admin');
+}
+
+async function notifyLoadEntityRow(table, id) {
+  if (!notify.PARTY_TABLES[table]) return null;
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from(table).select('*').eq('id', String(id)).limit(1), 2000);
+      if (Array.isArray(data) && data[0]) return data[0];
+    } catch (e) { /* fall through to the local store */ }
+  }
+  return (getTable(loadDb(), table) || []).find(r => String(r.id) === String(id)) || null;
+}
+
+app.post('/api/notify', notifyRateLimiter, async (req, res) => {
+  const clean = notify.sanitizeNotifyBody(req.body || {});
+  if (!clean.ok) return res.status(clean.status).json({ error: clean.error });
+  const value = clean.value;
+  const viewer = access.getAccessContext(req);
+
+  const recipientIsAdmin = await notifyRecipientIsAdmin(value.user_id);
+  let sharedEntity = false;
+  if (viewer && value.ref) {
+    const row = await notifyLoadEntityRow(value.ref.table, value.ref.id);
+    sharedEntity = notify.recordLinksBoth(row, value.ref.table, viewer.userId, value.user_id);
+  }
+
+  const authz = notify.authorizeNotify({ viewer, value, recipientIsAdmin, sharedEntity });
+  if (!authz.ok) return res.status(authz.status).json({ error: authz.error });
+
+  const record = normalizeRecord('notifications', {
+    user_id: value.user_id,
+    type: value.type,
+    title: value.title,
+    message: value.message,
+    action_url: value.action_url,
+    is_read: false,
+    created_at: new Date().toISOString()
+  });
+
+  const db = loadDb();
+  getTable(db, 'notifications').push(record);
+  saveDb(db);
+  if (supabase) {
+    try {
+      const dbRecord = prepareRecordForDb('notifications', serializeRecord(record));
+      await withSupaTimeout(supabase.from('notifications').insert(dbRecord), 2000);
+    } catch (e) {
+      console.warn('[Notify] Supabase mirror failed:', e.message);
+    }
+  }
+  dispatchPushNotification({
+    user_id: record.user_id,
+    title: record.title,
+    body: record.message || '',
+    url: record.action_url || './'
+  }).catch(err => console.warn('[Push] Notify dispatch error:', err.message));
+
+  return res.status(201).json(record);
 });
 
 // NOTE: push routes are registered ABOVE this catch-all, otherwise Express
@@ -1505,6 +1698,30 @@ function walletAdapter() {
       }
       return rec;
     },
+    // (#5) Atomic balance move. Delegates to the wallet_move RPC when Supabase
+    // is connected (row lock + ledger insert + balance update in ONE
+    // transaction, idempotent on user_id+type+reference) and mirrors the result
+    // into db.json, which the read paths merge OVER Supabase. Returns null when
+    // no RPC is reachable so the wallet engine falls back to its local path.
+    async moveBalance(rec, row) {
+      if (!supabase) return null;
+      return wallet.rpcMoveBalance({
+        supabase,
+        withTimeout: withSupaTimeout,
+        rec,
+        row,
+        mirror: (stamped, after) => {
+          const db = loadDb();
+          if (!Array.isArray(db.wallet_transactions)) db.wallet_transactions = [];
+          db.wallet_transactions.push(stamped);
+          const idx = getTable(db, 'users').findIndex(x => String(x.id) === String(rec.user_id));
+          if (idx !== -1) db.users[idx] = { ...db.users[idx], wallet_balance: after };
+          saveDb(db);
+          invalidateApiCache('users');
+          invalidateApiCache('wallet_transactions');
+        }
+      });
+    },
     async update(table, id, patch) {
       if (supabase) {
         try { await supabase.from(table).update(patch).eq('id', String(id)); } catch (e) {}
@@ -1622,13 +1839,18 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
   // password_hash first (see the user blocks below, which then delete it), so
   // only writes to other tables drop the field here.
   if (table !== 'users') delete body.password;
-  // (#2) Owner identity always comes from the session — never the body.
+  // (#2) Owner identity always comes from the session for non-admins — never
+  // the body. Admins are trusted to attribute a record on behalf of a
+  // vendor/buyer (ad campaigns, storefront editing), so their fields survive.
   const _postViewer = access.getAccessContext(req);
-  for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) {
-    // notifications: user_id is the TARGET of the message (admin-set), not an
-    // ownership claim — only admins/server can create them anyway (#9).
-    if (table === 'notifications' && f === 'user_id') continue;
-    delete body[f];
+  const _isAdminPost = access.isAdmin(_postViewer);
+  if (!_isAdminPost) {
+    for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) {
+      // referrals: the signup flow records who referred the new account. Both
+      // ids are re-validated and re-stamped below, so they pass through here.
+      if (table === 'referrals' && (f === 'referrer_id' || f === 'referred_id')) continue;
+      delete body[f];
+    }
   }
   invalidateApiCache(table); // Clear server GET cache so next read reflects new record
   if (table === 'storefronts') invalidateApiCache('stores');
@@ -1852,7 +2074,10 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     const dbReplay = loadDb();
     const dupRow = getTable(dbReplay, table).find(r => String(r.id) === String(body.id));
     if (dupRow) {
-      const own = !viewer || access.isAdmin(viewer) || String(dupRow.buyer_id) === String(viewer.userId) || String(dupRow.vendor_id) === String(viewer.userId);
+      // (#13) Only the row's own buyer/vendor (or an admin) may replay it. An
+      // anonymous caller has no identity to prove, so a guessed id must never
+      // hand back the stored order (buyer name, phone, address, totals).
+      const own = !!viewer && (access.isAdmin(viewer) || String(dupRow.buyer_id) === String(viewer.userId) || String(dupRow.vendor_id) === String(viewer.userId));
       if (own) return res.status(200).json(serializeRecord(dupRow));
       return res.status(409).json({ error: 'This order was already submitted.' });
     }
@@ -2090,20 +2315,40 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     } catch(e) {}
   }
 
-  // (#2) Stamp owner identity from the session AFTER stripping client-supplied
-  // owner fields. Admins may still target another owner explicitly via the
-  // query param (?vendor_id=) — the storefront editor relies on that.
-  {
+  // (#2) Stamp the owner from the session AFTER the client fields were dropped.
+  // Every writable table that carries an owner needs one here: a missing stamp
+  // makes the row invisible to the user who created it (support tickets,
+  // referrals) or unattributable (ad campaigns lose their vendor).
+  if (_isAdminPost) {
+    // Admins may attribute a record on behalf of a vendor/buyer; the storefront
+    // editor passes ?vendor_id= explicitly.
     const qOwn = req.query.vendor_id || req.query.buyer_id || req.query.user_id || req.query.rendor_id;
-    const ownId = (access.isAdmin(_postViewer) && qOwn) ? String(qOwn) : (_postViewer ? String(_postViewer.userId) : 'anonymous');
-    if (table === 'products' || table === 'stores' || table === 'storefronts') {
-      if (!body.vendor_id) body.vendor_id = ownId;
+    if (qOwn) {
+      if (table === 'products' || table === 'stores' || table === 'storefronts' || table === 'ad_campaigns') body.vendor_id = String(qOwn);
+      else if (table === 'orders' || table === 'packages') body.buyer_id = String(qOwn);
+      else if (table === 'support_tickets' || table === 'notifications') body.user_id = String(qOwn);
+      else if (table === 'services') body.rendor_id = String(qOwn);
+    }
+  } else {
+    const ownId = _postViewer ? String(_postViewer.userId) : 'anonymous';
+    if (table === 'products' || table === 'stores' || table === 'storefronts' || table === 'ad_campaigns') {
+      body.vendor_id = ownId;
     } else if (table === 'orders' || table === 'packages') {
-      if (!body.buyer_id) body.buyer_id = ownId;
+      body.buyer_id = ownId;
+    } else if (table === 'support_tickets') {
+      body.user_id = ownId;
     } else if (table === 'reviews') {
-      if (!body.buyer_id && !body.customer_id) body.buyer_id = ownId;
+      body.buyer_id = ownId;
     } else if (table === 'services') {
       body.rendor_id = ownId; // always the session rendor — never client-chosen
+    } else if (table === 'referrals') {
+      // The new account records who referred it: the referred side is always
+      // the session, and the referrer must be a real account.
+      body.referred_id = ownId;
+      const referrerId = String(body.referrer_id || '');
+      if (!referrerId || !(await userExistsById(referrerId))) {
+        return res.status(400).json({ error: 'Referrer not found.' });
+      }
     }
   }
 
@@ -2799,7 +3044,11 @@ app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
 // package.json, server source, lib/, api/, test/, scratch/, supabase
 // credentials/schema dumps, git internals…). Blocklist them before static.
 const SENSITIVE_STATIC_PATTERNS = [
-  /(^|\/)\.git(\/|$)/, /(^|\/)\.env(\..*)?$/, /(^|\/)db\.json$/, /(^|\/)package(-lock)?\.json$/,
+  /(^|\/)\.git(\/|$)/, /(^|\/)\.env(\..*)?$/, /(^|\/)package(-lock)?\.json$/,
+  // db.json and every copy/variant of it (a backup like db.json.bak-* holds the
+  // same secrets and plaintext history), the session-secret fallback file, and
+  // the usual editor/backup artefacts of the same data.
+  /(^|\/)db\.json($|\.)/, /(^|\/)\.session-secret$/, /\.(bak|backup|orig|old|save|tmp)$/i,
   /(^|\/)supabase_schema\.json$/, /(^|\/)supabase-migration\.sql$/, /(^|\/)supabase_proxy\.py$/,
   /(^|\/)vercel\.json$/, /(^|\/)server\.js$/, /(^|\/)api\//, /(^|\/)lib\//, /(^|\/)test\//,
   /(^|\/)scratch\//, /(^|\/)node_modules\//, /(^|\/)\.freebuff\//, /\.(pem|key|p12|pfx)$/

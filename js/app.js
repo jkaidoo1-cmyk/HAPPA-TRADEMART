@@ -3050,9 +3050,9 @@ function setLocationFilter(loc) {
 
 // ── Escape HTML ───────────────────────────────────────────
 function escHtml(s) {
-  // (#6) Also escapes single quotes and backticks: escaped values are used
-  // inside single-quoted inline event handlers and template contexts, where
-  // an unescaped ' or ` let crafted text break out and execute script.
+  // (#6) HTML-text escaping. Also escapes single quotes and backticks: escaped
+  // values are used inside attributes and template contexts, where a bare '
+  // or ` let crafted text break out of the surrounding markup.
   return String(s || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -3060,6 +3060,34 @@ function escHtml(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
     .replace(/`/g, '&#96;');
+}
+
+/**
+ * (#6) Escape a value that is interpolated into a JavaScript string literal
+ * inside an inline handler, e.g. onclick="fn('${jsArg(name)}')".
+ *
+ * escHtml is NOT safe there: the HTML parser decodes `&#39;` back into `'`
+ * before the handler is compiled, so the string literal ends early and the
+ * rest of the value executes as script. Backslashes are just as dangerous
+ * (`\'` escapes the closing quote). This produces \uXXXX escapes instead — the
+ * parser leaves them alone, the JS engine decodes them at call time, and the
+ * handler still receives the original characters.
+ */
+function jsArg(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\u005c')
+    .replace(/'/g, '\\u0027')
+    .replace(/"/g, '\\u0022')
+    .replace(/`/g, '\\u0060')
+    .replace(/\r?\n/g, '\\n')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
+if (typeof window !== 'undefined') {
+  window.escHtml = escHtml;
+  window.jsArg = jsArg;
 }
 
 // Item names that were never entered fall back to the category "Other" in old

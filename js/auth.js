@@ -730,6 +730,11 @@ async function doRegister(e) {
 
   const created = await apiPost('users', newUser);
 
+  // (#10) Referral alerts are queued and flushed once the new session exists:
+  // POST /api/notify refuses anonymous cross-user alerts, and the new account's
+  // own users row (referred_by) is the link the server authorizes against.
+  const pendingReferralNotifs = [];
+
   if (!created || !created.id) {
 
     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = `<i class="fas fa-user-plus"></i> Create ${authRole === 'vendor' ? 'Vendor' : authRole === 'rendor' ? 'Rendor' : 'Buyer'} Account`; }
@@ -810,11 +815,14 @@ async function doRegister(e) {
 
       await apiPatch('users', referrer.id, { referral_count: newCount }).catch(() => {});
 
-      // Notify the referrer
+      // Notify the referrer — queued, because the caller is still anonymous here
 
-      addNotification(referrer.id, 'referral', '🎁 New Referral Signup!',
-
-        `${name} joined using your referral link! Your store gets saved for them automatically.`);
+      pendingReferralNotifs.push({
+        to: referrer.id,
+        type: 'referral',
+        title: '🎁 New Referral Signup!',
+        message: `${name} joined using your referral link! Your store gets saved for them automatically.`
+      });
 
 
 
@@ -864,9 +872,12 @@ async function doRegister(e) {
 
 
 
-          addNotification(created.id, 'referral', '🏪 Store Saved For You!',
-
-            `"${referrerStore.name}" has been saved to your stores. Check it out in the marketplace!`);
+          pendingReferralNotifs.push({
+            to: created.id,
+            type: 'referral',
+            title: '🏪 Store Saved For You!',
+            message: `"${referrerStore.name}" has been saved to your stores. Check it out in the marketplace!`
+          });
 
         }
 
@@ -906,6 +917,15 @@ async function doRegister(e) {
   if (typeof startDashboardSyncPolling === 'function') startDashboardSyncPolling();
   if (typeof startNotifPolling === 'function') startNotifPolling();
   if (typeof _hookPushInit === 'function') _hookPushInit();
+
+  // Flush the queued referral alerts now that the new session exists (#10). The
+  // new account's own users row carries referred_by, which is the shared link
+  // the server checks — so a referral can only be reported to the two accounts
+  // actually involved.
+  const referralRef = { table: 'users', id: created.id };
+  for (const n of pendingReferralNotifs) {
+    addNotification(n.to, n.type, n.title, n.message, '', referralRef);
+  }
 
   // Notify admin of new signup
   const roleLabel = authRole === 'vendor' ? 'Vendor' : authRole === 'rendor' ? 'Rendor' : 'Buyer';

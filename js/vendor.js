@@ -394,7 +394,7 @@ async function renderVendorDashboard() {
       <div style="font-size:.85rem;font-weight:700;margin-bottom:2px;opacity:.9">
         Share your link — when someone signs up, your store is automatically saved for them!
       </div>
-      <div style="background:rgba(0,0,0,.25);border-radius:8px;padding:8px 10px;margin:10px 0;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="copyRefLink('${u.referral_code||''}')">
+      <div style="background:rgba(0,0,0,.25);border-radius:8px;padding:8px 10px;margin:10px 0;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="copyRefLink('${jsArg(u.referral_code||'')}')">
         <i class="fas fa-link" style="flex-shrink:0;font-size:.8rem"></i>
         <span style="font-size:.72rem;word-break:break-all;flex:1;text-align:left">${buildRefLink(u.referral_code||'')}</span>
         <i class="fas fa-copy" style="flex-shrink:0;font-size:.8rem"></i>
@@ -403,13 +403,13 @@ async function renderVendorDashboard() {
         <strong>${u.referral_count||0}</strong> people have signed up via your link
       </div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-accent btn-sm" onclick="copyRefLink('${u.referral_code||''}')">
+        <button class="btn btn-accent btn-sm" onclick="copyRefLink('${jsArg(u.referral_code||'')}')">
           <i class="fas fa-copy"></i> Copy Link
         </button>
-        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="shareRefLink('${u.referral_code||''}')">
+        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="shareRefLink('${jsArg(u.referral_code||'')}')">
           <i class="fas fa-share-alt"></i> Share
         </button>
-        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="shareRefWhatsApp('${u.referral_code||''}')">
+        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="shareRefWhatsApp('${jsArg(u.referral_code||'')}')">
           <i class="fab fa-whatsapp"></i> WhatsApp
         </button>
       </div>
@@ -3491,7 +3491,7 @@ window.updateStorefrontPreview = function() {
                   <span class="product-rating" style="font-size:0.55rem; color:#fbbf24"><i class="fas fa-star"></i> ${p.rating || p.avg_rating || '5.0'}</span>
                   <span class="product-sold" style="font-size:0.55rem; color:var(--text-muted)">${p.sold_count || p.total_sold || 0} sold</span>
                 </div>
-                <button class="prev-btn-theme" onclick="alert('Simulated product checkout for ${escHtml(p.name)}!')" style="width:100%; font-size:.55rem; padding:3px; border-radius:4px; margin-top:4px">Buy Now</button>
+                <button class="prev-btn-theme" onclick="alert('Simulated product checkout for ${jsArg(p.name)}!')" style="width:100%; font-size:.55rem; padding:3px; border-radius:4px; margin-top:4px">Buy Now</button>
               </div>
             </div>
           `).join('')}
@@ -4060,8 +4060,8 @@ window.openStorefrontSubscribeModal = async function(storeId, preSelectedPlan, p
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px">
         ${Object.entries(STOREFRONT_PLANS).map(([key, p]) => `
           <label style="cursor:pointer">
-            <input type="radio" name="sub-plan" value="${key}" ${key === preSelectedPlan ? 'checked' : ''} style="display:none" onchange="window.updateSubModalTotal('${storeId}','${store.name || ''}')"/>
-            <div id="sub-plan-card-${key}" onclick="this.previousElementSibling.checked=true;window.updateSubModalTotal('${storeId}','${store.name || ''}')" style="border:2px solid ${key === preSelectedPlan ? 'var(--primary)' : 'var(--border)'};border-radius:10px;padding:10px 8px;text-align:center;transition:.2s">
+            <input type="radio" name="sub-plan" value="${key}" ${key === preSelectedPlan ? 'checked' : ''} style="display:none" onchange="window.updateSubModalTotal('${storeId}','${jsArg(store.name || '')}')"/>
+            <div id="sub-plan-card-${key}" onclick="this.previousElementSibling.checked=true;window.updateSubModalTotal('${storeId}','${jsArg(store.name || '')}')" style="border:2px solid ${key === preSelectedPlan ? 'var(--primary)' : 'var(--border)'};border-radius:10px;padding:10px 8px;text-align:center;transition:.2s">
               <div style="font-size:1.2rem">${p.icon}</div>
               <div style="font-weight:800;font-size:.8rem">${p.name}</div>
               <div style="font-size:.85rem;font-weight:700;color:${p.color}">GH₵${p.price}</div>
@@ -4074,7 +4074,7 @@ window.openStorefrontSubscribeModal = async function(storeId, preSelectedPlan, p
       <!-- Duration picker -->
       <div style="margin-bottom:16px">
         <label style="font-size:.8rem;font-weight:700;margin-bottom:6px;display:block">Billing Duration</label>
-        <select id="sub-duration" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem" onchange="window.updateSubModalTotal('${storeId}','${store.name || ''}')">
+        <select id="sub-duration" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem" onchange="window.updateSubModalTotal('${storeId}','${jsArg(store.name || '')}')">
           <option value="1">1 Month</option>
           <option value="3">3 Months (save 5%)</option>
           <option value="6">6 Months (save 10%)</option>

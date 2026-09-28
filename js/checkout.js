@@ -434,8 +434,10 @@ async function placeOrder() {
     if (pkg) packages.push(pkg);
     else { showToast('An item in your cart just sold out — that part of the order could not be created.', 'error', 6000); }
 
-    // Notify vendor
-    addNotification(items[0].vendor_id, 'order', '🛒 New Order!', `Package ${pCode}: ${items.length} item(s) ordered`, '');
+    // Notify vendor. The package row is the proof the buyer and vendor share
+    // this transaction — the server rejects cross-user alerts without it (#10).
+    addNotification(items[0].vendor_id, 'order', '🛒 New Order!', `Package ${pCode}: ${items.length} item(s) ordered`, '',
+      pkg ? { table: 'packages', id: pkg.id } : null);
 
     // Increment store total_sales and total_orders stats immediately upon purchase completion
     if (storeId) {

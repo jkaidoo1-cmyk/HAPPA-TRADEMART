@@ -496,8 +496,11 @@ async function updateVendorStatus(packageId, newStatus) {
     processed: `Your order ${pCode} is packed and ready for pickup.`
   };
   if (msgs[newStatus] && pkg.buyer_id) {
+    // `ref` proves the vendor shares this package with the buyer — the server
+    // only lets a caller notify the other party on a shared record (#10).
     addNotification(pkg.buyer_id, 'order',
-      newStatus === 'received' ? '✅ Order Received' : '📦 Order Packed', msgs[newStatus]);
+      newStatus === 'received' ? '✅ Order Received' : '📦 Order Packed', msgs[newStatus], '',
+      { table: 'packages', id: packageId });
   }
 
   showToast(`Order marked as ${newStatus} ✅`, 'success');
@@ -604,7 +607,8 @@ async function confirmRejectOrder(packageId) {
   }
   if (refundAmt > 0 && pkg.buyer_id) {
     addNotification(pkg.buyer_id, 'order', '💰 Order Refunded',
-      `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`);
+      `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`,
+      '', { table: 'packages', id: packageId });
   }
 
   // Restore product stock & update status back to active
@@ -758,7 +762,8 @@ async function finalizePackageDelivery(pkg, packageId, newStatus) {
     } else {
       if (earnAmt > 0) {
         addNotification(pkg.vendor_id, 'earning', '💰 Payment Released',
-          `GHS ${earnAmt.toFixed(2)} from order ${pkg.package_code} has been released to your wallet.`);
+          `GHS ${earnAmt.toFixed(2)} from order ${pkg.package_code} has been released to your wallet.`,
+          '', { table: 'packages', id: packageId });
       }
     }
 
@@ -819,7 +824,8 @@ async function finalizePackageDelivery(pkg, packageId, newStatus) {
               refItem.referrer_id,
               'referral',
               '🎁 Referral Reward Received!',
-              `You earned GHS ${reward.toFixed(2)} (${pct}%) referral reward from ${pkg.buyer_name || 'a friend'}'s purchase ${pkg.package_code}.`
+              `You earned GHS ${reward.toFixed(2)} (${pct}%) referral reward from ${pkg.buyer_name || 'a friend'}'s purchase ${pkg.package_code}.`,
+              '', { table: 'referrals', id: refItem.id }
             );
           }
         }
@@ -837,7 +843,8 @@ async function finalizePackageDelivery(pkg, packageId, newStatus) {
       `Package ${pkg.package_code} has been delivered. You can now rate the store.`]
   };
   if (notifs[newStatus])
-    addNotification(pkg.buyer_id, 'order', notifs[newStatus][0], notifs[newStatus][1]);
+    addNotification(pkg.buyer_id, 'order', notifs[newStatus][0], notifs[newStatus][1], '',
+      { table: 'packages', id: packageId });
 }
 
 // ── Admin: re-fetch and re-render just the orders list ────

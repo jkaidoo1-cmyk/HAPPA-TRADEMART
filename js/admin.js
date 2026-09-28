@@ -905,10 +905,10 @@ function adminStoreRowHTML(s, allUsers) {
           <button class="btn btn-success btn-sm" onclick="activateStore('${s.id}')">
             <i class="fas fa-check"></i> Reactivate
           </button>` : ''}
-        <button class="btn btn-outline btn-sm" onclick="showHandoverModal('${s.id}','${escHtml(intendedEmail)}')">
+        <button class="btn btn-outline btn-sm" onclick="showHandoverModal('${s.id}','${jsArg(intendedEmail)}')">
           <i class="fas fa-exchange-alt"></i> ${isUnassigned ? 'Assign Vendor' : 'Re-assign'}
         </button>
-        <button class="btn btn-ghost btn-sm" onclick="renameStore('${s.id}','${escHtml(s.name)}')">
+        <button class="btn btn-ghost btn-sm" onclick="renameStore('${s.id}','${jsArg(s.name)}')">
           <i class="fas fa-edit"></i> Rename
         </button>
       </div>
@@ -1355,10 +1355,10 @@ function adminPendingVendorRowHTML(v) {
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-        <button class="btn btn-success btn-sm" onclick="approveAndCreateStore('${v.id}','${v.email}')">
+        <button class="btn btn-success btn-sm" onclick="approveAndCreateStore('${v.id}','${jsArg(v.email)}')">
           <i class="fas fa-check"></i> Approve
         </button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="rejectVendorApplication('${v.id}','${v.email}')">
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="rejectVendorApplication('${v.id}','${jsArg(v.email)}')">
           <i class="fas fa-times"></i> Reject
         </button>
       </div>
@@ -1463,11 +1463,11 @@ function adminPendingRendorCardHTML(r) {
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-        <button class="btn btn-sm" onclick="approveRendor('${r.id}','${r.email}')"
+        <button class="btn btn-sm" onclick="approveRendor('${r.id}','${jsArg(r.email)}')"
                 style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed">
           <i class="fas fa-check"></i> Approve
         </button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="rejectRendorApplication('${r.id}','${r.email}')">
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="rejectRendorApplication('${r.id}','${jsArg(r.email)}')">
           <i class="fas fa-times"></i> Reject
         </button>
       </div>
@@ -1520,7 +1520,7 @@ function adminActiveRendorCardHTML(r) {
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
         <button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.72rem;padding:4px 8px"
-                onclick="event.stopPropagation();adminActivateRendorSub('${r.id}','${escHtml(r.rendor_display_name||r.name)}')">
+                onclick="event.stopPropagation();adminActivateRendorSub('${r.id}','${jsArg(r.rendor_display_name||r.name)}')">
           ${r.rendor_sub_status === 'active' ? '<i class="fas fa-sync"></i> Renew' : '<i class="fas fa-star"></i> Activate'}
         </button>
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();adminNotifyUser('${r.id}')">
@@ -1938,13 +1938,13 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
             <i class="fas fa-id-card"></i> Review ID Docs
           </button>
         ` : ''}
-        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();showSendNotificationModal('${u.id}','${escHtml(u.name).replace(/'/g,"\\'")}')"><i class="fas fa-bell"></i> Notify</button>
+        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();showSendNotificationModal('${u.id}','${jsArg(u.name)}')"><i class="fas fa-bell"></i> Notify</button>
         <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();adminOpenVendorProfile('${u.id}')"><i class="fas fa-user"></i> Profile</button>
-        <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();adjustUserWallet('${u.id}','${escHtml(u.name).replace(/'/g,"\\'")}',${ u.wallet_balance||0})"><i class="fas fa-wallet"></i> Wallet</button>
+        <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();adjustUserWallet('${u.id}','${jsArg(u.name)}',${ u.wallet_balance||0})"><i class="fas fa-wallet"></i> Wallet</button>
         ${u.status === 'active'
           ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="event.stopPropagation();suspendUser('${u.id}')"><i class="fas fa-ban"></i> Suspend</button>`
           : (u.status !== 'deleted' ? `<button class="btn btn-ghost btn-sm" style="color:var(--success)" onclick="event.stopPropagation();activateUser('${u.id}')"><i class="fas fa-check"></i> Activate</button>` : '')}
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger);margin-top:2px" onclick="event.stopPropagation();if(confirm('Are you ABSOLUTELY sure you want to delete ${escHtml(u.name).replace(/'/g,"\\'") || 'this user'}? This CANNOT be undone!'))_apDeleteUser('${u.id}')"><i class="fas fa-trash-alt"></i> Delete</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);margin-top:2px" onclick="event.stopPropagation();if(confirm('Are you ABSOLUTELY sure you want to delete ${jsArg(u.name) || 'this user'}? This CANNOT be undone!'))_apDeleteUser('${u.id}')"><i class="fas fa-trash-alt"></i> Delete</button>
       </div>
     </div>
 
@@ -1966,7 +1966,7 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
           ${store.status === 'active'
             ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger);border:1px solid var(--danger)" onclick="event.stopPropagation();suspendStore('${store.id}')"><i class="fas fa-ban"></i> Suspend</button>`
             : `<button class="btn btn-success btn-sm" onclick="event.stopPropagation();activateStore('${store.id}')"><i class="fas fa-check"></i> Activate</button>`}
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();renameStore('${store.id}','${escHtml(store.name)}')"><i class="fas fa-edit"></i> Rename</button>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();renameStore('${store.id}','${jsArg(store.name)}')"><i class="fas fa-edit"></i> Rename</button>
         </div>
       </div>
     </div>` : `
@@ -2050,7 +2050,7 @@ function showSendNotificationModal(userId, userName) {
     <div class="form-hint"><span id="notif-char-count">0</span>/300 characters</div>
   </div>
   <div style="display:flex;gap:8px">
-    <button class="btn btn-primary" style="flex:1" onclick="sendAdminNotification('${userId}','${escHtml(userName).replace(/'/g,"\\'").replace(/"/g,"&quot;")}')">
+    <button class="btn btn-primary" style="flex:1" onclick="sendAdminNotification('${userId}','${jsArg(userName)}')">
       <i class="fas fa-paper-plane"></i> Send
     </button>
     <button class="btn btn-outline" onclick="closeModalForce()">Cancel</button>
@@ -2109,7 +2109,7 @@ function adjustUserWallet(userId, userName, currentBalance) {
     <label class="form-label">Reason / Note</label>
     <input class="form-control" id="wallet-adj-note" placeholder="e.g. Refund for order #…">
   </div>
-  <button class="btn btn-primary btn-block" onclick="applyWalletAdjustment('${userId}','${escHtml(userName).replace(/'/g,"\\'")}',${parseFloat(currentBalance||0)})">
+  <button class="btn btn-primary btn-block" onclick="applyWalletAdjustment('${userId}','${jsArg(userName)}',${parseFloat(currentBalance||0)})">
     <i class="fas fa-check"></i> Apply
   </button>
 </div>`);

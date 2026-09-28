@@ -1,4 +1,4 @@
-async function addNotification(userId, type, title, message, actionUrl = '') {
+async function addNotification(userId, type, title, message, actionUrl = '', ref = null) {
   if (!userId) return;
   const targetId = String(userId).trim();
   if (!targetId) return;
@@ -59,15 +59,29 @@ async function addNotification(userId, type, title, message, actionUrl = '') {
     renderNotifBadge();
   }
 
-  // Upload to server DB and refresh the active user immediately when the
-  // notification was sent to the person currently signed in.
+  // Persist through the narrow server endpoint (#10). The notifications TABLE is
+  // server/admin-only (a client insert auto-dispatches a web-push, so it was an
+  // open push relay). POST /api/notify verifies the recipient — yourself, an
+  // admin, or the other party on the record passed as `ref` — then stores the
+  // row and dispatches the push exactly once.
   try {
-    await apiPost('notifications', notif);
+    await apiFetch('notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: targetId,
+        type: notif.type,
+        title: notif.title,
+        message: notif.message,
+        action_url: notif.action_url,
+        ref: ref || null
+      })
+    });
     if (isForMe && typeof fetchServerNotifications === 'function') {
       await fetchServerNotifications();
     }
   } catch (err) {
-    console.warn('Failed to upload notification to server:', err);
+    console.warn('Failed to send notification:', err && err.message || err);
   }
 
   // Push delivery is owned by the server: inserting the notification row above

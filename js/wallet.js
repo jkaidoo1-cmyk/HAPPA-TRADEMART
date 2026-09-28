@@ -712,7 +712,7 @@ function adminTxnRowHTML(t) {
     <div style="font-size:.78rem;font-weight:600;color:var(--text);margin-top:2px">
       👤 ${userName} (${userEmail})
     </div>
-    <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">${t.note || ''}</div>
+    <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">${escHtml(t.note || '')}</div>
     ${detailsHTML}
     <div style="font-size:.7rem;color:var(--text-muted);margin-top:4px">${formatDateTime(t.created_at)}</div>
     

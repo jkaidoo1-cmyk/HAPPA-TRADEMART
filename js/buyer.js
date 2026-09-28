@@ -158,7 +158,7 @@ async function renderBuyerDashboard() {
     <div class="referral-code-card" style="margin-bottom:16px">
       <div style="font-size:.78rem;opacity:.8;margin-bottom:4px">Your Referral Link</div>
       <div style="font-size:.85rem;font-weight:700;margin-bottom:2px;opacity:.9">Share your link — when someone signs up, your referral count grows!</div>
-      <div style="background:rgba(0,0,0,.25);border-radius:8px;padding:8px 10px;margin:10px 0;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="copyRefLink('${u.referral_code||''}')">
+      <div style="background:rgba(0,0,0,.25);border-radius:8px;padding:8px 10px;margin:10px 0;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="copyRefLink('${jsArg(u.referral_code||'')}')">
         <i class="fas fa-link" style="flex-shrink:0;font-size:.8rem"></i>
         <span id="user-ref-link" style="font-size:.72rem;word-break:break-all;flex:1;text-align:left">${buildRefLink(u.referral_code||'')}</span>
         <i class="fas fa-copy" style="flex-shrink:0;font-size:.8rem"></i>
@@ -167,13 +167,13 @@ async function renderBuyerDashboard() {
         Referrals: <strong>${u.referral_count||0}</strong> people have signed up via your link
       </div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-accent btn-sm" onclick="copyRefLink('${u.referral_code||''}')">
+        <button class="btn btn-accent btn-sm" onclick="copyRefLink('${jsArg(u.referral_code||'')}')">
           <i class="fas fa-copy"></i> Copy Link
         </button>
-        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="shareRefLink('${u.referral_code||''}')">
+        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="shareRefLink('${jsArg(u.referral_code||'')}')">
           <i class="fas fa-share-alt"></i> Share Link
         </button>
-        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="shareRefWhatsApp('${u.referral_code||''}')">
+        <button class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.5);color:#fff" onclick="shareRefWhatsApp('${jsArg(u.referral_code||'')}')">
           <i class="fab fa-whatsapp"></i> WhatsApp
         </button>
       </div>
@@ -239,7 +239,7 @@ async function renderBuyerDashboard() {
           <i class="fas fa-users"></i>
           <h3>No referrals yet</h3>
           <p>Share your referral link above to invite friends to HAPPA TRADEMART!</p>
-          <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="copyRefLink('${u.referral_code||''}')">
+          <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="copyRefLink('${jsArg(u.referral_code||'')}')">
             <i class="fas fa-copy"></i> Copy Your Link
           </button>
         </div>`}

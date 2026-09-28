@@ -10,13 +10,16 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const crypto = require('crypto');
 const dataStore = require('./data-store');
 
 // Shared session/auth module (HMAC-signed tokens via SESSION_SECRET, or
 // in-memory fallback) and the shared API access-control layer.
 const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requireAdmin, revokeToken } = require('../lib/session');
 const access = require('../lib/access');
+const otp = require('../lib/otp');
+const notify = require('../lib/notify');
 
 const app = express();
 // Allow larger JSON payloads (product images are sent as base64 up to 5 images)
@@ -137,6 +140,19 @@ function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+// Drops memoised reads after a write. This function used to be referenced from
+// the wallet adapter without ever being defined, so every balance save threw a
+// ReferenceError AFTER the money had already moved (a paid subscription would
+// surface as a 500). server.js keeps a full response cache; here only the user
+// map is memoised, and a stale balance must not outlive a wallet move.
+function invalidateApiCache(table) {
+  try {
+    if (table === 'users' || table === 'wallet_transactions' || !table) {
+      global.userCache = {};
+    }
+  } catch (e) { /* cache reset is best-effort */ }
+}
+
 // (#2) Which store does a product write belong to? A product is filed under a
 // store, and that store decides both the storefront it appears in and the
 // vendor the package pays out to — so a vendor must not be able to file
@@ -163,6 +179,21 @@ async function productStoreOwnership(viewer, storeId) {
   const owner = String(row.vendor_id || '');
   if (!owner) return 'unknown';
   return owner === uid ? 'own' : 'foreign';
+}
+
+// Does a user with this id exist? Used to validate a referral's referrer.
+async function userExistsById(userId) {
+  const uid = String(userId || '').trim();
+  if (!uid) return false;
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from('users').select('id').eq('id', uid).limit(1), 2000);
+      if (data && data[0]) return true;
+    } catch (e) {}
+  }
+  dataStore.ensureTable('users');
+  return (dataStore.getStore().users || []).some(u => String(u.id) === uid);
 }
 
 // Cap a single Supabase call at `ms`. This was referenced in seven places but
@@ -215,7 +246,10 @@ const PACKAGE_META_FIELDS = [
   'delivery_partner', 'pickup_date', 'delivered_date', 'balance_released', 'refunded',
   'buyer_name', 'buyer_phone', 'buyer_email', 'payment_status', 'total_amount', 'items_count',
   'delivery_status', 'order_source', 'storefront_id', 'storefront_name', 'platform_fee',
-  'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location'
+  'delivery_name', 'delivery_phone', 'delivery_address', 'delivery_location',
+  // (#15) pending → released | refunded. Packed into `extra` on the slim schema
+  // so a released order can never also be refunded (and vice versa).
+  'settlement_status'
 ];
 
 const ORDER_META_FIELDS = [
@@ -605,10 +639,36 @@ const writeRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+// (#12) Login throttling in layers. Keying only on IP+email lets one IP spray
+// unlimited addresses and lets rotating IPs hammer a single account, so the
+// per-IP and per-account buckets are enforced separately from the pair.
+const loginIpRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => ipKeyGenerator(String(req.ip || '')),
+  message: { error: 'Too many login attempts from this network. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+const loginEmailRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  // Hashed: raw emails must not sit in limiter memory, and the key is never an
+  // IP so no IPv6 normalization is needed here.
+  keyGenerator: (req) => {
+    const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+    return crypto.createHash('sha256').update(`email:${email}`).digest('hex');
+  },
+  message: { error: 'Too many login attempts for this account. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 // ── Auth Endpoints ─────────────────────────────────────────────
 
 // POST /api/auth/login
-app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
+app.post('/api/auth/login', loginIpRateLimiter, loginEmailRateLimiter, loginRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
@@ -617,13 +677,18 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
 
     const cleanEmail = String(email).trim().toLowerCase();
 
-    // Load users from Supabase (primary) + local db.json (fallback), merge by id
+    // Load the matching user from Supabase (primary) + local db.json
+    // (fallback), merge by id. (#21) Only the matching row is fetched — the old
+    // select('*') pulled the whole users table on every login (billed egress;
+    // the likely cause of the recurring Supabase 402 quota errors). The login
+    // form accepts an email OR a phone number, so query the matching column.
     let supaUsers = [];
     let supaFailed = false; // DB unreachable → fail honestly with 503, never fake "Invalid credentials"
     const supabase = getSupabase();
     if (supabase) {
       try {
-        const { data, error } = await supabase.from('users').select('*');
+        const identifierColumn = cleanEmail.includes('@') ? 'email' : 'phone';
+        const { data, error } = await supabase.from('users').select('*').eq(identifierColumn, cleanEmail).limit(1);
         if (error) supaFailed = true;
         else if (data) supaUsers = data.map(serializeRecord);
       } catch (err) { supaFailed = true; }
@@ -648,8 +713,6 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
       u.status !== 'deleted'
     );
 
-    const isLocalOnly = !supaUsers.some(u => String(u.id) === String(user.id));
-
     if (!user) {
       if (supaFailed) {
         // The user may exist in the unreachable DB — do NOT report bad credentials.
@@ -668,8 +731,9 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     // Plaintext fallback removed: only bcrypt-hashed passwords are accepted.
 
     if (!isValidPassword) {
-      if (supaFailed && !isLocalOnly) {
-        // Record came from (or also lives in) an unreachable DB — the hash we checked may be stale.
+      if (supaFailed) {
+        // The database was unreachable, so the hash we compared against may be a
+        // stale local mirror rather than a genuine mismatch — say so honestly.
         return res.status(503).json({ error: 'Service temporarily unavailable — the database could not be reached. Please try again in a few minutes.' });
       }
       return res.status(401).json({ error: 'Invalid email or password.' });
@@ -833,6 +897,76 @@ async function sendSms(phone, text) {
   return { ok: false, channel: 'none' };
 }
 
+// ── OTP storage (#1) ─────────────────────────────────────────────────────
+// Codes live in the shared `otps` table whenever Supabase is configured: a code
+// issued by one serverless instance must be verifiable by another, and the
+// attempt counter has to survive cold starts. The local file store is the
+// fallback for single-process dev runs.
+function otpStore() {
+  const supabase = getSupabase();
+  const localStore = () => { dataStore.ensureTable('otps'); return dataStore.getStore(); };
+  return {
+    async countOtpsSince(userId, purpose, sinceMs) {
+      if (supabase) {
+        try {
+          const { count, error } = await supabase.from('otps')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', String(userId)).eq('purpose', purpose)
+            .gte('created_at', new Date(sinceMs).toISOString());
+          if (!error) return count || 0;
+        } catch (e) { /* fall back to the local mirror */ }
+      }
+      const rows = localStore().otps || [];
+      return rows.filter(r => String(r.user_id) === String(userId) && r.purpose === purpose && new Date(r.created_at).getTime() >= sinceMs).length;
+    },
+    async clearPendingOtps(userId, purpose) {
+      const now = new Date().toISOString();
+      if (supabase) {
+        try {
+          await supabase.from('otps').update({ consumed_at: now })
+            .eq('user_id', String(userId)).eq('purpose', purpose).is('consumed_at', null);
+        } catch (e) {}
+      }
+      const rows = localStore().otps || [];
+      for (const r of rows) {
+        if (String(r.user_id) === String(userId) && r.purpose === purpose && r.consumed_at == null) r.consumed_at = now;
+      }
+      dataStore.saveToFile();
+    },
+    async insertOtp(row) {
+      if (supabase) {
+        try { await supabase.from('otps').insert(row); } catch (e) { console.warn('[OTP] Supabase insert failed:', e && e.message); }
+      }
+      const store = localStore();
+      store.otps = (store.otps || []).filter(r => String(r.id) !== String(row.id));
+      store.otps.push(row);
+      dataStore.saveToFile();
+    },
+    async findPendingOtp(userId, purpose) {
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('otps').select('*')
+            .eq('user_id', String(userId)).eq('purpose', purpose).is('consumed_at', null)
+            .order('created_at', { ascending: false }).limit(1);
+          if (!error && data && data[0]) return serializeRecord(data[0]);
+        } catch (e) {}
+      }
+      const rows = localStore().otps || [];
+      return rows
+        .filter(r => String(r.user_id) === String(userId) && r.purpose === purpose && r.consumed_at == null)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+    },
+    async updateOtp(id, patch) {
+      if (supabase) {
+        try { await supabase.from('otps').update(patch).eq('id', String(id)); } catch (e) {}
+      }
+      const store = localStore();
+      const row = (store.otps || []).find(r => String(r.id) === String(id));
+      if (row) { Object.assign(row, patch); dataStore.saveToFile(); }
+    }
+  };
+}
+
 // POST /api/auth/request-otp — issues an OTP for the SESSION user (#1).
 // Codes are bcrypt-hashed with a 5-minute expiry and a 5-attempt cap. In
 // serverless production an SMS provider (TERMII_* or TWILIO_* env) is
@@ -851,25 +985,16 @@ app.post('/api/auth/request-otp', writeRateLimiter, async (req, res) => {
     if (!process.env.TERMII_API_KEY && !process.env.TWILIO_ACCOUNT_SID) {
       return res.status(503).json({ error: 'SMS delivery is not configured on the server. Set TERMII_API_KEY or TWILIO_ACCOUNT_SID.' });
     }
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const code_hash = await bcrypt.hash(code, 8);
-    const row = {
-      id: 'otp-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100),
-      user_id: String(session.userId),
-      purpose: 'verify_phone',
-      code_hash,
-      attempts: 0,
-      created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-      consumed_at: null
-    };
-    dataStore.ensureTable('otps');
-    const storeO = dataStore.getStore();
-    storeO.otps = (storeO.otps || []).filter(r => !(r.user_id === row.user_id && r.purpose === 'verify_phone' && !r.consumed_at));
-    storeO.otps.push(row);
-    dataStore.saveToFile();
+    const store = otpStore();
+    const code = otp.generateCode(); // crypto.randomInt — never Math.random
+    const issued = await otp.issueOtp(store, { userId: session.userId, codeHash: await bcrypt.hash(code, 8) });
+    if (!issued.ok) return res.status(issued.status).json({ error: issued.error });
     const sent = await sendSms(String(me.phone), `Your HAPPA TRADEMART verification code is ${code}. It expires in 5 minutes.`);
-    if (!sent.ok) return res.status(502).json({ error: 'Could not send the SMS. Try again shortly.' });
+    if (!sent.ok) {
+      // The SMS never left: burn the code so it cannot be used later.
+      await store.updateOtp(issued.row.id, { consumed_at: new Date().toISOString() });
+      return res.status(502).json({ error: 'Could not send the SMS. Try again shortly.' });
+    }
     return res.json({ success: true, delivered: true, channel: sent.channel });
   } catch (err) {
     return res.status(500).json({ error: 'Could not start verification. Try again.' });
@@ -884,26 +1009,20 @@ app.post('/api/auth/verify-phone', async (req, res) => {
     const targetId = String(session.userId);
     const body = req.body || {};
 
-    // OTP gate: a server-issued, unexpired, unconsumed code must match.
-    dataStore.ensureTable('otps');
-    const storeV = dataStore.getStore();
-    const now = Date.now();
-    const otpRow = (storeV.otps || []).filter(r => r.purpose === 'verify_phone')
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .find(r => r.user_id === targetId && r.consumed_at == null && now - new Date(r.created_at).getTime() < 10 * 60 * 1000);
+    // OTP gate: a server-issued, unexpired, unconsumed code must match. The
+    // row is read from the SHARED store (Supabase when configured), so a code
+    // issued by one instance verifies on another and attempts persist.
+    const codes = otpStore();
+    const otpRow = await otp.findPendingOtp(codes, { userId: targetId });
     if (!otpRow) return res.status(400).json({ error: 'No verification code pending. Request a new one.' });
-    if (otpRow.expires_at && now > new Date(otpRow.expires_at).getTime()) {
-      return res.status(400).json({ error: 'Code expired. Request a new one.' });
-    }
-    if ((otpRow.attempts || 0) >= 5) return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
+    if (otp.isExpired(otpRow)) return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    if (otp.isLockedOut(otpRow)) return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
     const codeOk = typeof otpRow.code_hash === 'string' && otpRow.code_hash.startsWith('$2') && await bcrypt.compare(String(body.code || ''), otpRow.code_hash);
     if (!codeOk) {
-      otpRow.attempts = (otpRow.attempts || 0) + 1;
-      dataStore.saveToFile();
+      await codes.updateOtp(otpRow.id, { attempts: (otpRow.attempts || 0) + 1 });
       return res.status(400).json({ error: 'Incorrect code.' });
     }
-    otpRow.consumed_at = new Date().toISOString();
-    dataStore.saveToFile();
+    await codes.updateOtp(otpRow.id, { consumed_at: new Date().toISOString() });
 
     dataStore.ensureTable('users');
     const store = dataStore.getStore();
@@ -1223,6 +1342,121 @@ app.post('/api/push/send', requireAuth, requireAdmin, async (req, res) => {
   } catch(err) {
     console.error('[Push] Send error:', err.message);
     res.status(500).json({ error: 'Failed to send push notification' });
+  }
+});
+
+// POST /api/notify — the only way a non-admin can create a notification (#10).
+//
+// The notifications TABLE is server/admin-only because inserting a row
+// auto-dispatches a web-push (a client-open insert was an open push relay), which
+// broke the ~59 buyer/vendor alerts the frontend used to create itself. Here the
+// caller names a recipient and the server verifies they may address that person —
+// themselves, an admin, or the other party on a shared order/package/ticket/
+// referral/campaign — then builds and stores the row and dispatches the push once.
+const notifyRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 120,
+  keyGenerator: (req) => {
+    const v = access.getAccessContext(req);
+    const key = v && v.userId ? `u:${v.userId}` : `ip:${ipKeyGenerator(String(req.ip || ''))}`;
+    return crypto.createHash('sha256').update(key).digest('hex');
+  },
+  message: { error: 'Too many notifications sent. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Escalations to staff ('admin', or a specific staff account) are allowed for
+// every caller, including the anonymous signup / password-reset flows.
+async function notifyRecipientIsAdmin(userId) {
+  const id = String(userId || '');
+  if (!id || id === notify.ADMIN_TARGET) return true;
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from('users').select('id,role').eq('id', id).limit(1), 2000);
+      if (Array.isArray(data) && data[0]) return String(data[0].role || '') === 'admin';
+    } catch (e) { /* fall through to the local store */ }
+  }
+  try {
+    dataStore.ensureTable('users');
+    const row = (dataStore.getStore().users || []).find(u => String(u.id) === id);
+    return !!(row && String(row.role) === 'admin');
+  } catch (e) { return false; }
+}
+
+async function notifyLoadEntityRow(table, id) {
+  if (!notify.PARTY_TABLES[table]) return null;
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from(table).select('*').eq('id', String(id)).limit(1), 2000);
+      if (Array.isArray(data) && data[0]) return data[0];
+    } catch (e) { /* fall through to the local store */ }
+  }
+  try {
+    dataStore.ensureTable(table);
+    return (dataStore.getStore()[table] || []).find(r => String(r.id) === String(id)) || null;
+  } catch (e) { return null; }
+}
+
+app.post('/api/notify', notifyRateLimiter, async (req, res) => {
+  try {
+    const clean = notify.sanitizeNotifyBody(req.body || {});
+    if (!clean.ok) return res.status(clean.status).json({ error: clean.error });
+    const value = clean.value;
+    const viewer = access.getAccessContext(req);
+
+    const recipientIsAdmin = await notifyRecipientIsAdmin(value.user_id);
+    let sharedEntity = false;
+    if (viewer && value.ref) {
+      const row = await notifyLoadEntityRow(value.ref.table, value.ref.id);
+      sharedEntity = notify.recordLinksBoth(row, value.ref.table, viewer.userId, value.user_id);
+    }
+
+    const authz = notify.authorizeNotify({ viewer, value, recipientIsAdmin, sharedEntity });
+    if (!authz.ok) return res.status(authz.status).json({ error: authz.error });
+
+    const record = serializeRecord({
+      id: String(generateId()),
+      user_id: value.user_id,
+      type: value.type,
+      title: value.title,
+      message: value.message,
+      action_url: value.action_url,
+      is_read: false,
+      created_at: new Date().toISOString()
+    });
+
+    // Local store is always written (it is the durable fallback and the source
+    // the list endpoint merges over Supabase); Supabase is mirrored best-effort.
+    try {
+      dataStore.ensureTable('notifications');
+      dataStore.getStore().notifications.push(record);
+      dataStore.saveToFile();
+    } catch (e) {
+      console.warn('[Notify] Local store write failed:', e.message);
+    }
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const dbRecord = prepareRecordForDb('notifications', serializeRecord(record));
+        await withSupaTimeout(supabase.from('notifications').insert(dbRecord), 2000);
+      } catch (e) {
+        console.warn('[Notify] Supabase mirror failed:', e.message);
+      }
+    }
+    dispatchPushNotificationApi({
+      user_id: record.user_id,
+      title: record.title,
+      body: record.message || '',
+      url: record.action_url || './'
+    }).catch(err => console.warn('[Push] Notify dispatch error:', err.message));
+
+    return res.status(201).json(record);
+  } catch (err) {
+    console.error('[Notify] Unexpected error:', err && err.message || err);
+    return res.status(500).json({ error: 'Notification could not be sent.' });
   }
 });
 
@@ -1653,6 +1887,32 @@ function walletAdapter() {
       }
       return rec;
     },
+    // (#5) Atomic balance move. Delegates to the wallet_move RPC (row lock +
+    // ledger insert + balance update in ONE transaction, idempotent on
+    // user_id+type+reference) and mirrors the result into db.json, which the
+    // read paths merge OVER Supabase. Returns null when no RPC is reachable so
+    // the wallet engine falls back to its local path.
+    async moveBalance(rec, row) {
+      const supabase = getSupabase();
+      if (!supabase) return null;
+      return wallet.rpcMoveBalance({
+        supabase,
+        withTimeout: withSupaTimeout,
+        rec,
+        row,
+        mirror: (stamped, after) => {
+          dataStore.ensureTable('wallet_transactions');
+          dataStore.ensureTable('users');
+          const store = dataStore.getStore();
+          store.wallet_transactions.push(stamped);
+          const idx = store.users.findIndex(x => String(x.id) === String(rec.user_id));
+          if (idx !== -1) store.users[idx] = { ...store.users[idx], wallet_balance: after };
+          dataStore.saveToFile();
+          invalidateApiCache('users');
+          invalidateApiCache('wallet_transactions');
+        }
+      });
+    },
     async update(table, id, patch) {
       const supabase = getSupabase();
       if (supabase) {
@@ -1798,12 +2058,17 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     // password_hash first (the user blocks below then delete it), so only
     // writes to other tables drop the field here.
     if (table !== 'users') delete body.password;
+    // (#2) Owner identity always comes from the session for non-admins — never
+    // the body. Admins are trusted to attribute a record on behalf of a
+    // vendor/buyer (ad campaigns, storefront editing), so their fields survive.
     const _postViewer0 = access.getAccessContext(req);
-    for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) {
-      // notifications: user_id is the TARGET of the message (admin-set), not
-      // an ownership claim — only admins/server can create them anyway (#9).
-      if (table === 'notifications' && f === 'user_id') continue;
-      delete body[f];
+    if (!access.isAdmin(_postViewer0)) {
+      for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) {
+        // referrals: the signup flow records who referred the new account. Both
+        // ids are re-validated and re-stamped below, so they pass through here.
+        if (table === 'referrals' && (f === 'referrer_id' || f === 'referred_id')) continue;
+        delete body[f];
+      }
     }
 
     // ── Access control ─────────────────────────────────────────────
@@ -1831,7 +2096,10 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       }
       if (dupRow) {
         const dup = serializeRecord(dupRow);
-        const own = !viewer || access.isAdmin(viewer) || String(dup.buyer_id) === String(viewer.userId) || String(dup.vendor_id) === String(viewer.userId);
+        // (#13) Only the row's own buyer/vendor (or an admin) may replay it. An
+        // anonymous caller has no identity to prove, so a guessed id must never
+        // hand back the stored order (buyer name, phone, address, totals).
+        const own = !!viewer && (access.isAdmin(viewer) || String(dup.buyer_id) === String(viewer.userId) || String(dup.vendor_id) === String(viewer.userId));
         if (own) return res.status(200).json(dup);
         return res.status(409).json({ error: 'This order was already submitted.' });
       }
@@ -2280,9 +2548,15 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     // Route those writes into the visible wallet ledger so every balance change is traceable.
     if (table === 'transactions') table = 'wallet_transactions';
     // (#3) Server-generated id — a client-chosen id could collide with (and
-    // overwrite) another user's row.
-    body.id = generateId();
-    body.id = String(body.id);
+    // overwrite) another user's row. EXCEPTION: orders/packages keep the id the
+    // replay guard above already checked, so a checkout retry stays idempotent
+    // instead of creating a second order (server.js behaves the same).
+    if (table === 'orders' || table === 'packages') {
+      if (!body.id) body.id = generateId();
+      body.id = String(body.id);
+    } else {
+      body.id = String(generateId());
+    }
     if (!body.created_at) body.created_at = new Date().toISOString();
     body.updated_at = new Date().toISOString();
 
@@ -2338,19 +2612,39 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       pkgApplied = applied;
     }
 
-    // (#2) Stamp owner identity from the session (admins may target another
-    // owner via query param). Client owner fields were already stripped.
-    {
+    // (#2) Stamp the owner from the session AFTER the client fields were
+    // dropped. Every writable table that carries an owner needs one here: a
+    // missing stamp makes the row invisible to the user who created it
+    // (support tickets, referrals) or unattributable (ad campaigns lose their
+    // vendor).
+    if (access.isAdmin(viewer)) {
       const qOwn = req.query.vendor_id || req.query.buyer_id || req.query.user_id || req.query.rendor_id;
-      const ownId = (access.isAdmin(viewer) && qOwn) ? String(qOwn) : (viewer ? String(viewer.userId) : 'anonymous');
-      if (table === 'products' || table === 'stores' || table === 'storefronts') {
-        if (!body.vendor_id) body.vendor_id = ownId;
+      if (qOwn) {
+        if (table === 'products' || table === 'stores' || table === 'storefronts' || table === 'ad_campaigns') body.vendor_id = String(qOwn);
+        else if (table === 'orders' || table === 'packages') body.buyer_id = String(qOwn);
+        else if (table === 'support_tickets' || table === 'notifications') body.user_id = String(qOwn);
+        else if (table === 'services') body.rendor_id = String(qOwn);
+      }
+    } else {
+      const ownId = viewer ? String(viewer.userId) : 'anonymous';
+      if (table === 'products' || table === 'stores' || table === 'storefronts' || table === 'ad_campaigns') {
+        body.vendor_id = ownId;
       } else if (table === 'orders' || table === 'packages') {
-        if (!body.buyer_id) body.buyer_id = ownId;
+        body.buyer_id = ownId;
+      } else if (table === 'support_tickets') {
+        body.user_id = ownId;
       } else if (table === 'reviews') {
-        if (!body.buyer_id && !body.customer_id) body.buyer_id = ownId;
+        body.buyer_id = ownId;
       } else if (table === 'services') {
         body.rendor_id = ownId;
+      } else if (table === 'referrals') {
+        // The new account records who referred it: the referred side is always
+        // the session, and the referrer must be a real account.
+        body.referred_id = ownId;
+        const referrerId = String(body.referrer_id || '');
+        if (!referrerId || !(await userExistsById(referrerId))) {
+          return res.status(400).json({ error: 'Referrer not found.' });
+        }
       }
     }
 

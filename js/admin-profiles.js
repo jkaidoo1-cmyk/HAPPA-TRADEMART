@@ -97,7 +97,7 @@ function _apPasswordSection(userId) {
 
 // ── Helper: danger zone (delete account) ──────────────────
 function _apDangerZone(userId, userName) {
-  const nameSafe = (userName||'').replace(/'/g,"\\'");
+  const nameSafe = jsArg(userName||'');
   return `
 <div class="ap-section-title" style="margin-top:20px;color:var(--danger)">⚠️ Danger Zone</div>
 <div class="ap-action-btn ap-action-red"
@@ -924,7 +924,7 @@ async function adminOpenBuyerProfile(userId) {
     : '—';
   const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#7c3aed'}[u.status] || 'var(--text-muted)';
   const PANEL_ID = 'ap-buyer-modal';
-  const nameSafe = escHtml(u.name||'').replace(/'/g,"\\'");
+  const nameSafe = jsArg(u.name||'');
 
   showAdminPanel(`
 <div class="ap-panel-inner" id="${PANEL_ID}">
@@ -1296,17 +1296,17 @@ async function adminOpenVendorProfile(userId) {
             ? '<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="suspendStore(\'' + store.id + '\')"><i class="fas fa-ban"></i> Suspend Store</button>'
             : '<button class="btn btn-success btn-sm" onclick="activateStore(\'' + store.id + '\')"><i class="fas fa-check"></i> Activate Store</button>'}
           ${!store.is_paid ? '<button class="btn btn-primary btn-sm" onclick="_apMarkStorePaid(\'' + store.id + '\')"><i class="fas fa-check-circle"></i> Mark Paid</button>' : ''}
-          <button class="btn btn-ghost btn-sm" onclick="showHandoverModal('${store.id}','${escHtml(u.email||'')}')">
+          <button class="btn btn-ghost btn-sm" onclick="showHandoverModal('${store.id}','${jsArg(u.email||'')}')">
             <i class="fas fa-exchange-alt"></i> Re-assign Store
           </button>
         </div>
         <div style="height:1px;background:var(--border);margin:14px 0"></div>
         <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">🎨 Standalone Storefront Controls</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-          <button class="btn btn-success btn-sm" onclick="_apApproveStorefront('${store.id}','${escHtml(store.name).replace(/'/g,"\\'")}')">
+          <button class="btn btn-success btn-sm" onclick="_apApproveStorefront('${store.id}','${jsArg(store.name)}')">
             <i class="fas fa-check-circle"></i> Approve Storefront
           </button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="_apRevokeStorefront('${store.id}','${escHtml(store.name).replace(/'/g,"\\'")}')">
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="_apRevokeStorefront('${store.id}','${jsArg(store.name)}')">
             <i class="fas fa-times-circle"></i> Revoke / Reject Storefront
           </button>
           <button class="btn btn-outline btn-sm" onclick="closeAdminPanel();setTimeout(()=>showPage('storefront','${store.id}'),300)">
@@ -1484,7 +1484,7 @@ async function adminOpenRendorProfile(userId) {
     ? new Date(u.registered_at).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})
     : '—';
   const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#7c3aed'}[u.status] || 'var(--text-muted)';
-  const nameSafe = escHtml(u.name||'').replace(/'/g,"\\'");
+  const nameSafe = jsArg(u.name||'');
 
   // Subscription status
   const subStatus = u.rendor_sub_status || null;

@@ -1854,7 +1854,7 @@ function adminProductCardHTML(p) {
 
     <button title="Delete product permanently"
 
-            onclick="_sdDeleteProduct('${p.id}','${escHtml(p.name).replace(/'/g,"\\'")}',this)"
+            onclick="_sdDeleteProduct('${p.id}','${jsArg(p.name)}',this)"
 
             style="flex:1;background:#ef4444;color:#fff;border:none;border-radius:5px;padding:5px 0;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px">
 
@@ -2482,7 +2482,7 @@ async function renderRendorProfilePublic() {
 
     </div>
 
-    <button onclick="shareRendorProfile('${rendorId}','${escHtml(displayName)}')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" title="Share this profile">
+    <button onclick="shareRendorProfile('${rendorId}','${jsArg(displayName)}')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" title="Share this profile">
       <i class="fas fa-share-alt" style="font-size:.85rem"></i>
     </button>
 
