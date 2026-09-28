@@ -16,6 +16,7 @@ const { createSessionToken, getSessionUser, hasInvalidSession, requireAuth, requ
 const access = require('./lib/access');
 const otp = require('./lib/otp');
 const notify = require('./lib/notify');
+const uploads = require('./lib/uploads');
 
 
 // Load environment variables from .env if present
@@ -1296,6 +1297,222 @@ app.post('/api/push/send', requireAuth, requireAdmin, async (req, res) => {
   return res.json({ ok: true, sentCount: result.sentCount });
 });
 
+// ── Resumable uploads ───────────────────────────────────────
+// Chunk storage for lib/uploads.js. Supabase when configured (chunks are shared
+// between instances and survive a restart), db.json otherwise. api/index.js
+// implements the same contract so the client cannot tell the two apart.
+function uploadsStore() {
+  const localAll = () => { const d = loadDb(); if (!Array.isArray(d.upload_chunks)) d.upload_chunks = []; return d; };
+  return {
+    async loadChunks(uploadId) {
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('upload_chunks').select('*')
+            .eq('upload_id', String(uploadId)).order('idx', { ascending: true });
+          if (!error && Array.isArray(data) && data.length) return data.map(serializeRecord);
+        } catch (e) { /* fall back to the local mirror */ }
+      }
+      return localAll().upload_chunks
+        .filter(r => String(r.upload_id) === String(uploadId))
+        .sort((a, b) => Number(a.idx) - Number(b.idx));
+    },
+    // Upsert: re-sending a chunk the server already has must be a no-op, which
+    // is what makes a retry idempotent instead of duplicating data. Chunks are
+    // transient, so they live in ONE place (Supabase when configured, db.json
+    // otherwise) rather than being mirrored — image data is big enough that
+    // keeping two copies of every in-flight upload is pure waste.
+    async putChunk(row) {
+      if (supabase) {
+        try {
+          await withSupaTimeout(supabase.from('upload_chunks').upsert(row, { onConflict: 'upload_id,idx' }), 3000);
+        } catch (e) { console.warn('[Uploads] Supabase putChunk failed:', e && e.message || e); }
+        return;
+      }
+      const d = localAll();
+      d.upload_chunks = d.upload_chunks.filter(r => !(String(r.upload_id) === String(row.upload_id) && Number(r.idx) === Number(row.idx)));
+      d.upload_chunks.push(row);
+      saveDb(d);
+    },
+    async deleteUpload(uploadId) {
+      if (supabase) {
+        try { await withSupaTimeout(supabase.from('upload_chunks').delete().eq('upload_id', String(uploadId)), 3000); } catch (e) {}
+        return;
+      }
+      const d = localAll();
+      d.upload_chunks = d.upload_chunks.filter(r => String(r.upload_id) !== String(uploadId));
+      saveDb(d);
+    },
+    // Opportunistic sweep: an abandoned upload must not leave chunk rows behind
+    // forever. Runs when a new session starts, scoped to that user.
+    async purgeExpired(userId, olderThanMs) {
+      const cutoffMs = Date.now() - olderThanMs;
+      if (supabase) {
+        try {
+          await withSupaTimeout(supabase.from('upload_chunks').delete()
+            .eq('user_id', String(userId)).lt('created_at', new Date(cutoffMs).toISOString()), 3000);
+        } catch (e) {}
+        return;
+      }
+      const d = localAll();
+      const before = d.upload_chunks.length;
+      d.upload_chunks = d.upload_chunks.filter(r =>
+        String(r.user_id) !== String(userId) || new Date(r.created_at).getTime() >= cutoffMs
+      );
+      if (d.upload_chunks.length !== before) saveDb(d);
+    }
+  };
+}
+
+/**
+ * Expand every `asset:<id>` reference in a write body into its assembled data
+ * URL and delete the consumed chunks. Only the uploader's own chunks count, and
+ * a body with no asset refs short-circuits before touching storage, so the
+ * ordinary write path pays nothing for this.
+ *
+ * @returns {{ok: true, body: object} | {ok: false, status: number, code?: string, error: string}}
+ */
+async function expandUploadAssets(body, viewer) {
+  // Compression happens in the browser, so this is the server refusing to store
+  // what a client that skipped it sent. Checked BEFORE the asset-ref
+  // short-circuit so inline images are bounded on the ordinary write path too.
+  const oversized = uploads.firstOversizedImage(body);
+  if (oversized) {
+    return {
+      ok: false,
+      status: 413,
+      error: `That image is too large to store (${Math.round(oversized.chars / 1024)} KB). Images are compressed automatically on upload — please try attaching it again.`
+    };
+  }
+  const ids = uploads.collectAssetRefs(body);
+  if (!ids.size) return { ok: true, body };
+  const store = uploadsStore();
+  const map = new Map();
+  for (const id of ids) {
+    const rows = await store.loadChunks(id);
+    if (!rows.length) continue;
+    if (!viewer || String(rows[0].user_id) !== String(viewer.userId)) continue; // not yours
+    map.set(id, { rows, totalChunks: Number(rows[0].total_chunks) || 0 });
+  }
+  const consumed = new Set();
+  try {
+    const out = uploads.resolveAssetRefs(body, map, consumed);
+    for (const id of consumed) await store.deleteUpload(id);
+    return { ok: true, body: out };
+  } catch (e) {
+    if (e && e.code === 'asset_missing') {
+      return { ok: false, status: 409, code: 'asset_missing', error: e.message };
+    }
+    throw e;
+  }
+}
+
+// Upload chunks arrive far more often than records are saved (one image is
+// several chunks, and a bulk add is dozens of images), so they get their own
+// generous per-user budget instead of the general write limiter.
+const uploadChunkRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 4000,
+  keyGenerator: (req) => {
+    const v = access.getAccessContext(req);
+    const key = v && v.userId ? `u:${v.userId}` : `ip:${ipKeyGenerator(String(req.ip || ''))}`;
+    return crypto.createHash('sha256').update(key).digest('hex');
+  },
+  message: { error: 'Too many upload chunks. Please try again shortly.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Start a session. Nothing is stored until the first chunk arrives, so an
+// abandoned "start" costs nothing.
+app.post('/api/uploads', writeRateLimiter, async (req, res) => {
+  const viewer = access.getAccessContext(req);
+  if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+  const clean = uploads.validateCreate(req.body || {});
+  if (!clean.ok) return res.status(clean.status).json({ error: clean.error });
+  const store = uploadsStore();
+  await store.purgeExpired(viewer.userId, uploads.SESSION_TTL_MS);
+  return res.status(201).json({
+    uploadId: uploads.newUploadId(),
+    chunkChars: uploads.CHUNK_CHARS,
+    totalChunks: clean.value.totalChunks,
+    received: []
+  });
+});
+
+// What does the server already hold? This is the resume primitive: the client
+// uploads only the indices missing from this list.
+app.get('/api/uploads/:id', async (req, res) => {
+  const viewer = access.getAccessContext(req);
+  if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+  const rows = await uploadsStore().loadChunks(req.params.id);
+  // A session stores nothing until its first chunk arrives, so "no rows" means
+  // "nothing uploaded yet", NOT "unknown upload" — answering 404 here made a
+  // fresh client believe its session was lost and start over (and over).
+  if (!rows.length) {
+    return res.json({ uploadId: String(req.params.id), totalChunks: 0, chunkChars: uploads.CHUNK_CHARS, received: [], missing: [] });
+  }
+  if (String(rows[0].user_id) !== String(viewer.userId)) {
+    return res.status(404).json({ error: 'Upload not found.' });
+  }
+  const totalChunks = Number(rows[0].total_chunks) || 0;
+  const received = rows.map(r => Number(r.idx)).sort((a, b) => a - b);
+  return res.json({
+    uploadId: String(req.params.id),
+    totalChunks,
+    chunkChars: uploads.CHUNK_CHARS,
+    received,
+    missing: uploads.missingChunks(received, totalChunks)
+  });
+});
+
+// Store one chunk. Out-of-order arrival is fine — the index is explicit.
+app.put('/api/uploads/:id/:index', uploadChunkRateLimiter, async (req, res) => {
+  const viewer = access.getAccessContext(req);
+  if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+  const store = uploadsStore();
+  const existing = await store.loadChunks(req.params.id);
+  if (existing.length && String(existing[0].user_id) !== String(viewer.userId)) {
+    return res.status(403).json({ error: 'This upload belongs to another account.' });
+  }
+  const body = req.body || {};
+  const totalChunks = existing.length ? Number(existing[0].total_chunks) : Number(body.totalChunks);
+  const clean = uploads.validateChunk({ index: req.params.index, data: body.data }, totalChunks);
+  if (!clean.ok) return res.status(clean.status).json({ error: clean.error });
+
+  await store.putChunk({
+    upload_id: String(req.params.id),
+    idx: clean.value.index,
+    user_id: String(viewer.userId),
+    filename: String(body.filename || (existing[0] && existing[0].filename) || 'image').slice(0, 120),
+    total_chunks: Number(totalChunks),
+    data: clean.value.data,
+    created_at: new Date().toISOString()
+  });
+
+  const rows = await store.loadChunks(req.params.id);
+  const received = rows.map(r => Number(r.idx)).sort((a, b) => a - b);
+  const missing = uploads.missingChunks(received, totalChunks);
+  return res.json({ uploadId: String(req.params.id), received, missing, complete: missing.length === 0 });
+});
+
+// Confirm the session is whole and hand back the reference to use in the record
+// save. The chunks stay put until that record actually gets written, so a failed
+// save does not force the user to upload anything again.
+app.post('/api/uploads/:id/finish', async (req, res) => {
+  const viewer = access.getAccessContext(req);
+  if (!viewer) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+  const rows = await uploadsStore().loadChunks(req.params.id);
+  if (!rows.length || String(rows[0].user_id) !== String(viewer.userId)) {
+    return res.status(404).json({ error: 'Upload not found.' });
+  }
+  const totalChunks = Number(rows[0].total_chunks) || 0;
+  const missing = uploads.missingChunks(rows.map(r => Number(r.idx)), totalChunks);
+  if (missing.length) return res.status(409).json({ error: 'Upload is incomplete.', missing });
+  const dataUrl = uploads.assemble(rows, totalChunks);
+  if (!dataUrl) return res.status(409).json({ error: 'Upload is incomplete.', missing: [0] });
+  return res.json({ uploadId: String(req.params.id), assetRef: uploads.assetRefFor(req.params.id), bytes: dataUrl.length });
+});
+
 // (#10) Narrow notification endpoint. The notifications TABLE itself is
 // server/admin-only, because inserting a row auto-dispatches a web-push and a
 // client-open insert therefore acted as an open push relay. That broke the
@@ -1828,7 +2045,14 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
   // Set by the packages branch of the money block below; consumed by the
   // "Atomic stock reservation" block just before the insert.
   let pkgSale = null;
-  const body = req.body || {};
+  let body = req.body || {};
+  // Resumable uploads: swap `asset:<id>` refs for the assembled data URLs up
+  // front, so every later branch sees ordinary inline images.
+  {
+    const expanded = await expandUploadAssets(body, access.getAccessContext(req));
+    if (!expanded.ok) return res.status(expanded.status).json({ error: expanded.error, code: expanded.code });
+    body = expanded.body;
+  }
   // (#3) The server assigns ids. A client-supplied id could overwrite (take
   // over) an existing row with a different owner's data. EXCEPTION: orders and
   // packages — their client-generated id IS the idempotency key (a retried
@@ -2452,9 +2676,17 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
   if (!access.WRITABLE_TABLES.has(table)) return res.status(404).json({ error: 'Unknown resource.' });
   const id = req.params.id;
   if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
-  const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
+  let body = { ...req.body, id: id, updated_at: new Date().toISOString() };
   invalidateApiCache(table); // Clear server GET cache so next read reflects update
   if (table === 'storefronts') invalidateApiCache('stores');
+
+  // Resumable uploads: swap `asset:<id>` refs for the assembled data URLs before
+  // any branch below reads the body (the storefront path returns early).
+  {
+    const expanded = await expandUploadAssets(body, access.getAccessContext(req));
+    if (!expanded.ok) return res.status(expanded.status).json({ error: expanded.error, code: expanded.code });
+    body = expanded.body;
+  }
 
   // ── Access control (storefronts are checked inside their branch after the
   // store is resolved — a PUT upsert may carry the owner id in its body) ──
@@ -2672,9 +2904,16 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
   if (!access.WRITABLE_TABLES.has(table)) return res.status(404).json({ error: 'Unknown resource.' });
   const id = req.params.id;
   if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
-  const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
+  let body = { ...req.body, id: id, updated_at: new Date().toISOString() };
   invalidateApiCache(table); // Clear server GET cache so next read reflects patch
   if (table === 'storefronts') invalidateApiCache('stores');
+
+  // Resumable uploads: swap `asset:<id>` refs for the assembled data URLs.
+  {
+    const expanded = await expandUploadAssets(body, access.getAccessContext(req));
+    if (!expanded.ok) return res.status(expanded.status).json({ error: expanded.error, code: expanded.code });
+    body = expanded.body;
+  }
 
   // ── Access control (storefronts are checked inside their branch after the
   // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──

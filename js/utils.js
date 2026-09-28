@@ -111,6 +111,30 @@ document.addEventListener('error', (e) => {
 // Instead we use CSS touch-action to suppress zoom without JS interception.
 // The CSS rule `touch-action: manipulation` on buttons handles this.
 
+// ── Resumable upload kick-off ──────────────────────────────
+// Start sending a compressed image to the server as chunks, in the background.
+// Deliberately NOT awaited: the preview must appear instantly, and by the time
+// the user submits the form the chunks are usually already uploaded, which is
+// what turns a multi-megabyte save request into a few short `asset:` tokens.
+// If it does not finish, the image is simply sent inline exactly as before —
+// slower, never broken — and the session stays on disk so the next attempt (or
+// the next page load) continues from the first missing chunk.
+function backgroundUpload(file, dataUrl) {
+  if (typeof Uploader === 'undefined' || !Uploader.store) return;
+  // `App` is a top-level const, not a window property — `window.App` is always
+  // undefined and would disable uploads for everyone.
+  if (typeof App === 'undefined' || !App.currentUser) return; // anonymous: nothing to own the chunks
+  try {
+    Uploader.store(file, dataUrl).then(res => {
+      if (!res || !res.assetRef) console.warn('[Upload] image not fully uploaded yet — it will be attached inline');
+    }).catch(err => {
+      console.warn('[Upload] background upload failed:', err && err.message || err);
+    });
+  } catch (e) {
+    console.warn('[Upload] could not start the upload:', e && e.message || e);
+  }
+}
+
 // ── Image preview helpers (local gallery / file picker) ───
 // Used by vendor product uploads, store logo/banner, and admin store form.
 // previewWrapperId : id of the wrapper div shown after selection
@@ -150,6 +174,7 @@ async function compressImage(file, maxWidth = 750, quality = 0.70) {
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           dataUrl = canvas.toDataURL('image/jpeg', 0.60);
         }
+        backgroundUpload(file, dataUrl);
         resolve(dataUrl);
       };
       img.onerror = reject;
@@ -195,6 +220,7 @@ async function squareImage(file, size = 900, quality = 0.72) {
           c2.getContext('2d').drawImage(canvas, 0, 0, 550, 550);
           dataUrl = c2.toDataURL('image/jpeg', 0.60);
         }
+        backgroundUpload(file, dataUrl);
         resolve(dataUrl);
       };
       img.onerror = reject;

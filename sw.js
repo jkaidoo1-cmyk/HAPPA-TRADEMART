@@ -5,7 +5,7 @@
  *            Offline fallback page for navigation requests.
  */
 
-const CACHE_NAME      = 'happa-v143';
+const CACHE_NAME      = 'happa-v144';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install
@@ -19,6 +19,15 @@ const PRECACHE_ASSETS = [
   './images/icon-192.png',
   './images/icon-512.png',
   './css/style.css',
+  // Icon font — precached on purpose. It used to be a jsDelivr CDN request that
+  // was only cached opportunistically, so any cache wipe (see the self-heal in
+  // index.html) left every icon dependent on a live third-party fetch. With no
+  // local copy to fall back on, a failed fetch meant a blank icon set app-wide.
+  './css/vendor/fontawesome.min.css',
+  './css/webfonts/fa-solid-900.woff2',
+  './css/webfonts/fa-regular-400.woff2',
+  './css/webfonts/fa-brands-400.woff2',
+  './js/chart.min.js',
   './js/optimistic_ui.js',
   './js/app.js',
   './js/auth.js',
@@ -33,10 +42,10 @@ const PRECACHE_ASSETS = [
   './js/admin-settings.js',
 
   './js/utils.js',
+  './js/upload.js',
   './js/search.js',
   './js/notifications.js',
   './js/wallet.js',
-  './js/delivery.js',
   './js/ads.js',
   './js/rendor.js'
 ];
@@ -131,7 +140,7 @@ self.addEventListener('fetch', event => {
     caches.match(request).then(cached => {
       const isSameOrigin = url.origin === self.location.origin;
 
-      // CDN assets (immutable) → cache-first, network fallback
+      // Cross-origin assets → cache-first, network fallback
       if (!isSameOrigin) {
         if (cached) return cached;
         return fetch(request).then(response => {
@@ -140,7 +149,11 @@ self.addEventListener('fetch', event => {
             caches.open(CACHE_NAME).then(cache => cache.put(request, clone)).catch(() => {});
           }
           return response;
-        }).catch(() => new Response('', { status: 408 }));
+        // A real network error, NOT an empty 408. Returning `new Response('', {status:408})`
+        // handed the browser a blank stylesheet/script that looked like a success,
+        // so a failed CDN fetch silently wiped out the app's icons with no error
+        // in the console. `Response.error()` surfaces it honestly instead.
+        }).catch(() => Response.error());
       }
 
       // Same-origin assets → stale-while-revalidate

@@ -2142,9 +2142,23 @@ async function apiFetch(table, opts = {}) {
   const url = API + table;
   const method = (opts.method || 'GET').toUpperCase();
   const isWrite = method !== 'GET';
+
+  // Resumable uploads: an image that finished uploading is sent as the short
+  // token `asset:<id>` instead of ~180 KB of base64, so the save request stays
+  // small enough to survive a flaky connection. The server expands the token
+  // back into the image when it writes the row, so storage is unchanged.
+  // Untouched when nothing was uploaded — the body is passed through verbatim.
+  const originalBody = opts.body;
+  let requestOpts = opts;
+  if (isWrite && typeof Uploader !== 'undefined' && typeof originalBody === 'string' && Uploader.hasAssets()) {
+    const prepared = Uploader.prepareBody(originalBody);
+    if (prepared !== originalBody) requestOpts = { ...opts, body: prepared };
+  }
+
   try {
     let resp;
-    resp = await fetch(url, { ...opts, headers });
+    resp = await fetch(url, { ...requestOpts, headers });
+    if (isWrite && requestOpts !== opts && typeof Uploader !== 'undefined') Uploader.commit();
     if (!resp || !resp.ok) {
       let errDetail = `HTTP ${resp ? resp.status : 'Error'}`;
       try {
@@ -2162,6 +2176,13 @@ async function apiFetch(table, opts = {}) {
   } catch(e) {
     console.warn('API Error:', table, e);
     window.lastApiError = e.message || String(e);
+    // An attached image the server no longer has (swept after 24h, or consumed
+    // by an earlier save): drop the tokens and retry once with the inline image
+    // the browser still holds. The user's save must not fail over this.
+    if (isWrite && !opts._noAssetRetry && e && e.status === 409 && /asset/i.test(e.message || '')) {
+      if (typeof Uploader !== 'undefined') Uploader.invalidateAll();
+      return apiFetch(table, { ...opts, body: originalBody, _noAssetRetry: true });
+    }
     // A 401 while holding a token means the server no longer recognizes this
     // session (expired/rotated). Re-authenticate — never serve stale local
     // data as if it were live.

@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "gen-secret": "node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"",
-    "test": "node --test test/access.test.js test/api.test.js test/commerce-atomic.test.js test/checkout-rules.test.js test/security.test.js test/wallet-atomic.test.js"
+    "test": "node --test test/access.test.js test/api.test.js test/commerce-atomic.test.js test/checkout-rules.test.js test/security.test.js test/uploads.test.js test/wallet-atomic.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

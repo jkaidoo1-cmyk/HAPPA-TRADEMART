@@ -143,6 +143,27 @@ begin
 end;
 $$;
 
+-- ── Resumable uploads ────────────────────────────────────────────────────
+-- One row per uploaded chunk. A retried chunk is an idempotent upsert on
+-- (upload_id, idx), and the client learns which pieces the server already holds
+-- by asking for the index list — which is what lets an interrupted upload resume
+-- instead of restarting. Rows are deleted as soon as the record that consumed
+-- them is written, and swept after 24h otherwise.
+-- Kept OFF the generic /api/:table surface (like otps): only /api/uploads/*
+-- touches it, so a browser can never read another user's chunks.
+create table if not exists upload_chunks (
+  upload_id text not null,
+  idx int not null,
+  user_id text not null,
+  filename text,
+  total_chunks int not null,
+  data text not null,
+  created_at timestamptz not null default now(),
+  primary key (upload_id, idx)
+);
+create index if not exists upload_chunks_user_idx on upload_chunks (user_id, created_at desc);
+create index if not exists upload_chunks_age_idx on upload_chunks (created_at);
+
 -- ── #8: plaintext passwords must not exist anywhere ───────────────────────
 alter table users drop column if exists password;
 
@@ -184,7 +205,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['users','orders','packages','wallet_transactions','notifications','referrals','support_tickets','service_orders']
+  foreach t in array array['users','orders','packages','wallet_transactions','notifications','referrals','support_tickets','service_orders','upload_chunks']
   loop
     -- Only drop where the table actually exists, otherwise the whole block
     -- aborts on the first name that was never created.

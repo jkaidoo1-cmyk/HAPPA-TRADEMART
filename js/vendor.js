@@ -2439,7 +2439,9 @@ function switchTab(el, tabId) {
   const target = document.getElementById(tabId);
   if (!target) return;
 
-  if (window.App) {
+  // `App` is a top-level const, not a window property: `if (window.App)` is
+  // always false, so the active tab was never remembered across a re-render.
+  if (typeof App !== 'undefined') {
     if (!App.activeTab) App.activeTab = {};
     if (App.currentPage) App.activeTab[App.currentPage] = tabId;
   }
@@ -3280,7 +3282,10 @@ window.updateStorefrontPreview = function() {
   let displayProducts = [];
   const storeNameVal = document.getElementById('store-name')?.value || '';
   const myStore = (App.allStores || []).find(s => String(s.vendor_id) === String(App.currentUser?.id) || String(s.id) === String(App.myStore?.id) || s.name === storeNameVal) || App.myStore || {};
-  if (window.App && Array.isArray(App.allProducts)) {
+  // Same `window.App` mistake as above: this guard was always false, so the
+  // storefront live preview fell through to the four hardcoded demo products
+  // instead of showing the vendor's real ones.
+  if (typeof App !== 'undefined' && Array.isArray(App.allProducts)) {
     displayProducts = App.allProducts.filter(p => String(p.store_id) === String(myStore.id) && isProductListable(p));
     if (displayProducts.length === 0) {
       displayProducts = App.allProducts.filter(p => String(p.vendor_id) === String(App.currentUser?.id) && isProductListable(p));

@@ -28,7 +28,7 @@
     // background push notifications.
     (function() {
       if (!('serviceWorker' in navigator)) return;
-      var SW_VERSION = 'happa-v143';
+      var SW_VERSION = 'happa-v144';
       var lastCleaned = localStorage.getItem('sw_selfheal_version');
       if (lastCleaned === SW_VERSION) return; // already cleaned for this version
       localStorage.setItem('sw_selfheal_version', SW_VERSION);
@@ -105,10 +105,16 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
     rel="stylesheet">
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
-  <!-- Chart.js (Deferred) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+  <!-- Font Awesome — SELF-HOSTED, deliberately not a CDN link.
+       This used to load from cdn.jsdelivr.net. When that request failed, all
+       ~1000 `fa-` icon usages in the app became zero-width glyphs, which made
+       the notification bell and the account button in the top-right corner
+       completely invisible (they have no background until hover). A third-party
+       CDN must never be able to blank out the app's entire icon set.
+       Vendored: css/vendor/fontawesome.min.css + css/webfonts/*.woff2 (FA Free 6.4.0). -->
+  <link rel="stylesheet" href="/css/vendor/fontawesome.min.css">
+  <!-- Chart.js (Deferred) — self-hosted for the same reason: a CDN blip silently broke the admin charts. -->
+  <script src="/js/chart.min.js" defer></script>
 
   <link rel="stylesheet" href="/css/style.css">
   <style>
@@ -795,6 +801,7 @@
      ============================================================ -->
   <script src="/js/optimistic_ui.js" defer></script>
   <script src="/js/utils.js" defer></script>
+  <script src="/js/upload.js" defer></script>
   <script src="/js/app.js" defer></script>
   <script src="/js/auth.js" defer></script>
   <script src="/js/orders.js" defer></script>
