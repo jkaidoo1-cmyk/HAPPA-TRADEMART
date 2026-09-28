@@ -3936,28 +3936,38 @@ window.submitStorefrontAdminLogin = async function(form, storeId) {
   const btn = form.querySelector('[type=submit]');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in…'; }
 
-  // Dynamically populate App.allUsers if missing or empty
-  if (!App.allUsers || !App.allUsers.length) {
-    const res = await apiGet('users', 'limit=200').catch(() => null);
-    App.allUsers = res?.data || [];
+  // (#22) Credentials are verified by the REAL /auth/login endpoint — the old
+  // code compared a plaintext `password` against a public users list in the
+  // browser, which anyone could bypass with direct API calls.
+  let authRes = null;
+  try {
+    authRes = await apiFetch('auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+  } catch (err) {
+    authRes = null;
   }
-
-  // Find user and check credentials
-  const foundUser = (App.allUsers || []).find(u => u.email.toLowerCase() === email && u.password === password);
+  const foundUser = authRes && authRes.user ? authRes.user : null;
   if (!foundUser) {
-    showToast('Invalid email or password', 'danger');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-lock"></i> Sign in'; }
+    showToast((authRes && authRes.error) || 'Invalid email or password', 'danger');
     return;
   }
+  if (authRes.token) setAuthToken(authRes.token);
 
-  // Check store ownership
+  // Store ownership is enforced server-side too; this client check just
+  // gives a friendlier error before the dashboard renders.
   const s = App.allStores.find(st => String(st.id) === String(storeId));
-  if (!s || String(s.vendor_id) !== String(foundUser.id)) {
+  if ((!s || String(s.vendor_id) !== String(foundUser.id)) && String(foundUser.role) !== 'admin') {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-lock"></i> Sign in'; }
     showToast('Access denied: This account is not the registered owner of this storefront.', 'danger');
     return;
   }
 
   App.currentUser = foundUser;
-  localStorage.setItem('happa_session', JSON.stringify(foundUser));
+  saveSessions();
   updateNavForUser();
   showToast('Logged in to control center successfully! 🏪', 'success');
 

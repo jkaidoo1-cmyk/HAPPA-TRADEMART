@@ -71,6 +71,11 @@ before(async () => {
   prod.sold_count = 0;
   prod.status = 'active';
   prod.is_available = true;
+  // (#14) item→store binding: a package may only contain products that
+  // actually belong to the store it claims, so the fixture product must live
+  // under the same store these packages check out from.
+  prod.store_id = 'store-msku253he58z';
+  prod.vendor_id = 'msku253he58z';
   const store = (db.stores || []).find(x => String(x.id) === 'store-msku253he58z');
   assert.ok(store, 'fixture store-msku253he58z must exist in db.json');
   store.total_orders = 0;
@@ -234,4 +239,27 @@ test('order totals are server-derived and the order row does not touch stock', a
   const pAfter = await getProd();
   assert.equal(Number(pAfter.stock_qty), Number(pBefore.stock_qty),
     'orders are mirrors — packages own the stock decrement');
+});
+
+test('a package mixing another store\'s items is refused with 409 and no side effects', async () => {
+  const stBefore = await getStore();
+  const pBefore = await getProd();
+  const res = await api('/packages', {
+    method: 'POST',
+    body: {
+      id: 'rules-pkg-crossstore',
+      store_id: 'store-vendor', // claims a different store...
+      buyer_id: 'test-buyer',
+      items: [{ id: 'prod-diag-1', qty: 1 }] // ...while the item belongs to store-msku253he58z
+    }
+  });
+  assert.equal(res.status, 409);
+  assert.match(String(res.data.error), /not available from this store/);
+
+  const pAfter = await getProd();
+  assert.equal(Number(pAfter.stock_qty), Number(pBefore.stock_qty),
+    'refused sale must not touch stock');
+  const stAfter = await getStore();
+  assert.equal(Number(stAfter.total_orders), Number(stBefore.total_orders));
+  assert.equal(Number(stAfter.total_sales), Number(stBefore.total_sales));
 });

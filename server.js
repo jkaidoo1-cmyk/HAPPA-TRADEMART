@@ -3,7 +3,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const crypto = require('crypto');
 
 let webpush;
@@ -49,9 +49,25 @@ const DB_FILE = process.env.HAPPA_DB_FILE || path.join(__dirname, 'db.json');
 const app = express();
 
 // Rate Limiter for Login Endpoint (5 attempts / 15 mins)
+// (#19) Behind proxies (and on serverless) req.ip is the proxy unless this is
+// set — without it every visitor shares the proxy IP and limits misfire.
+app.set('trust proxy', 1);
+
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  skipSuccessfulRequests: true, // (#19) only failed logins count
+  keyGenerator: (req) => {
+    // Key by IP + email so one attacker can't lock out a victim's account
+    // by spamming from many IPs, and a shared office IP can't lock everyone.
+    // Hashed so the key can never be a raw IPv6 address (express-rate-limit
+    // rejects those) and so raw emails don't sit in limiter memory dumps.
+    const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+    // ipKeyGenerator() normalizes IPv6 to a /64 subnet key — required by
+    // express-rate-limit, otherwise IPv6 users could dodge the limit.
+    const ip = ipKeyGenerator(String(req.ip || ''));
+    return crypto.createHash('sha256').update(`${ip}:${email}`).digest('hex');
+  },
   message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false
@@ -67,6 +83,38 @@ const writeRateLimiter = rateLimit({
   legacyHeaders: false
 });
 
+
+// ── SMS delivery (item #1) ─────────────────────────────────────
+// Pluggable provider for OTP texts. Configure with TERMII_* (Ghana-friendly)
+// or TWILIO_* env vars; without either, OTPs are logged server-side only so
+// local development can still complete verification.
+async function sendSms(phone, text) {
+  const p = String(phone || '').trim();
+  const t = String(text || '');
+  try {
+    if (process.env.TERMII_API_KEY && process.env.TERMII_SENDER_ID) {
+      const r = await fetch('https://api.ng.termii.com/api/sms/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: p, from: process.env.TERMII_SENDER_ID, sms: t, type: 'plain', channel: 'generic', api_key: process.env.TERMII_API_KEY })
+      });
+      return { ok: r.ok, channel: 'termii' };
+    }
+    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER) {
+      const sid = process.env.TWILIO_ACCOUNT_SID;
+      const auth = Buffer.from(sid + ':' + process.env.TWILIO_AUTH_TOKEN).toString('base64');
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Basic ' + auth },
+        body: new URLSearchParams({ To: p, From: process.env.TWILIO_FROM_NUMBER, Body: t })
+      });
+      return { ok: r.ok, channel: 'twilio' };
+    }
+  } catch (e) {
+    console.warn('[SMS] provider error:', e.message);
+  }
+  console.log(`[SMS] (no provider configured) OTP text for ${p}: ${t}`);
+  return { ok: false, channel: 'server-log' };
+}
 
 function withSupaTimeout(promise, ms = 2500) {
   return Promise.race([
@@ -182,6 +230,14 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:9000,h
   .split(',').map(s => s.trim());
 
 app.use((req, res, next) => {
+  // (#6) Baseline Content-Security-Policy for HTML responses: only scripts
+  // from this origin may run, and inline handlers still work (the SPA uses
+  // them) — this blocks external script injection from XSS payloads.
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
   const origin = req.headers.origin;
   if (origin) {
     // Reflect the origin ONLY if it's allowlisted (default: local dev origins,
@@ -303,6 +359,30 @@ function normalizeRecord(table, record) {
     normalized.name = '';
   }
   return normalized;
+}
+
+// (#2) Which store does a product write belong to? A product is filed under a
+// store, and that store decides both the storefront it appears in and the
+// vendor the package pays out to — so a vendor must not be able to file
+// products into (or move them into) another vendor's store.
+// Returns 'own' | 'foreign' | 'unknown' (unknown = legacy/unmirrored row, in
+// which case the write is allowed rather than blocked on missing data).
+async function productStoreOwnership(viewer, storeId) {
+  const sid = String(storeId || '');
+  const uid = String((viewer && viewer.userId) || '');
+  if (!sid || !uid) return 'unknown';
+  let row = null;
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from('stores').select('id, vendor_id').eq('id', sid).limit(1), 2000);
+      if (data && data[0]) row = data[0];
+    } catch (e) {}
+  }
+  if (!row) row = getTable(loadDb(), 'stores').find(s => String(s.id) === sid) || null;
+  if (!row) return 'unknown';
+  const owner = String(row.vendor_id || '');
+  if (!owner) return 'unknown';
+  return owner === uid ? 'own' : 'foreign';
 }
 
 const JSONB_COLS = new Set([
@@ -620,7 +700,10 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   let supaFailed = false; // DB unreachable → fail honestly with 503, never fake "Invalid credentials"
   if (supabase) {
     try {
-      const { data, error } = await supabase.from('users').select('*');
+      // (#21) Fetch only the row that matches this email — the old select('*')
+      // pulled the whole users table on every login (billed egress; the likely
+      // cause of the recurring Supabase 402 quota errors).
+      const { data, error } = await supabase.from('users').select('*').eq('email', cleanEmail).limit(1);
       if (error) supaFailed = true;
       else if (data) supaUsers = data.map(serializeRecord);
     } catch (err) { supaFailed = true; }
@@ -639,9 +722,15 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   const user = users.find(u =>
     (u.email?.toLowerCase() === cleanEmail || u.phone === cleanEmail) &&
     u.status !== 'deleted'
-  );
+  ) || null; // never undefined — guards the user.id dereference below
 
-  const isLocalOnly = !supaUsers.some(u => String(u.id) === String(user.id));
+  // Dummy hash comparison for unknown emails: equalizes response time so an
+  // attacker cannot enumerate registered accounts by timing the login call.
+  if (!user) {
+    await bcrypt.compare(password, '$2a$10$CwTycUXWue0Thq9StjUM0uJ8TuKx0fOgrcVnTTpA6Vh8HhV1GhG7O').catch(() => {});
+  }
+
+  const isLocalOnly = !!(user && supaUsers.some(u => String(u.id) === String(user.id)));
 
   if (!user) {
     if (supaFailed) {
@@ -742,13 +831,20 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
 // POST /api/auth/check-email — boolean existence check for signup.
 // Returns only { exists: true|false } so registration can detect duplicates
 // without leaking any account details (no emails/phones in list responses).
-app.post('/api/auth/check-email', async (req, res) => {
+// (#12) Rate-limited: check-email must not become an account-existence oracle.
+const checkEmailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 20,
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true, legacyHeaders: false
+});
+app.post('/api/auth/check-email', checkEmailLimiter, async (req, res) => {
   const email = String((req.body && req.body.email) || '').trim().toLowerCase();
   if (!email) return res.status(400).json({ error: 'Email is required.' });
+  // (#21) Query the database for this email instead of downloading all users.
   let supaUsers = [];
   if (supabase) {
     try {
-      const { data, error } = await supabase.from('users').select('email,status');
+      const { data, error } = await supabase.from('users').select('email,status').eq('email', email).limit(1);
       if (!error && data) supaUsers = data;
     } catch (err) {}
   }
@@ -790,11 +886,72 @@ app.get('/api/auth/verify', (req, res) => {
   return res.json({ valid: true, userId: session.userId, role: session.role });
 });
 
-app.post('/api/auth/verify-phone', async (req, res) => {
+// ── Phone OTP: issue + verify (#1) ──────────────────────────
+// POST /api/auth/request-otp — issues a code for the SESSION user's phone.
+// Stored bcrypt-hashed with a 5-minute expiry and a 5-attempt cap; delivered
+// via SMS provider when configured (see sendSms), otherwise logged server-side
+// for local development. Never returned in the response.
+app.post('/api/auth/request-otp', writeRateLimiter, async (req, res) => {
   try {
     const session = getSessionUser(req);
-    const targetId = (session && session.userId) || (req.body && req.body.userId);
-    if (!targetId) return res.status(400).json({ error: 'User ID is required.' });
+    if (!session) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    const db = loadDb();
+    const me = getTable(db, 'users').find(u => String(u.id) === String(session.userId));
+    if (!me || !me.phone) return res.status(400).json({ error: 'Add a phone number to your account first.' });
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code_hash = await bcrypt.hash(code, 8);
+    const row = {
+      id: 'otp-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100),
+      user_id: String(session.userId),
+      purpose: 'verify_phone',
+      code_hash,
+      attempts: 0,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      consumed_at: null
+    };
+    if (!Array.isArray(db.otps)) db.otps = [];
+    db.otps = db.otps.filter(r => !(r.user_id === row.user_id && r.purpose === 'verify_phone' && !r.consumed_at));
+    db.otps.push(row);
+    saveDb(db);
+    const sent = await sendSms(String(me.phone), `Your HAPPA TRADEMART verification code is ${code}. It expires in 5 minutes.`);
+    return res.json({ success: true, delivered: sent.ok, channel: sent.channel });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not start verification. Try again.' });
+  }
+});
+
+app.post('/api/auth/verify-phone', async (req, res) => {
+  try {
+    // (#1) Verification acts ONLY on the session's own account. The old code
+    // fell back to req.body.userId, letting anyone verify any phone.
+    const body = req.body || {};
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    const targetId = String(session.userId);
+
+    // (#1) OTP gate: the account is only marked verified after a code that the
+    // server issued (hash-stored, 5-min expiry, max 5 attempts) is presented.
+    // With no SMS provider configured the code is logged server-side so local
+    // development still works; it is never returned in any API response.
+    const dbO = loadDb();
+    const otpRows = getTable(dbO, 'otps') || [];
+    const now = Date.now();
+    const otpRow = otpRows.filter(r => r.purpose === 'verify_phone').sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .find(r => r.user_id === String(targetId) && r.consumed_at == null && now - new Date(r.created_at).getTime() < 10 * 60 * 1000);
+    if (!otpRow) return res.status(400).json({ error: 'No verification code pending. Request a new one.' });
+    if (otpRow.expires_at && now > new Date(otpRow.expires_at).getTime()) {
+      return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    }
+    if ((otpRow.attempts || 0) >= 5) return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
+    const codeOk = typeof otpRow.code_hash === 'string' && otpRow.code_hash.startsWith('$2') && await bcrypt.compare(String(body.code || ''), otpRow.code_hash);
+    if (!codeOk) {
+      otpRow.attempts = (otpRow.attempts || 0) + 1;
+      saveDb(dbO);
+      return res.status(400).json({ error: 'Incorrect code.' });
+    }
+    otpRow.consumed_at = new Date().toISOString();
+    saveDb(dbO);
 
     const db = loadDb();
     const users = getTable(db, 'users');
@@ -837,12 +994,12 @@ function initVapidKeysServer() {
       if (pub && priv) {
         vapidKeys = { publicKey: pub, privateKey: priv };
       } else {
+        // (#7) Never persist the private key: an unconfigured server uses a
+        // throwaway key pair that lives in memory for this process only (push
+        // subscriptions must be re-created after a restart). Set
+        // VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY (see .env.example) to keep them.
         vapidKeys = webpush.generateVAPIDKeys();
-        if (vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey && db && Array.isArray(db.settings)) {
-          db.settings.push({ id: 'set-vapid-pub', key: 'vapid_public_key', value: vapidKeys.publicKey, updated_at: new Date().toISOString() });
-          db.settings.push({ id: 'set-vapid-priv', key: 'vapid_private_key', value: vapidKeys.privateKey, updated_at: new Date().toISOString() });
-          saveDb(db);
-        }
+        console.warn('[Push] VAPID keys are not configured — using a temporary in-memory key pair. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to make push subscriptions stable.');
       }
     } catch (e) {
       try { vapidKeys = webpush.generateVAPIDKeys(); } catch (err) {}
@@ -950,12 +1107,14 @@ app.get('/api/push/vapid-key', (req, res) => {
   return res.json({ publicKey: vapidKeys.publicKey });
 });
 
-app.post('/api/push/subscribe', async (req, res) => {
-  const { subscription, user_id } = req.body || {};
+// (#9) Subscribing requires an authenticated session; the subscription is
+// always owned by the session user. Client-supplied user_id is ignored.
+app.post('/api/push/subscribe', requireAuth, async (req, res) => {
+  const { subscription } = req.body || {};
   if (!subscription || !subscription.endpoint) {
     return res.status(400).json({ error: 'Invalid subscription payload.' });
   }
-  const uid = String(user_id || 'anonymous');
+  const uid = String(req.userSession.userId);
   const endpoint = subscription.endpoint;
   const keys = subscription.keys || {};
   const rec = {
@@ -1028,7 +1187,8 @@ app.post('/api/push/migrate', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/push/send', requireAuth, async (req, res) => {
+// (#9) Only admins may send arbitrary pushes; everyone else gets 403.
+app.post('/api/push/send', requireAuth, requireAdmin, async (req, res) => {
   const { user_id, title, body, url } = req.body || {};
   if (!user_id || !title) return res.status(400).json({ error: 'user_id and title required.' });
   const result = await dispatchPushNotification({ user_id, title, body, url });
@@ -1446,10 +1606,30 @@ app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
 
 app.post('/api/:table', writeRateLimiter, async (req, res) => {
   let table = req.params.table;
+  // (#10) Closed table allowlist — unknown tables 404 instead of succeeding.
+  if (!access.WRITABLE_TABLES.has(table)) return res.status(404).json({ error: 'Unknown resource.' });
   // Set by the packages branch of the money block below; consumed by the
   // "Atomic stock reservation" block just before the insert.
   let pkgSale = null;
   const body = req.body || {};
+  // (#3) The server assigns ids. A client-supplied id could overwrite (take
+  // over) an existing row with a different owner's data. EXCEPTION: orders and
+  // packages — their client-generated id IS the idempotency key (a retried
+  // checkout must hit the replay guard, not create a second order); the guard
+  // now answers 409 without data to anyone but the owner (#13).
+  if (table !== 'orders' && table !== 'packages') delete body.id;
+  // (#8) A plaintext password is never stored. User writes hash it into
+  // password_hash first (see the user blocks below, which then delete it), so
+  // only writes to other tables drop the field here.
+  if (table !== 'users') delete body.password;
+  // (#2) Owner identity always comes from the session — never the body.
+  const _postViewer = access.getAccessContext(req);
+  for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) {
+    // notifications: user_id is the TARGET of the message (admin-set), not an
+    // ownership claim — only admins/server can create them anyway (#9).
+    if (table === 'notifications' && f === 'user_id') continue;
+    delete body[f];
+  }
   invalidateApiCache(table); // Clear server GET cache so next read reflects new record
   if (table === 'storefronts') invalidateApiCache('stores');
 
@@ -1475,29 +1655,42 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       return res.status(403).json({ error: 'You can only manage your own store.' });
     }
 
+    // (#16) MERGE with the existing row, never reset it: an omitted field
+    // keeps its stored value instead of falling back to a default (the old
+    // defaults blanked out a storefront whenever a partial save arrived).
+    // subscription_* (#16/#4) can only be changed by an admin or by the
+    // verified-payment flow — client values are ignored.
+    const isAdminEdit = access.isAdmin(viewer);
+    const pick = (v, cur, def) => (v !== undefined && v !== null && v !== '') ? v : (cur !== undefined ? cur : def);
     const storeUpdates = {
-      storefront_status: body.status || 'draft',
-      name: body.name || st.name || 'My Store',
+      storefront_status: pick(body.status, st.storefront_status, 'draft'),
+      name: pick(body.name, st.name, 'My Store'),
       status: st.status || 'active',
-      category: body.category || st.category || 'General',
-      location: body.location || st.location || '',
-      slug: body.url_slug || st.slug || '',
-      theme: body.theme || 'classic',
-      font_family: body.font_family || 'Outfit',
-      slogan: body.slogan || '',
-      description: body.about_us || st.description || '',
-      logo_url: body.logo_url || '',
-      banner_url: body.banner_url || '',
-      primary_color: body.primary_color || '#e85d04',
-      secondary_color: body.secondary_color || '#faf9f6',
-      tertiary_color: body.tertiary_color || '#e85d04',
-      business_hours: body.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
-      return_policy: body.return_policy || '',
-      facebook: body.facebook_url || '',
-      instagram: body.instagram_url || '',
-      subscription_plan: body.subscription_plan || st.subscription_plan || 'starter',
-      subscription_status: body.subscription_status || st.subscription_status || 'active',
-      plan_prices: body.plan_prices || st.plan_prices || null,
+      category: pick(body.category, st.category, 'General'),
+      location: pick(body.location, st.location, ''),
+      slug: pick(body.url_slug, st.slug || st.url_slug, ''),
+      theme: pick(body.theme, st.theme, 'classic'),
+      font_family: pick(body.font_family, st.font_family, 'Outfit'),
+      slogan: pick(body.slogan, st.slogan, ''),
+      description: pick(body.about_us, st.description, ''),
+      logo_url: pick(body.logo_url, st.logo_url, ''),
+      banner_url: pick(body.banner_url, st.banner_url, ''),
+      primary_color: pick(body.primary_color, st.primary_color, '#e85d04'),
+      secondary_color: pick(body.secondary_color, st.secondary_color, '#faf9f6'),
+      tertiary_color: pick(body.tertiary_color, st.tertiary_color, '#e85d04'),
+      business_hours: pick(body.business_hours, st.business_hours, 'Mon - Sat: 8:00 AM - 6:00 PM'),
+      return_policy: pick(body.return_policy, st.return_policy, ''),
+      facebook: pick(body.facebook_url, st.facebook, ''),
+      instagram: pick(body.instagram_url, st.instagram, ''),
+      youtube_url: pick(body.youtube_url, st.youtube_url, ''),
+      meta_description: pick(body.meta_description, st.meta_description, ''),
+      subscription_plan: isAdminEdit ? pick(body.subscription_plan, st.subscription_plan, 'starter') : (st.subscription_plan || 'starter'),
+      subscription_status: isAdminEdit ? pick(body.subscription_status, st.subscription_status, 'active') : (st.subscription_status || 'active'),
+      subscription_start: isAdminEdit ? pick(body.subscription_start, st.subscription_start, null) : (st.subscription_start || null),
+      subscription_end: isAdminEdit ? pick(body.subscription_end, st.subscription_end, null) : (st.subscription_end || null),
+      subscription_months: isAdminEdit ? pick(body.subscription_months, st.subscription_months, null) : (st.subscription_months || null),
+      subscription_method: isAdminEdit ? pick(body.subscription_method, st.subscription_method, null) : (st.subscription_method || null),
+      plan_prices: st.plan_prices || body.plan_prices || null,
       updated_at: new Date().toISOString()
     };
 
@@ -1621,6 +1814,11 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     const pv = commerce.validateProductBody(body);
     if (!pv.ok) return res.status(400).json({ error: pv.error });
   }
+  // (#2) A product may only be filed under a store the writer owns.
+  if (table === 'products' && body.store_id && !access.isAdmin(viewer)
+      && (await productStoreOwnership(viewer, body.store_id)) === 'foreign') {
+    return res.status(403).json({ error: 'You can only file products under your own store.' });
+  }
 
   // Store slugs are the public storefront URL — they must be globally unique.
   // Without this check any vendor could claim another store's URL slug and
@@ -1646,12 +1844,18 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
   // Re-POSTing an existing order/package id returns the original row without
   // re-running money derivation, coupon usage, stock decrement or stats, so a
   // client retry can never apply an effect twice (guide §8 idempotency).
+  // (#13) The row is returned only to its owner (or an admin); anyone else
+  // gets a bare 409 with no data — an id leak must not leak the order.
   if (table === 'orders' || table === 'packages') {
     if (!body.id) body.id = `${table.slice(0, 3)}-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
     body.id = String(body.id);
     const dbReplay = loadDb();
     const dupRow = getTable(dbReplay, table).find(r => String(r.id) === String(body.id));
-    if (dupRow) return res.status(200).json(serializeRecord(dupRow));
+    if (dupRow) {
+      const own = !viewer || access.isAdmin(viewer) || String(dupRow.buyer_id) === String(viewer.userId) || String(dupRow.vendor_id) === String(viewer.userId);
+      if (own) return res.status(200).json(serializeRecord(dupRow));
+      return res.status(409).json({ error: 'This order was already submitted.' });
+    }
   }
 
   // ── Server-enforced ownership + revenue recording ─────────────────────────
@@ -1662,21 +1866,9 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     const isGuest = !viewer;
     if (!isGuest) body.buyer_id = String(viewer.userId);
 
-    if (table === 'packages' && body.store_id) {
-      // vendor_id must come from the store, never from the client.
-      let store = null;
-      if (supabase) {
-        try {
-          const { data, error } = await supabase.from('stores').select('*').eq('id', String(body.store_id)).maybeSingle();
-          if (!error && data) store = serializeRecord(data);
-        } catch (e) {}
-      }
-      if (!store) {
-        const dbL = loadDb();
-        store = getTable(dbL, 'stores').find(s => String(s.id) === String(body.store_id)) || null;
-      }
-      if (store && store.vendor_id) body.vendor_id = String(store.vendor_id);
-    }
+    // A package's store/vendor attribution (#14) is resolved below, once the
+    // cart items are actually known — the package is bound to a store and its
+    // vendor_id is read from that store row, never from the request body.
 
     const isStorefrontRow = String(body.order_source || '') === 'storefront' || !!body.storefront_id;
     const rawItems = Array.isArray(body.items) ? body.items : [];
@@ -1710,6 +1902,37 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     body.items = resolved.items;
 
     if (table === 'packages') {
+      // ── (#14) Bind the package to one store ───────────────────────────
+      // A package pays out to exactly one vendor, taken from its store row. So
+      // the package must be tied to a store that provably sold every item:
+      // `store_id` is the client's claim, and when it is missing (legacy
+      // products written before store_id existed) the items' own store is
+      // used. A cart mixing another store's products is refused.
+      const isAdminPost = access.isAdmin(viewer);
+      let storeRow = null;
+      if (!body.store_id) {
+        const storeIds = new Set();
+        for (const it of resolved.items) {
+          const prod = productsById.get(String((it && (it.product_id || it.id)) || ''));
+          if (prod && prod.store_id) storeIds.add(String(prod.store_id));
+        }
+        if (storeIds.size === 1) body.store_id = [...storeIds][0];
+      }
+      if (body.store_id) {
+        if (supabase) {
+          try {
+            const { data } = await withSupaTimeout(supabase.from('stores').select('*').eq('id', String(body.store_id)).maybeSingle(), 2000);
+            if (data) storeRow = serializeRecord(data);
+          } catch (e) {}
+        }
+        if (!storeRow) storeRow = getTable(loadDb(), 'stores').find(s => String(s.id) === String(body.store_id)) || null;
+      }
+      if (storeRow && storeRow.vendor_id) body.vendor_id = String(storeRow.vendor_id);
+      if (!isAdminPost) {
+        const storeChk = commerce.validateItemsForStore(resolved.items, productsById, storeRow);
+        if (!storeChk.ok) return res.status(409).json({ error: storeChk.error });
+      }
+
       // Refuse to oversell: every product's stock must cover its quantity.
       const stockCheck = commerce.stockRequirements(resolved.items, productsById);
       if (!stockCheck.ok) return res.status(409).json({ error: stockCheck.error });
@@ -1856,12 +2079,32 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
   if (!body.created_at) body.created_at = new Date().toISOString();
   body.updated_at = new Date().toISOString();
 
-  // If creating a user with a password, hash it with bcrypt server-side
+  // If creating a user with a password, hash it with bcrypt server-side.
+  // The plaintext `password` field is NEVER stored (#8) — it is hashed into
+  // password_hash and then stripped from the record before any write.
   if (table === 'users' && body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+  delete body.password; // plaintext must never reach the database
   if (table === 'users' && body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
     try {
       body.password_hash = await bcrypt.hash(body.password_hash, 10);
     } catch(e) {}
+  }
+
+  // (#2) Stamp owner identity from the session AFTER stripping client-supplied
+  // owner fields. Admins may still target another owner explicitly via the
+  // query param (?vendor_id=) — the storefront editor relies on that.
+  {
+    const qOwn = req.query.vendor_id || req.query.buyer_id || req.query.user_id || req.query.rendor_id;
+    const ownId = (access.isAdmin(_postViewer) && qOwn) ? String(qOwn) : (_postViewer ? String(_postViewer.userId) : 'anonymous');
+    if (table === 'products' || table === 'stores' || table === 'storefronts') {
+      if (!body.vendor_id) body.vendor_id = ownId;
+    } else if (table === 'orders' || table === 'packages') {
+      if (!body.buyer_id) body.buyer_id = ownId;
+    } else if (table === 'reviews') {
+      if (!body.buyer_id && !body.customer_id) body.buyer_id = ownId;
+    } else if (table === 'services') {
+      body.rendor_id = ownId; // always the session rendor — never client-chosen
+    }
   }
 
   const db = loadDb();
@@ -1960,6 +2203,8 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
 
 app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
   let table = req.params.table;
+  // (#10) Closed table allowlist — unknown tables 404.
+  if (!access.WRITABLE_TABLES.has(table)) return res.status(404).json({ error: 'Unknown resource.' });
   const id = req.params.id;
   if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
@@ -1988,12 +2233,19 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (table === 'products') {
       const pv = commerce.validateProductBody(body);
       if (!pv.ok) return res.status(400).json({ error: pv.error });
+      // (#2) Moving a product under someone else's store would hand that store
+      // the vendor payout for a product it does not sell.
+      if (body.store_id && !access.isAdmin(viewer)
+          && (await productStoreOwnership(viewer, body.store_id)) === 'foreign') {
+        return res.status(403).json({ error: 'You can only file products under your own store.' });
+      }
     }
   }
 
   // Hash user passwords server-side (admin reset sends password/password_hash)
   if (table === 'users') {
     if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+    delete body.password; // plaintext must never reach the database (#8)
     if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
       try {
         body.password_hash = await bcrypt.hash(body.password_hash, 10);
@@ -2003,6 +2255,10 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
       }
     }
   }
+
+  // (#2) Owner identity lives on the stored record — a PUT body can never
+  // move a row to another owner.
+  for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) delete body[f];
 
   // Service posts: a rendor can never reassign a post to another rendor.
   if (table === 'services' && viewer && !access.isAdmin(viewer)) {
@@ -2167,6 +2423,8 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
 
 app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
   let table = req.params.table;
+  // (#10) Closed table allowlist — unknown tables 404.
+  if (!access.WRITABLE_TABLES.has(table)) return res.status(404).json({ error: 'Unknown resource.' });
   const id = req.params.id;
   if (table === 'transactions') table = 'wallet_transactions'; // legacy alias → visible ledger
   const body = { ...req.body, id: id, updated_at: new Date().toISOString() };
@@ -2196,11 +2454,22 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (table === 'products') {
       const pv = commerce.validateProductBody(body);
       if (!pv.ok) return res.status(400).json({ error: pv.error });
+      // (#2) Moving a product under someone else's store would hand that store
+      // the vendor payout for a product it does not sell.
+      if (body.store_id && !access.isAdmin(viewer)
+          && (await productStoreOwnership(viewer, body.store_id)) === 'foreign') {
+        return res.status(403).json({ error: 'You can only file products under your own store.' });
+      }
     }
   }
 
+  // (#2) Owner identity lives on the stored record — a PATCH body can never
+  // move a row to another owner.
+  for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) delete body[f];
+
   // Hash password if being updated
   if (table === 'users' && body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+  delete body.password; // plaintext must never reach the database (#8)
   if (table === 'users' && body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
     try {
       body.password_hash = await bcrypt.hash(body.password_hash, 10);
@@ -2536,6 +2805,14 @@ const SENSITIVE_STATIC_PATTERNS = [
   /(^|\/)scratch\//, /(^|\/)node_modules\//, /(^|\/)\.freebuff\//, /\.(pem|key|p12|pfx)$/
 ];
 app.use((req, res, next) => {
+  // (#17) Check the URL-DECODED path: Express serves files after decoding, so
+  // an encoded request like /db%2Ejson or /%2Eenv previously slipped past this
+  // blocklist and reached the static handler. Decode (safely) first.
+  let checkPath = req.path || '';
+  try { checkPath = decodeURIComponent(checkPath); } catch (e) { return res.status(400).send('Bad request'); }
+  if (SENSITIVE_STATIC_PATTERNS.some(re => re.test(checkPath)) || /\.(json|js|env)$/i.test(checkPath) && /\.(db\.json|session-secret)/i.test(checkPath)) {
+    return res.status(404).send('Not found');
+  }
   if (SENSITIVE_STATIC_PATTERNS.some(re => re.test(req.path))) {
     return res.status(404).send('Not found');
   }

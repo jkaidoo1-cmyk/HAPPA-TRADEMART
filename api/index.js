@@ -37,6 +37,19 @@ if (!String(process.env.SESSION_SECRET || '').trim()) {
   console.warn('[Session] Set SESSION_SECRET in your Vercel environment variables.\n');
 }
 
+// (#20) Never fall back to the local data store silently in production. On a
+// serverless host the filesystem is ephemeral, so writes that land in the
+// local store are lost on the next cold start. The fallback is still allowed
+// (it keeps local development working) but it must be loud.
+if (!String(process.env.SUPABASE_URL || '').trim() || !String(process.env.SUPABASE_KEY || '').trim()) {
+  const hosted = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production');
+  if (hosted) {
+    console.error('\n[Data] ERROR: SUPABASE_URL / SUPABASE_KEY are not set in this hosted environment.');
+    console.error('[Data] Every write is landing in the ephemeral local store and WILL BE LOST.');
+    console.error('[Data] Set both variables in the host dashboard before serving traffic.\n');
+  }
+}
+
 // ── Dead-session detection ─────────────────────────────────────
 // A presented-but-invalid Bearer token is an explicit 401, never silent
 // anonymity: owner-only tables (notifications, wallet, …) would otherwise
@@ -122,6 +135,34 @@ function getSupabase() {
 // ── Helpers ───────────────────────────────────────────────────
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// (#2) Which store does a product write belong to? A product is filed under a
+// store, and that store decides both the storefront it appears in and the
+// vendor the package pays out to — so a vendor must not be able to file
+// products into (or move them into) another vendor's store.
+// Returns 'own' | 'foreign' | 'unknown' (unknown = legacy/unmirrored row, in
+// which case the write is allowed rather than blocked on missing data).
+async function productStoreOwnership(viewer, storeId) {
+  const sid = String(storeId || '');
+  const uid = String((viewer && viewer.userId) || '');
+  if (!sid || !uid) return 'unknown';
+  let row = null;
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from('stores').select('id, vendor_id').eq('id', sid).limit(1), 2000);
+      if (data && data[0]) row = data[0];
+    } catch (e) {}
+  }
+  if (!row) {
+    dataStore.ensureTable('stores');
+    row = (dataStore.getStore().stores || []).find(s => String(s.id) === sid) || null;
+  }
+  if (!row) return 'unknown';
+  const owner = String(row.vendor_id || '');
+  if (!owner) return 'unknown';
+  return owner === uid ? 'own' : 'foreign';
 }
 
 // Cap a single Supabase call at `ms`. This was referenced in seven places but
@@ -763,12 +804,106 @@ app.get('/api/auth/verify', (req, res) => {
   return res.json({ valid: true, userId: session.userId, role: session.role });
 });
 
-// POST /api/auth/verify-phone
+// ── SMS delivery (#1) — same contract as server.js; production requires a
+// provider (TERMII_* or TWILIO_* env vars), there is no log fallback here.
+async function sendSms(phone, text) {
+  const p = String(phone || '').trim();
+  const t = String(text || '');
+  try {
+    if (process.env.TERMII_API_KEY && process.env.TERMII_SENDER_ID) {
+      const r = await fetch('https://api.ng.termii.com/api/sms/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: p, from: process.env.TERMII_SENDER_ID, sms: t, type: 'plain', channel: 'generic', api_key: process.env.TERMII_API_KEY })
+      });
+      return { ok: r.ok, channel: 'termii' };
+    }
+    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER) {
+      const sid = process.env.TWILIO_ACCOUNT_SID;
+      const auth = Buffer.from(sid + ':' + process.env.TWILIO_AUTH_TOKEN).toString('base64');
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Basic ' + auth },
+        body: new URLSearchParams({ To: p, From: process.env.TWILIO_FROM_NUMBER, Body: t })
+      });
+      return { ok: r.ok, channel: 'twilio' };
+    }
+  } catch (e) {
+    console.warn('[SMS] provider error:', e.message);
+  }
+  return { ok: false, channel: 'none' };
+}
+
+// POST /api/auth/request-otp — issues an OTP for the SESSION user (#1).
+// Codes are bcrypt-hashed with a 5-minute expiry and a 5-attempt cap. In
+// serverless production an SMS provider (TERMII_* or TWILIO_* env) is
+// REQUIRED — without one the request fails honestly instead of leaking codes.
+app.post('/api/auth/request-otp', writeRateLimiter, async (req, res) => {
+  try {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    let me = null;
+    const supabase = getSupabase();
+    if (supabase) {
+      try { const { data } = await supabase.from('users').select('phone').eq('id', String(session.userId)).maybeSingle(); if (data) me = data; } catch (e) {}
+    }
+    if (!me) { dataStore.ensureTable('users'); me = (dataStore.getStore().users || []).find(u => String(u.id) === String(session.userId)) || null; }
+    if (!me || !me.phone) return res.status(400).json({ error: 'Add a phone number to your account first.' });
+    if (!process.env.TERMII_API_KEY && !process.env.TWILIO_ACCOUNT_SID) {
+      return res.status(503).json({ error: 'SMS delivery is not configured on the server. Set TERMII_API_KEY or TWILIO_ACCOUNT_SID.' });
+    }
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code_hash = await bcrypt.hash(code, 8);
+    const row = {
+      id: 'otp-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100),
+      user_id: String(session.userId),
+      purpose: 'verify_phone',
+      code_hash,
+      attempts: 0,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      consumed_at: null
+    };
+    dataStore.ensureTable('otps');
+    const storeO = dataStore.getStore();
+    storeO.otps = (storeO.otps || []).filter(r => !(r.user_id === row.user_id && r.purpose === 'verify_phone' && !r.consumed_at));
+    storeO.otps.push(row);
+    dataStore.saveToFile();
+    const sent = await sendSms(String(me.phone), `Your HAPPA TRADEMART verification code is ${code}. It expires in 5 minutes.`);
+    if (!sent.ok) return res.status(502).json({ error: 'Could not send the SMS. Try again shortly.' });
+    return res.json({ success: true, delivered: true, channel: sent.channel });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not start verification. Try again.' });
+  }
+});
+
+// POST /api/auth/verify-phone — verifies the SESSION user only (#1).
 app.post('/api/auth/verify-phone', async (req, res) => {
   try {
     const session = getSessionUser(req);
-    const targetId = (session && session.userId) || (req.body && req.body.userId);
-    if (!targetId) return res.status(400).json({ error: 'User ID is required.' });
+    if (!session) return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    const targetId = String(session.userId);
+    const body = req.body || {};
+
+    // OTP gate: a server-issued, unexpired, unconsumed code must match.
+    dataStore.ensureTable('otps');
+    const storeV = dataStore.getStore();
+    const now = Date.now();
+    const otpRow = (storeV.otps || []).filter(r => r.purpose === 'verify_phone')
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .find(r => r.user_id === targetId && r.consumed_at == null && now - new Date(r.created_at).getTime() < 10 * 60 * 1000);
+    if (!otpRow) return res.status(400).json({ error: 'No verification code pending. Request a new one.' });
+    if (otpRow.expires_at && now > new Date(otpRow.expires_at).getTime()) {
+      return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    }
+    if ((otpRow.attempts || 0) >= 5) return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
+    const codeOk = typeof otpRow.code_hash === 'string' && otpRow.code_hash.startsWith('$2') && await bcrypt.compare(String(body.code || ''), otpRow.code_hash);
+    if (!codeOk) {
+      otpRow.attempts = (otpRow.attempts || 0) + 1;
+      dataStore.saveToFile();
+      return res.status(400).json({ error: 'Incorrect code.' });
+    }
+    otpRow.consumed_at = new Date().toISOString();
+    dataStore.saveToFile();
 
     dataStore.ensureTable('users');
     const store = dataStore.getStore();
@@ -853,13 +988,12 @@ function initVapidKeysApi() {
       if (pub && priv) {
         vapidKeys = { publicKey: pub, privateKey: priv };
       } else {
+        // (#7) Never persist the private key: an unconfigured server uses a
+        // throwaway key pair that lives in memory for this instance only (push
+        // subscriptions must be re-created after a cold start). Set
+        // VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY in the host's env to keep them.
         vapidKeys = webpush.generateVAPIDKeys();
-        if (vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey) {
-          dataStore.ensureTable('settings');
-          store.settings.push({ id: 'set-vapid-pub', key: 'vapid_public_key', value: vapidKeys.publicKey, updated_at: new Date().toISOString() });
-          store.settings.push({ id: 'set-vapid-priv', key: 'vapid_private_key', value: vapidKeys.privateKey, updated_at: new Date().toISOString() });
-          dataStore.saveToFile();
-        }
+        console.warn('[Push] VAPID keys are not configured — using a temporary in-memory key pair. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to make push subscriptions stable.');
       }
     } catch (e) {
       try { vapidKeys = webpush.generateVAPIDKeys(); } catch (err) {}
@@ -994,10 +1128,11 @@ app.get('/api/push/vapid-key', (req, res) => {
   res.json({ publicKey: vapidKeys.publicKey });
 });
 
-// POST /api/push/subscribe — store a push subscription
-app.post('/api/push/subscribe', async (req, res) => {
+// POST /api/push/subscribe — store a push subscription (#9: auth required,
+// owned by the session user; client user_id ignored)
+app.post('/api/push/subscribe', requireAuth, async (req, res) => {
   try {
-    const { subscription, user_id } = req.body || {};
+    const { subscription } = req.body || {};
     if (!subscription || !subscription.endpoint) {
       return res.status(400).json({ error: 'Invalid subscription' });
     }
@@ -1005,7 +1140,7 @@ app.post('/api/push/subscribe', async (req, res) => {
     const subRecord = {
       endpoint: subscription.endpoint,
       keys: subscription.keys || {},
-      user_id: user_id || 'anonymous',
+      user_id: String(req.userSession.userId), // (#9) session user, always
       created_at: new Date().toISOString()
     };
     if (supabase) {
@@ -1075,8 +1210,8 @@ app.post('/api/push/migrate', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/push/send — send push notification to a user
-app.post('/api/push/send', requireAuth, async (req, res) => {
+// POST /api/push/send — send push notification to a user (#9: admin only)
+app.post('/api/push/send', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { user_id, title, body, url } = req.body || {};
     if (!user_id || !title) return res.status(400).json({ error: 'Missing user_id or title' });
@@ -1652,7 +1787,24 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     const supabase = getSupabase();
     supaRef = supabase;
     let table = req.params.table;
+    // (#10) Closed table allowlist — unknown tables 404.
+    if (!access.WRITABLE_TABLES.has(table)) return res.status(404).json({ error: 'Unknown resource.' });
     const body = req.body || {};
+    // (#3) Server assigns ids; (#8) no plaintext; (#2) no client owner fields.
+    // EXCEPTION: orders/packages keep their client id — it IS the idempotency
+    // key for checkout retries (the replay guard 409s non-owners, #13).
+    if (table !== 'orders' && table !== 'packages') delete body.id;
+    // (#8) A plaintext password is never stored. User writes hash it into
+    // password_hash first (the user blocks below then delete it), so only
+    // writes to other tables drop the field here.
+    if (table !== 'users') delete body.password;
+    const _postViewer0 = access.getAccessContext(req);
+    for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) {
+      // notifications: user_id is the TARGET of the message (admin-set), not
+      // an ownership claim — only admins/server can create them anyway (#9).
+      if (table === 'notifications' && f === 'user_id') continue;
+      delete body[f];
+    }
 
     // ── Access control ─────────────────────────────────────────────
     const viewer = access.getAccessContext(req);
@@ -1677,7 +1829,12 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         dataStore.ensureTable(table);
         dupRow = (dataStore.getStore()[table] || []).find(r => String(r.id) === String(body.id)) || null;
       }
-      if (dupRow) return res.status(200).json(serializeRecord(dupRow));
+      if (dupRow) {
+        const dup = serializeRecord(dupRow);
+        const own = !viewer || access.isAdmin(viewer) || String(dup.buyer_id) === String(viewer.userId) || String(dup.vendor_id) === String(viewer.userId);
+        if (own) return res.status(200).json(dup);
+        return res.status(409).json({ error: 'This order was already submitted.' });
+      }
     }
 
     // Anonymous signup must never mint an admin, set a wallet balance, or
@@ -1727,6 +1884,11 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     if (table === 'products') {
       const pv = commerce.validateProductBody(body);
       if (!pv.ok) return res.status(400).json({ error: pv.error });
+      // (#2) A product may only be filed under a store the writer owns.
+      if (body.store_id && !access.isAdmin(viewer)
+          && (await productStoreOwnership(viewer, body.store_id)) === 'foreign') {
+        return res.status(403).json({ error: 'You can only file products under your own store.' });
+      }
     }
 
     // Store slugs are the public storefront URL — they must be globally unique.
@@ -1760,21 +1922,9 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       const isGuest = !viewer;
       if (!isGuest) body.buyer_id = String(viewer.userId);
 
-      if (table === 'packages' && body.store_id) {
-        // vendor_id must come from the store, never from the client.
-        let store = null;
-        if (supabase) {
-          try {
-            const { data, error } = await supabase.from('stores').select('*').eq('id', String(body.store_id)).maybeSingle();
-            if (!error && data) store = serializeRecord(data);
-          } catch (e) {}
-        }
-        if (!store) {
-          dataStore.ensureTable('stores');
-          store = (dataStore.getStore().stores || []).find(s => String(s.id) === String(body.store_id)) || null;
-        }
-        if (store && store.vendor_id) body.vendor_id = String(store.vendor_id);
-      }
+    // A package's store/vendor attribution (#14) is resolved below, once the
+    // cart items are actually known — the package is bound to a store and its
+    // vendor_id is read from that store row, never from the request body.
 
     const isStorefrontRow = String(body.order_source || '') === 'storefront' || !!body.storefront_id;
     const rawItems = Array.isArray(body.items) ? body.items : [];
@@ -1808,6 +1958,40 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     body.items = resolved.items;
 
     if (table === 'packages') {
+      // ── (#14) Bind the package to one store ───────────────────────────
+      // A package pays out to exactly one vendor, taken from its store row. So
+      // the package must be tied to a store that provably sold every item:
+      // `store_id` is the client's claim, and when it is missing (legacy
+      // products written before store_id existed) the items' own store is
+      // used. A cart mixing another store's products is refused.
+      const isAdminPost = access.isAdmin(viewer);
+      let storeRow = null;
+      if (!body.store_id) {
+        const storeIds = new Set();
+        for (const it of resolved.items) {
+          const prod = productsById.get(String((it && (it.product_id || it.id)) || ''));
+          if (prod && prod.store_id) storeIds.add(String(prod.store_id));
+        }
+        if (storeIds.size === 1) body.store_id = [...storeIds][0];
+      }
+      if (body.store_id) {
+        if (supabase) {
+          try {
+            const { data } = await withSupaTimeout(supabase.from('stores').select('*').eq('id', String(body.store_id)).maybeSingle(), 2000);
+            if (data) storeRow = serializeRecord(data);
+          } catch (e) {}
+        }
+        if (!storeRow) {
+          dataStore.ensureTable('stores');
+          storeRow = (dataStore.getStore().stores || []).find(s => String(s.id) === String(body.store_id)) || null;
+        }
+      }
+      if (storeRow && storeRow.vendor_id) body.vendor_id = String(storeRow.vendor_id);
+      if (!isAdminPost) {
+        const storeChk = commerce.validateItemsForStore(resolved.items, productsById, storeRow);
+        if (!storeChk.ok) return res.status(409).json({ error: storeChk.error });
+      }
+
       // Refuse to oversell: every product's stock must cover its quantity.
       const stockCheck = commerce.stockRequirements(resolved.items, productsById);
       if (!stockCheck.ok) return res.status(409).json({ error: stockCheck.error });
@@ -1953,6 +2137,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     // Hash user passwords server-side (admin reset sends password/password_hash)
     if (table === 'users') {
       if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+      delete body.password; // plaintext must never reach the database (#8)
       if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
         try {
           body.password_hash = await bcrypt.hash(body.password_hash, 10);
@@ -1990,29 +2175,39 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         return res.status(403).json({ error: 'You can only manage your own store.' });
       }
 
+      // (#16) MERGE with the existing row, never reset it; subscription_* can
+      // only change via admin edit or the verified-payment flow (#4).
+      const isAdminEdit = access.isAdmin(viewer);
+      const pick = (v, cur, def) => (v !== undefined && v !== null && v !== '') ? v : (cur !== undefined ? cur : def);
       const storeUpdates = {
-        storefront_status: body.status || 'draft',
-        name: body.name || st.name || 'My Store',
+        storefront_status: pick(body.status, st.storefront_status, 'draft'),
+        name: pick(body.name, st.name, 'My Store'),
         status: st.status || 'active',
-        category: body.category || st.category || 'General',
-        location: body.location || st.location || '',
-        slug: body.url_slug || st.slug || '',
-        theme: body.theme || 'classic',
-        font_family: body.font_family || 'Outfit',
-        slogan: body.slogan || '',
-        description: body.about_us || st.description || '',
-        logo_url: body.logo_url || '',
-        banner_url: body.banner_url || '',
-        primary_color: body.primary_color || '#e85d04',
-        secondary_color: body.secondary_color || '#faf9f6',
-        tertiary_color: body.tertiary_color || '#e85d04',
-        business_hours: body.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
-        return_policy: body.return_policy || '',
-        facebook: body.facebook_url || '',
-        instagram: body.instagram_url || '',
-        subscription_plan: body.subscription_plan || st.subscription_plan || 'starter',
-        subscription_status: body.subscription_status || st.subscription_status || 'active',
-        plan_prices: body.plan_prices || st.plan_prices || null,
+        category: pick(body.category, st.category, 'General'),
+        location: pick(body.location, st.location, ''),
+        slug: pick(body.url_slug, st.slug || st.url_slug, ''),
+        theme: pick(body.theme, st.theme, 'classic'),
+        font_family: pick(body.font_family, st.font_family, 'Outfit'),
+        slogan: pick(body.slogan, st.slogan, ''),
+        description: pick(body.about_us, st.description, ''),
+        logo_url: pick(body.logo_url, st.logo_url, ''),
+        banner_url: pick(body.banner_url, st.banner_url, ''),
+        primary_color: pick(body.primary_color, st.primary_color, '#e85d04'),
+        secondary_color: pick(body.secondary_color, st.secondary_color, '#faf9f6'),
+        tertiary_color: pick(body.tertiary_color, st.tertiary_color, '#e85d04'),
+        business_hours: pick(body.business_hours, st.business_hours, 'Mon - Sat: 8:00 AM - 6:00 PM'),
+        return_policy: pick(body.return_policy, st.return_policy, ''),
+        facebook: pick(body.facebook_url, st.facebook, ''),
+        instagram: pick(body.instagram_url, st.instagram, ''),
+        youtube_url: pick(body.youtube_url, st.youtube_url, ''),
+        meta_description: pick(body.meta_description, st.meta_description, ''),
+        subscription_plan: isAdminEdit ? pick(body.subscription_plan, st.subscription_plan, 'starter') : (st.subscription_plan || 'starter'),
+        subscription_status: isAdminEdit ? pick(body.subscription_status, st.subscription_status, 'active') : (st.subscription_status || 'active'),
+        subscription_start: isAdminEdit ? pick(body.subscription_start, st.subscription_start, null) : (st.subscription_start || null),
+        subscription_end: isAdminEdit ? pick(body.subscription_end, st.subscription_end, null) : (st.subscription_end || null),
+        subscription_months: isAdminEdit ? pick(body.subscription_months, st.subscription_months, null) : (st.subscription_months || null),
+        subscription_method: isAdminEdit ? pick(body.subscription_method, st.subscription_method, null) : (st.subscription_method || null),
+        plan_prices: st.plan_prices || body.plan_prices || null,
         updated_at: new Date().toISOString()
       };
 
@@ -2084,7 +2279,9 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     // Legacy alias: old code posted adjustments to a `transactions` table nobody ever reads.
     // Route those writes into the visible wallet ledger so every balance change is traceable.
     if (table === 'transactions') table = 'wallet_transactions';
-    if (!body.id) body.id = generateId();
+    // (#3) Server-generated id — a client-chosen id could collide with (and
+    // overwrite) another user's row.
+    body.id = generateId();
     body.id = String(body.id);
     if (!body.created_at) body.created_at = new Date().toISOString();
     body.updated_at = new Date().toISOString();
@@ -2139,6 +2336,22 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         } catch (e) {}
       }
       pkgApplied = applied;
+    }
+
+    // (#2) Stamp owner identity from the session (admins may target another
+    // owner via query param). Client owner fields were already stripped.
+    {
+      const qOwn = req.query.vendor_id || req.query.buyer_id || req.query.user_id || req.query.rendor_id;
+      const ownId = (access.isAdmin(viewer) && qOwn) ? String(qOwn) : (viewer ? String(viewer.userId) : 'anonymous');
+      if (table === 'products' || table === 'stores' || table === 'storefronts') {
+        if (!body.vendor_id) body.vendor_id = ownId;
+      } else if (table === 'orders' || table === 'packages') {
+        if (!body.buyer_id) body.buyer_id = ownId;
+      } else if (table === 'reviews') {
+        if (!body.buyer_id && !body.customer_id) body.buyer_id = ownId;
+      } else if (table === 'services') {
+        body.rendor_id = ownId;
+      }
     }
 
     const record = serializeRecord(body);
@@ -2300,8 +2513,18 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
       if (table === 'products') {
         const pv = commerce.validateProductBody(body);
         if (!pv.ok) return res.status(400).json({ error: pv.error });
+        // (#2) Moving a product under someone else's store would hand that
+        // store the vendor payout for a product it does not sell.
+        if (body.store_id && !access.isAdmin(viewer)
+            && (await productStoreOwnership(viewer, body.store_id)) === 'foreign') {
+          return res.status(403).json({ error: 'You can only file products under your own store.' });
+        }
       }
     }
+
+    // (#2) Owner identity lives on the stored record — a PATCH/PUT body can
+    // never move a row to another owner.
+    for (const f of ['vendor_id', 'buyer_id', 'user_id', 'rendor_id', 'referrer_id', 'referred_id']) delete body[f];
 
     // Service posts: a rendor can never reassign a post to another rendor.
     if (table === 'services' && !access.isAdmin(viewer)) {
@@ -2311,6 +2534,7 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     // Hash user passwords server-side
     if (table === 'users') {
       if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+      delete body.password; // plaintext must never reach the database (#8)
       if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
         try {
           body.password_hash = await bcrypt.hash(body.password_hash, 10);
@@ -2519,12 +2743,19 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
       if (table === 'products') {
         const pv = commerce.validateProductBody(body);
         if (!pv.ok) return res.status(400).json({ error: pv.error });
+        // (#2) Moving a product under someone else's store would hand that
+        // store the vendor payout for a product it does not sell.
+        if (body.store_id && !access.isAdmin(viewer)
+            && (await productStoreOwnership(viewer, body.store_id)) === 'foreign') {
+          return res.status(403).json({ error: 'You can only file products under your own store.' });
+        }
       }
     }
 
     // Hash user passwords server-side
     if (table === 'users') {
       if (body.password && !body.password_hash) body.password_hash = body.password; // legacy `password` field alias
+      delete body.password; // plaintext must never reach the database (#8)
       if (body.password_hash && !body.password_hash.startsWith('$2a$') && !body.password_hash.startsWith('$2b$')) {
         try {
           body.password_hash = await bcrypt.hash(body.password_hash, 10);

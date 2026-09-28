@@ -938,7 +938,17 @@ async function doRegister(e) {
 
 function showOTPModal(user) {
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  // (#1) The OTP is generated and checked by the SERVER (POST auth/request-otp
+  // → POST auth/verify-phone). No code is generated, displayed or compared
+  // here — the "Demo OTP" display and the Skip path are gone.
+  apiFetch('auth/request-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }).then(r => {
+    if (r && r.delivered) showToast('Verification code sent to your phone. 📱', 'success');
+    else showToast('Could not send an SMS right now — ask support to verify you.', 'warning');
+  }).catch(() => {});
 
   showModal(`
 
@@ -956,8 +966,6 @@ function showOTPModal(user) {
 
     An OTP has been sent to <strong>${user.phone}</strong>.<br>
 
-    <span style="color:var(--primary)">[Demo: OTP is <strong>${otp}</strong>]</span>
-
   </p>
 
   <div class="form-group">
@@ -968,17 +976,11 @@ function showOTPModal(user) {
 
   </div>
 
-  <button class="btn btn-primary btn-block" onclick="verifyOTP('${user.id}','${otp}')">
+  <button class="btn btn-primary btn-block" onclick="verifyOTP()">
 
     <i class="fas fa-check-circle"></i> Verify
 
   </button>
-
-  <div style="text-align:center;margin-top:12px">
-
-    <a href="javascript:void(0)" onclick="skipOTP('${user.id}')" style="font-size:.8rem;color:var(--text-muted)">Skip for now</a>
-
-  </div>
 
 </div>`);
 
@@ -986,18 +988,21 @@ function showOTPModal(user) {
 
 
 
-async function verifyOTP(userId, expectedOtp) {
+async function verifyOTP() {
   const entered = document.getElementById('otp-input')?.value.trim();
-  if (entered !== expectedOtp) { showToast('Incorrect OTP. Please try again.', 'error'); return; }
+  if (!entered) { showToast('Enter the 6-digit code we sent you.', 'error'); return; }
 
+  // The server checks the code against its hashed copy (5-min expiry, 5
+  // attempts) and only then marks the session account verified (#1).
   try {
     await apiFetch('auth/verify-phone', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId })
+      body: JSON.stringify({ code: entered })
     });
   } catch (err) {
-    console.warn('[VerifyOTP] Server verify-phone fallback:', err);
+    showToast('Incorrect or expired code. Please try again.', 'error');
+    return;
   }
 
   if (App.currentUser) App.currentUser.is_verified = true;
@@ -1017,9 +1022,12 @@ async function verifyOTP(userId, expectedOtp) {
   showPage('dashboard');
 }
 
-async function skipOTP(userId) {
+// (#1) "Skip" no longer exists in the OTP modal. Kept as a no-op alias only
+// because older cached HTML may still reference it — it now simply closes the
+// modal and continues WITHOUT setting is_verified.
+async function skipOTP() {
   closeModalForce();
-  showToast(`Welcome to HAPPA TRADEMART! Please verify your phone later.`, 'warning');
+  showToast('You can verify your phone later from your profile.', 'warning');
   if ((App.currentUser?.role === 'vendor' || App.currentUser?.role === 'rendor') &&
        App.currentUser?.status === 'pending_approval') {
     showPendingScreen();

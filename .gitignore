@@ -9,6 +9,8 @@ npm-debug.log*
 .env.backup-preview
 .env.*
 db.json
+# One-off security-cleanup backups of db.json (may contain pre-migration data)
+db.json.bak*
 scratch/
 supabase_proxy.py
 supabase_schema.json

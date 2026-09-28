@@ -486,7 +486,7 @@ function walletTxnRowHTML(t) {
   </div>
   <div style="flex:1;min-width:0">
     <div style="font-weight:600;font-size:.875rem">${typeLabel}</div>
-    <div style="font-size:.75rem;color:var(--text-muted)">${t.note || (t.network || '') + (t.account_number ? ' · ' + maskAccount(t.account_number) : '')}</div>
+    <div style="font-size:.75rem;color:var(--text-muted)">${escHtml(t.note) || escHtml((t.network || '') + (t.account_number ? ' · ' + maskAccount(t.account_number) : ''))}</div>
     <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">${formatDateTime(t.created_at)}</div>
   </div>
   <div style="text-align:right;flex-shrink:0">
@@ -666,14 +666,14 @@ function adminTxnRowHTML(t) {
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:6px;font-size:.78rem">
           <div style="display:flex;justify-content:space-between;margin-bottom:2px">
             <span style="color:var(--text-muted)">Network:</span>
-            <strong>📱 ${t.network || 'Mobile Money'}</strong>
+            <strong>📱 ${escHtml(t.network) || 'Mobile Money'}</strong>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="color:var(--text-muted)">MoMo Number:</span>
             <div style="display:flex;align-items:center;gap:6px">
-              <strong>${t.account_number || ''}</strong>
+              <strong>${escHtml(t.account_number || '')}</strong>
               <button class="btn btn-outline btn-sm" style="padding:1px 5px;font-size:.65rem;height:auto"
-                      onclick="navigator.clipboard.writeText('${t.account_number || ''}'); showToast('Account number copied!', 'success')">
+                      data-copy-acct="${escHtml(t.account_number || '')}">
                 <i class="far fa-copy"></i> Copy
               </button>
             </div>
@@ -685,14 +685,14 @@ function adminTxnRowHTML(t) {
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:6px;font-size:.78rem">
           <div style="display:flex;justify-content:space-between;margin-bottom:2px">
             <span style="color:var(--text-muted)">Bank:</span>
-            <strong>🏦 ${t.network || 'Bank Transfer'}</strong>
+            <strong>🏦 ${escHtml(t.network) || 'Bank Transfer'}</strong>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="color:var(--text-muted)">Account Number:</span>
             <div style="display:flex;align-items:center;gap:6px">
-              <strong>${t.account_number || ''}</strong>
+              <strong>${escHtml(t.account_number || '')}</strong>
               <button class="btn btn-outline btn-sm" style="padding:1px 5px;font-size:.65rem;height:auto"
-                      onclick="navigator.clipboard.writeText('${t.account_number || ''}'); showToast('Account number copied!', 'success')">
+                      data-copy-acct="${escHtml(t.account_number || '')}">
                 <i class="far fa-copy"></i> Copy
               </button>
             </div>
@@ -863,3 +863,15 @@ window.filterAdminTxns = filterAdminTxns;
 window.approveWithdrawal = approveWithdrawal;
 window.rejectWithdrawal = rejectWithdrawal;
 window.setWithdrawalStatus = setWithdrawalStatus;
+
+// (#6) Delegated copy handler replaces inline onclick="clipboard.writeText('${acct}')"
+// which was an XSS injection point — a crafted account_number could break out
+// of the single-quoted attribute and execute script.
+document.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-copy-acct]');
+  if (!btn) return;
+  const val = btn.getAttribute('data-copy-acct') || '';
+  navigator.clipboard.writeText(val).then(() => {
+    if (typeof showToast === 'function') showToast('Account number copied!', 'success');
+  }).catch(() => {});
+});

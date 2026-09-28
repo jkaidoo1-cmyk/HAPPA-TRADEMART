@@ -3050,7 +3050,16 @@ function setLocationFilter(loc) {
 
 // ── Escape HTML ───────────────────────────────────────────
 function escHtml(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // (#6) Also escapes single quotes and backticks: escaped values are used
+  // inside single-quoted inline event handlers and template contexts, where
+  // an unescaped ' or ` let crafted text break out and execute script.
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`/g, '&#96;');
 }
 
 // Item names that were never entered fall back to the category "Other" in old
