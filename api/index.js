@@ -1703,6 +1703,59 @@ app.post('/api/notify', notifyRateLimiter, async (req, res) => {
   }
 });
 
+// ── Egress accounting ─────────────────────────────────────────
+// Vercel's dashboard shows what the browser downloaded; it never shows what
+// Supabase sent the function, and that is normally the tighter quota (Supabase's
+// free tier meters egress far more aggressively than Vercel's Hobby plan). So
+// every list read reports its own payload size. Grep the deployment logs for
+// `[egress]` to see which route is actually costing the most.
+function logEgress(req, table, payload) {
+  try {
+    const bytes = Buffer.byteLength(JSON.stringify(payload));
+    const rows = payload && Array.isArray(payload.data) ? payload.data.length : '?';
+    console.log(`[egress] ${req.method} ${req.originalUrl || req.url} table=${table} rows=${rows} bytes=${bytes}`);
+  } catch (e) { /* never let accounting break a response */ }
+}
+
+// Single exit for list responses: applies the read policy and the response-wide
+// secret scrub, records the payload size, and sends with a conditional-GET ETag.
+// Every list branch must go through this so a new read route cannot silently skip
+// the accounting or the scrub.
+//
+// Why the ETag matters here: every list response is `no-cache` (revalidate on
+// every request), so before this, every page view, tab-return and 20-second poll
+// re-downloaded the full payload — including the base64 images carried inside
+// the rows. An unchanged list now costs an empty 304. Freshness is untouched:
+// this function recomputes the payload on every request and only skips the
+// transfer when the bytes are byte-for-byte identical to what the client holds.
+function sendList(req, res, table, rows, viewer) {
+  // scrubSensitive is applied here explicitly because this bypasses res.json,
+  // which is where that scrub is otherwise installed (app.response.json).
+  const payload = scrubSensitive({ data: access.applyReadPolicy(table, rows, viewer) });
+  logEgress(req, table, payload);
+
+  const body = JSON.stringify(payload);
+  const etag = '"' + crypto.createHash('sha1').update(body).digest('base64url') + '"';
+
+  res.setHeader('ETag', etag);
+  // The payload depends on who is asking, so no shared cache may hand one
+  // viewer's list to another.
+  const priorVary = res.getHeader('Vary');
+  res.setHeader('Vary', priorVary ? String(priorVary) + ', Authorization' : 'Authorization');
+
+  const inm = req.headers['if-none-match'];
+  if (inm && String(inm).split(',').some(tag => {
+    const t = tag.trim();
+    return t === etag || t === 'W/' + etag || t === '*';
+  })) {
+    res.status(304);
+    return res.end();
+  }
+
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  return res.send(body);
+}
+
 // GET /api/:table  — list with optional filters
 app.get('/api/:table', async (req, res) => {
   try {
@@ -1728,7 +1781,36 @@ app.get('/api/:table', async (req, res) => {
         const store = dataStore.getStore();
         stores = store.stores.map(serializeRecord);
       } else {
-        const { data, error } = await supabase.from('stores').select('*');
+        // Read the local fallback FIRST — whether a bounded range is safe below
+        // depends on whether it actually holds any stores.
+        dataStore.ensureTable('stores');
+        const localStores = dataStore.getStore().stores.map(serializeRecord);
+
+        // Bound the query inside the database whenever that cannot change the
+        // answer. A range is only sound when the local db.json store holds no
+        // `stores` rows (otherwise merging could promote a row into the
+        // requested page) and the caller passed neither a search nor a filter —
+        // those are applied client-side below, so applying them to a truncated
+        // window would hide legitimate matches.
+        //
+        // This matters: the branch previously ran select('*') with no bound at
+        // all, so `?limit=200` and the homepage's `?limit=6` both pulled every
+        // store — logo and banner included — out of Supabase and then threw all
+        // but a handful away. Supabase bills for what the database sends.
+        const sfMax = parseInt(limit, 10);
+        const sfHasFilters = Object.values(filters).some(v => v !== undefined && v !== '' && v !== null);
+        const sfCanBound = !localStores.length && !search && !sfHasFilters &&
+          Number.isFinite(sfMax) && sfMax > 0;
+        let sfQuery = supabase.from('stores').select('*');
+        if (sfCanBound) {
+          // Cap the fetch from row 0 rather than applying the page offset here.
+          // The slice at the end of this branch is the single place the offset
+          // is applied; pushing the offset into the query as well would skip
+          // the page twice and return nothing for page > 1.
+          const sfPage = parseInt(page, 10) || 1;
+          sfQuery = sfQuery.range(0, sfPage * sfMax - 1);
+        }
+        const { data, error } = await sfQuery;
         if (error) {
           console.error('[GET] Supabase error on stores:', error.message, '— using local stores');
         } else {
@@ -1736,8 +1818,6 @@ app.get('/api/:table', async (req, res) => {
         }
         // Merge local stores too, so records that only live in db.json (written
         // while Supabase was down) are still resolvable — "storefront not available".
-        dataStore.ensureTable('stores');
-        const localStores = dataStore.getStore().stores.map(serializeRecord);
         const storeMap = new Map();
         stores.forEach(s => storeMap.set(String(s.id), s));
         localStores.forEach(s => {
@@ -1798,7 +1878,15 @@ app.get('/api/:table', async (req, res) => {
         if (!v) continue;
         rows = rows.filter(r => String(r[k] ?? '').toLowerCase() === String(v).toLowerCase());
       }
-      return res.json({ data: access.applyReadPolicy(table, rows, viewer) });
+      // Honour `limit` on this branch too. It used to return EVERY storefront
+      // regardless of the requested limit — admin.js asks for 200 — so the
+      // response body was far larger than any caller wanted.
+      const sfLimit = parseInt(limit, 10);
+      if (Number.isFinite(sfLimit) && sfLimit > 0) {
+        const sfOffset = ((parseInt(page, 10) || 1) - 1) * sfLimit;
+        rows = rows.slice(sfOffset, sfOffset + sfLimit);
+      }
+      return sendList(req, res, table, rows, viewer);
     }
 
     if (!supabase) {
@@ -1818,8 +1906,19 @@ app.get('/api/:table', async (req, res) => {
       }
       // Apply sorting
       if (sort) rows.sort((a,b) => (b[sort]||0) - (a[sort]||0));
+
+      // Apply limit/page. This branch used to apply them ONLY when `search` was
+      // set (that happened inside applyClientFilters), so a bounded read on the
+      // local / no-Supabase path returned every row regardless of the requested
+      // limit — the same waste the storefronts branch had, and the path taken
+      // whenever Supabase credentials are missing.
+      const localMax = parseInt(limit, 10);
+      if (Number.isFinite(localMax) && localMax > 0) {
+        const localStart = ((parseInt(page, 10) || 1) - 1) * localMax;
+        rows = rows.slice(localStart, localStart + localMax);
+      }
       
-      res.json({ data: access.applyReadPolicy(table, rows, viewer) });
+      sendList(req, res, table, rows, viewer);
       return;
     }
 
@@ -1841,7 +1940,11 @@ app.get('/api/:table', async (req, res) => {
         if (!isNaN(max) && max > 0) {
           const pageNum = parseInt(page, 10) || 1;
           const start = (pageNum - 1) * max;
-          queryBuilder = queryBuilder.range(start, start + max - 1);
+          // Cap the fetch from row 0 — see the note in the storefronts branch.
+          // The final slice is the single authority on the page offset; the
+          // old `range(start, …)` here skipped the page a second time, so any
+          // page > 1 on the Supabase path merged into an empty result.
+          queryBuilder = queryBuilder.range(0, start + max - 1);
         }
       }
       const { data, error } = await queryBuilder;
@@ -1894,7 +1997,7 @@ app.get('/api/:table', async (req, res) => {
       // to localStorage, so records that exist locally look "missing".
       console.error('[GET] Supabase error on', table + ':', supaError.message, '— returning local rows (' + rows.length + ')');
     }
-    res.json({ data: access.applyReadPolicy(table, rows, viewer) });
+    sendList(req, res, table, rows, viewer);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2729,13 +2832,17 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         updated_at: new Date().toISOString()
       };
 
-      // Persist logo/banner in the `extra` JSONB field as a fallback —
-      // if the Supabase stores table lacks these columns, the direct update
-      // fails silently but `extra` always exists.
+      // Only small, non-image fields go into the `extra` JSONB fallback.
+      // logo_url/banner_url are deliberately NOT mirrored here. They are image
+      // data URLs (up to ~180 KB each after client compression) and mirroring
+      // them stored every store's logo and banner TWICE — once in its real
+      // column and once inside `extra` — so every `stores`/`storefronts` read
+      // moved roughly double the bytes it actually needed. writeWithCandidates
+      // below already owns the missing-column case: its slim candidate moves
+      // logo_url/banner_url into `extra` only when the real column is absent
+      // (STORE_OPTIONAL_COLS), which is precisely when the fallback is needed.
       let extraSf = {};
       try { extraSf = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {}); } catch(e) {}
-      if (storeUpdates.logo_url) extraSf.logo_url = storeUpdates.logo_url;
-      if (storeUpdates.banner_url) extraSf.banner_url = storeUpdates.banner_url;
       if (storeUpdates.name) extraSf.name = storeUpdates.name;
       if (storeUpdates.slogan) extraSf.slogan = storeUpdates.slogan;
       if (storeUpdates.layout) extraSf.layout = storeUpdates.layout;
@@ -3167,23 +3274,30 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if ('layout' in body) storeUpdates.layout = body.layout;
       storeUpdates.updated_at = new Date().toISOString();
 
-      // Persist logo/banner in the `extra` JSONB field as a fallback —
-      // if the Supabase stores table lacks `logo_url`/`banner_url` columns,
-      // the direct column update fails silently but `extra` always exists.
+      // Only small, non-image fields go into `extra` — see the note in the POST
+      // storefront branch: mirroring logo_url/banner_url doubled every store's
+      // image payload on every read, and writeWithCandidates already retries a
+      // slim candidate that populates `extra` when the real column is missing.
       let extraSf = {};
       try { extraSf = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {}); } catch(e) {}
-      if ('logo_url' in storeUpdates) extraSf.logo_url = storeUpdates.logo_url;
-      if ('banner_url' in storeUpdates) extraSf.banner_url = storeUpdates.banner_url;
       if ('name' in storeUpdates) extraSf.name = storeUpdates.name;
       if ('slogan' in storeUpdates) extraSf.slogan = storeUpdates.slogan;
       storeUpdates.extra = extraSf;
 
+      // writeWithCandidates, not a bare update: supabase-js RESOLVES with
+      // `{ error }` instead of throwing, so the try/catch that used to wrap the
+      // raw update could never fire — a missing column or RLS rejection was
+      // swallowed silently and the storefront edit was quietly lost on the
+      // deployed backend. This now retries the slim payload and reports failure.
       if (supabase) {
         try {
           const dbRecord = prepareRecordForDb('stores', storeUpdates);
-          await supabase.from('stores').update(dbRecord).eq('id', storeId);
+          const { error: writeErr } = await writeWithCandidates(supabase, 'stores', 'update', dbRecord, st, storeId);
+          if (writeErr) {
+            console.warn('[PUT] Supabase storefront update failed:', writeErr.message);
+          }
         } catch (err) {
-          console.warn('[PUT] Supabase storefront update failed:', err.message);
+          console.warn('[PUT] Supabase storefront update exception:', err.message);
         }
       }
       dataStore.ensureTable('stores');
@@ -3419,9 +3533,8 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
       try {
         extra = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {});
       } catch(e) {}
-      // Persist logo/banner in extra JSONB as a fallback for Supabase column absence
-      if ('logo_url' in storeUpdates) extra.logo_url = storeUpdates.logo_url;
-      if ('banner_url' in storeUpdates) extra.banner_url = storeUpdates.banner_url;
+      // logo_url/banner_url are NOT mirrored into `extra` — see the note in the
+      // POST storefront branch. Only the small, non-image fields go here.
       if ('name' in storeUpdates) extra.name = storeUpdates.name;
       if ('slogan' in storeUpdates) extra.slogan = storeUpdates.slogan;
       if ('layout' in storeUpdates) extra.layout = storeUpdates.layout;
@@ -3432,12 +3545,18 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
 
       storeUpdates.updated_at = new Date().toISOString();
 
+      // writeWithCandidates, not a bare update — see the note in the PUT
+      // storefront branch: a resolved `{ error }` never reaches try/catch, so a
+      // schema mismatch used to lose the edit silently.
       if (supabase) {
         try {
           const dbRecord = prepareRecordForDb('stores', storeUpdates);
-          await supabase.from('stores').update(dbRecord).eq('id', storeId);
+          const { error: writeErr } = await writeWithCandidates(supabase, 'stores', 'update', dbRecord, st, storeId);
+          if (writeErr) {
+            console.warn('[PATCH] Supabase storefront update failed:', writeErr.message);
+          }
         } catch (err) {
-          console.warn('[PATCH] Supabase storefront update failed:', err.message);
+          console.warn('[PATCH] Supabase storefront update exception:', err.message);
         }
       }
       dataStore.ensureTable('stores');

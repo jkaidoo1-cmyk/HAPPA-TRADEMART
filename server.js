@@ -2140,11 +2140,11 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    // Persist logo/banner in the `extra` JSONB field as a fallback
+    // Only the small, non-image fields are mirrored into the `extra` JSONB
     let extraSf = {};
     try { extraSf = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {}); } catch(e) {}
-    if (storeUpdates.logo_url) extraSf.logo_url = storeUpdates.logo_url;
-    if (storeUpdates.banner_url) extraSf.banner_url = storeUpdates.banner_url;
+    // fallback. logo_url/banner_url are deliberately NOT mirrored: they are
+    // image data URLs, and mirroring them stored every store's image twice
     if (storeUpdates.name) extraSf.name = storeUpdates.name;
     if (storeUpdates.slogan) extraSf.slogan = storeUpdates.slogan;
     storeUpdates.extra = extraSf;
@@ -2152,7 +2152,16 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     if (supabase) {
       try {
         const dbRecord = prepareRecordForDb('stores', storeUpdates);
-        await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        const { error: storeWriteErr } = await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        if (storeWriteErr) {
+          // supabase-js RESOLVES with { error } instead of throwing, so the
+          // catch below never sees this. Retry carrying the images inside
+          // `extra`, which unpackStoreMeta promotes on read — needed only when
+          // the stores table genuinely lacks logo_url/banner_url columns.
+          const imgFallback = Object.assign({}, extraSf, { logo_url: storeUpdates.logo_url, banner_url: storeUpdates.banner_url });
+          await supabase.from('stores').update({ extra: imgFallback }).eq('id', storeId);
+          console.warn('[POST] storefront update retried with images in extra:', storeWriteErr.message);
+        }
       } catch (err) {
         console.warn('[POST] Supabase storefront update failed:', err.message);
       }
@@ -2807,11 +2816,11 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if ('layout' in body) storeUpdates.layout = body.layout;
     storeUpdates.updated_at = new Date().toISOString();
 
-    // Persist logo/banner in the `extra` JSONB field as a fallback
+    // Only the small, non-image fields are mirrored into the `extra` JSONB
     let extraSf = {};
     try { extraSf = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {}); } catch(e) {}
-    if ('logo_url' in storeUpdates) extraSf.logo_url = storeUpdates.logo_url;
-    if ('banner_url' in storeUpdates) extraSf.banner_url = storeUpdates.banner_url;
+    // fallback. logo_url/banner_url are deliberately NOT mirrored: they are
+    // image data URLs, and mirroring them doubled every store read.
     if ('name' in storeUpdates) extraSf.name = storeUpdates.name;
     if ('slogan' in storeUpdates) extraSf.slogan = storeUpdates.slogan;
     if ('layout' in storeUpdates) extraSf.layout = storeUpdates.layout;
@@ -2820,7 +2829,16 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (supabase) {
       try {
         const dbRecord = prepareRecordForDb('stores', storeUpdates);
-        await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        const { error: storeWriteErr } = await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        if (storeWriteErr) {
+          // supabase-js RESOLVES with { error } instead of throwing, so the
+          // catch below never sees this. Retry carrying the images inside
+          // `extra`, which unpackStoreMeta promotes on read — needed only when
+          // the stores table genuinely lacks logo_url/banner_url columns.
+          const imgFallback = Object.assign({}, extraSf, { logo_url: storeUpdates.logo_url, banner_url: storeUpdates.banner_url });
+          await supabase.from('stores').update({ extra: imgFallback }).eq('id', storeId);
+          console.warn('[PUT] storefront update retried with images in extra:', storeWriteErr.message);
+        }
       } catch (err) {
         console.warn('[PUT] Supabase storefront update failed:', err.message);
       }
@@ -3047,9 +3065,9 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     try {
       extra = typeof st.extra === 'string' ? JSON.parse(st.extra) : (st.extra || {});
     } catch(e) {}
-    // Persist logo/banner in extra JSONB as a fallback
-    if ('logo_url' in storeUpdates) extra.logo_url = storeUpdates.logo_url;
-    if ('banner_url' in storeUpdates) extra.banner_url = storeUpdates.banner_url;
+    // Only the small, non-image fields are mirrored into the `extra` JSONB
+    // fallback. logo_url/banner_url are deliberately NOT mirrored: they are
+    // image data URLs, and mirroring them doubled every store read.
     if ('name' in storeUpdates) extra.name = storeUpdates.name;
     if ('slogan' in storeUpdates) extra.slogan = storeUpdates.slogan;
     if ('layout' in storeUpdates) extra.layout = storeUpdates.layout;
@@ -3063,7 +3081,16 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (supabase) {
       try {
         const dbRecord = prepareRecordForDb('stores', storeUpdates);
-        await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        const { error: storeWriteErr } = await supabase.from('stores').update(dbRecord).eq('id', storeId);
+        if (storeWriteErr) {
+          // supabase-js RESOLVES with { error } instead of throwing, so the
+          // catch below never sees this. Retry carrying the images inside
+          // `extra`, which unpackStoreMeta promotes on read — needed only when
+          // the stores table genuinely lacks logo_url/banner_url columns.
+          const imgFallback = Object.assign({}, extra, { logo_url: storeUpdates.logo_url, banner_url: storeUpdates.banner_url });
+          await supabase.from('stores').update({ extra: imgFallback }).eq('id', storeId);
+          console.warn('[PATCH] storefront update retried with images in extra:', storeWriteErr.message);
+        }
       } catch (err) {
         console.warn('[PATCH] Supabase storefront update failed:', err.message);
       }

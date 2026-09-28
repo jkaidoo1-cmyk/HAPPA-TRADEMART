@@ -120,6 +120,7 @@ function renderNotifBadge() {
 // bustCache=true is used when we know data just changed (push received,
 // page focus) — it bypasses both the client apiCache and the SW HTTP cache
 // so fresh server data lands immediately.
+let _lastSessionVerifyAt = 0;
 async function fetchServerNotifications(bustCache = false) {
   if (!App.currentUser || !App.currentUser.id) {
     App.notifications = [];
@@ -128,9 +129,19 @@ async function fetchServerNotifications(bustCache = false) {
     return;
   }
 
-  // Validate session user status: if deleted, stop polling and log out immediately
-  const isValid = await verifySessionUser();
-  if (isValid === false) return;
+  // Validate session user status: if the account was deleted or disabled, stop
+  // polling and log out. That check reads the user row — a second round trip on
+  // top of the notification read — and it used to run on EVERY call, including
+  // the 20-second poll, so a logged-in user spent two requests per tick. Once a
+  // minute still catches a deleted account promptly while nearly halving the
+  // poll's request count. A deleted session also surfaces as a failed read just
+  // below, which leaves the existing list intact instead of wiping it.
+  const now = Date.now();
+  if (now - _lastSessionVerifyAt > 60000) {
+    _lastSessionVerifyAt = now;
+    const isValid = await verifySessionUser();
+    if (isValid === false) return;
+  }
 
   const uid = String(App.currentUser.id);
   const isAdmin = App.currentUser?.role === 'admin';

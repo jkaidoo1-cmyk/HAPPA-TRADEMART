@@ -26,14 +26,14 @@
       "src": "/api",
       "dest": "/api/index.js",
       "headers": {
-        "Cache-Control": "no-cache, no-store, must-revalidate"
+        "Cache-Control": "no-cache, must-revalidate"
       }
     },
     {
       "src": "/api/(.*)",
       "dest": "/api/index.js",
       "headers": {
-        "Cache-Control": "no-cache, no-store, must-revalidate"
+        "Cache-Control": "no-cache, must-revalidate"
       }
     },
     {

@@ -659,7 +659,10 @@ function startDashboardSyncPolling() {
       } catch(e){}
       App.isBackgroundRefresh = false;
     }
-  }, 15000);
+    // 30s rather than 15s: this re-reads whole order rows with images attached,
+    // and a repeat read of unchanged data is now served as an empty 304, so the
+    // marginal value of the extra tick was always low.
+  }, 30000);
 }
 
 function stopDashboardSyncPolling() {
