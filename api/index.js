@@ -990,13 +990,24 @@ app.post('/api/auth/request-otp', writeRateLimiter, async (req, res) => {
     }
     if (!me) { dataStore.ensureTable('users'); me = (dataStore.getStore().users || []).find(u => String(u.id) === String(session.userId)) || null; }
     if (!me || !me.phone) return res.status(400).json({ error: 'Add a phone number to your account first.' });
-    if (!process.env.TERMII_API_KEY && !process.env.TWILIO_ACCOUNT_SID) {
+    // OTP_TEST_MODE=1: explicit, deliberate testing escape hatch for deployments
+    // that have no SMS provider yet. The code is still generated, hashed and
+    // stored exactly as in production — it is simply ALSO returned in the API
+    // response so the caller can complete verification without a carrier.
+    // Never enable in production with real users; remove the flag when the
+    // SMS provider (TERMII_* / TWILIO_*) is wired up.
+    const otpTestMode = process.env.OTP_TEST_MODE === '1';
+    if (!otpTestMode && !process.env.TERMII_API_KEY && !process.env.TWILIO_ACCOUNT_SID) {
       return res.status(503).json({ error: 'SMS delivery is not configured on the server. Set TERMII_API_KEY or TWILIO_ACCOUNT_SID.' });
     }
     const store = otpStore();
     const code = otp.generateCode(); // crypto.randomInt — never Math.random
     const issued = await otp.issueOtp(store, { userId: session.userId, codeHash: await bcrypt.hash(code, 8) });
     if (!issued.ok) return res.status(issued.status).json({ error: issued.error });
+    if (otpTestMode) {
+      console.warn('[OTP] TEST MODE: returning verification code in the API response for user ' + session.userId);
+      return res.json({ success: true, delivered: true, channel: 'test-mode', test_code: code });
+    }
     const sent = await sendSms(String(me.phone), `Your HAPPA TRADEMART verification code is ${code}. It expires in 5 minutes.`);
     if (!sent.ok) {
       // The SMS never left: burn the code so it cannot be used later.

@@ -966,7 +966,12 @@ function showOTPModal(user) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})
   }).then(r => {
-    if (r && r.delivered) showToast('Verification code sent to your phone. 📱', 'success');
+    if (r && r.delivered && r.channel === 'test-mode' && r.test_code) {
+      // OTP_TEST_MODE deployment: the server returned the code in the response.
+      const inp = document.getElementById('otp-input');
+      if (inp) inp.value = r.test_code;
+      showToast('Test mode — your code is ' + r.test_code + ' (prefilled). 🧪', 'success');
+    } else if (r && r.delivered) { showToast('Verification code sent to your phone. 📱', 'success'); }
     else showToast('Could not send an SMS right now — ask support to verify you.', 'warning');
   }).catch(() => {});
 

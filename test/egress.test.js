@@ -280,3 +280,37 @@ test('egress: the stores query is bounded inside the database, and pages only on
     await new Promise(resolve => stub.close(resolve));
   }
 });
+
+test('otp test mode: code is returned with the flag and 503 without it', async () => {
+  // The admin fixture has no phone unless we add one; request-otp requires it.
+  const store = dataStore.getStore();
+  const admin = store.users.find(u => u.id === ADMIN_ID);
+  const savedPhone = admin.phone;
+  admin.phone = '+233201234567';
+  const savedMode = process.env.OTP_TEST_MODE;
+  const savedTermii = process.env.TERMII_API_KEY;
+  try {
+    // 1. Without the flag and without a provider → the honest 503.
+    delete process.env.OTP_TEST_MODE;
+    delete process.env.TERMII_API_KEY;
+    const refused = await api('/auth/request-otp', { method: 'POST', headers: adminAuth(), body: {} });
+    assert.equal(refused.status, 503, JSON.stringify(refused.data));
+    assert.ok(!refused.data.test_code, 'no code may leak without the flag');
+
+    // 2. With OTP_TEST_MODE=1 → code returned, channel test-mode, and the
+    //    code actually verifies the account end-to-end.
+    process.env.OTP_TEST_MODE = '1';
+    const issued = await api('/auth/request-otp', { method: 'POST', headers: adminAuth(), body: {} });
+    assert.equal(issued.status, 200, JSON.stringify(issued.data));
+    assert.equal(issued.data.channel, 'test-mode');
+    assert.ok(/^\d{6}$/.test(issued.data.test_code || ''), 'a 6-digit test_code is returned');
+
+    const verified = await api('/auth/verify-phone', { method: 'POST', headers: adminAuth(), body: { code: issued.data.test_code } });
+    assert.equal(verified.status, 200, JSON.stringify(verified.data));
+    assert.equal(verified.data.is_verified, true);
+  } finally {
+    admin.phone = savedPhone;
+    if (savedMode === undefined) delete process.env.OTP_TEST_MODE; else process.env.OTP_TEST_MODE = savedMode;
+    if (savedTermii === undefined) delete process.env.TERMII_API_KEY; else process.env.TERMII_API_KEY = savedTermii;
+  }
+});

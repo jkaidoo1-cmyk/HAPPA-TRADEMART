@@ -1013,6 +1013,13 @@ app.post('/api/auth/request-otp', writeRateLimiter, async (req, res) => {
     const code = otp.generateCode(); // crypto.randomInt — never Math.random
     const issued = await otp.issueOtp(store, { userId: session.userId, codeHash: await bcrypt.hash(code, 8) });
     if (!issued.ok) return res.status(issued.status).json({ error: issued.error });
+    // OTP_TEST_MODE=1: parity with api/index.js — return the code in the
+    // response instead of only logging it, so browser-based testing works
+    // without reading the server console. Off unless explicitly enabled.
+    if (process.env.OTP_TEST_MODE === '1') {
+      console.warn('[OTP] TEST MODE: returning verification code in the API response for user ' + session.userId);
+      return res.json({ success: true, delivered: true, channel: 'test-mode', test_code: code });
+    }
     const sent = await sendSms(String(me.phone), `Your HAPPA TRADEMART verification code is ${code}. It expires in 5 minutes.`);
     // 'server-log' means no SMS provider is configured: the code was printed to
     // the server console (local dev only), so it is still deliverable — but if
