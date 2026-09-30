@@ -336,6 +336,7 @@ async function loadAdminSupport() {
   if (!container) return;
   container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading tickets…</div>';
 
+  try {
   const res = await apiGet('support_tickets', 'limit=200').catch(err => {
     console.error('loadAdminSupport failed:', err);
     return null;
@@ -370,6 +371,12 @@ async function loadAdminSupport() {
     ${list.length ? list.map(t => _adminTicketCardHTML(t)).join('') :
       '<div class="empty-state" style="padding:30px"><i class="fas fa-inbox"></i><h3>No support tickets</h3><p>New tickets from users and vendors will appear here.</p></div>'}
   `;
+  } catch (err) {
+    // A throw here (bad ticket row, helper hiccup, stale-cache script clash)
+    // used to leave the panel stuck on a blank pane with no way forward.
+    console.error('loadAdminSupport render failed:', err);
+    container.innerHTML = '<div class="empty-state" style="padding:30px"><i class="fas fa-exclamation-triangle"></i><h3>Could not display tickets</h3><p>' + escHtml(err && err.message ? err.message : 'Unexpected error') + '</p><button class="btn" style="margin-top:10px" onclick="loadAdminSupport()">Retry</button></div>';
+  }
 }
 
 function _adminTicketCardHTML(t) {
