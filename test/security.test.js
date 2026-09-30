@@ -168,6 +168,42 @@ test('#10: unknown tables 404 instead of silently succeeding', async () => {
   assert.equal(access.WRITABLE_TABLES.has('packages'), true);
 });
 
+test('#10 regression: admin-only tables pass the coarse gate and stay admin-only', async () => {
+  // settings/delivery_rates/wallet_transactions/platform_revenue were left out
+  // of WRITABLE_TABLES when the closed allowlist shipped, so the generic
+  // routes 404'd them before the ADMIN_ONLY_WRITE_TABLES check could run —
+  // every admin settings save died with 'Unknown resource'.
+  for (const t of ['settings', 'delivery_rates', 'wallet_transactions', 'platform_revenue']) {
+    assert.equal(access.WRITABLE_TABLES.has(t), true, `${t} must be in WRITABLE_TABLES`);
+    assert.equal(access.ADMIN_ONLY_WRITE_TABLES.has(t), true, `${t} must stay admin-only`);
+  }
+
+  // Anonymous write is refused by the fine-grained layer (403, not 404).
+  const anon = await api('/settings', {
+    method: 'POST',
+    body: { key: 'anon_probe', value: '1' }
+  });
+  assert.equal(anon.status, 403, JSON.stringify(anon.data));
+
+  // Admin write reaches the handler and actually persists.
+  const admin = await api('/settings', {
+    method: 'POST',
+    headers: auth('admin', 'admin'),
+    body: { key: 'gate_probe', value: '1', label: 'gate probe', type: 'text' }
+  });
+  assert.ok([200, 201].includes(admin.status), JSON.stringify(admin.data));
+  assert.ok(admin.data && (admin.data.id || admin.data.data?.id), 'admin settings POST returns the row');
+
+  // A non-admin cannot mutate what the admin created.
+  const pid = (admin.data && (admin.data.id || admin.data.data?.id));
+  const vendor = await api('/settings/' + pid, {
+    method: 'PATCH',
+    headers: auth('sec-vendor-1', 'vendor'),
+    body: { value: 'hacked' }
+  });
+  assert.equal(vendor.status, 403, JSON.stringify(vendor.data));
+});
+
 test('#9: notifications cannot be created by anonymous or non-admin callers', async () => {
   const anon = await api('/notifications', {
     method: 'POST',
