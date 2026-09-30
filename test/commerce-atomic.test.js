@@ -70,7 +70,9 @@ test('CAS decrement lands on the first try', async () => {
   assert.equal(out.applied.length, 1);
   assert.equal(db.rows.p1.stock_qty, 3);
   assert.equal(db.rows.p1.total_sold, 2);
-  assert.equal(db.rows.p1.sold_count, 2);
+  // The database patch must NOT carry sold_count — that column does not exist
+  // on the fresh schema and its presence broke every checkout (PGRST204).
+  assert.equal(db.rows.p1.sold_count, undefined);
 });
 
 test('lost race: re-reads the fresh row and retries instead of overselling', async () => {
