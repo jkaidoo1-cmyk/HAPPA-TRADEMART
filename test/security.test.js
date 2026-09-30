@@ -240,8 +240,24 @@ test('#1: phone verification requires a session and a pending code', async () =>
   const otp = await api('/auth/request-otp', { method: 'POST', body: { phone: '+233000000000' } });
   assert.equal(otp.status, 401, JSON.stringify(otp.data));
 
-  // Signed in but with no code requested → a clean 400 (not a 500 from a
-  // broken handler) and the account stays unverified.
+  // With the OTP master switch OFF (test env: no provider), verification gates
+  // are lifted: the signed-in account is marked verified without a code. The
+  // security property that still holds: NO session → NO verification (above).
+  if (!access.otpEnabled()) {
+    const lifted = await api('/auth/verify-phone', {
+      method: 'POST',
+      headers: auth('sec-buyer-1', 'buyer'),
+      body: { code: '123456' }
+    });
+    assert.equal(lifted.status, 200, JSON.stringify(lifted.data));
+    assert.equal(lifted.data.otp_disabled, true);
+    const meLifted = (readDb().users || []).find(u => String(u.id) === 'sec-buyer-1');
+    assert.equal(meLifted.is_verified, true, 'switch off → the signed-in account verifies');
+    return;
+  }
+
+  // Switch on: signed in but with no code requested → a clean 400 (not a 500
+  // from a broken handler) and the account stays unverified.
   const noCode = await api('/auth/verify-phone', {
     method: 'POST',
     headers: auth('sec-buyer-1', 'buyer'),

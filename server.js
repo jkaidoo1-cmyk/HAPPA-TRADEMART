@@ -1009,6 +1009,10 @@ app.post('/api/auth/request-otp', writeRateLimiter, async (req, res) => {
     const db = loadDb();
     const me = getTable(db, 'users').find(u => String(u.id) === String(session.userId));
     if (!me || !me.phone) return res.status(400).json({ error: 'Add a phone number to your account first.' });
+    // OTP_TEST_MODE=1 overrides the master switch (explicit testing intent).
+    const otpTestMode = process.env.OTP_TEST_MODE === '1';
+    // OTP master switch off → refuse politely (frontend skips the step).
+    if (!access.otpEnabled() && !otpTestMode) return res.status(423).json({ error: 'Phone verification is currently disabled.', code: 'OTP_DISABLED' });
     const store = otpStore();
     const code = otp.generateCode(); // crypto.randomInt — never Math.random
     const issued = await otp.issueOtp(store, { userId: session.userId, codeHash: await bcrypt.hash(code, 8) });
@@ -1049,7 +1053,15 @@ app.post('/api/auth/verify-phone', async (req, res) => {
     // development still works; it is never returned in any API response.
     const store = otpStore();
     const otpRow = await otp.findPendingOtp(store, { userId: targetId });
-    if (!otpRow) return res.status(400).json({ error: 'No verification code pending. Request a new one.' });
+    if (!access.otpEnabled()) {
+      // Switch off: verification gates are lifted — mark verified and return.
+      const db0 = loadDb();
+      const st = getTable(db0, 'users');
+      const ui = st.findIndex(u => String(u.id) === String(targetId));
+      if (ui !== -1) { st[ui].is_verified = true; st[ui].updated_at = new Date().toISOString(); saveDb(db0); }
+      return res.json({ success: true, is_verified: true, otp_disabled: true });
+    }
+if (!otpRow) return res.status(400).json({ error: 'No verification code pending. Request a new one.' });
     if (otp.isExpired(otpRow)) return res.status(400).json({ error: 'Code expired. Request a new one.' });
     if (otp.isLockedOut(otpRow)) return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
     const codeOk = typeof otpRow.code_hash === 'string' && otpRow.code_hash.startsWith('$2') && await bcrypt.compare(String(body.code || ''), otpRow.code_hash);

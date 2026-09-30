@@ -281,7 +281,7 @@ test('egress: the stores query is bounded inside the database, and pages only on
   }
 });
 
-test('otp test mode: code is returned with the flag and 503 without it', async () => {
+test('otp switch: disabled by default (423), test mode with flag, on with provider', async () => {
   // The admin fixture has no phone unless we add one; request-otp requires it.
   const store = dataStore.getStore();
   const admin = store.users.find(u => u.id === ADMIN_ID);
@@ -289,28 +289,45 @@ test('otp test mode: code is returned with the flag and 503 without it', async (
   admin.phone = '+233201234567';
   const savedMode = process.env.OTP_TEST_MODE;
   const savedTermii = process.env.TERMII_API_KEY;
+  const savedEnabled = process.env.OTP_ENABLED;
+  const access = require('../lib/access');
   try {
-    // 1. Without the flag and without a provider → the honest 503.
+    // 1. Switch off (the default: no provider, no flags) → 423 OTP_DISABLED.
     delete process.env.OTP_TEST_MODE;
     delete process.env.TERMII_API_KEY;
+    delete process.env.OTP_ENABLED;
+    assert.equal(access.otpEnabled(), false, 'switch must be off with no provider');
     const refused = await api('/auth/request-otp', { method: 'POST', headers: adminAuth(), body: {} });
-    assert.equal(refused.status, 503, JSON.stringify(refused.data));
-    assert.ok(!refused.data.test_code, 'no code may leak without the flag');
+    assert.equal(refused.status, 423, JSON.stringify(refused.data));
+    assert.equal(refused.data.code, 'OTP_DISABLED');
+    assert.ok(!refused.data.test_code, 'no code may leak while disabled');
 
-    // 2. With OTP_TEST_MODE=1 → code returned, channel test-mode, and the
-    //    code actually verifies the account end-to-end.
+    // 2. verify-phone with the switch off lifts the gate: is_verified flips on
+    //    without any code (this is what makes signup skip verification).
+    const lifted = await api('/auth/verify-phone', { method: 'POST', headers: adminAuth(), body: { code: '000000' } });
+    assert.equal(lifted.status, 200, JSON.stringify(lifted.data));
+    assert.equal(lifted.data.is_verified, true);
+    assert.equal(lifted.data.otp_disabled, true);
+
+    // 3. OTP_TEST_MODE=1 with the switch still off → the code roundtrip works
+    //    (explicit testing escape hatch, unchanged from its original shape).
     process.env.OTP_TEST_MODE = '1';
     const issued = await api('/auth/request-otp', { method: 'POST', headers: adminAuth(), body: {} });
     assert.equal(issued.status, 200, JSON.stringify(issued.data));
     assert.equal(issued.data.channel, 'test-mode');
     assert.ok(/^\d{6}$/.test(issued.data.test_code || ''), 'a 6-digit test_code is returned');
-
     const verified = await api('/auth/verify-phone', { method: 'POST', headers: adminAuth(), body: { code: issued.data.test_code } });
     assert.equal(verified.status, 200, JSON.stringify(verified.data));
     assert.equal(verified.data.is_verified, true);
+    delete process.env.OTP_TEST_MODE;
+
+    // 4. Connecting a provider flips the switch on automatically.
+    process.env.TERMII_API_KEY = 'stub-key';
+    assert.equal(access.otpEnabled(), true, 'provider presence must enable OTP');
   } finally {
     admin.phone = savedPhone;
     if (savedMode === undefined) delete process.env.OTP_TEST_MODE; else process.env.OTP_TEST_MODE = savedMode;
     if (savedTermii === undefined) delete process.env.TERMII_API_KEY; else process.env.TERMII_API_KEY = savedTermii;
+    if (savedEnabled === undefined) delete process.env.OTP_ENABLED; else process.env.OTP_ENABLED = savedEnabled;
   }
 });

@@ -950,7 +950,22 @@ async function doRegister(e) {
 
   // Buyers go straight through OTP → dashboard
 
-  showOTPModal(created);
+  fetch('./api/auth/request-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then(r => r.json().then(j => ({ ok: r.ok, status: r.status, j })))
+    .then(({ status, j }) => {
+      if (status === 423 || (j && j.code === 'OTP_DISABLED')) {
+        // OTP master switch is off: no verification step. Mark the session
+        // verified AND lift the gate server-side (verify-phone auto-verifies
+        // while the switch is off) so the DB row agrees after re-login.
+        if (App.currentUser) App.currentUser.is_verified = true;
+        saveSessions();
+        apiFetch('auth/verify-phone', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
+        showToast('🎉 Welcome to HAPPA TRADEMART!', 'success');
+        return;
+      }
+      showOTPModal(created);
+    })
+    .catch(() => showOTPModal(created)); // server unreachable → keep old behavior
 
 }
 

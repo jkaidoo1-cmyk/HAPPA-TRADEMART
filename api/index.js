@@ -990,13 +990,15 @@ app.post('/api/auth/request-otp', writeRateLimiter, async (req, res) => {
     }
     if (!me) { dataStore.ensureTable('users'); me = (dataStore.getStore().users || []).find(u => String(u.id) === String(session.userId)) || null; }
     if (!me || !me.phone) return res.status(400).json({ error: 'Add a phone number to your account first.' });
-    // OTP_TEST_MODE=1: explicit, deliberate testing escape hatch for deployments
-    // that have no SMS provider yet. The code is still generated, hashed and
-    // stored exactly as in production — it is simply ALSO returned in the API
+    // OTP_TEST_MODE=1: explicit, deliberate testing escape hatch — works even
+    // while the master switch is off. The code is still generated, hashed and
+    // stored exactly as in production; it is simply ALSO returned in the API
     // response so the caller can complete verification without a carrier.
-    // Never enable in production with real users; remove the flag when the
-    // SMS provider (TERMII_* / TWILIO_*) is wired up.
     const otpTestMode = process.env.OTP_TEST_MODE === '1';
+    // Phone verification is switched off (no SMS provider connected): refuse
+    // politely — the frontend sees 423/OTP_DISABLED and skips the OTP step.
+    // OTP_TEST_MODE=1 overrides the switch (explicit testing intent).
+    if (!access.otpEnabled() && !otpTestMode) return res.status(423).json({ error: 'Phone verification is currently disabled.', code: 'OTP_DISABLED' });
     if (!otpTestMode && !process.env.TERMII_API_KEY && !process.env.TWILIO_ACCOUNT_SID) {
       return res.status(503).json({ error: 'SMS delivery is not configured on the server. Set TERMII_API_KEY or TWILIO_ACCOUNT_SID.' });
     }
@@ -1033,7 +1035,17 @@ app.post('/api/auth/verify-phone', async (req, res) => {
     // issued by one instance verifies on another and attempts persist.
     const codes = otpStore();
     const otpRow = await otp.findPendingOtp(codes, { userId: targetId });
-    if (!otpRow) return res.status(400).json({ error: 'No verification code pending. Request a new one.' });
+    if (!access.otpEnabled()) {
+      // Switch off: verification gates are lifted — mark verified and return.
+      dataStore.ensureTable('users');
+      const st = dataStore.getStore();
+      const ui = (st.users || []).findIndex(u => String(u.id) === String(targetId));
+      if (ui !== -1) { st.users[ui].is_verified = true; st.users[ui].updated_at = new Date().toISOString(); dataStore.saveToFile(); }
+      const sb = getSupabase();
+      if (sb) { try { await sb.from('users').update({ is_verified: true, updated_at: new Date().toISOString() }).eq('id', String(targetId)); } catch (e) {} }
+      return res.json({ success: true, is_verified: true, otp_disabled: true });
+    }
+if (!otpRow) return res.status(400).json({ error: 'No verification code pending. Request a new one.' });
     if (otp.isExpired(otpRow)) return res.status(400).json({ error: 'Code expired. Request a new one.' });
     if (otp.isLockedOut(otpRow)) return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
     const codeOk = typeof otpRow.code_hash === 'string' && otpRow.code_hash.startsWith('$2') && await bcrypt.compare(String(body.code || ''), otpRow.code_hash);
