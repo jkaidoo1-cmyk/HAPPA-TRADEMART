@@ -37,7 +37,7 @@ async function renderVendorDashboard() {
     You'll receive an in-app notification once approved — usually within 24 hours.
   </p>
 
-  <div style="background:linear-gradient(90deg,#dbeafe,#ede9fe);border:1.5px solid #93c5fd;border-radius:var(--radius-sm);padding:12px 14px;text-align:left;margin-bottom:16px">
+  <div style="background:var(--primary-light);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;text-align:left;margin-bottom:16px">
     <div style="font-weight:700;font-size:.83rem;margin-bottom:4px;color:#1e3a8a">
       <i class="fas fa-sign-in-alt"></i> You're already logged in!
     </div>
@@ -200,7 +200,7 @@ async function renderVendorDashboard() {
 <div class="tab-content ${activeTabId === 'vendor-overview' ? 'active' : ''}" id="vendor-overview">
   <div class="dashboard-wrap">
     ${!u.is_verified ? `<div class="verify-banner"><i class="fas fa-exclamation-triangle"></i><p>Please verify your phone number to unlock all features</p></div>` : ''}
-    ${!u.id_verified ? `<div class="verify-banner" style="background:linear-gradient(90deg,#fff7ed,#ffedd5);border-color:#fb923c;cursor:pointer" onclick="switchTab('vendor-verify')"><i class="fas fa-id-card" style="color:#ea580c"></i><p>Upload your ID to complete vendor verification</p></div>` : ''}
+    ${!u.id_verified ? `<div class="verify-banner" style="background:var(--primary-light);border-color:var(--primary);cursor:pointer" onclick="switchTab('vendor-verify')"><i class="fas fa-id-card" style="color:#ea580c"></i><p>Upload your ID to complete vendor verification</p></div>` : ''}
 
     <div class="stats-grid">          <div class="admin-action-btn" onclick="showPage('vendor-my-store')">
           <i class="fas fa-store"></i><span>My Store</span>
@@ -287,7 +287,7 @@ async function renderVendorDashboard() {
   <div class="dashboard-wrap">
 
     <!-- Balance Header -->
-    <div style="background:linear-gradient(135deg,var(--success),#16a34a);border-radius:var(--radius-md);padding:18px;color:#fff;margin-bottom:16px">
+    <div style="background:var(--success);border-radius:var(--radius-md);padding:18px;color:#fff;margin-bottom:16px">
       <div style="font-size:.78rem;opacity:.8;margin-bottom:4px">Wallet Balance</div>
       <div style="font-size:2rem;font-weight:800;line-height:1">GHS ${parseFloat(u.wallet_balance||0).toFixed(2)}</div>
       <div style="font-size:.75rem;opacity:.7;margin:4px 0 14px">Earnings release after delivery is confirmed</div>
@@ -418,7 +418,7 @@ async function renderVendorDashboard() {
     <!-- Store auto-save perk -->
     ${myStore ? `
     <div class="card" style="margin-bottom:16px;border:2px solid var(--success)">
-      <div class="card-body" style="background:linear-gradient(90deg,#d1fae5,#a7f3d0);padding:12px 14px">
+      <div class="card-body" style="background:rgba(45,158,92,.12);padding:12px 14px">
           <i class="fas fa-store" style="margin-right:6px"></i> Your Store Gets Auto-Saved!
         <div style="font-size:.8rem;color:#065f46;line-height:1.6">
           When someone signs up through your referral link, <strong>"${escHtml(myStore.name)}"</strong> is automatically added to their saved stores and they see it first. More exposure for your store!
@@ -516,14 +516,14 @@ async function renderVendorDashboard() {
       <!-- State 1: No Storefront Created Yet (storefront_status is 'none' or not set) -->
       ${(!myStorefront || !myStorefront.status || myStorefront.status === 'none') ? `
         <div style="padding:32px 24px;background:#fff;border-radius:18px;border:1px solid var(--border);margin-bottom:20px;box-shadow:0 4px 16px rgba(0,0,0,0.04)">
-          <div style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#fff4ef,#ffe8d6);color:var(--primary);font-size:2rem;margin:0 auto 16px">🎨</div>
+          <div style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:var(--primary-light);color:var(--primary);font-size:2rem;margin:0 auto 16px">🎨</div>
           <h2 style="font-weight:900;font-size:1.4rem;text-align:center;margin-bottom:8px">Build Your Own Standalone Storefront Website</h2>
           <p style="font-size:.9rem;color:var(--text-light);text-align:center;margin-bottom:20px;line-height:1.7;max-width:640px;margin-left:auto;margin-right:auto">
             A <strong>Storefront</strong> is your dedicated, custom-branded web application (e.g. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;color:var(--primary);font-weight:700">happamart.com/#storefront/your-shop</code>). 
             Unlike standard marketplace listings, your storefront gives you full brand identity with custom UI themes, custom brand colors, slogan, logo, business hours, shipping policies, and a direct link to share with your customers.
           </p>
 
-          <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fed7aa;border-radius:12px;padding:12px 16px;text-align:center;margin-bottom:24px;max-width:560px;margin-left:auto;margin-right:auto">
+          <div style="background:var(--primary-light);border:1.5px solid var(--primary);border-radius:12px;padding:12px 16px;text-align:center;margin-bottom:24px;max-width:560px;margin-left:auto;margin-right:auto">
             <div style="font-size:.85rem;font-weight:800;color:#c2410c"><i class="fas fa-tag"></i> Subscriptions as low as <strong>GH₵ 30 / month</strong></div>
             <div style="font-size:.78rem;color:#9a3412;margin-top:2px">Custom admin pricing, flexible durations, and high product upload allowances!</div>
           </div>
@@ -1583,7 +1583,7 @@ function _addProductModalHTML(storeId, vendorId, prev) {
 
       <!-- Submit -->
       <button class="btn btn-primary btn-block" type="submit"
-              style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;padding:12px;font-size:.9rem;font-weight:700;border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(124,58,237,.25)">
+              style="background:var(--primary);color:#fff;border-color:var(--primary);padding:12px;font-size:.9rem;font-weight:700;border-radius:var(--radius-sm)">
         <i class="fas fa-plus-circle"></i> Add Product
       </button>
     </div>
@@ -1924,15 +1924,15 @@ function showVerificationUploadModal(userId) {
 <div class="modal-handle"></div>
 <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
   <div style="display:flex; align-items:center; gap: 12px;">
-    <div style="width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, var(--primary), #8b5cf6); color: white; display:flex; align-items:center; justify-content:center; font-size: 1.2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+    <div style="width: 42px; height: 42px; border-radius: 12px; background: var(--primary); color: #fff; display:flex; align-items:center; justify-content:center; font-size: 1.2rem;">
       <i class="fas fa-shield-check"></i>
     </div>
-    <span class="modal-title" style="font-size: 1.3rem; font-weight: 800; background: linear-gradient(135deg, var(--text), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${isRendor ? 'Rendor' : 'Vendor'} Verification</span>
+    <span class="modal-title" style="font-size: 1.3rem; font-weight: 800; color: var(--text);">${isRendor ? 'Rendor' : 'Vendor'} Verification</span>
   </div>
   <div class="modal-close" onclick="closeModalForce()" style="background: var(--surface); border-radius: 50%; width: 32px; height: 32px; display:flex; align-items:center; justify-content:center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.2s;"><i class="fas fa-times"></i></div>
 </div>
 <div class="modal-body" style="max-height:75vh;overflow-y:auto;padding: 16px 24px 24px;">
-  <div style="background: linear-gradient(to right, rgba(var(--primary-rgb), 0.08), transparent); border-left: 3px solid var(--primary); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+  <div style="background: var(--primary-light); border-left: 3px solid var(--primary); padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 24px;">
     <p style="font-size:.85rem; color:var(--text); margin:0; line-height:1.5; font-weight: 500;">
       Secure your account and unlock all features. All fields are mandatory to apply for ${isRendor ? 'rendor' : 'vendor'} verification.
     </p>
@@ -1993,8 +1993,8 @@ function showVerificationUploadModal(userId) {
       justify-content: center;
       width: 24px;
       height: 24px;
-      background: linear-gradient(135deg, var(--primary), #8b5cf6);
-      color: white;
+      background: var(--primary);
+      color: #fff;
       border-radius: 50%;
       font-size: 0.8rem;
       font-weight: 800;
@@ -2002,14 +2002,14 @@ function showVerificationUploadModal(userId) {
       box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.3);
     }
     .submit-verif-btn {
-      background: linear-gradient(135deg, var(--primary), #8b5cf6);
-      color: white;
+      background: var(--primary);
+      color: #fff;
       border: none;
       padding: 16px;
       border-radius: 12px;
       font-weight: 700;
       font-size: 1.05rem;
-      box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3);
+      box-shadow: none;
       transition: all 0.3s ease;
       width: 100%;
       cursor: pointer;
@@ -2238,7 +2238,7 @@ async function showAvailableStores() {
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
 <div class="modal-body">
-  <div class="verify-banner" style="background:linear-gradient(90deg,#dbeafe,#e0f2fe);border-color:#0ea5e9;margin-bottom:16px">
+  <div class="verify-banner" style="background:var(--primary-light);border-color:var(--primary);margin-bottom:16px">
     <i class="fas fa-gift" style="color:#0284c7"></i>
     <div>
       <p style="margin:0;font-weight:600">Referral Progress: ${userReferralCount}/${threshold}</p>
