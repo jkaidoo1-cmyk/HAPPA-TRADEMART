@@ -331,3 +331,24 @@ test('otp switch: disabled by default (423), test mode with flag, on with provid
     if (savedEnabled === undefined) delete process.env.OTP_ENABLED; else process.env.OTP_ENABLED = savedEnabled;
   }
 });
+test('fresh-db writes: empty-string timestamps/numerics coerce to null (flash_sale_end regression)', async () => {
+  // The vendor's add-product flow always sends flash_sale_end: '' for non-flash
+  // products. Postgres (timestamptz) rejects '' with 22007, so on the fresh
+  // database every product save died silently (the client had already shown
+  // its optimistic toast). prepareRecordForDb must coerce before the write.
+  const store = dataStore.getStore();
+  const vendor = { id: 'eg-vendor-1', name: 'EG Vendor', email: 'eg-v@test.com', role: 'vendor', status: 'active', password_hash: 'x' };
+  store.users = (store.users || []).filter(u => u.id !== vendor.id).concat(vendor);
+  store.stores = (store.stores || []).concat({ id: 'eg-store-1', name: 'EG Store', vendor_id: vendor.id, status: 'active' });
+  const vAuth = { Authorization: `Bearer ${session.createSessionToken(vendor.id, 'vendor')}` };
+  const res = await api('/products', { method: 'POST', headers: vAuth, body: {
+    name: 'Flashless Product', price: 10, original_price: 12, stock_qty: 5,
+    store_id: 'eg-store-1', category: 'General', images: [],
+    status: 'active', is_available: true, is_flash_sale: false, flash_sale_end: '',
+    tags: [], weight_kg: 0.5, commission_pct: 8
+  } });
+  assert.ok([200, 201].includes(res.status), JSON.stringify(res.data).slice(0, 200));
+  const row = (dataStore.getStore().products || []).find(p => p.name === 'Flashless Product');
+  assert.ok(row, 'the product row persisted');
+  assert.equal(row.flash_sale_end, null, 'empty-string timestamp must be stored as null');
+});

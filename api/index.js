@@ -476,6 +476,49 @@ const TABLE_COLUMNS = {
   push_subscriptions: ['id', 'user_id', 'endpoint', 'keys', 'created_at']
 };
 
+
+// Columns typed as timestamp (timestamptz) and numeric in the Postgres schema.
+// Empty strings from clients are coerced to null in prepareRecordForDb —
+// Postgres rejects '' in these column types (22P07/22007) while the JS side
+// treats '' and null interchangeably.
+const TIMESTAMP_COLUMNS = {
+  users: ['registered_at', 'created_at', 'updated_at', 'rendor_sub_expiry'],
+  stores: ['subscription_start', 'subscription_end', 'created_at', 'updated_at'],
+  products: ['flash_sale_end', 'created_at', 'updated_at'],
+  orders: ['created_at', 'updated_at'],
+  packages: ['created_at', 'updated_at'],
+  wallet_transactions: ['created_at', 'updated_at'],
+  notifications: ['created_at', 'updated_at'],
+  order_notifications: ['created_at', 'updated_at'],
+  ad_campaigns: ['start_date', 'end_date', 'created_at', 'updated_at'],
+  services: ['created_at', 'updated_at'],
+  service_orders: ['created_at', 'updated_at'],
+  settings: ['updated_at'],
+  reviews: ['created_at'],
+  delivery_rates: ['created_at'],
+  referrals: ['created_at'],
+  platform_revenue: ['created_at'],
+  support_tickets: ['created_at', 'updated_at'],
+  storefronts: ['subscription_start', 'subscription_end', 'created_at', 'updated_at'],
+  push_subscriptions: ['created_at'],
+  audit_logs: ['created_at']
+};
+const NUMERIC_COLUMNS = {
+  users: ['wallet_balance', 'referral_earnings', 'rendor_starting_price', 'sub_quote_monthly', 'sub_quote_quarterly', 'sub_quote_biannual', 'sub_payment_amount', 'rendor_sub_price_override'],
+  stores: ['avg_rating', 'total_sales', 'store_price'],
+  products: ['price', 'original_price', 'flash_pct', 'avg_rating', 'weight_kg', 'commission_pct'],
+  orders: ['unit_price', 'subtotal', 'platform_fee', 'delivery_fee', 'total'],
+  packages: ['total', 'delivery_fee'],
+  wallet_transactions: ['amount', 'balance_before', 'balance_after'],
+  ad_campaigns: ['budget', 'spent'],
+  services: ['price'],
+  service_orders: ['amount'],
+  reviews: ['rating'],
+  delivery_rates: ['base_rate', 'per_kg_rate'],
+  referrals: ['reward'],
+  platform_revenue: ['amount']
+};
+
 function prepareRecordForDb(table, record, existingRecord) {
   const out = { ...record };
 
@@ -551,6 +594,16 @@ function prepareRecordForDb(table, record, existingRecord) {
     if (!out.placement)   out.placement   = Array.isArray(adExtra.pages) ? adExtra.pages.join(',') : 'home';
   }
 
+  // Postgres rejects empty strings in timestamp/numeric columns (the client
+  // sends e.g. flash_sale_end: '' for non-flash products). Coerce them to
+  // null BEFORE anything (Supabase write or local mirror) consumes the record —
+  // '' is semantically "no value" for every read path.
+  for (const col of TIMESTAMP_COLUMNS[table] || []) {
+    if (out[col] === '') out[col] = null;
+  }
+  for (const col of NUMERIC_COLUMNS[table] || []) {
+    if (out[col] === '' || out[col] === undefined) out[col] = null;
+  }
   // Filter columns to only include valid DB columns for Supabase
   if (TABLE_COLUMNS[table]) {
     const clean = {};
@@ -3029,6 +3082,15 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     }
 
     const record = serializeRecord(body);
+    // POST shares prepareRecordForDb's Postgres type coercion: an empty-string
+    // timestamp (flash_sale_end: '') or numeric would 400 on the fresh schema
+    // (22007/22P02). Reuse the same maps the update path uses.
+    for (const col of TIMESTAMP_COLUMNS[table] || []) {
+      if (record[col] === '') record[col] = null;
+    }
+    for (const col of NUMERIC_COLUMNS[table] || []) {
+      if (record[col] === '') record[col] = null;
+    }
 
     if (table === 'notifications' && record && record.user_id && record.title) {
       dispatchPushNotificationApi({
