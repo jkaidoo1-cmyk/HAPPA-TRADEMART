@@ -582,7 +582,7 @@ async function renderProductDetail(id) {
   </div>
 
   <div style="display:flex;align-items:center;gap:8px;margin:8px 0">
-    <span style="font-size:1.4rem;font-weight:800;color:var(--primary)">GHS ${p.price}</span>
+    <span style="font-size:1.4rem;font-weight:800;color:var(--primary)">${formatPrice(p.price)}</span>
     ${p.original_price > p.price ? `<span style="font-size:.9rem;color:var(--text-muted);text-decoration:line-through">GHS ${p.original_price}</span>` : ''}
   </div>
 
@@ -2101,7 +2101,19 @@ async function _sdDeleteProduct(productId, productName, btn) {
 
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
-  await apiDelete('products', productId);
+  const res = await apiDelete('products', productId);
+
+  // apiFetch returns null when the server refused the delete — the row is
+  // still live for every other visitor, so the UI must NOT say "deleted".
+  if (!res || !res.success) {
+
+    if (btn) { btn.disabled = false; btn.textContent = 'Del'; }
+
+    showToast(window.lastApiError || 'Delete failed — the product is still live. Try again.', 'error', 5000);
+
+    return;
+
+  }
 
   if (typeof removeProductFromCaches === 'function') removeProductFromCaches(productId);
 
@@ -2123,9 +2135,9 @@ async function _sdSaveProduct(productId, form) {
 
 
 
-  data.price          = parseFloat(data.price)          || 0;
+  data.price          = parseFloat(data.price);
 
-  data.original_price = parseFloat(data.original_price) || 0;
+  data.original_price = parseFloat(data.original_price);
 
   data.stock_qty      = parseInt(data.stock_qty)        || 0;
 
@@ -2155,13 +2167,43 @@ async function _sdSaveProduct(productId, form) {
 
 
 
+  // Match the server's product rules — fail here, not after a rejected save.
+
+  if (!String(data.name || '').trim()) {
+
+    showToast('Product name is required.', 'warning');
+
+    return;
+
+  }
+
+  if (isNaN(data.price)) {
+
+    showToast('Fill in a valid price.', 'warning');
+
+    return;
+
+  }
+
+
+
   const btn = form.querySelector('[type=submit]');
 
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
 
 
-  await apiPatch('products', productId, data);
+  const saved = await apiPatch('products', productId, data);
+
+  if (!saved) {
+
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save'; }
+
+    showToast(window.lastApiError || 'Save failed — the product was not updated.', 'error', 5000);
+
+    return;
+
+  }
 
 
 
@@ -3170,7 +3212,7 @@ window.openStorefrontProductModal = async function(productId) {
       <div style="padding:20px; display:grid; gap:12px">
         <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name))}</h3>
         <div style="display:flex; justify-content:space-between; align-items:center">
-          <span style="font-size:1.25rem; font-weight:900; color:${primaryColor}">GHS ${p.price}</span>
+          <span style="font-size:1.25rem; font-weight:900; color:${primaryColor}">${formatPrice(p.price)}</span>
           <span style="font-size:0.75rem; background:#f3f4f6; padding:3px 8px; border-radius:12px; color:var(--text-muted)">In Stock: ${p.stock_qty || 0}</span>
         </div>
         ${(p.description||'').trim() ? `<p style="font-size:0.82rem; color:var(--text-light); line-height:1.5; margin:0; max-height:80px; overflow-y:auto">${escHtml(p.description)}</p>` : ''}

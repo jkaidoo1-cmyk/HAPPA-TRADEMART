@@ -1748,6 +1748,11 @@ async function saveProductEdit(productId) {
   const buyerNotePrompt = 'Add a note (e.g. color, size)';
   const status = stock === 0 ? 'sold_out' : 'active';
   
+  if (isNaN(price) || isNaN(stock)) {
+    showToast('Fill in price and stock with valid numbers', 'warning');
+    return;
+  }
+
   const p = App.allProducts.find(p => String(p.id) === String(productId));
   let finalPrice = price;
   let finalOrig = p ? (p.original_price || p.price) : price;
@@ -1763,12 +1768,19 @@ async function saveProductEdit(productId) {
     }
   }
 
-  await apiPatch('products', productId, {
+  const saved = await apiPatch('products', productId, {
     name, description, category,
     stock_qty: stock, price: finalPrice, original_price: finalOrig, is_flash_sale: flash, status, images,
     allow_buyer_note: allowBuyerNote,
     buyer_note_prompt: allowBuyerNote ? buyerNotePrompt : ''
   });
+
+  if (!saved) {
+    // Server refused the edit (e.g. blank price/name) — keep the modal open
+    // and tell the vendor instead of pretending the update landed.
+    showToast(window.lastApiError || 'Save failed — the product was not updated.', 'error', 5000);
+    return;
+  }
 
   if (p) {
     p.name = name; p.description = description; p.category = category;
@@ -1808,7 +1820,14 @@ async function deleteVendorProduct(productId) {
   const el = document.getElementById('vendor-product-' + productId);
   const btn = el?.querySelector('[onclick*=deleteVendorProduct]');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
-  await apiDelete('products', productId);
+  const res = await apiDelete('products', productId);
+  // apiFetch returns null when the server rejected the delete — the row is
+  // still live for every other visitor, so the UI must NOT say "deleted".
+  if (!res || !res.success) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; }
+    showToast(window.lastApiError || 'Delete failed — the product is still live. Check your connection and try again.', 'error', 5000);
+    return;
+  }
   // Remove from global cache immediately so it doesn't reappear
   if (typeof removeProductFromCaches === 'function') removeProductFromCaches(productId);
   showToast('Product deleted', 'warning');

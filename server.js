@@ -3360,11 +3360,16 @@ app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
   if (supabase) {
     try {
       const { error } = await supabase.from(table).delete().eq('id', id);
-      if (error) throw error;
+      if (error) {
+        // A row that stayed in the database is NOT a success — respond with an
+        // error so the client tells the vendor the truth instead of showing
+        // "Product deleted" while the record stays live for everyone else.
+        console.error(`[Supabase Delete] table=${table} id=${id}:`, error.message);
+        return res.status(502).json({ error: 'Delete failed on the database: ' + error.message });
+      }
     } catch (err) {
-      // Supabase rejected/timed out (missing table, RLS, outage) — don't fail
-      // the request; still remove the record from the local db so it stays gone.
-      console.error(`[Supabase Delete fallback] table=${table} id=${id}:`, err.message);
+      console.error(`[Supabase Delete exception] table=${table} id=${id}:`, err.message);
+      return res.status(502).json({ error: 'Delete failed: ' + err.message });
     }
   }
 

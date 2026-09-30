@@ -3081,6 +3081,14 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       }
     }
 
+    // Product rows must carry sane numbers (mirrors server.js and the PUT/PATCH
+    // routes): JSON.stringify turns NaN into null, so the POST path used to
+    // happily save price:null products that rendered as "GHS null" on the site.
+    if (table === 'products') {
+      const pv = commerce.validateProductBody(body);
+      if (!pv.ok) return res.status(400).json({ error: pv.error });
+    }
+
     const record = serializeRecord(body);
     // POST shares prepareRecordForDb's Postgres type coercion: an empty-string
     // timestamp (flash_sale_end: '') or numeric would 400 on the fresh schema
@@ -3888,16 +3896,11 @@ app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
     
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) {
-      console.error('[DELETE] Supabase error:', table, error.message, '— falling back to db.json');
-      // RLS may reject the delete on the deployed backend; still remove it
-      // locally so the record (e.g. auto-deleted sold-out product) is gone.
-      dataStore.ensureTable(table);
-      const store = dataStore.getStore();
-      const before = store[table].length;
-      store[table] = store[table].filter(r => String(r.id) !== String(id));
-      dataStore.saveToFile();
-      if (store[table].length === before) return res.status(404).json({ error: 'Record not found' });
-      return res.status(204).send();
+      // A row that stayed in the database is NOT a success. Masking this as
+      // 204 made the vendor's device report "Product deleted" while the record
+      // stayed live for every other visitor. Fail loudly instead.
+      console.error('[DELETE] Supabase error:', table, error.message);
+      return res.status(502).json({ error: 'Delete failed on the database: ' + error.message });
     }
     res.status(204).send();
   } catch (err) {

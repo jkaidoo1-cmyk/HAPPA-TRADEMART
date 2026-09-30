@@ -183,9 +183,21 @@ async function compressImage(file, maxWidth = 750, quality = 0.70) {
   });
 }
 
+// ── Price display helper ─────────────────────────────────
+// Renders a saved price for cards/detail pages. Legacy rows (and any future
+// bad write) can carry null/undefined — show an honest placeholder instead of
+// the infamous "GHS null".
+function formatPrice(price) {
+  const n = Number(price);
+  return Number.isFinite(n) && n >= 0 ? 'GHS ' + n : 'Price unavailable';
+}
+
 // ── Square product image helper ────────────────────────────
-// Centers the image on a square white canvas so product photos fill
-// square product cards edge-to-edge (no cropping, no distortion).
+// Scales the photo to COVER a square canvas and crops the overflow, so the
+// stored image is edge-to-edge content — exactly how store banners behave in
+// their slots. The old letterbox behavior (fit INSIDE on a white canvas)
+// baked white bars into the saved file, which then showed as empty gaps on
+// the sides of product cards no matter what CSS did.
 // Used for product uploads (vendor products, bulk builder, rendor posts).
 async function squareImage(file, size = 900, quality = 0.72) {
   return new Promise((resolve, reject) => {
@@ -199,9 +211,13 @@ async function squareImage(file, size = 900, quality = 0.72) {
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
+        // JPEG has no alpha — an unpainted pixel would render black, so keep
+        // the white base coat even though the cover-draw below overpaints it.
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, size, size);
-        const scale = Math.min(size / img.width, size / img.height);
+        // Cover, not contain: the larger scale factor fills every edge and the
+        // centered draw crops what spills over.
+        const scale = Math.max(size / img.width, size / img.height);
         const w = Math.round(img.width * scale);
         const h = Math.round(img.height * scale);
         ctx.drawImage(img, Math.round((size - w) / 2), Math.round((size - h) / 2), w, h);

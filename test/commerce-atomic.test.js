@@ -173,3 +173,18 @@ test('local decrement marks sold out; restore puts stock back', () => {
   assert.equal(products[0].status, 'active');
   assert.equal(products[0].is_available, true);
 });
+
+// ── "GHS null" regression (2026-09-30): a vendor product saved with
+// price:null and name:'' because JSON.stringify(NaN) → null and
+// Number(null) === 0 laundered the empty value through the old check.
+test('validateProductBody rejects the payloads that used to save as GHS null', () => {
+  assert.equal(commerce.validateProductBody({ name: 'Shorts', price: null }).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shorts', price: '' }).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shorts', price: 'abc' }).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shorts', price: -5 }).ok, false);
+  // A blank product name is rejected too — an untitled card is undiscoverable.
+  assert.equal(commerce.validateProductBody({ name: '   ', price: 25 }).ok, false);
+  // Partial updates and complete creates still pass.
+  assert.equal(commerce.validateProductBody({ stock_qty: 3 }).ok, true);
+  assert.equal(commerce.validateProductBody({ name: 'Blue Shorts', price: 25, original_price: 40, stock_qty: 3 }).ok, true);
+});

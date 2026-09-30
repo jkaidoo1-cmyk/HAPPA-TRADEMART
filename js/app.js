@@ -2910,7 +2910,7 @@ function productCardHTML(p) {
   <div class="product-body">
     <div class="product-name">${escHtml(itemDisplayName(p.name))}</div>
     <div style="display:flex;align-items:center;flex-wrap:wrap">
-      <span class="product-price">GHS ${p.price}</span>${discount}
+      <span class="product-price">${formatPrice(p.price)}</span>${discount}
     </div>
     <div class="product-meta">
       <span class="product-rating">${stars}</span>
@@ -2947,7 +2947,7 @@ function vendorProductCardHTML(p) {
   <div class="product-body">
     <div class="product-name">${escHtml(itemDisplayName(p.name))}</div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
-      <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="product-price">GHS ${p.price}</span>${discount}</span>
+      <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="product-price">${formatPrice(p.price)}</span>${discount}</span>
       ${stockBadge}
     </div>
     <div class="product-meta">
@@ -2975,7 +2975,7 @@ function productCardSmall(p) {
   ${imageBlock}
   <div class="product-body">
     <div class="product-name">${escHtml(itemDisplayName(p.name))}</div>
-    <span class="product-price">GHS ${p.price}</span>
+    <span class="product-price">${formatPrice(p.price)}</span>
   </div>
 </div>`;
 }
