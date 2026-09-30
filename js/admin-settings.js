@@ -3,7 +3,7 @@
    Full settings load / save for all 6 categories + commission tiers
    ============================================================ */
 
-// All settings keys with their defaults and input type
+// All settings keys with their input type
 const SETTINGS_CONFIG = [
   { key: 'delivery_fee_local',         id: 'setting-delivery-local',             type: 'number',   default: '5'    },
   { key: 'delivery_fee_intercity',     id: 'setting-delivery-intercity',         type: 'number',   default: '15'   },
@@ -32,6 +32,27 @@ const SETTINGS_CONFIG = [
   // Note: announcement fields are loaded separately (outside the form) via loadAdminSettings
   // but saved via sendAnnouncement() / clearAnnouncement()
 ];
+
+// ── Dirty tracking (egress) ───────────────────────────────
+// Baseline of every tracked value as of the last load/save. Saving used to
+// upsert ALL settings rows on every click (~20 writes for a one-field change);
+// now only keys whose current value differs from this baseline are written.
+let _settingsBaseline = null;
+function currentSettingValues() {
+  const vals = {};
+  for (const cfg of SETTINGS_CONFIG) {
+    const el = document.getElementById(cfg.id);
+    if (!el) continue;
+    vals[cfg.key] = cfg.type === 'checkbox' ? String(el.checked) : String(el.value);
+  }
+  // Tracked JSON blobs are compared by their serialized form.
+  vals.commission_tiers = JSON.stringify(_commissionTiers || []);
+  vals.referral_commission_tiers = JSON.stringify(_referralCommissionTiers || []);
+  vals.hero_banners = JSON.stringify(_heroBanners || []);
+  vals.coupons = JSON.stringify(_coupons || []);
+  return vals;
+}
+function markSettingsSaved() { _settingsBaseline = currentSettingValues(); }
 
 // ── Load all settings from DB → populate form fields ─────
 async function loadAdminSettings() {
@@ -91,6 +112,10 @@ async function loadAdminSettings() {
   } catch(e) { _coupons = []; }
   if (typeof renderCouponsEditor === 'function') renderCouponsEditor();
 
+  // Everything on screen now matches the database — remember it as the
+  // baseline the next save diffs against.
+  markSettingsSaved();
+
 }
 
 // ── Save all settings to DB ───────────────────────────────
@@ -115,6 +140,16 @@ async function saveAdminSettings(e) {
   const rows = res?.data || [];
   if (!rows.length && !res) { await fail(); return; }
 
+  // Dirty tracking: diff every tracked value against the baseline from the
+  // last load/save and write ONLY the keys the admin actually changed. A
+  // one-field save used to fire ~20 writes (each field + the tier/banner/coupon
+  // blobs) on every click — pure egress waste, and every write was a fresh
+  // chance for a partial failure.
+  if (!_settingsBaseline) markSettingsSaved(); // safety: never tracked → snapshot now
+  const before = _settingsBaseline;
+  const after = currentSettingValues();
+  const dirtyKeys = Object.keys(after).filter(k => after[k] !== before[k]);
+
   const upsert = async (key, value) => {
     const existing = rows.find(r => r.key === key);
     if (existing) {
@@ -132,25 +167,29 @@ async function saveAdminSettings(e) {
     }
   };
 
-  // Read and save every field
-  const saves = SETTINGS_CONFIG.map(cfg => {
-    const el = document.getElementById(cfg.id);
-    if (!el) return Promise.resolve(true);
-    const val = cfg.type === 'checkbox' ? String(el.checked) : el.value;
-    return upsert(cfg.key, val);
+  if (!dirtyKeys.length) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save All Settings'; }
+    showToast('No changes to save.', 'info');
+    return;
+  }
+
+  // Read and save every changed field
+  const saves = dirtyKeys.map(key => {
+    if (key === 'commission_tiers' || key === 'referral_commission_tiers') return Promise.resolve(true); // handled below
+    return upsert(key, after[key]);
   });
 
   const results = await Promise.all(saves);
   const failed = results.filter(r => r === false).length;
 
-  // Save commission tiers
-  const tiersOk = await saveCommissionTiers(rows);
+  // Save commission tiers — only when their serialized form changed.
+  const tiersOk = dirtyKeys.includes('commission_tiers') || dirtyKeys.includes('referral_commission_tiers')
+    ? await saveCommissionTiers(rows, dirtyKeys)
+    : true;
 
-  // Save hero banners
-  const heroOk = await upsert('hero_banners', JSON.stringify(_heroBanners));
-
-  // Save coupons
-  const couponsOk = await upsert('coupons', JSON.stringify(_coupons));
+  // Save hero banners / coupons — only when they changed.
+  const heroOk = dirtyKeys.includes('hero_banners') ? await upsert('hero_banners', after.hero_banners) : true;
+  const couponsOk = dirtyKeys.includes('coupons') ? await upsert('coupons', after.coupons) : true;
 
   const extraFailed = [tiersOk, heroOk, couponsOk].filter(ok => ok === false).length;
   const totalFailed = failed + extraFailed;
@@ -159,6 +198,9 @@ async function saveAdminSettings(e) {
     await fail(`${totalFailed} setting${totalFailed > 1 ? 's' : ''} failed to save. Check your connection and try again.`);
     return;
   }
+
+  // Everything persisted — re-baseline so the next save only sends real diffs.
+  markSettingsSaved();
 
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save All Settings'; }
 
@@ -301,10 +343,14 @@ function removeReferralCommissionTier(index) {
 }
 
 // ── Save both tier types ──────────────────────────────────
-async function saveCommissionTiers(existingRows) {
+async function saveCommissionTiers(existingRows, dirtyKeys) {
   const rows  = existingRows || (await apiGet('settings', 'limit=100'))?.data || [];
+  // Only tier lists whose serialized form changed are written; called without
+  // dirtyKeys (legacy callers) it saves both, as before.
+  const dirty = (key) => !dirtyKeys || dirtyKeys.includes(key);
   const upsertTier = async (key, tiers) => {
     if (!tiers || !tiers.length) return;
+    if (!dirty(key)) return true;
     const value    = JSON.stringify(tiers);
     const existing = rows.find(r => r.key === key);
     if (existing) return !!(await apiPatch('settings', existing.id, { value, updated_at: new Date().toISOString() }));
