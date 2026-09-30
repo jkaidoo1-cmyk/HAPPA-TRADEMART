@@ -829,9 +829,19 @@ function changeDetailQty(delta, max = 999) {
 
 async function addToCartFromDetail(productId) {
 
-  const p = App.allProducts.find(p => p.id === productId) || await apiGet(`products/${productId}`);
+  // Cached products add instantly; a cold fetch must not fail silently —
+  // the buyer taps "Add to Cart" and then finds an empty cart with no
+  // explanation. Surface the failure and stop.
+  const p = App.allProducts.find(p => String(p.id) === String(productId))
+    || await apiGet(`products/${productId}`).catch(() => null);
 
-  if (!p) return;
+  if (!p) {
+
+    showToast('Could not add to cart — check your connection and try again.', 'error', 4000);
+
+    return;
+
+  }
 
   const qty  = parseInt(document.getElementById('detail-qty')?.textContent) || 1;
 
@@ -849,9 +859,16 @@ async function buyNow(productId) {
     return;
   }
 
-  const p = App.allProducts?.find(p => String(p.id) === String(productId)) || await apiFetch(`products/${productId}`);
+  const p = App.allProducts?.find(p => String(p.id) === String(productId))
+    || await apiFetch(`products/${productId}`).catch(() => null);
 
-  if (!p) return;
+  if (!p) {
+
+    showToast('Could not start checkout — check your connection and try again.', 'error', 4000);
+
+    return;
+
+  }
 
   const qty = parseInt(document.getElementById('detail-qty')?.textContent) || 1;
   const note = (document.getElementById('buyer-note-' + productId)?.value || '').trim();

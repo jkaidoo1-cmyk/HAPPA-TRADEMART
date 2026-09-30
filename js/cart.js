@@ -53,6 +53,10 @@ function addToCart(product, qty = 1, buyerNote = '') {
   }
   saveCart();
   updateCartBadge();
+  // If the buyer already navigated to the cart while a slow product fetch
+  // (addToCartFromDetail) was still in flight, refresh the visible list now
+  // — the item must appear without them leaving and coming back.
+  if (App.currentPage === 'cart' && typeof renderCart === 'function') renderCart();
   // Pulse the cart icon so the user sees the count change
   const cartIcon = document.querySelector('.nav-icon[onclick*="cart"], .nav-icon i.fa-shopping-cart, .nav-icon i.fa-shopping-bag');
   if (cartIcon) {
