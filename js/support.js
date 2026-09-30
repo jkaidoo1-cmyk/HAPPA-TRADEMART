@@ -65,10 +65,12 @@ function _ticketStatusBadge(status) {
 }
 
 function _priorityBadge(p) {
-  const map = { urgent: '<span class="status-badge status-rejected">🔴 Urgent</span>',
-                high: '<span class="status-badge status-pending">🟠 High</span>',
-                normal: '<span class="status-badge status-active">🟢 Normal</span>' };
-  return map[p] || map.normal;
+  // Normal priority is the default — showing a badge for it is noise.
+  // Only deviations from normal are surfaced.
+  const map = { urgent: '<span class="status-badge status-rejected">Urgent</span>',
+                high: '<span class="status-badge status-pending">High</span>',
+                normal: '' };
+  return map[p] || '';
 }
 
 // ── Contact channels (configurable via Admin → Settings → Customer Care) ──
@@ -358,14 +360,23 @@ async function loadAdminSupport() {
   if (_adminSupportFilter === 'open') list = tickets.filter(t => t.status === 'open' || t.status === 'in_progress');
   else if (_adminSupportFilter !== 'all') list = tickets.filter(t => t.status === _adminSupportFilter);
 
+  // Compact segmented filter pills — one row, count inline, no orphaned cards.
+  const FILTERS = [
+    ['all', 'All', tickets.length],
+    ['open', 'Open', counts.open + counts.in_progress],
+    ['resolved', 'Resolved', counts.resolved],
+    ['closed', 'Closed', counts.closed]
+  ];
   container.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px">
-      ${[['all', 'All', tickets.length], ['open', 'Open', counts.open + counts.in_progress], ['resolved', 'Resolved', counts.resolved], ['closed', 'Closed', counts.closed]]
-        .map(([k, label, n]) => `
-        <div style="background:${_adminSupportFilter === k ? 'var(--primary)' : '#fff'};color:${_adminSupportFilter === k ? '#fff' : 'var(--text)'};border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;cursor:pointer" onclick="_adminSupportFilter='${k}';loadAdminSupport()">
-          <div style="font-size:1.3rem;font-weight:900">${n}</div>
-          <div style="font-size:.72rem;opacity:.8">${label}</div>
-        </div>`).join('')}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      ${FILTERS.map(([k, label, n]) => {
+        const active = _adminSupportFilter === k;
+        return `
+        <button type="button" aria-pressed="${active}" style="display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:var(--radius-full);border:1px solid ${active ? 'var(--primary)' : 'var(--border)'};background:${active ? 'var(--primary)' : '#fff'};color:${active ? '#fff' : 'var(--text)'};font-size:.78rem;font-weight:${active ? '700' : '600'};cursor:pointer" onclick="_adminSupportFilter='${k}';loadAdminSupport()">
+          ${label}
+          <span style="background:${active ? 'rgba(255,255,255,.25)' : 'var(--bg)'};color:${active ? '#fff' : 'var(--text-muted)'};border-radius:var(--radius-full);padding:1px 7px;font-size:.7rem;font-weight:800">${n}</span>
+        </button>`;
+      }).join('')}
     </div>
 
     ${list.length ? list.map(t => _adminTicketCardHTML(t)).join('') :
@@ -382,38 +393,44 @@ async function loadAdminSupport() {
 function _adminTicketCardHTML(t) {
   const msgs = _supportMessages(t);
   return `
-<div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;cursor:pointer" onclick="toggleSupportTicket('${t.id}')">
+<div class="card" style="margin-bottom:10px" id="admin-ticket-${t.id}">
+  <div class="card-body" style="padding:12px 14px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer" onclick="toggleSupportTicket('${t.id}')">
     <div style="flex:1;min-width:0">
-      <div style="font-weight:800;font-size:.9rem">${escHtml(t.subject || 'Untitled')}</div>
-      <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">
-        👤 ${escHtml(t.user_name || 'Unknown')} (${escHtml(t.user_role || 'user')}) · ${escHtml(t.user_email || '')} · ${escHtml(t.category || 'Other')}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-weight:700;font-size:.92rem">${escHtml(t.subject || 'Untitled')}</span>
+        ${_priorityBadge(t.priority)}
+        ${_ticketStatusBadge(t.status)}
       </div>
-      <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px">Opened ${formatDateTime(t.created_at)} · Updated ${formatDateTime(t.updated_at)}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:.75rem;color:var(--text-muted);margin-top:5px">
+        <i class="fas fa-user" style="font-size:.66rem"></i>
+        <span style="font-weight:600;color:var(--text)">${escHtml(t.user_name || 'Unknown')}</span>
+        <span style="text-transform:capitalize">${escHtml(t.user_role || 'user')}</span>
+        ${t.user_email ? `<span>·</span><span>${escHtml(t.user_email)}</span>` : ''}
+        ${t.category ? `<span>·</span><span>${escHtml(t.category)}</span>` : ''}
+      </div>
+      <div style="font-size:.72rem;color:var(--text-light);margin-top:3px">Opened ${formatDateTime(t.created_at)}${t.updated_at && t.updated_at !== t.created_at ? ` · Updated ${formatDateTime(t.updated_at)}` : ''}</div>
     </div>
-    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-      ${_priorityBadge(t.priority)}
-      ${_ticketStatusBadge(t.status)}
-      <i class="fas fa-chevron-down" style="color:var(--text-muted);font-size:.75rem"></i>
-    </div>
+    <i class="fas fa-chevron-down" style="color:var(--text-light);font-size:.8rem;margin-top:4px;flex-shrink:0"></i>
   </div>
 
-  <div id="support-ticket-${t.id}" style="display:none;margin-top:12px">
+  <div id="support-ticket-${t.id}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
     ${_threadHTML(msgs)}
 
     <!-- Admin reply -->
-    <div style="display:flex;gap:8px;margin-top:10px">
+    <div style="display:flex;gap:8px;margin-top:12px">
       <input class="form-control" id="admin-reply-${t.id}" placeholder="Reply as Support Team...">
       <button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="adminReplyTicket('${t.id}')"><i class="fas fa-paper-plane"></i> Reply</button>
     </div>
 
     <!-- Status controls -->
     <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-      ${t.status === 'open' ? `<button class="btn btn-outline btn-sm" onclick="adminSetTicketStatus('${t.id}','in_progress')">▶ In Progress</button>` : ''}
-      ${(t.status === 'open' || t.status === 'in_progress') ? `<button class="btn btn-success btn-sm" style="background:#16a34a;border:none;color:#fff" onclick="adminSetTicketStatus('${t.id}','resolved')">✓ Mark Resolved</button>` : ''}
-      ${(t.status !== 'closed') ? `<button class="btn btn-ghost btn-sm" onclick="adminSetTicketStatus('${t.id}','closed')">✕ Close</button>` : ''}
-      ${(t.status === 'closed' || t.status === 'resolved') ? `<button class="btn btn-outline btn-sm" onclick="adminSetTicketStatus('${t.id}','open')">↺ Reopen</button>` : ''}
+      ${t.status === 'open' ? `<button class="btn btn-outline btn-sm" onclick="adminSetTicketStatus('${t.id}','in_progress')"><i class="fas fa-play"></i> In Progress</button>` : ''}
+      ${(t.status === 'open' || t.status === 'in_progress') ? `<button class="btn btn-sm" style="background:var(--success);border:none;color:#fff" onclick="adminSetTicketStatus('${t.id}','resolved')"><i class="fas fa-check"></i> Mark Resolved</button>` : ''}
+      ${(t.status !== 'closed') ? `<button class="btn btn-ghost btn-sm" onclick="adminSetTicketStatus('${t.id}','closed')"><i class="fas fa-times"></i> Close</button>` : ''}
+      ${(t.status === 'closed' || t.status === 'resolved') ? `<button class="btn btn-outline btn-sm" onclick="adminSetTicketStatus('${t.id}','open')"><i class="fas fa-rotate-left"></i> Reopen</button>` : ''}
     </div>
+  </div>
   </div>
 </div>`;
 }
