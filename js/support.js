@@ -409,7 +409,15 @@ function _adminTicketCardHTML(t) {
         ${t.user_email ? `<span>·</span><span>${escHtml(t.user_email)}</span>` : ''}
         ${t.category ? `<span>·</span><span>${escHtml(t.category)}</span>` : ''}
       </div>
-      <div style="font-size:.72rem;color:var(--text-light);margin-top:3px">Opened ${formatDateTime(t.created_at)}${t.updated_at && t.updated_at !== t.created_at ? ` · Updated ${formatDateTime(t.updated_at)}` : ''}</div>
+      <div style="font-size:.72rem;color:var(--text-light);margin-top:3px">Opened ${formatDateTime(t.created_at)}${(() => {
+        // Skip "Updated" when it is the same moment as creation (updates that
+        // only bumped millisecond precision on write carry no information).
+        try {
+          const u = new Date(t.updated_at), c = new Date(t.created_at);
+          if (t.updated_at && u.getTime() - c.getTime() > 60000) return ` · Updated ${formatDateTime(t.updated_at)}`;
+        } catch (e) {}
+        return '';
+      })()}</div>
     </div>
     <i class="fas fa-chevron-down" style="color:var(--text-light);font-size:.8rem;margin-top:4px;flex-shrink:0"></i>
   </div>
