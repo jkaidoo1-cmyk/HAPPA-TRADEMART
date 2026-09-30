@@ -817,7 +817,9 @@ async function renderAdminDashboard() {
           <i class="fas fa-check-circle"></i> Announcement sent!
         </div>
       </div>
-    </div>    <!-- ── Support / Customer Care Tab ── -->
+    </div>
+  </div>
+</div>    <!-- ── Support / Customer Care Tab ── -->
     <div class="tab-content ${activeTabId === 'admin-support' ? 'active' : ''}" id="admin-support">
       <div class="dashboard-wrap">
         <h3 style="font-size:.95rem;font-weight:700;margin-bottom:4px">🎧 Customer Care / Support Tickets</h3>
