@@ -447,7 +447,7 @@ function _apRenderVendorProducts(userId, data) {
         <form onsubmit="event.preventDefault();_apSaveProductEdit('${p.id}','${userId}',this)">
           <div class="form-group">
             <label class="form-label">Name</label>
-            <input class="form-control" name="name" value="${escHtml(p.name||'')}" required>
+            <input class="form-control" name="name" value="${escHtml(p.name||'')}" placeholder="Optional — a title shown on the card">
           </div>
           <div style="display:flex;gap:8px">
             <div class="form-group" style="flex:1">
@@ -703,7 +703,7 @@ function _apRenderVendorProductsForPage(userId, data) {
             <form onsubmit="event.preventDefault();_apSaveProductEdit('${p.id}','${userId}',this);_apRenderVendorProductsForPage('${userId}')">
               <div class="form-group">
                 <label class="form-label">Name</label>
-                <input class="form-control" name="name" value="${escHtml(p.name||'')}" required>
+                <input class="form-control" name="name" value="${escHtml(p.name||'')}" placeholder="Optional — a title shown on the card">
               </div>
               <div style="display:flex;gap:8px">
                 <div class="form-group" style="flex:1">

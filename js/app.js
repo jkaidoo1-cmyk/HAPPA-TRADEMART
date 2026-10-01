@@ -2863,11 +2863,11 @@ function _pcSlide(btn, dir) {
 function _pcSlideshowHTML(images, altText) {
   const imgs = (images && images.length) ? images : ['https://placehold.co/300x300?text=No+Image'];
   if (imgs.length === 1) {
-    return `<img class="product-img" src="${imgs[0]}" alt="${altText}" loading="lazy" onerror="this.src='https://placehold.co/300x300?text=No+Image'">`;
+    return `<img class="product-img" src="${imgs[0]}" alt="${altText}" loading="lazy" onload="fitProductImage(this)" onerror="this.src='https://placehold.co/300x300?text=No+Image'">`;
   }
   const slidesHTML = imgs.map((src, i) =>
     `<div class="pc-slide${i === 0 ? ' active' : ''}">
-      <img src="${src}" alt="${altText} ${i+1}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/300x300?text=No+Image'">
+      <img src="${src}" alt="${altText} ${i+1}" loading="lazy" decoding="async" onload="fitProductImage(this)" onerror="this.src='https://placehold.co/300x300?text=No+Image'">
     </div>`
   ).join('');
   const dotsHTML = imgs.map((_, i) =>
@@ -2901,6 +2901,7 @@ function productCardHTML(p) {
   const stars = renderStars(p.avg_rating || 0);
   const imageBlock = _pcSlideshowHTML(p.images, escHtml(p.name));
   const syncing = p._isOptimistic ? '<span style="position:absolute;top:6px;right:6px;background:var(--primary);color:#fff;font-size:.6rem;font-weight:700;padding:2px 6px;border-radius:100px;z-index:2"><i class="fas fa-spinner fa-spin"></i> SYNCING</span>' : '';
+  const title = itemDisplayName(p.name) || 'Untitled product';
   return `
 <div class="product-card" data-prod-id="${p.id}" onclick="openProduct('${p.id}')" style="${p._isOptimistic ? 'opacity:.85;border:1px dashed var(--primary)' : ''}">
   ${flash}
@@ -2908,7 +2909,7 @@ function productCardHTML(p) {
   ${soldOut}
   ${imageBlock}
   <div class="product-body">
-    <div class="product-name">${escHtml(itemDisplayName(p.name))}</div>
+    <div class="product-name">${escHtml(title)}</div>
     <div style="display:flex;align-items:center;flex-wrap:wrap">
       <span class="product-price">${formatPrice(p.price)}</span>${discount}
     </div>
@@ -2945,7 +2946,7 @@ function vendorProductCardHTML(p) {
   ${soldOut}
   ${imageBlock}
   <div class="product-body">
-    <div class="product-name">${escHtml(itemDisplayName(p.name))}</div>
+    <div class="product-name">${escHtml(itemDisplayName(p.name) || 'Untitled product')}</div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
       <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="product-price">${formatPrice(p.price)}</span>${discount}</span>
       ${stockBadge}

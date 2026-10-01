@@ -2760,6 +2760,10 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
 
     // Product rows must carry sane numbers (guide §3 strict request schemas).
     if (table === 'products') {
+      // The name is optional on upload — make sure the key exists so the
+      // validator can default a missing/blank name for a CREATE (a partial
+      // PATCH below never reaches this line's normalization).
+      if (!('name' in body)) body.name = '';
       const pv = commerce.validateProductBody(body);
       if (!pv.ok) return res.status(400).json({ error: pv.error });
       // (#2) A product may only be filed under a store the writer owns.

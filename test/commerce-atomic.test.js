@@ -184,9 +184,16 @@ test('validateProductBody rejects the payloads that used to save as GHS null', (
   assert.equal(commerce.validateProductBody({ name: 'Shorts', price: '' }).ok, false);
   assert.equal(commerce.validateProductBody({ name: 'Shorts', price: 'abc' }).ok, false);
   assert.equal(commerce.validateProductBody({ name: 'Shorts', price: -5 }).ok, false);
-  // A blank product name is rejected too — an untitled card is undiscoverable.
-  assert.equal(commerce.validateProductBody({ name: '   ', price: 25 }).ok, false);
+  // The name is OPTIONAL (a vendor may upload without one) — but it must never
+  // be stored blank, or the card, search and order lines would render empty.
+  const blank = { name: '   ', price: 25 };
+  assert.equal(commerce.validateProductBody(blank).ok, true);
+  assert.equal(blank.name, 'Untitled product', 'a blank name is defaulted, not rejected');
   // Partial updates and complete creates still pass.
   assert.equal(commerce.validateProductBody({ stock_qty: 3 }).ok, true);
   assert.equal(commerce.validateProductBody({ name: 'Blue Shorts', price: 25, original_price: 40, stock_qty: 3 }).ok, true);
+  // A PATCH that does not mention the name at all must not clobber it.
+  const patch = { stock_qty: 7 };
+  commerce.validateProductBody(patch);
+  assert.equal('name' in patch, false, 'a partial update leaves the stored name untouched');
 });

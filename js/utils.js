@@ -245,6 +245,67 @@ async function squareImage(file, size = 900, quality = 0.72) {
   });
 }
 
+// ── Display-time image fit ──────────────────────────────────────────────
+// Uploads are cover-cropped today, but images saved by an older build had a
+// white bar BAKED INTO the jpeg (a portrait photo letterboxed onto a white
+// square) — no CSS can ever make those fill the card. When such an image
+// loads, detect the symmetric white frame, crop it away and swap in the
+// trimmed file, so the photo fills the space the way the user expects.
+// Only runs when a frame is actually detected: the common case costs four
+// thin pixel reads, and the result is cached per source image.
+const _fittedImageCache = new Map();
+function fitProductImage(img) {
+  try {
+    if (!img || img.dataset.fitDone) return;
+    img.dataset.fitDone = '1';
+    const src = img.currentSrc || img.src || '';
+    if (src.slice(0, 10) !== 'data:image') return;   // only local data URIs (canvas must not be tainted)
+    const cached = _fittedImageCache.get(src);
+    if (cached) { if (cached !== src) img.src = cached; return; }
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (!w || !h) return;
+
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+
+    const whiteish = (d, i) => d[i] >= 250 && d[i + 1] >= 250 && d[i + 2] >= 250;
+    const edgesAllWhite = data => { for (let i = 0; i < data.length; i += 4) if (!whiteish(data, i)) return false; return true; };
+    // Symmetric white frame = the letterbox signature. One thin strip per side.
+    const vertFrame = edgesAllWhite(ctx.getImageData(0, 0, 1, h).data) &&
+                      edgesAllWhite(ctx.getImageData(w - 1, 0, 1, h).data);
+    const horizFrame = edgesAllWhite(ctx.getImageData(0, 0, w, 1).data) &&
+                       edgesAllWhite(ctx.getImageData(0, h - 1, w, 1).data);
+    if (!vertFrame && !horizFrame) { _fittedImageCache.set(src, src); return; }
+
+    // A frame was found — measure how far in the real content starts.
+    const full = ctx.getImageData(0, 0, w, h).data;
+    const at = (x, y) => (y * w + x) * 4;
+    const isWhite = (x, y) => whiteish(full, at(x, y));
+    let l = 0; while (l < w && vertFrame) { let ok = true; for (let y = 0; y < h; y++) if (!isWhite(l, y)) { ok = false; break; } if (!ok) break; l++; }
+    let r = 0; while (r < w - l && vertFrame) { let ok = true; for (let y = 0; y < h; y++) if (!isWhite(w - 1 - r, y)) { ok = false; break; } if (!ok) break; r++; }
+    let t = 0; while (t < h && horizFrame) { let ok = true; for (let x = 0; x < w; x++) if (!isWhite(x, t)) { ok = false; break; } if (!ok) break; t++; }
+    let b = 0; while (b < h - t && horizFrame) { let ok = true; for (let x = 0; x < w; x++) if (!isWhite(x, h - 1 - b)) { ok = false; break; } if (!ok) break; b++; }
+
+    const cw = w - l - r, ch = h - t - b;
+    // Ignore trivial insets (JPEG noise) — only real letterboxing gets cropped —
+    // and refuse degenerate results, so a suspiciously all-white image can never
+    // be cropped down to a sliver.
+    const trivial = (l + r) / w < 0.04 && (t + b) / h < 0.04;
+    if (cw < w * 0.2 || ch < h * 0.2 || trivial) { _fittedImageCache.set(src, src); return; }
+
+    const trimmed = document.createElement('canvas');
+    trimmed.width = cw; trimmed.height = ch;
+    trimmed.getContext('2d').drawImage(c, l, t, cw, ch, 0, 0, cw, ch);
+    const out = trimmed.toDataURL('image/jpeg', 0.8);
+    _fittedImageCache.set(src, out);
+    img.src = out;
+  } catch (e) {
+    // Cross-origin, decode failure or a hostile image — leave the original alone.
+  }
+}
+
 async function previewProductImage(input, previewWrapperId, hiddenId, makeSquare = false) {
   const file = input.files?.[0];
   if (!file) return;

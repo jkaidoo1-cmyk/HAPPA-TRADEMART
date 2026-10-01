@@ -551,7 +551,9 @@ async function renderProductDetail(id) {
 
   ${discount > 0 ? `<span style="position:absolute;z-index:2;top:12px;right:12px;background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:var(--radius-full)">${discount}% OFF</span>` : ''}
 
-  <img src="${images[0]}" alt="${escHtml(p.name)}" style="width:100%;aspect-ratio:1;max-height:340px;object-fit:fill;display:block"
+  <img src="${images[0]}" alt="${escHtml(p.name)}" style="width:100%;aspect-ratio:1;max-height:340px;object-fit:cover;display:block"
+
+       onload="fitProductImage(this)"
 
        onerror="this.src='https://placehold.co/600x600?text=No+Image'">
 
@@ -1890,11 +1892,12 @@ function adminProductCardHTML(p) {
 
     ${flash}${soldOut}${hidden}
 
-    <img style="width:100%;height:140px;object-fit:fill;display:block"
+    <img style="width:100%;height:140px;object-fit:cover;display:block"
 
          src="${p.images?.[0]||'https://placehold.co/300x300?text=No+Image'}"
 
          alt="${escHtml(p.name)}" loading="lazy"
+         onload="fitProductImage(this)"
 
          onerror="this.src='https://placehold.co/300x300?text=No+Image'">
 
@@ -3411,10 +3414,10 @@ window.openStorefrontProductModal = async function(productId) {
       <button onclick="document.getElementById('storefront-product-modal').remove()" style="position:absolute; top:12px; right:12px; border:none; background:rgba(0,0,0,0.5); color:#fff; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.8rem; z-index:10">
         <i class="fas fa-times"></i>
       </button>      <div style="width:100%; height:200px; background:#f8f9fa; overflow:hidden">
-        <img src="${img}" style="width:100%; height:100%; object-fit:fill; display:block" onerror="this.src='https://placehold.co/400x300?text=Product'">
+        <img src="${img}" style="width:100%; height:100%; object-fit:cover; display:block" onload="fitProductImage(this)" onerror="this.src='https://placehold.co/400x300?text=Product'">
       </div>
       <div style="padding:20px; display:grid; gap:12px">
-        <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name))}</h3>
+        <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name) || 'Untitled product')}</h3>
         <div style="display:flex; justify-content:space-between; align-items:center">
           <span style="font-size:1.25rem; font-weight:900; color:${primaryColor}">${formatPrice(p.price)}</span>
           <span style="font-size:0.75rem; background:#f3f4f6; padding:3px 8px; border-radius:12px; color:var(--text-muted)">In Stock: ${p.stock_qty || 0}</span>
