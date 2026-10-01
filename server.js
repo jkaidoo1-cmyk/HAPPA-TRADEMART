@@ -1759,10 +1759,20 @@ app.post('/api/notify', notifyRateLimiter, async (req, res) => {
 app.get('/api/:table', async (req, res) => {
   const table = req.params.table;
   const viewer = access.getAccessContext(req);
+  // Orders and packages are private to the parties involved. Scope them here so
+  // a vendor cannot list another vendor's fulfilments and an anonymous caller
+  // cannot dump the order book; a targeted lookup by code (tracking) still works.
+  const scopeOrderList = (tbl, list) => {
+    if (tbl !== 'packages' && tbl !== 'orders') return list;
+    const q = req.query || {};
+    const exact = [q.code, q.package_code, q.id].some(v => v != null && String(v).trim().length >= 4);
+    const searchVal = String(q.search || '').trim();
+    return access.scopeOrderRows(list, viewer, exact || searchVal.length >= 4);
+  };
   const cacheKey = `${table}:${JSON.stringify(req.query)}`;
   const cachedResponse = getCachedApiResponse(cacheKey);
   if (cachedResponse) {
-    return res.json({ data: access.applyReadPolicy(table, cachedResponse.data || [], viewer) });
+    return res.json({ data: access.applyReadPolicy(table, scopeOrderList(table, cachedResponse.data || []), viewer) });
   }
 
   if (table === 'storefronts') {
@@ -1828,7 +1838,7 @@ app.get('/api/:table', async (req, res) => {
     const params = parseQueryParams(req.query);
     const filtered = applyFilters(rows, params);
     setCachedApiResponse(cacheKey, { data: filtered });
-    return res.json({ data: access.applyReadPolicy(table, filtered, viewer) });
+    return res.json({ data: access.applyReadPolicy(table, scopeOrderList(table, filtered), viewer) });
   }
   
   let supaRows = [];
@@ -1856,7 +1866,7 @@ app.get('/api/:table', async (req, res) => {
   const params = parseQueryParams(req.query);
   const filtered = applyFilters(rows, params);
   setCachedApiResponse(cacheKey, { data: filtered });
-  return res.json({ data: access.applyReadPolicy(table, filtered, viewer) });
+  return res.json({ data: access.applyReadPolicy(table, scopeOrderList(table, filtered), viewer) });
 });
 
 // Mark rendor subscriptions inactive once their expiry passes — run on read so

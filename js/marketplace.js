@@ -3256,11 +3256,10 @@ async function handleStorefrontOrderSearch(storeId, query, isEnter) {
 
   let pkgs = [];
   try {
-    if (typeof fetchPkgSearchCache === 'function') pkgs = await fetchPkgSearchCache();
-    else {
-      const res = await apiGet('packages', 'limit=200');
-      pkgs = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
-    }
+    // Always ask for the code the shopper typed — the package list is private to
+    // the parties involved, so a blanket fetch returns nothing for a visitor.
+    const res = await apiGet('packages', 'search=' + encodeURIComponent(q) + '&limit=50');
+    pkgs = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
   } catch (e) {}
 
   const ql = q.toLowerCase();
@@ -3597,7 +3596,12 @@ async function renderStorefrontOrders(storeId, container, primaryColor) {
   const lastCode = localStorage.getItem('happa_last_package_code') || '';
   const lastPhone = localStorage.getItem('happa_last_package_phone') || '';
   try {
-    const pkgsRes = await apiGet('packages', 'limit=200');
+    // A visitor asks only for the code they hold; a signed-in user gets their own
+    // rows. The full list is private to the parties involved.
+    const pkgQ = (!App.currentUser && lastCode)
+      ? ('search=' + encodeURIComponent(lastCode) + '&limit=200')
+      : 'limit=200';
+    const pkgsRes = await apiGet('packages', pkgQ);
     const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
     const norm = v => String(v || '').replace(/\D/g, '');
     const u = App.currentUser;

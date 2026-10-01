@@ -85,6 +85,29 @@ test('access: admin sees full user rows; anonymous gets PII scrubbed', () => {
   assert.equal(anonView[0].id_image, undefined);
 });
 
+test('access: order and package lists are scoped to the parties involved', () => {
+  // A vendor must never see another vendor's fulfilments (items + payout
+  // amounts), and an anonymous caller must not be able to dump the order book —
+  // but tracking a package by the code you already hold must still work.
+  const vendor = { userId: 'v1', role: 'vendor' };
+  const buyer = { userId: 'b1', role: 'buyer' };
+  const admin = { userId: 'admin', role: 'admin' };
+  const rows = [
+    { id: 'p1', vendor_id: 'v1', buyer_id: 'b1' },
+    { id: 'p2', vendor_id: 'v2', buyer_id: 'b1' },
+    { id: 'p3', vendor_id: 'v2', buyer_id: 'b9' }
+  ];
+  assert.deepEqual(access.scopeOrderRows(rows, vendor, false).map(r => r.id), ['p1'],
+    'a vendor only sees their own packages');
+  assert.deepEqual(access.scopeOrderRows(rows, buyer, false).map(r => r.id), ['p1', 'p2'],
+    'a buyer sees every order they are party to, across vendors');
+  assert.equal(access.scopeOrderRows(rows, admin, false).length, 3, 'an admin sees everything');
+  assert.deepEqual(access.scopeOrderRows(rows, null, false), [],
+    'anonymous bulk listing returns nothing');
+  assert.equal(access.scopeOrderRows(rows, null, true).length, 3,
+    'a targeted code lookup still returns the row for tracking');
+});
+
 test('access: a storefront may only go live when a paid subscription is on record', () => {
   // A vendor must never be able to flip their storefront live for free — the
   // public storefront gate trusts this status, so payment is the trust anchor.

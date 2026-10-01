@@ -164,7 +164,12 @@ async function renderCartOrders() {
   // Gather orders: logged-in user orders + any recently placed via localStorage code
   const lastCode = localStorage.getItem('happa_last_package_code') || '';
   try {
-    const pkgsRes = await apiGet('packages', 'limit=50');
+    // Package lists are private to the parties involved now: a signed-in user
+    // gets their own rows, a guest asks only for the code they hold.
+    const pkgQuery = (!App.currentUser && lastCode)
+      ? ('search=' + encodeURIComponent(lastCode) + '&limit=50')
+      : 'limit=50';
+    const pkgsRes = await apiGet('packages', pkgQuery);
     const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
 
     // Match orders for this user (by id, phone, email) OR by last placed package code
@@ -280,7 +285,8 @@ async function trackPackageByCode() {
 
   result.innerHTML = '<div style="font-size:.8rem;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Looking up...</div>';
   try {
-    const pkgsRes = await apiGet('packages', 'limit=200');
+    // Targeted lookup — the caller already holds this code.
+    const pkgsRes = await apiGet('packages', 'search=' + encodeURIComponent(code) + '&limit=10');
     const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
     const pkg = allPkgs.find(p => String(p.package_code || p.code || '').toUpperCase() === code.toUpperCase());
     if (!pkg) {

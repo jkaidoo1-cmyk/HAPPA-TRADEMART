@@ -1864,6 +1864,16 @@ function logEgress(req, table, payload) {
 // this function recomputes the payload on every request and only skips the
 // transfer when the bytes are byte-for-byte identical to what the client holds.
 function sendList(req, res, table, rows, viewer) {
+  // Orders and packages are private to the parties involved — scope them HERE,
+  // the single exit every list branch goes through, so a new read route cannot
+  // forget it. A targeted lookup by code (order tracking) is still allowed for
+  // anonymous callers; a bulk listing of the order book is not.
+  if (table === 'packages' || table === 'orders') {
+    const q = req.query || {};
+    const exact = [q.code, q.package_code, q.id].some(v => v != null && String(v).trim().length >= 4);
+    const searchVal = String(q.search || '').trim();
+    rows = access.scopeOrderRows(rows, viewer, exact || searchVal.length >= 4);
+  }
   // scrubSensitive is applied here explicitly because this bypasses res.json,
   // which is where that scrub is otherwise installed (app.response.json).
   const payload = scrubSensitive({ data: access.applyReadPolicy(table, rows, viewer) });
