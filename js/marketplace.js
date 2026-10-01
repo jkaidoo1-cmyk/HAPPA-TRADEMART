@@ -992,7 +992,9 @@ async function renderStoreDetail(id) {
   // A store is viewable when it is marketplace-active OR its storefront is live
   // (storefront_status mirrors the storefront record; a paid/approved storefront
   // must not be hidden just because the marketplace `status` flag is unset).
-  const storeDetailLive = s.status === 'active' || s.storefront_status === 'active' || s.storefront_status === 'approved';
+  // Only a PAID subscription (status 'active') makes the storefront viewable.
+  // Legacy 'approved' is an unpaid state and must not open the page.
+  const storeDetailLive = s.status === 'active' || s.storefront_status === 'active';
   if (!storeDetailLive && !isOwner && !isAdmin) {
     c.innerHTML = `
       <div class="empty-state" style="padding: 40px 20px; text-align: center;">
@@ -1273,7 +1275,12 @@ async function renderStorefront(id) {
     const isOwner = App.currentUser && (String(App.currentUser.id) === String(s.vendor_id) || String(App.currentUser.id) === String(s.user_id));
     const isAdmin = App.currentUser && App.currentUser.role === 'admin';
     const storefrontStatus = sf?.status || s.storefront_status || 'none';
-    const isLive = storefrontStatus === 'active' || storefrontStatus === 'approved';
+    const isLive = storefrontStatus === 'active';
+    // 'approved'/'approved_pending_payment' = admin-approved but NOT yet paid —
+    // never treat those as live for the public (that let an unpaid storefront
+    // open as if active). Owner/admin may still preview it, but with a clear
+    // "payment pending" ribbon instead of a normal live page.
+    const sfUnpaid = storefrontStatus === 'approved' || storefrontStatus === 'approved_pending_payment';
 
     if (!isLive && !isOwner && !isAdmin) {
       // A background re-render that failed to load the storefront record (sf) can
@@ -1352,6 +1359,15 @@ async function renderStorefront(id) {
 
   let themeStyles = '';
   let headerHTML = '';
+
+  // Unpaid storefront (owner/admin preview): show an unmistakable ribbon so the
+  // vendor can never mistake a pre-payment preview for a live storefront.
+  if (sfUnpaid) {
+    themeStyles += `
+      #sf-unpaid-ribbon { position: sticky; top: 0; z-index: 99990; background: #fef3c7; color: #92400e; border-bottom: 2px solid #f59e0b; font-weight: 800; font-size: .78rem; text-align: center; padding: 8px 12px; }
+      #sf-unpaid-ribbon a { color: #b45309; text-decoration: underline; }
+    `;
+  }
 
   if (theme === 'bold') {
     themeStyles = `
@@ -1708,6 +1724,15 @@ async function renderStorefront(id) {
       </div>
     </div>
   `;
+
+  // Pre-payment preview ribbon (owner/admin only reaches here)
+  if (sfUnpaid) {
+    const ribbon = document.createElement('div');
+    ribbon.id = 'sf-unpaid-ribbon';
+    const dashPage = (App.currentUser && App.currentUser.role === 'admin') ? 'admin-dashboard' : 'vendor-dashboard';
+    ribbon.innerHTML = `⚠ Payment pending — this storefront is NOT live yet. Visitors see "Under Construction". <a href="#" onclick="showPage('${dashPage}'); return false;">${dashPage === 'admin-dashboard' ? 'Open admin panel' : 'Go to dashboard to pay'}</a>`;
+    c.parentElement && c.parentElement.insertBefore(ribbon, c);
+  }
 
   switchStorefrontTab('home', s.id);
 

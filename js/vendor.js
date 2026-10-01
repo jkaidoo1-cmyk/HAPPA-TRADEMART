@@ -7,6 +7,20 @@ async function renderVendorDashboard() {
     const c = document.getElementById('vendor-dashboard-content');
     if (!c) return;
     if (!App.currentUser) { showPage('auth'); return; }
+    // Loading placeholder: the dashboard pulls the user, store, storefront,
+    // products and packages before it can render, so a cold visit showed a
+    // completely blank panel for seconds. A skeleton beats a blank page.
+    if (!c.innerHTML.trim() || c.dataset.rendering !== '1') {
+      c.dataset.rendering = '1';
+      c.innerHTML = `
+<div class="dashboard-wrap">
+  <div class="skeleton-row" style="margin-bottom:12px"><div class="skeleton-box avatar"></div><div class="skeleton-box lines"><div class="skeleton-box line1"></div><div class="skeleton-box line2"></div></div></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
+    ${Array(4).fill('<div class="skeleton-box" style="height:74px;border-radius:12px"></div>').join('')}
+  </div>
+  ${Array(3).fill('<div class="skeleton-box" style="height:110px;border-radius:14px;margin-bottom:12px"></div>').join('')}
+</div>`;
+    }
   // Accept both 'vendor' and legacy 'seller' role
   if (App.currentUser.role !== 'vendor' && App.currentUser.role !== 'seller') {
     c.innerHTML = '<div class="empty-state"><i class="fas fa-lock"></i><h3>Access Denied</h3><p>Vendor accounts only</p></div>';
@@ -170,6 +184,10 @@ async function renderVendorDashboard() {
   const sfInstagram = myStorefront?.instagram_url || myStore?.instagram_url || '';
   const sfYoutube = myStorefront?.youtube_url || myStore?.youtube_url || '';
   const sfSlug = myStorefront?.url_slug || myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || '';
+  // The storefront URL is only genuinely live once the vendor has PAID: the admin
+  // approval sets 'approved_pending_payment' and only the payment flow sets 'active'.
+  // Until then the link must be presented as inactive (not shareable as "live").
+  const sfPaidLive = myStorefront?.status === 'active';
   const sfMetaDesc = myStorefront?.meta_description || myStore?.meta_description || '';
 
   const defaultStarterPrice = parseInt(await getSetting('storefront_price_starter', '50')) || 50;
@@ -596,70 +614,37 @@ async function renderVendorDashboard() {
           </div>
         ` : ''}
 
-        <!-- ── Status Banner: Approved, Pending Payment ── -->
-        ${myStorefront.status === 'approved_pending_payment' ? `
+        <!-- ── Status Banner: Approved but NOT yet paid — show the plan grid, NOT a live link ── -->
+        ${(myStorefront.status === 'approved_pending_payment' || myStorefront.status === 'approved') ? `
           <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:18px;margin-bottom:16px">
             <div style="font-weight:800;font-size:1.05rem;color:#166534;margin-bottom:6px"><i class="fas fa-check-circle" style="color:#16a34a"></i> Storefront Layout Approved!</div>
-            <div style="font-size:.84rem;color:#14532d;line-height:1.5;margin-bottom:18px">                  Your storefront layout has been approved by admin. Select a subscription plan below to choose your duration and pay to activate your live URL.
-            </div>
+            <div style="font-size:.84rem;color:#14532d;line-height:1.5;margin-bottom:18px">Your storefront layout has been approved by admin. Select a subscription plan below to choose your duration and pay to activate your live URL — your storefront link stays inactive until payment is confirmed.</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;max-width:900px">
-              <!-- Starter Plan -->
-              <div style="border:1px solid var(--border);border-radius:14px;padding:20px 16px;text-align:center;background:#fff;display:flex;flex-direction:column;justify-content:space-between">
-                <div>
-                  <div style="font-size:1.6rem;margin-bottom:6px">🌱</div>
-                  <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Starter Plan</div>
-                  <div style="font-size:1.4rem;font-weight:900;color:var(--text);margin-bottom:8px">GH₵ ${starterPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                  <div style="font-size:.78rem;color:var(--text-light);line-height:1.6;margin-bottom:12px;text-align:left">
-                    <div>✓ 📦 <strong>50 Product Uploads Max</strong></div>
-                    <div>✓ 🎨 Custom branding &amp; logo</div>
-                    <div>✓ 📱 Shareable website link</div>
+              ${[['starter','🌱','Starter Plan','50 Product Uploads Max','Custom branding &amp; logo','Shareable website link','btn-outline',''],['growth','🚀','Growth Plan','100 Product Uploads Max','Full custom UI theme &amp; slogan','Sales analytics &amp; priority search','btn-primary','RECOMMENDED'],['pro','💎','Pro Plan (Unlimited)','UNLIMITED Product Uploads','Daily Automated Item Sharing Outside the Site &amp; Across Social Media','VIP Priority Support &amp; Verified Badge','btn-outline','']].map(([key,icon,label,f1,f2,f3,btnCls,tag]) => `
+                <div style="border:${key === 'growth' ? '2px solid var(--primary)' : '1px solid var(--border)'};border-radius:14px;padding:20px 16px;text-align:center;background:#fff;display:flex;flex-direction:column;justify-content:space-between;position:relative">
+                  ${tag ? `<div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px">${tag}</div>` : ''}
+                  <div>
+                    <div style="font-size:1.6rem;margin-bottom:6px">${icon}</div>
+                    <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">${label}</div>
+                    <div style="font-size:1.4rem;font-weight:900;${key === 'growth' ? 'color:var(--primary)' : key === 'pro' ? 'color:#7c3aed' : 'color:var(--text)'};margin-bottom:8px">GH₵ ${({ starter: starterPrice, growth: growthPrice, pro: proPrice })[key]}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
+                    <div style="font-size:.78rem;color:var(--text-light);line-height:1.6;margin-bottom:12px;text-align:left">
+                      <div>✓ 📦 <strong>${f1}</strong></div>
+                      <div>✓ ${f2}</div>
+                      <div>✓ ${f3}</div>
+                    </div>
                   </div>
+                  <button class="btn ${btnCls} btn-sm" style="width:100%;margin-top:12px;font-size:.8rem;${key === 'pro' ? 'border-color:#7c3aed;color:#7c3aed;background:#f5f3ff' : ''}" onclick="window.showVendorStorefrontSubscriptionModal('${myStore.id}', '${key}', ${({ starter: starterPrice, growth: growthPrice, pro: proPrice })[key]})">
+                    Select Duration &amp; Pay
+                  </button>
                 </div>
-                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:12px;font-size:.8rem" onclick="window.showVendorStorefrontSubscriptionModal('${myStore.id}', 'starter', ${starterPrice})">
-                  Select Duration &amp; Pay
-                </button>
-              </div>
-
-              <!-- Growth Plan -->
-              <div style="border:2px solid var(--primary);border-radius:14px;padding:20px 16px;text-align:center;background:#fff;position:relative;display:flex;flex-direction:column;justify-content:space-between">
-                <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px">RECOMMENDED</div>
-                <div>
-                  <div style="font-size:1.6rem;margin-bottom:6px">🚀</div>
-                  <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Growth Plan</div>
-                  <div style="font-size:1.4rem;font-weight:900;color:var(--primary);margin-bottom:8px">GH₵ ${growthPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                  <div style="font-size:.78rem;color:var(--text-light);line-height:1.6;margin-bottom:12px;text-align:left">
-                    <div>✓ 📦 <strong>100 Product Uploads Max</strong></div>
-                    <div>✓ 🎨 Full custom UI theme &amp; slogan</div>
-                    <div>✓ 📈 Sales analytics &amp; priority search</div>
-                  </div>
-                </div>
-                <button class="btn btn-primary btn-sm" style="width:100%;margin-top:12px;font-size:.8rem" onclick="window.showVendorStorefrontSubscriptionModal('${myStore.id}', 'growth', ${growthPrice})">
-                  Select Duration &amp; Pay
-                </button>
-              </div>
-
-              <!-- Pro Plan -->
-              <div style="border:2px solid #7c3aed;border-radius:14px;padding:20px 16px;text-align:center;background:#fff;display:flex;flex-direction:column;justify-content:space-between">
-                <div>
-                  <div style="font-size:1.6rem;margin-bottom:6px">💎</div>
-                  <div style="font-weight:800;font-size:.95rem;margin-bottom:4px">Pro Plan (Unlimited)</div>
-                  <div style="font-size:1.4rem;font-weight:900;color:#7c3aed;margin-bottom:8px">GH₵ ${proPrice}<span style="font-size:.75rem;font-weight:500;color:var(--text-muted)">/mo</span></div>
-                  <div style="font-size:.78rem;color:var(--text-light);line-height:1.6;margin-bottom:12px;text-align:left">
-                    <div>✓ 🚀 <strong>UNLIMITED Product Uploads</strong></div>
-                    <div>✓ 📢 <strong>Daily Automated Item Sharing Outside the Site &amp; Across Social Media</strong> for more customers!</div>
-                    <div>✓ 🌟 VIP Priority Support &amp; Verified Badge</div>
-                  </div>
-                </div>
-                <button class="btn btn-outline btn-sm" style="width:100%;margin-top:12px;font-size:.8rem;border-color:#7c3aed;color:#7c3aed;background:#f5f3ff" onclick="window.showVendorStorefrontSubscriptionModal('${myStore.id}', 'pro', ${proPrice})">
-                  Select Duration &amp; Pay
-                </button>
-              </div>
+              `).join('')}
             </div>
           </div>
         ` : ''}
 
-        <!-- ── Status Banner: Active & Live ── -->
-        ${(myStorefront.status === 'approved' || myStorefront.status === 'active') ? `
+
+        <!-- ── Status Banner: Active & Live (ONLY after payment) ── -->
+        ${myStorefront.status === 'active' ? `
           <div style="background:#d1fae5;border:1.5px solid #a7f3d0;color:#065f46;border-radius:12px;padding:16px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
             <div>
               <div style="font-weight:800;font-size:1rem;margin-bottom:4px"><i class="fas fa-check-circle" style="color:#10b981"></i> Storefront Active & Live!</div>
@@ -706,11 +691,19 @@ async function renderVendorDashboard() {
               <div style="font-size:.72rem;color:var(--text-light)">Design your store — changes preview live as you type.</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              ${sfPaidLive ? `
               <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);border-radius:20px;padding:5px 10px;font-size:.7rem;cursor:pointer" onclick="navigator.clipboard.writeText('${window.location.origin}/#storefront/${sfSlug}');showToast('Link copied! 📋','success')" title="Copy storefront link">
                 <i class="fas fa-link" style="color:var(--primary);font-size:.65rem"></i>
                 <span style="font-weight:700;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${window.location.origin}/#storefront/${sfSlug}</span>
                 <i class="fas fa-copy" style="color:var(--text-light);font-size:.6rem"></i>
               </div>
+              ` : `
+              <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:20px;padding:5px 10px;font-size:.7rem" title="Activate your subscription to make this link live">
+                <i class="fas fa-lock" style="color:#94a3b8;font-size:.65rem"></i>
+                <span style="font-weight:700;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${window.location.origin}/#storefront/${sfSlug}</span>
+                <span style="font-weight:800;color:#f59e0b;font-size:.62rem">INACTIVE</span>
+              </div>
+              `}
               ${myStorefront.status !== 'pending_approval' ? `
                 <button class="btn btn-sm btn-primary" style="box-shadow:0 2px 8px ${sfPrimaryColor}40" onclick="window.saveVendorStoreSettings('${myStore.id}')">
                   <i class="fas fa-save"></i> Save
@@ -1028,11 +1021,15 @@ async function renderVendorDashboard() {
       window.updateStorefrontPreview();
     }
   }, 200);
+  c.dataset.rendering = '0';
   } catch (err) {
     console.error('[renderVendorDashboard] Error:', err);
     try {
       const c = document.getElementById('vendor-dashboard-content');
-      if (c) c.innerHTML = `<div class="empty-state" style="padding:28px 20px"><i class="fas fa-exclamation-triangle"></i><h3>Something went wrong</h3><p style="font-size:.8rem;color:var(--text-muted);word-break:break-word;max-width:420px;margin:8px auto 0">${escHtml(err && err.message ? err.message : String(err))}</p><button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="renderVendorDashboard()"><i class="fas fa-redo"></i> Try Again</button></div>`;
+      if (c) {
+        c.dataset.rendering = '0';
+        c.innerHTML = `<div class="empty-state" style="padding:28px 20px"><i class="fas fa-exclamation-triangle"></i><h3>Something went wrong</h3><p style="font-size:.8rem;color:var(--text-muted);word-break:break-word;max-width:420px;margin:8px auto 0">${escHtml(err && err.message ? err.message : String(err))}</p><button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="renderVendorDashboard()"><i class="fas fa-redo"></i> Try Again</button></div>`;
+      }
     } catch (e) {}
   }
 }
@@ -3191,14 +3188,7 @@ window.showVendorStorefrontSubscriptionModal = function(storeId, planKey, monthl
 
         <div style="display:flex;gap:10px;justify-content:flex-end">
           <button class="btn btn-ghost" onclick="closeModal('modal-sf-sub-pay')">Cancel</button>
-          <button class="btn btn-primary" onclick="
-            const months = parseInt(document.getElementById('sf-sub-months-sel').value || '1');
-            const payMethod = (document.querySelector('[name=sf-sub-pay]:checked')||{}).value || 'momo';
-            const payPhone = (document.getElementById('sf-sub-momo-phone')||{}).value || '';
-            closeModal('modal-sf-sub-pay');
-            closeModal('modal-sf-sub-pay');
-            window.confirmStorefrontSubscription('${storeId}');
-          ">
+          <button class="btn btn-primary" onclick="window.confirmStorefrontSubscription('${storeId}')">
             <i class="fas fa-lock"></i> Pay &amp; Activate Now
           </button>
         </div>
@@ -4202,6 +4192,9 @@ window.confirmStorefrontSubscription = async function(storeId) {
   const payMethod = document.querySelector('[name="sub-pay"]:checked') || document.querySelector('[name="sf-sub-pay"]:checked');
   const durationEl = document.getElementById('sub-duration') || document.getElementById('sf-sub-months-sel');
   if (!durationEl) { showToast('No subscription modal open.', 'warning'); return; }
+  // Read every value out of the modal DOM BEFORE removing it — the old flow
+  // closed the modal in the button's inline onclick first, so these lookups
+  // hit dead nodes and payment silently never proceeded.
   // The simple modal has no plan selector — the plan is pre-selected by the caller.
   const planKey = selectedPlan ? selectedPlan.value : (durationEl.dataset.plan || 'growth');
   const plan = STOREFRONT_PLANS[planKey] || STOREFRONT_PLANS.growth;
@@ -4271,23 +4264,31 @@ window.confirmStorefrontSubscription = async function(storeId) {
 
   try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
 
-  await apiPatch('stores', storeId, {
+  // Persist the paid subscription on the store FIRST — the storefront may only
+  // be switched live by the server when that paid subscription is on record.
+  const storePatched = await apiPatch('stores', storeId, {
     subscription_plan: planKey,
     subscription_status: 'active',
     subscription_start: now.toISOString(),
     subscription_end: newEnd.toISOString()
-  }).catch(() => {});
+  }).catch(() => null);
 
   // Update storefront record status to active
+  let sfPatched = null;
   if (App.myStorefront) {
     App.myStorefront.status = 'active';
     const sfIdx = App.allStorefronts ? App.allStorefronts.findIndex(s => String(s.id) === String(App.myStorefront.id)) : -1;
     if (sfIdx !== -1) App.allStorefronts[sfIdx].status = 'active';
     try { localStorage.setItem('happa_all_storefronts', JSON.stringify(App.allStorefronts)); } catch(e){}
-    await apiPatch('storefronts', App.myStorefront.id, { status: 'active' }).catch(() => {});
+    sfPatched = await apiPatch('storefronts', App.myStorefront.id, { status: 'active' }).catch(() => null);
   }
 
-  showToast(`🎉 ${plan.name} plan activated! Storefront subscription runs until ${newEnd.toLocaleDateString()}.`, 'success');
+  if (!storePatched || !sfPatched) {
+    // Money has been taken — never claim success if the go-live write failed.
+    showToast('Payment received, but the storefront could not be switched live automatically. Please retry — it will go live without a second charge.', 'warning');
+  } else {
+    showToast(`🎉 ${plan.name} plan activated! Storefront subscription runs until ${newEnd.toLocaleDateString()}.`, 'success');
+  }
 
   // Notify admin of subscription payment
   if (typeof addNotification === 'function') {

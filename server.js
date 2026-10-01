@@ -501,7 +501,9 @@ function looksLikeStoreRecord(out) {
   ));
 }
 
-const STORE_UNPACK_COLS = ['logo_url', 'banner_url', 'slogan', 'name', 'layout'];
+// plan_prices lives in the jsonb `extra` on the slim Supabase schema — see
+// the note in api/index.js.
+const STORE_UNPACK_COLS = ['logo_url', 'banner_url', 'slogan', 'name', 'layout', 'plan_prices'];
 
 function unpackStoreMeta(record) {
   if (!record || !looksLikeStoreRecord(record)) return record;
@@ -1815,7 +1817,8 @@ app.get('/api/:table', async (req, res) => {
         meta_description: extraSf.meta_description || st.meta_description || '',
         subscription_plan: extraSf.subscription_plan || st.subscription_plan || 'starter',
         subscription_status: extraSf.subscription_status || st.subscription_status || 'active',
-        plan_prices: extraSf.plan_prices || st.plan_prices || null,
+        plan_prices: extraSf.plan_prices || st.plan_prices || st.extra?.plan_prices || null,
+        admin_feedback: extraSf.admin_feedback || st.storefront_admin_feedback || st.extra?.admin_feedback || null,
         only_show_on_storefront: st.extra?.only_show_on_storefront === true || st.extra?.only_show_on_storefront === 'true',
         created_at: st.created_at,
         updated_at: st.updated_at
@@ -1951,7 +1954,8 @@ app.get('/api/:table/:id', async (req, res) => {
       meta_description: st.meta_description || '',
       subscription_plan: st.subscription_plan || 'starter',
       subscription_status: st.subscription_status || 'active',
-      plan_prices: st.plan_prices || null,
+      plan_prices: st.plan_prices || st.extra?.plan_prices || null,
+      admin_feedback: st.storefront_admin_feedback || st.extra?.admin_feedback || null,
       only_show_on_storefront: st.extra?.only_show_on_storefront === true || st.extra?.only_show_on_storefront === 'true',
       created_at: st.created_at,
       updated_at: st.updated_at
@@ -2445,6 +2449,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       subscription_plan: storeUpdates.subscription_plan,
       subscription_status: storeUpdates.subscription_status,
       plan_prices: storeUpdates.plan_prices,
+      admin_feedback: body.admin_feedback || (st.extra && parseExtraObject(st.extra).admin_feedback) || null,
       created_at: st.created_at || new Date().toISOString(),
       updated_at: storeUpdates.updated_at
     };
@@ -3034,6 +3039,12 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer.userId)) {
       return res.status(403).json({ error: 'You can only manage your own store.' });
     }
+    // Payment enforcement: going live is EARNED by payment, not a flag a
+    // client can freely set. Only an admin, or a paid-up store (active
+    // subscription ending in the future), may set status 'active'.
+    if ('status' in body && body.status === 'active' && !access.canActivateStorefront(st, viewer)) {
+      return res.status(402).json({ error: 'Subscription payment required before activating the storefront. Select a plan and pay first.' });
+    }
 
     const storeId = st.id;
     const storeUpdates = {};
@@ -3070,6 +3081,8 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if ('name' in storeUpdates) extraSf.name = storeUpdates.name;
     if ('slogan' in storeUpdates) extraSf.slogan = storeUpdates.slogan;
     if ('layout' in storeUpdates) extraSf.layout = storeUpdates.layout;
+    if ('plan_prices' in storeUpdates) extraSf.plan_prices = storeUpdates.plan_prices;
+    if ('admin_feedback' in body) extraSf.admin_feedback = String(body.admin_feedback).slice(0, 500);
     storeUpdates.extra = extraSf;
 
     if (supabase) {
@@ -3280,6 +3293,12 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer.userId)) {
       return res.status(403).json({ error: 'You can only manage your own store.' });
     }
+    // Payment enforcement: going live is EARNED by payment, not a flag a
+    // client can freely set. Only an admin, or a paid-up store (active
+    // subscription ending in the future), may set status 'active'.
+    if ('status' in body && body.status === 'active' && !access.canActivateStorefront(st, viewer)) {
+      return res.status(402).json({ error: 'Subscription payment required before activating the storefront. Select a plan and pay first.' });
+    }
 
     const storeId = st.id;
     const storeUpdates = {};
@@ -3317,6 +3336,8 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if ('name' in storeUpdates) extra.name = storeUpdates.name;
     if ('slogan' in storeUpdates) extra.slogan = storeUpdates.slogan;
     if ('layout' in storeUpdates) extra.layout = storeUpdates.layout;
+    if ('plan_prices' in storeUpdates) extra.plan_prices = storeUpdates.plan_prices;
+    if ('admin_feedback' in body) extra.admin_feedback = String(body.admin_feedback).slice(0, 500);
     if ('only_show_on_storefront' in body) {
       extra.only_show_on_storefront = body.only_show_on_storefront === true || body.only_show_on_storefront === 'true';
     }

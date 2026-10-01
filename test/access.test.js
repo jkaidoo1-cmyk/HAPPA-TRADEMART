@@ -85,6 +85,46 @@ test('access: admin sees full user rows; anonymous gets PII scrubbed', () => {
   assert.equal(anonView[0].id_image, undefined);
 });
 
+test('access: a storefront may only go live when a paid subscription is on record', () => {
+  // A vendor must never be able to flip their storefront live for free — the
+  // public storefront gate trusts this status, so payment is the trust anchor.
+  const vendor = { userId: 'v1', role: 'vendor' };
+  const admin = { userId: 'admin', role: 'admin' };
+  const future = new Date(Date.now() + 86400000).toISOString();
+  const past = new Date(Date.now() - 86400000).toISOString();
+
+  assert.equal(access.canActivateStorefront({ subscription_end: future }, vendor), true,
+    'paid-up store may go live');
+  assert.equal(access.canActivateStorefront({ subscription_end: past }, vendor), false,
+    'expired subscription may NOT go live');
+  assert.equal(access.canActivateStorefront({ subscription_end: null }, vendor), false,
+    'an unpaid storefront (never paid) may NOT go live');
+  assert.equal(access.canActivateStorefront({}, vendor), false,
+    'a store with no subscription data may NOT go live');
+  assert.equal(access.canActivateStorefront({ subscription_end: null }, admin), true,
+    'an admin may always activate (manual grant)');
+});
+
+test('access: storefront plan prices are public settings — vendors must see admin prices', () => {
+  // The vendor dashboard renders subscription plan cards from these settings.
+  // They were missing from the public allowlist, so non-admin reads returned
+  // empty and every vendor saw stale hardcoded defaults (50/100/200) after the
+  // admin changed the real prices.
+  const rows = [
+    { id: 's1', key: 'storefront_price_starter', value: '25' },
+    { id: 's2', key: 'storefront_price_growth', value: '50' },
+    { id: 's3', key: 'storefront_price_pro', value: '100' },
+    { id: 's4', key: 'vapid_private_key', value: 'SECRET' }
+  ];
+  const vendorView = access.applyReadPolicy('settings', rows, { userId: 'v1', role: 'vendor' });
+  const keys = vendorView.map(r => r.key);
+  assert.ok(keys.includes('storefront_price_starter'), 'starter price must be public');
+  assert.ok(keys.includes('storefront_price_growth'), 'growth price must be public');
+  assert.ok(keys.includes('storefront_price_pro'), 'pro price must be public');
+  assert.equal(vendorView.find(r => r.key === 'storefront_price_starter').value, '25');
+  assert.ok(!keys.includes('vapid_private_key'), 'secrets stay hidden');
+});
+
 test('access: rendor public profile fields survive the anonymous PII scrub', () => {
   // Buyer-side rendor discovery depends on these fields being public:
   // the Services tab, home services list and Stores page cards are all
