@@ -447,11 +447,9 @@ async function renderStores() {
 
     return;
 
-  }
-
-  if (empty) empty.classList.add('hidden');
-
+  }  if (empty) empty.classList.add('hidden');
   renderItemsProgressively(grid, stores, s => storeCardHTML(s), { initialBatch: 6, batchSize: 6 });
+  renderStoresRendorSection();
 }
 
 
@@ -2776,6 +2774,125 @@ async function renderHomeServices() {
   sec.style.display = '';
 
   list.innerHTML = posts.map(s => rendorPostCardPublicHTML(s, rendorMap[s.rendor_id])).join('');
+
+}
+
+
+
+// ── Service Providers section on the Stores page ──────────
+// Rendor profiles, listed like stores: visible while their subscription is
+// active, each card opening the rendor's public profile (contact info + posts).
+async function renderStoresRendorSection() {
+
+  const sec  = document.getElementById('stores-rendors-section');
+
+  const list = document.getElementById('stores-rendors-list');
+
+  if (!sec || !list) return;
+
+  try {
+
+    const [postsRes, usersRes] = await Promise.all([
+
+      apiGet('services', 'limit=200'),
+
+      apiGet('users',    'limit=200')
+
+    ]);
+
+    const allRendors = (usersRes?.data  || []).filter(u => u.role === 'rendor' && isRendorPubliclyVisible(u));
+
+    const rendorMap = {};
+
+    allRendors.forEach(r => { rendorMap[r.id] = r; });
+
+    // A rendor with zero visible posts shows no card — same rule the
+
+    // marketplace Services tab uses, so both surfaces always agree.
+
+    const rendorIdsWithPosts = new Set(
+
+      (postsRes?.data || [])
+
+        .filter(s => s.status === 'active' && !s.deleted && rendorMap[s.rendor_id])
+
+        .map(s => s.rendor_id)
+
+    );
+
+    const rendorCards = allRendors.filter(r => rendorIdsWithPosts.has(r.id));
+
+    if (!rendorCards.length) { sec.style.display = 'none'; return; }
+
+    sec.style.display = '';
+
+    list.innerHTML = rendorCards.map(r => storesRendorCardHTML(r)).join('');
+
+  } catch (e) {
+
+    sec.style.display = 'none';
+
+  }
+
+}
+
+
+
+// Compact profile card for the Stores page (mirrors storeCardHTML structure)
+
+function storesRendorCardHTML(r) {
+
+  const displayName = r.rendor_display_name || r.name || 'Rendor';
+
+  const avatar = displayName.charAt(0).toUpperCase();
+
+  const verified = r.id_verified
+
+    ? '<span style="display:inline-flex;align-items:center;gap:3px;font-size:.68rem;background:#ede9fe;color:#7c3aed;border-radius:20px;padding:1px 7px;font-weight:700"><i class="fas fa-check-circle"></i> Verified</span>'
+
+    : '';
+
+  const cat = r.rendor_service_cat || 'Service Provider';
+
+  const startPrice = r.rendor_starting_price
+
+    ? `<span style="font-weight:800;color:#7c3aed;font-size:.78rem">From GHS ${parseFloat(r.rendor_starting_price).toFixed(2)}</span>`
+
+    : '';
+
+  return `
+
+<div class="rendor-post-card" onclick="openRendorProfile('${r.id}')">
+
+  <div style="padding:12px;display:flex;align-items:center;gap:11px">
+
+    <div class="rendor-post-avatar" style="width:46px;height:46px;font-size:1.15rem">${escHtml(avatar)}</div>
+
+    <div style="flex:1;min-width:0">
+
+      <div style="font-weight:700;font-size:.9rem;display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+
+        ${escHtml(displayName)} ${verified}
+
+      </div>
+
+      <div style="font-size:.74rem;color:var(--text-muted);margin-top:2px">
+
+        <i class="fas fa-briefcase"></i> ${escHtml(cat)}
+
+        ${r.location ? ` &nbsp;·&nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(r.location)}` : ''}
+
+      </div>
+
+      ${startPrice ? `<div style="margin-top:3px">${startPrice}</div>` : ''}
+
+    </div>
+
+    <i class="fas fa-chevron-right" style="color:var(--text-muted);font-size:.8rem;flex-shrink:0"></i>
+
+  </div>
+
+</div>`;
 
 }
 

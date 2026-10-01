@@ -85,6 +85,32 @@ test('access: admin sees full user rows; anonymous gets PII scrubbed', () => {
   assert.equal(anonView[0].id_image, undefined);
 });
 
+test('access: rendor public profile fields survive the anonymous PII scrub', () => {
+  // Buyer-side rendor discovery depends on these fields being public:
+  // the Services tab, home services list and Stores page cards are all
+  // rendered from scrubbed user rows fetched without a session.
+  const rows = [{ id: 'r1', role: 'rendor', status: 'active', name: 'Kojo', email: 'kojo@private.mail', phone: '020999', wallet_balance: 55,
+    rendor_display_name: 'Kojo Cuts', rendor_service_cat: 'Barbing', rendor_bio: 'Mobile barber', rendor_starting_price: 20,
+    rendor_tags: 'barber,home-service', rendor_whatsapp: '0209998887', rendor_email: 'book@kojo.mail', rendor_instagram: '@kojo',
+    rendor_twitter: null, rendor_facebook: null, rendor_website: 'https://kojo.gh', rendor_contact_other: 'Telegram @kojo',
+    rendor_sub_status: 'active', rendor_sub_expiry: Date.now() + 86400000 }];
+  const anon = access.applyReadPolicy('users', rows, null)[0];
+  assert.equal(anon.email, undefined);                 // account email still hidden
+  assert.equal(anon.phone, undefined);                 // account phone still hidden
+  assert.equal(anon.rendor_display_name, 'Kojo Cuts');
+  assert.equal(anon.rendor_service_cat, 'Barbing');
+  assert.equal(anon.rendor_bio, 'Mobile barber');
+  assert.equal(anon.rendor_starting_price, 20);
+  assert.equal(anon.rendor_tags, 'barber,home-service');
+  assert.equal(anon.rendor_whatsapp, '0209998887');    // business contact stays public
+  assert.equal(anon.rendor_email, 'book@kojo.mail');
+  assert.equal(anon.rendor_instagram, '@kojo');
+  assert.equal(anon.rendor_website, 'https://kojo.gh');
+  assert.equal(anon.rendor_contact_other, 'Telegram @kojo');
+  assert.equal(anon.rendor_sub_active, true);          // derived flag for public gating
+  assert.equal(anon.rendor_sub_expiry, undefined);     // raw expiry stays private
+});
+
 test('access: package rows are scrubbed for anonymous but full for owner/admin', () => {
   const rows = [{ id: 'p1', package_code: 'PK-1', buyer_id: 'buyer-1', vendor_id: 'v1', status: 'processing', total: 50, delivery_phone: '024111', delivery_address: 'Accra' }];
   assert.equal(access.applyReadPolicy('packages', rows, null)[0].delivery_phone, undefined);
