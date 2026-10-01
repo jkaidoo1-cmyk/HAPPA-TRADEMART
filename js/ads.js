@@ -48,6 +48,47 @@ const AdEngine = {
   DEFAULT_SLIDE_MS: 3000,  // fallback slide duration: 3 s
 };
 
+/* ── Campaign analytics (impressions / clicks / time-spent) ────────── */
+/* Counted client-side and flushed to POST /api/ads/track as DELTAS via
+   sendBeacon every 20s (and on page hide). No PII leaves the browser.     */
+const _adStats = {}; // campaignId → { impressions, clicks, seconds }
+
+function _adTrack(campaignId, type, seconds) {
+  if (!campaignId) return;
+  const s = _adStats[campaignId] || (_adStats[campaignId] = { impressions: 0, clicks: 0, seconds: 0 });
+  if (type === 'impression') { s.impressions += 1; s.seconds += (seconds || 0); }
+  else if (type === 'click') { s.clicks += 1; }
+}
+
+// Inline onclick handler — declared on window because slide markup is a string.
+window.trackAdClick = function (campaignId) { _adTrack(campaignId, 'click', 0); };
+
+function _adFlushStats() {
+  const ids = Object.keys(_adStats);
+  if (!ids.length) return;
+  for (const cid of ids) {
+    const s = _adStats[cid];
+    if (!s.impressions && !s.clicks && !s.seconds) continue;
+    const payload = JSON.stringify({
+      campaign_id: cid,
+      impressions: s.impressions,
+      clicks: s.clicks,
+      seconds: Math.round(s.seconds)
+    });
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/ads/track', new Blob([payload], { type: 'application/json' }));
+      } else {
+        fetch('/api/ads/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(() => {});
+      }
+    } catch (e) { /* analytics must never break the banner */ }
+    _adStats[cid] = { impressions: 0, clicks: 0, seconds: 0 };
+  }
+}
+setInterval(_adFlushStats, 20000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') _adFlushStats(); });
+window.addEventListener('pagehide', _adFlushStats);
+
 /* ──────────────────────────────────────────────────────────── */
 /*  localStorage helpers                                        */
 /* ──────────────────────────────────────────────────────────── */
@@ -422,9 +463,14 @@ function _renderSlide(slot, slotId, product, store, state) {
   const discount = !isHero && (product.original_price > product.price)
     ? Math.round((1 - product.price / product.original_price) * 100) : 0;
 
+  // Analytics: every slide rendered = one impression + its dwell budget.
+  if (state.campaign && state.campaign.id) {
+    _adTrack(state.campaign.id, 'impression', state.slideMs / 1000);
+  }
+
   const slideHTML = `
 <div class="ads-slide ads-slide--active"
-     ${!isHero ? `onclick="openProduct('${product.id}')" role="button" tabindex="0" aria-label="Sponsored: ${escHtml(itemDisplayName(product.name))}"` : ''}>
+     ${!isHero ? `onclick="trackAdClick('${state.campaign ? state.campaign.id : ''}');openProduct('${product.id}')" role="button" tabindex="0" aria-label="Sponsored: ${escHtml(itemDisplayName(product.name))}"` : ''}>
 
   ${img
     ? `<div class="ads-slide-bg" style="background-image:url('${escHtml(img)}')"></div>`

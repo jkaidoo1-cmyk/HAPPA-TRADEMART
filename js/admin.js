@@ -3227,6 +3227,21 @@ async function loadAdminAds() {
       const pages = Array.isArray(c.pages) ? c.pages : [];
       const isActive = c.status === 'active';
 
+      // ── Campaign analytics (impressions / clicks / time spent) ──
+      let cExtra = c.extra || {};
+      if (typeof cExtra === 'string') { try { cExtra = JSON.parse(cExtra); } catch(e) { cExtra = {}; } }
+      const imp = parseInt(c.impressions, 10) || 0;
+      const clk = parseInt(c.clicks, 10) || 0;
+      const ctr = imp > 0 ? ((clk / imp) * 100).toFixed(1) : '0.0';
+      const dwellSec = Number(cExtra.ads_dwell_seconds) || 0;
+      const dwellMin = dwellSec >= 60 ? `${(dwellSec / 60).toFixed(1)} min` : `${Math.round(dwellSec)} s`;
+      let todayStats = { imp: 0, clk: 0, sec: 0 };
+      try {
+        const d0 = new Date();
+        const dayKey = `${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}-${String(d0.getDate()).padStart(2,'0')}`;
+        todayStats = (cExtra.ads_daily || {})[dayKey] || { imp: 0, clk: 0, sec: 0 };
+      } catch(e){}
+
       const d = new Date();
       const todayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const spentKey = `happa_ads_${c.id}_${todayStr}`;
@@ -3272,6 +3287,23 @@ async function loadAdminAds() {
                   <span>⏱️ ${c.interval_value || 3}s per slide</span>
                   <span>📦 ${eligibleProds.length} active products</span>
                   <span>🏪 ${storeIds.length} stores participating</span>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:96px;text-align:center">
+                    <div style="font-size:.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">Impressions</div>
+                    <div style="font-size:1rem;font-weight:800;color:var(--text)">${imp.toLocaleString()}</div>
+                    <div style="font-size:.66rem;color:var(--text-muted)">+${todayStats.imp} today</div>
+                  </div>
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:96px;text-align:center">
+                    <div style="font-size:.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">Clicks</div>
+                    <div style="font-size:1rem;font-weight:800;color:var(--text)">${clk.toLocaleString()}</div>
+                    <div style="font-size:.66rem;color:var(--text-muted)">${ctr}% CTR</div>
+                  </div>
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:96px;text-align:center">
+                    <div style="font-size:.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">Time shown</div>
+                    <div style="font-size:1rem;font-weight:800;color:var(--text)">${dwellMin}</div>
+                    <div style="font-size:.66rem;color:var(--text-muted)">${Math.round(todayStats.sec)}s today</div>
+                  </div>
                 </div>
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap">

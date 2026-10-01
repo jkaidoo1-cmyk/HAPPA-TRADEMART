@@ -215,7 +215,11 @@ function withSupaTimeout(promise, ms = 2500) {
 function auditLog(entry) {
   access.writeAuditLog({
     saveLocal: (e) => { dataStore.ensureTable('audit_logs'); dataStore.getStore().audit_logs.push(e); dataStore.saveToFile(); },
-    mirrorSupa: (e) => { const sb = getSupabase(); return sb ? sb.from('audit_logs').insert(e).catch(() => {}) : null; },
+    // NOTE: PostgrestBuilder is only a thenable — it has no .catch(). A
+    // chained .catch here threw synchronously and 500'd every audited action
+    // (admin user deletes, product deletes, …). writeAuditLog already wraps
+    // the returned builder in Promise.resolve().catch.
+    mirrorSupa: (e) => { const sb = getSupabase(); return sb ? sb.from('audit_logs').insert(e) : null; },
     ...entry
   });
 }
@@ -402,6 +406,15 @@ function serializeRecord(record) {
 
   out = unpackPackageMeta(out);
   out = unpackUserMeta(out);
+
+  // Users: normalize rendor_sub_expiry to a ms number on read. Postgres
+  // returns the timestamptz as an ISO string while every consumer (sub gate,
+  // renewal logic, admin UI) expects the ms epoch the app writes — Number(iso)
+  // was NaN, which made every live rendor look unsubscribed to buyers.
+  if (out.rendor_sub_expiry != null && out.rendor_sub_expiry !== '' && typeof out.rendor_sub_expiry !== 'number') {
+    const _subMs = access.rendorSubExpiryMs(out.rendor_sub_expiry);
+    if (Number.isFinite(_subMs)) out.rendor_sub_expiry = _subMs;
+  }
   out = unpackProductMeta(out);
   out = unpackStoreMeta(out);
 
@@ -592,6 +605,14 @@ function prepareRecordForDb(table, record, existingRecord) {
     if (!out.image_url)   out.image_url   = '';
     if (!out.link)        out.link        = '';
     if (!out.placement)   out.placement   = Array.isArray(adExtra.pages) ? adExtra.pages.join(',') : 'home';
+  }
+
+  // rendor_sub_expiry is a timestamptz column: the app's ms-epoch value must
+  // become an ISO string before Postgres sees it, or the write 400s (22008) —
+  // which silently failed admin subscription activations and rendor purchases.
+  if (table === 'users' && out.rendor_sub_expiry != null && out.rendor_sub_expiry !== '') {
+    const _subMs = access.rendorSubExpiryMs(out.rendor_sub_expiry);
+    if (Number.isFinite(_subMs)) out.rendor_sub_expiry = new Date(_subMs).toISOString();
   }
 
   // Postgres rejects empty strings in timestamp/numeric columns (the client
@@ -806,7 +827,7 @@ app.post('/api/auth/login', loginIpRateLimiter, loginEmailRateLimiter, loginRate
 
     // Auto-deactivate expired rendor subscriptions on login
     if (user.role === 'rendor' && user.rendor_sub_status === 'active' && user.rendor_sub_expiry) {
-      const expiryMs = Number(user.rendor_sub_expiry);
+      const expiryMs = access.rendorSubExpiryMs(user.rendor_sub_expiry);
       if (expiryMs && expiryMs < Date.now()) {
         user.rendor_sub_status = 'inactive';
         user.sub_request_status = null;
@@ -911,6 +932,40 @@ app.post('/api/auth/logout', (req, res) => {
     revokeToken(authHeader.substring(7).trim());
   }
   return res.json({ success: true });
+});
+
+// DELETE /api/auth/account — self-service account deletion (Settings → Delete
+// my account). The generic DELETE /api/users/:id is admin-only, so a regular
+// user deleting their own account used to 403 and silently do nothing. This
+// runs the same server-side cascade for the SESSION user only — the client
+// never supplies the id, so it can never delete anyone else.
+app.delete('/api/auth/account', writeRateLimiter, async (req, res) => {
+  try {
+    const viewer = access.getAccessContext(req);
+    if (!viewer || !viewer.userId) {
+      return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    }
+    if (String(viewer.userId) === 'admin') {
+      return res.status(400).json({ error: 'The main admin account cannot be deleted from the app.' });
+    }
+    const id = String(viewer.userId);
+    auditLog({ actorId: id, actorRole: viewer.role, action: 'delete_own_account', table: 'users', targetId: id });
+
+    const supabase = getSupabase();
+    if (supabase) {
+      const result = await cascadeDeleteUserSupabase(supabase, id);
+      if (!result.ok) return res.status(500).json({ error: result.error });
+    } else {
+      dataStore.ensureTable('users');
+      const store = dataStore.getStore();
+      cascadeDeleteUserLocal(store, id);
+      dataStore.saveToFile();
+    }
+    invalidateApiCache('users');
+    return res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/auth/refresh — extends a valid session by issuing a fresh token.
@@ -1394,7 +1449,7 @@ app.post('/api/push/migrate', requireAuth, async (req, res) => {
     if (supabase) {
       await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
       const subRecord = { endpoint, keys: req.body.keys || {}, user_id: userId, created_at: new Date().toISOString() };
-      await supabase.from('push_subscriptions').insert(subRecord).catch(() => {});
+      try { await supabase.from('push_subscriptions').insert(subRecord); } catch (e) {}
     } else {
       const subs = dataStore.getStore().push_subscriptions || [];
       const idx = subs.findIndex(s => s.endpoint === endpoint);
@@ -2088,7 +2143,7 @@ function sweepExpiredRendorSubs(rows, supabase) {
   let changedAny = false;
   for (const r of rows) {
     if (!r || r.role !== 'rendor' || r.rendor_sub_status !== 'active') continue;
-    const expiryMs = Number(r.rendor_sub_expiry);
+    const expiryMs = access.rendorSubExpiryMs(r.rendor_sub_expiry);
     if (!Number.isFinite(expiryMs) || expiryMs <= 0 || expiryMs >= now) continue;
     r.rendor_sub_status = 'inactive';
     r.sub_request_status = null;
@@ -2112,7 +2167,7 @@ function sweepExpiredRendorSubs(rows, supabase) {
       const store = dataStore.getStore();
       let localChanged = false;
       for (const r of rows) {
-        if (r && r.rendor_sub_status === 'inactive' && Number(r.rendor_sub_expiry) > 0 && Number(r.rendor_sub_expiry) < now) {
+        if (r && r.rendor_sub_status === 'inactive' && access.rendorSubExpiryMs(r.rendor_sub_expiry) > 0 && access.rendorSubExpiryMs(r.rendor_sub_expiry) < now) {
           const lu = (store.users || []).find(u => String(u.id) === String(r.id));
           if (lu && lu.rendor_sub_status === 'active') { lu.rendor_sub_status = 'inactive'; lu.sub_request_status = null; lu.sub_payment_status = null; lu.sub_payment_months = null; lu.sub_payment_amount = null; localChanged = true; }
         }
@@ -2441,6 +2496,115 @@ app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
   }
 });
 
+// POST /api/ads/track — anonymous campaign analytics from AdEngine. The
+// client batches impressions (one per slide shown), clicks and dwell seconds
+// and flushes them via sendBeacon every ~20s. Values are DELTAS, never
+// absolutes, so concurrent viewers aggregate. No PII, no session required.
+app.post('/api/ads/track', writeRateLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const campaignId = String(body.campaign_id || '');
+    const impressions = Math.max(0, Math.min(500, parseInt(body.impressions, 10) || 0));
+    const clicks = Math.max(0, Math.min(100, parseInt(body.clicks, 10) || 0));
+    const seconds = Math.max(0, Math.min(7200, Number(body.seconds) || 0));
+    if (!campaignId || (!impressions && !clicks && !seconds)) {
+      return res.status(400).json({ error: 'Nothing to track' });
+    }
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data } = await withSupaTimeout(supabase.from('ad_campaigns').select('*').eq('id', campaignId).maybeSingle(), 2500);
+        if (!data) return res.status(404).json({ error: 'Campaign not found' });
+        const rec = serializeRecord(data);
+        const extra = { ...parseExtraObject(rec.extra) };
+        const day = new Date().toISOString().slice(0, 10);
+        const daily = { ...(extra.ads_daily || {}) };
+        const d = { imp: 0, clk: 0, sec: 0, ...(daily[day] || {}) };
+        d.imp += impressions; d.clk += clicks; d.sec = Math.round((Number(d.sec) || 0) + seconds);
+        daily[day] = d;
+        const days = Object.keys(daily).sort();
+        while (days.length > 30) delete daily[days.shift()];   // keep a 30-day window
+        extra.ads_daily = daily;
+        extra.ads_dwell_seconds = Math.round((Number(extra.ads_dwell_seconds) || 0) + seconds);
+        const dbRecord = prepareRecordForDb('ad_campaigns', {
+          ...rec,
+          impressions: (parseInt(rec.impressions, 10) || 0) + impressions,
+          clicks: (parseInt(rec.clicks, 10) || 0) + clicks,
+          extra,
+          updated_at: new Date().toISOString()
+        }, rec);
+        await withSupaTimeout(supabase.from('ad_campaigns').update(dbRecord).eq('id', campaignId), 2500);
+        return res.json({ ok: true });
+      } catch (e) {
+        console.warn('[AdsTrack] Supabase failed, using local store:', e.message);
+      }
+    }
+    dataStore.ensureTable('ad_campaigns');
+    const row = dataStore.getStore().ad_campaigns.find(c => String(c.id) === String(campaignId));
+    if (!row) return res.status(404).json({ error: 'Campaign not found' });
+    row.impressions = (parseInt(row.impressions, 10) || 0) + impressions;
+    row.clicks = (parseInt(row.clicks, 10) || 0) + clicks;
+    const extra = parseExtraObject(row.extra);
+    const day = new Date().toISOString().slice(0, 10);
+    const daily = extra.ads_daily || {};
+    const d = daily[day] || { imp: 0, clk: 0, sec: 0 };
+    d.imp += impressions; d.clk += clicks; d.sec = Math.round((Number(d.sec) || 0) + seconds);
+    daily[day] = d;
+    extra.ads_daily = daily;
+    extra.ads_dwell_seconds = Math.round((Number(extra.ads_dwell_seconds) || 0) + seconds);
+    row.extra = extra;
+    dataStore.saveToFile();
+    return res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── New-order notifications + web push (vendor + admin) ──────────
+// Admins and vendors previously learned about a sale only by polling their
+// dashboards. On every successful POST /packages|/orders the server now
+// inserts the in-app notification rows and dispatches the web-push through
+// the existing engine. Best-effort: an order must never fail over a push.
+async function notifyNewOrder(record) {
+  try {
+    if (!record || !record.id) return;
+    const code = record.package_code || record.code || record.id;
+    const total = Number(record.total || record.total_amount || 0).toFixed(2);
+    const buyerName = record.buyer_name || record.buyer_email || 'A customer';
+    const now = new Date().toISOString();
+    const rows = [];
+    if (record.vendor_id) rows.push({
+      id: generateId('notif'), user_id: String(record.vendor_id), type: 'order',
+      title: 'New order received 🎉',
+      message: `${buyerName} placed order ${code} — GHS ${total}. Open Vendor Orders to process it.`,
+      is_read: false, created_at: now, extra: {}
+    });
+    rows.push({
+      id: generateId('notif'), user_id: 'admin', type: 'order',
+      title: 'New order on the platform 🎉',
+      message: `Order ${code} — GHS ${total}.`,
+      is_read: false, created_at: now, extra: {}
+    });
+    const supabase = getSupabase();
+    for (const row of rows) {
+      try {
+        dataStore.ensureTable('notifications');
+        dataStore.getStore().notifications.push(row);
+        dataStore.saveToFile();
+      } catch (e) {}
+      if (supabase) {
+        try { await withSupaTimeout(supabase.from('notifications').insert(prepareRecordForDb('notifications', serializeRecord(row))), 2000); } catch (e) {}
+      }
+      dispatchPushNotificationApi({
+        user_id: row.user_id,
+        title: row.title,
+        body: row.message,
+        url: './'
+      }).catch(() => {});
+    }
+  } catch (e) {}
+}
+
 app.post('/api/:table', writeRateLimiter, async (req, res) => {
   // Package side-effect tracking (guide §7/§8): pkgSale is set by the money
   // block, pkgApplied records stock reserved before the insert so a crash can
@@ -2567,7 +2731,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         dataStore.ensureTable('users');
         rendorUser = (dataStore.getStore().users || []).find(u => String(u.id) === String(viewer.userId)) || null;
       }
-      const expMs = Number(rendorUser && rendorUser.rendor_sub_expiry);
+      const expMs = access.rendorSubExpiryMs(rendorUser && rendorUser.rendor_sub_expiry);
       const subActive = !!rendorUser && rendorUser.rendor_sub_status === 'active' &&
         Number.isFinite(expMs) && expMs > 0 && expMs > Date.now();
       if (!subActive) {
@@ -3122,6 +3286,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         if (table === 'users' && typeof createSessionToken === 'function') {
           out.token = createSessionToken(out.id, out.role);
         }
+        if (table === 'packages' || table === 'orders') notifyNewOrder(out).catch(() => {});
         return res.status(201).json(out);
       } catch (localErr) {
         console.error('[POST] Local store error:', table, localErr);
@@ -3148,6 +3313,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         if (table === 'users' && typeof createSessionToken === 'function') {
           out.token = createSessionToken(out.id, out.role);
         }
+        if (table === 'packages' || table === 'orders') notifyNewOrder(out).catch(() => {});
         return res.status(201).json(out);
       } catch (localErr) {
         console.error('[POST] Local fallback failed:', table, localErr);
@@ -3160,6 +3326,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     if (table === 'users' && typeof createSessionToken === 'function') {
       out.token = createSessionToken(out.id, out.role);
     }
+    if (table === 'packages' || table === 'orders') notifyNewOrder(out).catch(() => {});
     res.status(201).json(out);
   } catch (err) {
     console.error('[POST] Unexpected error:', err);
@@ -3210,7 +3377,7 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
           if (!existingUser) {
             try { dataStore.ensureTable('users'); existingUser = (dataStore.getStore().users || []).find(u => String(u.id) === String(id)) || null; } catch (e) { existingUser = null; }
           }
-          const curMs = Number(existingUser && existingUser.rendor_sub_expiry);
+          const curMs = access.rendorSubExpiryMs(existingUser && existingUser.rendor_sub_expiry);
           const startFrom = Number.isFinite(curMs) && curMs > now ? curMs : now;
           const newExpiry = new Date(startFrom + months * 30 * 86400000);
           body.rendor_sub_expiry = String(newExpiry.getTime());
@@ -3769,6 +3936,95 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
   }
 });
 
+// ── Account deletion cascade (shared by admin delete + self-service delete) ──
+// Dissociate history (orders, packages, wallet, referrals, reviews keep their
+// totals for analytics), delete personal dependencies (notifications, ads,
+// services, products, stores, push subscriptions, support tickets), then
+// hard-delete the user row. Returns { ok } or { ok:false, error }.
+async function cascadeDeleteUserSupabase(supabase, id) {
+  // 1. Dissociate historical records by setting their user reference to NULL
+  try { await supabase.from('orders').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+  try { await supabase.from('orders').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('packages').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+  try { await supabase.from('packages').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('wallet_transactions').update({ user_id: null }).eq('user_id', id); } catch (e) {}
+  try { await supabase.from('referrals').update({ referrer_id: null }).eq('referrer_id', id); } catch (e) {}
+  try { await supabase.from('referrals').update({ referred_id: null }).eq('referred_id', id); } catch (e) {}
+  try { await supabase.from('reviews').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+  try { await supabase.from('service_orders').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+  try { await supabase.from('service_orders').update({ rendor_id: null }).eq('rendor_id', id); } catch (e) {}
+
+  // 2. Delete temporary/personal dependencies
+  try { await supabase.from('notifications').delete().eq('user_id', id); } catch (e) {}
+  try { await supabase.from('ad_campaigns').delete().eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('services').delete().eq('rendor_id', id); } catch (e) {}
+  try { await supabase.from('products').delete().eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('stores').delete().eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('support_tickets').delete().eq('user_id', id); } catch (e) {}
+  try { await supabase.from('push_subscriptions').delete().eq('user_id', id); } catch (e) {}
+
+  // 3. Now safely hard-delete the user account
+  const { error } = await supabase.from('users').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+// Local (db.json) variant of the cascade — same rules, memory/file store.
+function cascadeDeleteUserLocal(store, id) {
+  dataStore.ensureTable('orders');
+  store.orders.forEach(o => {
+    if (String(o.buyer_id) === String(id)) o.buyer_id = null;
+    if (String(o.vendor_id) === String(id)) o.vendor_id = null;
+  });
+
+  dataStore.ensureTable('packages');
+  store.packages.forEach(p => {
+    if (String(p.buyer_id) === String(id)) p.buyer_id = null;
+    if (String(p.vendor_id) === String(id)) p.vendor_id = null;
+  });
+
+  dataStore.ensureTable('wallet_transactions');
+  store.wallet_transactions.forEach(t => {
+    if (String(t.user_id) === String(id)) t.user_id = null;
+  });
+
+  dataStore.ensureTable('referrals');
+  store.referrals.forEach(r => {
+    if (String(r.referrer_id) === String(id)) r.referrer_id = null;
+    if (String(r.referred_id) === String(id)) r.referred_id = null;
+  });
+
+  dataStore.ensureTable('reviews');
+  store.reviews.forEach(r => {
+    if (String(r.buyer_id) === String(id)) r.buyer_id = null;
+  });
+
+  dataStore.ensureTable('notifications');
+  store.notifications = store.notifications.filter(n => String(n.user_id) !== String(id));
+
+  dataStore.ensureTable('ad_campaigns');
+  store.ad_campaigns = store.ad_campaigns.filter(a => String(a.vendor_id) !== String(id));
+
+  dataStore.ensureTable('services');
+  store.services = store.services.filter(s => String(s.rendor_id) !== String(id));
+
+  dataStore.ensureTable('products');
+  store.products = store.products.filter(p => String(p.vendor_id) !== String(id));
+
+  dataStore.ensureTable('stores');
+  store.stores = store.stores.filter(s => String(s.vendor_id) !== String(id));
+
+  dataStore.ensureTable('support_tickets');
+  store.support_tickets = store.support_tickets.filter(t => String(t.user_id) !== String(id));
+
+  dataStore.ensureTable('push_subscriptions');
+  store.push_subscriptions = store.push_subscriptions.filter(p => String(p.user_id) !== String(id));
+
+  // Delete user
+  dataStore.ensureTable('users');
+  store.users = store.users.filter(r => String(r.id) !== String(id));
+}
+
 // DELETE /api/:table/:id  — delete record
 app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
   try {
@@ -3860,26 +4116,8 @@ app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
         dataStore.saveToFile();
         return res.status(204).send();
       } else {
-        // 1. Dissociate historical records by setting their user reference to NULL
-        try { await supabase.from('orders').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
-        try { await supabase.from('orders').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('packages').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
-        try { await supabase.from('packages').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('wallet_transactions').update({ user_id: null }).eq('user_id', id); } catch (e) {}
-        try { await supabase.from('referrals').update({ referrer_id: null }).eq('referrer_id', id); } catch (e) {}
-        try { await supabase.from('referrals').update({ referred_id: null }).eq('referred_id', id); } catch (e) {}
-        try { await supabase.from('reviews').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
-
-        // 2. Delete temporary/personal dependencies (stores, products, ads, notifications, services)
-        try { await supabase.from('notifications').delete().eq('user_id', id); } catch (e) {}
-        try { await supabase.from('ad_campaigns').delete().eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('services').delete().eq('rendor_id', id); } catch (e) {}
-        try { await supabase.from('products').delete().eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('stores').delete().eq('vendor_id', id); } catch (e) {}
-
-        // 3. Now safely hard-delete the user account
-        const { error } = await supabase.from('users').delete().eq('id', id);
-        if (error) return res.status(500).json({ error: error.message });
+        const result = await cascadeDeleteUserSupabase(supabase, id);
+        if (!result.ok) return res.status(500).json({ error: result.error });
         return res.status(204).send();
       }
     }

@@ -2,6 +2,23 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const api = require('../api/index.js');
 
+test('rendor_sub_expiry is written as ISO and read back as ms (timestamptz-safe)', () => {
+  const ms = Date.now() + 86400000;
+  // Write path: the app sends the ms epoch (admin activation, plan purchase);
+  // Postgres timestamptz rejects bare epoch values (22008) — must become ISO.
+  const prepared = api.prepareRecordForDb('users', { id: 'r1', rendor_sub_expiry: String(ms) });
+  assert.equal(prepared.rendor_sub_expiry, new Date(ms).toISOString());
+
+  // Read path: serializeRecord normalizes back to ms so every consumer's
+  // Number(...) arithmetic works again.
+  const serialized = api.serializeRecord({ id: 'r1', rendor_sub_expiry: new Date(ms).toISOString() });
+  assert.equal(serialized.rendor_sub_expiry, ms);
+
+  // A ms-string from the local JSON store round-trips unchanged on read.
+  const local = api.serializeRecord({ id: 'r1', rendor_sub_expiry: String(ms) });
+  assert.equal(local.rendor_sub_expiry, ms);
+});
+
 test('product insert candidates fall back to a minimal payload when the schema is slim', () => {
   const candidates = api.getRecordCandidatesForTable('products', {
     id: 'p1',

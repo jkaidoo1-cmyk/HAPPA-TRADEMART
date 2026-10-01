@@ -97,6 +97,34 @@ function hideSearchDropdown() {
   if (dd) dd.classList.add('hidden');
 }
 
+// ── Rendor services cache (posts + publicly visible profiles) ──────────
+// Loaded lazily once per page load so keystroke suggestions never spam the API.
+let _svcSearchCache = null;
+async function _svcSearchData() {
+  if (!_svcSearchCache) {
+    _svcSearchCache = (async () => {
+      try {
+        const [svcRes, usersRes] = await Promise.all([
+          apiGet('services', 'limit=200'),
+          apiGet('users', 'limit=200')
+        ]);
+        const users = (usersRes?.data || []).filter(u =>
+          u.role === 'rendor' && typeof isRendorPubliclyVisible === 'function' && isRendorPubliclyVisible(u)
+        );
+        const map = {};
+        users.forEach(u => { map[u.id] = u; });
+        const posts = (svcRes?.data || []).filter(s =>
+          s.status === 'active' && !s.deleted && map[s.rendor_id]
+        );
+        return { posts, map };
+      } catch (e) {
+        return { posts: [], map: {} };
+      }
+    })();
+  }
+  return _svcSearchCache;
+}
+
 async function showSearchSuggestions(q) {
   const dd = document.getElementById('search-dropdown');
   if (!dd) return;
@@ -121,6 +149,18 @@ async function showSearchSuggestions(q) {
     )
   ).slice(0, 3);
 
+  // Rendor services + profiles (lazy-cached)
+  const svc = await _svcSearchData();
+  const matchedPosts = svc.posts.filter(p =>
+    (p.title || '').toLowerCase().includes(ql) ||
+    (p.category || '').toLowerCase().includes(ql) ||
+    (p.description || '').toLowerCase().includes(ql)
+  ).slice(0, 3);
+  const matchedRendors = Object.values(svc.map).filter(r =>
+    ((r.rendor_display_name || r.name || '').toLowerCase().includes(ql) ||
+     (r.rendor_service_cat || '').toLowerCase().includes(ql))
+  ).slice(0, 2);
+
   // Build suggestions
   let html = '';
 
@@ -144,6 +184,33 @@ async function showSearchSuggestions(q) {
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:.85rem">${highlight(s.name||'', q)}</div>
         <div style="font-size:.72rem;color:var(--text-muted)">${s.category} · ${s.location}</div>
+      </div>
+    </div>`).join('');
+  }
+
+  if (matchedPosts.length) {
+    html += `<div style="padding:8px 14px 4px;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">🎨 Services</div>`;
+    html += matchedPosts.map(p => {
+      const r = svc.map[p.rendor_id] || {};
+      return `
+    <div class="search-suggestion" onclick="openRendorProfile('${r.id}');hideSearchDropdown()">
+      <i class="fas fa-briefcase" style="color:#7c3aed;width:30px;text-align:center"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:.85rem">${highlight(p.title || '', q)}</div>
+        <div style="font-size:.72rem;color:var(--text-muted)">${escHtml(r.rendor_display_name || r.name || 'Rendor')} · ${p.price ? `From GHS ${p.price}` : escHtml(p.category || 'Service')}</div>
+      </div>
+    </div>`;
+    }).join('');
+  }
+
+  if (matchedRendors.length) {
+    html += `<div style="padding:8px 14px 4px;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Service Providers</div>`;
+    html += matchedRendors.map(r => `
+    <div class="search-suggestion" onclick="openRendorProfile('${r.id}');hideSearchDropdown()">
+      <div style="width:30px;height:30px;border-radius:50%;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.8rem;flex-shrink:0">${escHtml((r.rendor_display_name || r.name || 'R').charAt(0).toUpperCase())}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:.85rem">${highlight(r.rendor_display_name || r.name || 'Rendor', q)}</div>
+        <div style="font-size:.72rem;color:var(--text-muted)">${escHtml(r.rendor_service_cat || 'Service Provider')}${r.location ? ' · ' + escHtml(r.location) : ''}</div>
       </div>
     </div>`).join('');
   }
@@ -186,6 +253,7 @@ async function performSearch(query) {
     const sr = await apiGet('stores', 'limit=50');
     App.allStores = sr ? sr.data || [] : [];
   }
+  const svc = await _svcSearchData();
 
   const products = App.allProducts.filter(p =>
     p.status !== 'archived' && shouldShowProductOnMainWebsite(p) && (
@@ -205,6 +273,17 @@ async function performSearch(query) {
     )
   );
 
+  const matchedServices = svc.posts.filter(p =>
+    (p.title || '').toLowerCase().includes(q) ||
+    (p.category || '').toLowerCase().includes(q) ||
+    (p.description || '').toLowerCase().includes(q)
+  );
+  const matchedProviders = Object.values(svc.map).filter(r =>
+    ((r.rendor_display_name || r.name || '').toLowerCase().includes(q) ||
+     (r.rendor_service_cat || '').toLowerCase().includes(q) ||
+     (r.rendor_bio || '').toLowerCase().includes(q))
+  );
+
   showPage('search');
 
   const c = document.getElementById('search-results-content');
@@ -213,7 +292,7 @@ async function performSearch(query) {
   c.innerHTML = `
 <div style="margin-bottom:12px">
   <h3 style="font-weight:700">Results for "<em>${escHtml(query)}</em>"</h3>
-  <div style="font-size:.8rem;color:var(--text-muted)">${products.length} product${products.length!==1?'s':''} · ${stores.length} store${stores.length!==1?'s':''}</div>
+  <div style="font-size:.8rem;color:var(--text-muted)">${products.length} product${products.length!==1?'s':''} · ${stores.length} store${stores.length!==1?'s':''} · ${matchedServices.length} service${matchedServices.length!==1?'s':''} · ${matchedProviders.length} provider${matchedProviders.length!==1?'s':''}</div>
 </div>
 
 ${stores.length ? `
@@ -225,7 +304,17 @@ ${products.length ? `
 <h4 style="font-weight:700;font-size:.9rem;margin-bottom:8px">🛍 Products</h4>
 <div class="product-grid" id="search-products-container" style="padding:0"></div>` : ''}
 
-${!products.length && !stores.length ? `
+${matchedServices.length ? `
+<h4 style="font-weight:700;font-size:.9rem;margin:16px 0 8px;display:flex;align-items:center;gap:6px"><i class="fas fa-briefcase" style="color:#7c3aed"></i> Services</h4>
+<div id="search-services-container" style="display:grid;gap:12px"></div>
+<div style="margin-bottom:16px"></div>` : ''}
+
+${matchedProviders.length ? `
+<h4 style="font-weight:700;font-size:.9rem;margin:16px 0 8px">👤 Service Providers</h4>
+<div id="search-providers-container" style="display:grid;gap:12px"></div>
+<div style="margin-bottom:16px"></div>` : ''}
+
+${!products.length && !stores.length && !matchedServices.length && !matchedProviders.length ? `
 <div class="empty-state" style="padding:50px 20px">
   <i class="fas fa-search-minus"></i>
   <h3>No results found</h3>
@@ -241,6 +330,16 @@ ${!products.length && !stores.length ? `
   if (products.length) {
     const pEl = document.getElementById('search-products-container');
     if (pEl) renderItemsProgressively(pEl, products, p => productCardHTML(p), { initialBatch: 6, batchSize: 6 });
+  }
+
+  if (matchedServices.length) {
+    const svEl = document.getElementById('search-services-container');
+    if (svEl) svEl.innerHTML = matchedServices.map(p => rendorPostCardPublicHTML(p, svc.map[p.rendor_id])).join('');
+  }
+
+  if (matchedProviders.length) {
+    const prEl = document.getElementById('search-providers-container');
+    if (prEl) prEl.innerHTML = matchedProviders.map(r => storesRendorCardHTML(r)).join('');
   }
 }
 

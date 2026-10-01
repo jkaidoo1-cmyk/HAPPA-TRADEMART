@@ -111,6 +111,30 @@ test('access: rendor public profile fields survive the anonymous PII scrub', () 
   assert.equal(anon.rendor_sub_expiry, undefined);     // raw expiry stays private
 });
 
+test('access: rendor_sub_active survives a Postgres ISO timestamptz expiry', () => {
+  // Supabase returns timestamptz as ISO strings; Number(iso) was NaN and
+  // flagged every live rendor inactive — buyers saw zero services.
+  const iso = new Date(Date.now() + 30 * 86400000).toISOString();
+  const rows = [{ id: 'r2', role: 'rendor', status: 'active', name: 'Ama',
+    rendor_sub_status: 'active', rendor_sub_expiry: iso }];
+  const anon = access.applyReadPolicy('users', rows, null)[0];
+  assert.equal(anon.rendor_sub_active, true, 'ISO expiry must read as active');
+
+  const expiredIso = new Date(Date.now() - 86400000).toISOString();
+  const anon2 = access.applyReadPolicy('users',
+    [{ id: 'r3', role: 'rendor', status: 'active', name: 'Kweku',
+       rendor_sub_status: 'active', rendor_sub_expiry: expiredIso }], null)[0];
+  assert.equal(anon2.rendor_sub_active, false, 'expired ISO expiry must read as inactive');
+
+  // The tolerant parser itself: ms number, ms string, ISO string, garbage.
+  const ms = Date.now() + 60000;
+  assert.equal(access.rendorSubExpiryMs(ms), ms);
+  assert.equal(access.rendorSubExpiryMs(String(ms)), ms);
+  assert.equal(access.rendorSubExpiryMs(iso), Date.parse(iso));
+  assert.ok(Number.isNaN(access.rendorSubExpiryMs('not-a-date')));
+  assert.ok(Number.isNaN(access.rendorSubExpiryMs(null)));
+});
+
 test('access: package rows are scrubbed for anonymous but full for owner/admin', () => {
   const rows = [{ id: 'p1', package_code: 'PK-1', buyer_id: 'buyer-1', vendor_id: 'v1', status: 'processing', total: 50, delivery_phone: '024111', delivery_address: 'Accra' }];
   assert.equal(access.applyReadPolicy('packages', rows, null)[0].delivery_phone, undefined);

@@ -3628,13 +3628,20 @@ async function saveNotificationPrefs(userId) {
 async function requestAccountDeletion() {
   if (!App.currentUser) { showToast('Please sign in first', 'warning'); return; }
   if (confirm('Are you sure you want to permanently delete your account? This action is irreversible.\n\nAll your data including store, notifications, and orders will be deleted immediately.')) {
-    const uid = App.currentUser.id;
-    if (typeof _apDeleteUser === 'function') {
-      await _apDeleteUser(uid);
-    } else {
-      await apiDelete('users', uid).catch(() => {});
-      logout(true);
+    // DELETE /api/auth/account runs the full cascade server-side for the
+    // session user. The generic DELETE /api/users/:id is admin-only, so the
+    // old path (delegating to _apDeleteUser) 403'd for regular users and the
+    // account silently survived every deletion attempt.
+    const res = await apiFetch('auth/account', { method: 'DELETE' }).catch(err => {
+      console.error('Account deletion error:', err);
+      return null;
+    });
+    if (!res || !res.success) {
+      showToast('Account deletion failed on the server. Please try again or contact support.', 'error');
+      return;
     }
+    showToast('Your account has been deleted. Signing out...', 'warning');
+    if (typeof logout === 'function') logout(true);
   }
 }
 

@@ -368,7 +368,8 @@ function saveDb(db) {
 function auditLog(entry) {
   access.writeAuditLog({
     saveLocal: (e) => { const db = loadDb(); getTable(db, 'audit_logs').push(e); saveDb(db); },
-    mirrorSupa: (e) => supabase ? supabase.from('audit_logs').insert(e).catch(() => {}) : null,
+    // PostgrestBuilder is a thenable without .catch — see api/index.js.
+    mirrorSupa: (e) => supabase ? supabase.from('audit_logs').insert(e) : null,
     ...entry
   });
 }
@@ -526,6 +527,13 @@ function serializeRecord(record) {
 
   out = unpackUserMeta(out);
   out = unpackStoreMeta(out);
+
+  // Users: normalize rendor_sub_expiry to a ms number on read (Postgres
+  // returns timestamptz ISO; consumers expect the ms epoch) — see api/index.js.
+  if (out.rendor_sub_expiry != null && out.rendor_sub_expiry !== '' && typeof out.rendor_sub_expiry !== 'number') {
+    const _subMs = access.rendorSubExpiryMs(out.rendor_sub_expiry);
+    if (Number.isFinite(_subMs)) out.rendor_sub_expiry = _subMs;
+  }
   if (out.extra && typeof out.extra === 'object') {
     out = unpackWalletTxnMeta(out);
   }
@@ -684,6 +692,13 @@ function prepareRecordForDb(table, record, existingRecord) {
     if (!out.image_url)   out.image_url   = '';
     if (!out.link)        out.link        = '';
     if (!out.placement)   out.placement   = Array.isArray(adExtra.pages) ? adExtra.pages.join(',') : 'home';
+  }
+
+  // rendor_sub_expiry is a timestamptz column: ms-epoch → ISO before Postgres
+  // sees it, or the write 400s (22008) — see api/index.js.
+  if (table === 'users' && out.rendor_sub_expiry != null && out.rendor_sub_expiry !== '') {
+    const _subMs = access.rendorSubExpiryMs(out.rendor_sub_expiry);
+    if (Number.isFinite(_subMs)) out.rendor_sub_expiry = new Date(_subMs).toISOString();
   }
 
   // Postgres rejects empty strings in timestamp/numeric columns (the client
@@ -860,7 +875,7 @@ app.post('/api/auth/login', loginIpRateLimiter, loginEmailRateLimiter, loginRate
 
   // Auto-deactivate expired rendor subscriptions on login
   if (user.role === 'rendor' && user.rendor_sub_status === 'active' && user.rendor_sub_expiry) {
-    const expiryMs = Number(user.rendor_sub_expiry);
+    const expiryMs = access.rendorSubExpiryMs(user.rendor_sub_expiry);
     if (expiryMs && expiryMs < Date.now()) {
       user.rendor_sub_status = 'inactive';
       user.sub_request_status = null;
@@ -973,6 +988,62 @@ app.post('/api/auth/refresh', (req, res) => {
   revokeToken(session.token);
   const newToken = createSessionToken(session.userId, session.role);
   return res.json({ token: newToken });
+});
+
+// DELETE /api/auth/account — self-service account deletion (mirror of
+// api/index.js; runs the same cascade for the SESSION user only — the client
+// never supplies the id, so it can never delete anyone else).
+app.delete('/api/auth/account', writeRateLimiter, async (req, res) => {
+  try {
+    const viewer = access.getAccessContext(req);
+    if (!viewer || !viewer.userId) {
+      return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    }
+    if (String(viewer.userId) === 'admin') {
+      return res.status(400).json({ error: 'The main admin account cannot be deleted from the app.' });
+    }
+    const id = String(viewer.userId);
+    auditLog({ actorId: id, actorRole: viewer.role, action: 'delete_own_account', table: 'users', targetId: id });
+
+    const supabase = getSupabase();
+    if (supabase) {
+      const result = await cascadeDeleteUserSupabase(supabase, id);
+      if (!result.ok) return res.status(500).json({ error: result.error });
+    }
+
+    const db = loadDb();
+    getTable(db, 'orders').forEach(o => {
+      if (String(o.buyer_id) === String(id)) o.buyer_id = null;
+      if (String(o.vendor_id) === String(id)) o.vendor_id = null;
+    });
+    getTable(db, 'packages').forEach(p => {
+      if (String(p.buyer_id) === String(id)) p.buyer_id = null;
+      if (String(p.vendor_id) === String(id)) p.vendor_id = null;
+    });
+    getTable(db, 'wallet_transactions').forEach(t => {
+      if (String(t.user_id) === String(id)) t.user_id = null;
+    });
+    getTable(db, 'referrals').forEach(r => {
+      if (String(r.referrer_id) === String(id)) r.referrer_id = null;
+      if (String(r.referred_id) === String(id)) r.referred_id = null;
+    });
+    getTable(db, 'reviews').forEach(r => {
+      if (String(r.buyer_id) === String(id)) r.buyer_id = null;
+    });
+    db.notifications = getTable(db, 'notifications').filter(n => String(n.user_id) !== String(id));
+    db.ad_campaigns = getTable(db, 'ad_campaigns').filter(a => String(a.vendor_id) !== String(id));
+    db.services = getTable(db, 'services').filter(s => String(s.rendor_id) !== String(id));
+    db.products = getTable(db, 'products').filter(p => String(p.vendor_id) !== String(id));
+    db.stores = getTable(db, 'stores').filter(s => String(s.vendor_id) !== String(id));
+    db.support_tickets = getTable(db, 'support_tickets').filter(t => String(t.user_id) !== String(id));
+    db.push_subscriptions = getTable(db, 'push_subscriptions').filter(p => String(p.user_id) !== String(id));
+    db.users = getTable(db, 'users').filter(r => String(r.id) !== String(id));
+    saveDb(db);
+    invalidateApiCache('users');
+    return res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/auth/verify', (req, res) => {
@@ -1792,7 +1863,7 @@ function sweepExpiredRendorSubs(rows) {
   let changedAny = false;
   for (const r of rows) {
     if (!r || r.role !== 'rendor' || r.rendor_sub_status !== 'active') continue;
-    const expiryMs = Number(r.rendor_sub_expiry);
+    const expiryMs = access.rendorSubExpiryMs(r.rendor_sub_expiry);
     if (!Number.isFinite(expiryMs) || expiryMs <= 0 || expiryMs >= now) continue;
     r.rendor_sub_status = 'inactive';
     r.sub_request_status = null;
@@ -1815,7 +1886,7 @@ function sweepExpiredRendorSubs(rows) {
       const db = loadDb();
       const localRows = getTable(db, 'users');
       for (const r of rows) {
-        if (r && r.rendor_sub_status === 'inactive' && Number(r.rendor_sub_expiry) > 0 && Number(r.rendor_sub_expiry) < now) {
+        if (r && r.rendor_sub_status === 'inactive' && access.rendorSubExpiryMs(r.rendor_sub_expiry) > 0 && access.rendorSubExpiryMs(r.rendor_sub_expiry) < now) {
           const lu = localRows.find(u => String(u.id) === String(r.id));
           if (lu && lu.rendor_sub_status === 'active') { lu.rendor_sub_status = 'inactive'; lu.sub_request_status = null; lu.sub_payment_status = null; lu.sub_payment_months = null; lu.sub_payment_amount = null; }
         }
@@ -2110,6 +2181,107 @@ app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
   }
 });
 
+// POST /api/ads/track — anonymous campaign analytics (mirror of api/index.js).
+app.post('/api/ads/track', writeRateLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const campaignId = String(body.campaign_id || '');
+    const impressions = Math.max(0, Math.min(500, parseInt(body.impressions, 10) || 0));
+    const clicks = Math.max(0, Math.min(100, parseInt(body.clicks, 10) || 0));
+    const seconds = Math.max(0, Math.min(7200, Number(body.seconds) || 0));
+    if (!campaignId || (!impressions && !clicks && !seconds)) {
+      return res.status(400).json({ error: 'Nothing to track' });
+    }
+    if (supabase) {
+      try {
+        const { data } = await withSupaTimeout(supabase.from('ad_campaigns').select('*').eq('id', campaignId).maybeSingle(), 2500);
+        if (!data) return res.status(404).json({ error: 'Campaign not found' });
+        const rec = serializeRecord(data);
+        const extra = { ...parseExtraObject(rec.extra) };
+        const day = new Date().toISOString().slice(0, 10);
+        const daily = { ...(extra.ads_daily || {}) };
+        const d = { imp: 0, clk: 0, sec: 0, ...(daily[day] || {}) };
+        d.imp += impressions; d.clk += clicks; d.sec = Math.round((Number(d.sec) || 0) + seconds);
+        daily[day] = d;
+        const days = Object.keys(daily).sort();
+        while (days.length > 30) delete daily[days.shift()];
+        extra.ads_daily = daily;
+        extra.ads_dwell_seconds = Math.round((Number(extra.ads_dwell_seconds) || 0) + seconds);
+        const dbRecord = prepareRecordForDb('ad_campaigns', {
+          ...rec,
+          impressions: (parseInt(rec.impressions, 10) || 0) + impressions,
+          clicks: (parseInt(rec.clicks, 10) || 0) + clicks,
+          extra,
+          updated_at: new Date().toISOString()
+        }, rec);
+        await withSupaTimeout(supabase.from('ad_campaigns').update(dbRecord).eq('id', campaignId), 2500);
+        return res.json({ ok: true });
+      } catch (e) {
+        console.warn('[AdsTrack] Supabase failed, using local store:', e.message);
+      }
+    }
+    const dbT = loadDb();
+    const row = getTable(dbT, 'ad_campaigns').find(c => String(c.id) === String(campaignId));
+    if (!row) return res.status(404).json({ error: 'Campaign not found' });
+    row.impressions = (parseInt(row.impressions, 10) || 0) + impressions;
+    row.clicks = (parseInt(row.clicks, 10) || 0) + clicks;
+    const extra = parseExtraObject(row.extra);
+    const day = new Date().toISOString().slice(0, 10);
+    const daily = extra.ads_daily || {};
+    const d = daily[day] || { imp: 0, clk: 0, sec: 0 };
+    d.imp += impressions; d.clk += clicks; d.sec = Math.round((Number(d.sec) || 0) + seconds);
+    daily[day] = d;
+    extra.ads_daily = daily;
+    extra.ads_dwell_seconds = Math.round((Number(extra.ads_dwell_seconds) || 0) + seconds);
+    row.extra = extra;
+    saveDb(dbT);
+    invalidateApiCache('ad_campaigns');
+    return res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── New-order notifications + web push (vendor + admin) — mirror of api/index.js ──
+async function notifyNewOrder(record) {
+  try {
+    if (!record || !record.id) return;
+    const code = record.package_code || record.code || record.id;
+    const total = Number(record.total || record.total_amount || 0).toFixed(2);
+    const buyerName = record.buyer_name || record.buyer_email || 'A customer';
+    const now = new Date().toISOString();
+    const rows = [];
+    if (record.vendor_id) rows.push({
+      id: generateId('notif'), user_id: String(record.vendor_id), type: 'order',
+      title: 'New order received 🎉',
+      message: `${buyerName} placed order ${code} — GHS ${total}. Open Vendor Orders to process it.`,
+      is_read: false, created_at: now, extra: {}
+    });
+    rows.push({
+      id: generateId('notif'), user_id: 'admin', type: 'order',
+      title: 'New order on the platform 🎉',
+      message: `Order ${code} — GHS ${total}.`,
+      is_read: false, created_at: now, extra: {}
+    });
+    for (const row of rows) {
+      try {
+        const dbN = loadDb();
+        getTable(dbN, 'notifications').push(row);
+        saveDb(dbN);
+      } catch (e) {}
+      if (supabase) {
+        try { await withSupaTimeout(supabase.from('notifications').insert(prepareRecordForDb('notifications', serializeRecord(row))), 2000); } catch (e) {}
+      }
+      dispatchPushNotification({
+        user_id: row.user_id,
+        title: row.title,
+        body: row.message,
+        url: './'
+      }).catch(() => {});
+    }
+  } catch (e) {}
+}
+
 app.post('/api/:table', writeRateLimiter, async (req, res) => {
   let table = req.params.table;
   // (#10) Closed table allowlist — unknown tables 404 instead of succeeding.
@@ -2326,7 +2498,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       const dbR = loadDb();
       rendorUser = getTable(dbR, 'users').find(u => String(u.id) === String(viewer.userId)) || null;
     }
-    const expMs = Number(rendorUser && rendorUser.rendor_sub_expiry);
+    const expMs = access.rendorSubExpiryMs(rendorUser && rendorUser.rendor_sub_expiry);
     const subActive = !!rendorUser && rendorUser.rendor_sub_status === 'active' &&
       Number.isFinite(expMs) && expMs > 0 && expMs > Date.now();
     if (!subActive) {
@@ -2737,6 +2909,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
         if (table === 'users' && typeof createSessionToken === 'function') {
           out.token = createSessionToken(out.id, out.role);
         }
+        if (table === 'packages' || table === 'orders') notifyNewOrder(out).catch(() => {});
         return res.status(201).json(out);
       }
     } catch (err) {
@@ -2748,6 +2921,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
   if (table === 'users' && typeof createSessionToken === 'function') {
     out.token = createSessionToken(out.id, out.role);
   }
+  if (table === 'packages' || table === 'orders') notifyNewOrder(out).catch(() => {});
   res.status(201).json(out);
 });
 
@@ -3259,6 +3433,33 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
   }
 });
 
+// ── Account deletion cascade (shared by admin delete + self-service delete) ──
+// Mirror of api/index.js — see the full comment there.
+async function cascadeDeleteUserSupabase(supabase, id) {
+  try { await supabase.from('orders').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+  try { await supabase.from('orders').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('packages').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+  try { await supabase.from('packages').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('wallet_transactions').update({ user_id: null }).eq('user_id', id); } catch (e) {}
+  try { await supabase.from('referrals').update({ referrer_id: null }).eq('referrer_id', id); } catch (e) {}
+  try { await supabase.from('referrals').update({ referred_id: null }).eq('referred_id', id); } catch (e) {}
+  try { await supabase.from('reviews').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+  try { await supabase.from('service_orders').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
+  try { await supabase.from('service_orders').update({ rendor_id: null }).eq('rendor_id', id); } catch (e) {}
+
+  try { await supabase.from('notifications').delete().eq('user_id', id); } catch (e) {}
+  try { await supabase.from('ad_campaigns').delete().eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('services').delete().eq('rendor_id', id); } catch (e) {}
+  try { await supabase.from('products').delete().eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('stores').delete().eq('vendor_id', id); } catch (e) {}
+  try { await supabase.from('support_tickets').delete().eq('user_id', id); } catch (e) {}
+  try { await supabase.from('push_subscriptions').delete().eq('user_id', id); } catch (e) {}
+
+  const { error } = await supabase.from('users').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
   const table = req.params.table;
   const id = req.params.id;
@@ -3291,36 +3492,8 @@ app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
 
   if (table === 'users') {
     if (supabase) {
-      try {
-        // 1. Dissociate historical records by setting their user reference to NULL
-        try { await supabase.from('orders').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
-        try { await supabase.from('orders').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('packages').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
-        try { await supabase.from('packages').update({ vendor_id: null }).eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('wallet_transactions').update({ user_id: null }).eq('user_id', id); } catch (e) {}
-        try { await supabase.from('referrals').update({ referrer_id: null }).eq('referrer_id', id); } catch (e) {}
-        try { await supabase.from('referrals').update({ referred_id: null }).eq('referred_id', id); } catch (e) {}
-        try { await supabase.from('reviews').update({ buyer_id: null }).eq('buyer_id', id); } catch (e) {}
-
-        // 2. Delete temporary/personal dependencies (stores, products, ads, notifications, services)
-        try { await supabase.from('notifications').delete().eq('user_id', id); } catch (e) {}
-        try { await supabase.from('ad_campaigns').delete().eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('services').delete().eq('rendor_id', id); } catch (e) {}
-        try { await supabase.from('products').delete().eq('vendor_id', id); } catch (e) {}
-        try { await supabase.from('stores').delete().eq('vendor_id', id); } catch (e) {}
-
-        // 3. Now safely hard-delete the user account (best-effort — if Supabase
-        // fails, still remove the account from the local db below).
-        try {
-          const { error } = await supabase.from('users').delete().eq('id', id);
-          if (error) console.error('[Supabase] user delete rejected:', error.message);
-        } catch (err) {
-          console.error('[Supabase] user delete failed (falling back to local db):', err.message);
-        }
-      } catch (err) {
-        console.error(`[Supabase Delete Exception] table=${table} id=${id}:`, err.message);
-        // Continue to local removal below rather than failing the whole request.
-      }
+      const result = await cascadeDeleteUserSupabase(supabase, id);
+      if (!result.ok) console.error('[Supabase] user delete rejected:', result.error);
     }
     const db = loadDb();
     

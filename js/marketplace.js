@@ -24,8 +24,12 @@ function isRendorSubActive(r) {
   if (!r) return false;
   if (r.rendor_sub_active !== undefined) return r.rendor_sub_active === true;
   if (r.rendor_sub_status !== 'active') return false;
-  if (!r.rendor_sub_expiry) return false;
-  return new Date(Number(r.rendor_sub_expiry)) > new Date();
+  const v = r.rendor_sub_expiry;
+  if (!v) return false;
+  // ms-epoch (number or numeric string) or ISO string — both must parse;
+  // Number(iso) is NaN, which used to hide every subscribed rendor.
+  const ms = typeof v === 'number' ? v : (/^\d+$/.test(String(v).trim()) ? Number(v) : Date.parse(v));
+  return Number.isFinite(ms) && ms > Date.now();
 }
 
 // A rendor is publicly listed only while they have an active subscription.

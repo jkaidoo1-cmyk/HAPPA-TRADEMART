@@ -175,10 +175,17 @@ async function _apDeleteUser(userId) {
   }
 
   showToast('Deleting user account...', 'info');
-  await apiDelete('users', userId).catch(err => {
+  const delRes = await apiDelete('users', userId).catch(err => {
     console.error('Delete user error:', err);
     return null;
   });
+  if (!delRes || !delRes.success) {
+    // apiFetch returns null for server-rejected writes — the account is still
+    // live. Never purge local state or report success on failure.
+    showToast('Account deletion failed on the server. Please try again.', 'error');
+    closeAdminPanel();
+    return;
+  }
 
   // Purge user from local memory state
   if (App.allUsers) {
