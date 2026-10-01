@@ -59,6 +59,23 @@ test('product insert candidates fall back to a minimal payload when the schema i
   assert.equal(candidates[1].unknown_field, undefined);
 });
 
+test('storefront plan_prices survive the write→read round-trip through the store extra jsonb', () => {
+  // The admin sets per-vendor plan prices when approving a storefront. They are
+  // stored in the store's `extra` JSONB (the slim Supabase schema has no
+  // plan_prices column), so an unpack that misses them makes the vendor fall
+  // back to stale prices on reload.
+  const prepared = api.prepareRecordForDb('stores', {
+    id: 'store-9',
+    name: 'Pricey Store',
+    plan_prices: { starter: 25, growth: 50, pro: 100 }
+  });
+  assert.deepEqual(prepared.extra.plan_prices, { starter: 25, growth: 50, pro: 100 },
+    'plan_prices must be packed into extra for Supabase');
+
+  const serialized = api.serializeRecord({ id: 'store-9', extra: prepared.extra });
+  assert.equal(serialized.plan_prices.growth, 50, 'plan_prices must be unpacked on read');
+});
+
 test('storefront packages preserve source and delivery metadata for vendor processing', () => {
   const prepared = api.prepareRecordForDb('packages', {
     id: 'pkg-1',

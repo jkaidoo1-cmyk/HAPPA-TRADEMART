@@ -3810,6 +3810,10 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
       if ('subscription_months' in body) storeUpdates.subscription_months = body.subscription_months;
       if ('subscription_method' in body) storeUpdates.subscription_method = body.subscription_method;
       if ('layout' in body) storeUpdates.layout = body.layout;
+      // Admin per-vendor plan price overrides set at approval time. Must be
+      // copied here or the store's `extra.plan_prices` is never written and the
+      // vendor falls back to the global prices on reload.
+      if ('plan_prices' in body) storeUpdates.plan_prices = body.plan_prices;
 
       let extra = {};
       try {
