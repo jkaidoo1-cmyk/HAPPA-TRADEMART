@@ -1147,6 +1147,13 @@ function stampStorefrontMount(c, storeId, slug) {
   c.dataset.sfStoreId = String(storeId || '');
   c.dataset.sfSlug = String(slug || '');
 }
+// A non-live page (not found / under construction / expired / error) belongs to
+// no storefront, so drop the stamp and let the next render rebuild in full.
+function clearStorefrontMount(c) {
+  if (!c) return;
+  delete c.dataset.sfStoreId;
+  delete c.dataset.sfSlug;
+}
 
 async function renderStorefront(id) {
   let c = document.getElementById('storefront-content');
@@ -1271,9 +1278,11 @@ async function renderStorefront(id) {
               <i class="fas fa-redo"></i> Retry Loading
             </button>
           </div>`;
+        clearStorefrontMount(c);
         return;
       }
       c.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center"><i class="fas fa-store-slash" style="font-size:3rem;color:var(--text-light);margin-bottom:12px"></i><h3 style="font-size:1.2rem;font-weight:800">Storefront Not Found</h3><p style="color:var(--text-muted);font-size:.85rem;margin-top:4px">The requested storefront URL could not be located or may have been removed.</p></div>';
+      clearStorefrontMount(c);
       return;
     }
 
@@ -1325,6 +1334,7 @@ async function renderStorefront(id) {
             This storefront is currently not active. Once the vendor completes setup and receives admin approval, this page will go live.
           </p>
         </div>`;
+      clearStorefrontMount(c);
       return;
     }
 
@@ -1340,6 +1350,7 @@ async function renderStorefront(id) {
             This storefront's subscription has expired. The vendor needs to renew to restore access. In the meantime, you can still find this store's products on the main website.
           </p>
         </div>`;
+      clearStorefrontMount(c);
       return;
     }
 
@@ -1784,6 +1795,7 @@ async function renderStorefront(id) {
           <i class="fas fa-redo"></i> Retry Loading
         </button>
       </div>`;
+    clearStorefrontMount(c);
   }
 }
 
