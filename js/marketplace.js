@@ -1279,9 +1279,10 @@ async function renderStorefront(id) {
 
     const realStoreId = s.id;
     App.currentStoreId = realStoreId;
-    // Mark which storefront this page belongs to, so later renders can tell
-    // "same storefront, keep it" from "different storefront, rebuild it".
-    stampStorefrontMount(c, realStoreId, s.slug || sf?.url_slug || '');
+    // NOTE: the mount stamp is written only once the real storefront page is
+    // rendered (see below the visibility gates). Stamping here would make the
+    // gates think "this storefront is already on screen" and skip the
+    // under-construction / subscription pages.
 
     // Merge freshly-fetched products into App.allProducts before rendering
     if (prodRes && prodRes.data && prodRes.data.length) {
@@ -1748,6 +1749,11 @@ async function renderStorefront(id) {
       </div>
     </div>
   `;
+
+  // Mark which storefront this page belongs to only now that we are actually
+  // rendering it — later renders use this to tell "same storefront, keep it"
+  // from "different storefront, rebuild it" instead of inheriting the old DOM.
+  stampStorefrontMount(c, realStoreId, s.slug || sf?.url_slug || '');
 
   // Pre-payment preview ribbon (owner/admin only reaches here)
   if (sfUnpaid) {
