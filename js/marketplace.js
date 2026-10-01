@@ -1130,11 +1130,22 @@ async function renderStoreDetail(id) {
   }
 }
 
-// True when a real storefront page (not the skeleton) is already on screen —
-// guards against re-render races replacing a live storefront with an error state.
-function storefrontPageIsRendered(c) {
-  return !!c && !!c.querySelector('#storefront-page-container') &&
-    !c.querySelector('#storefront-page-container .skeleton-box');
+// Each storefront page is stamped with the store it was rendered for. Without
+// this, opening a second storefront (or a link to one that is under
+// construction / unreachable) left the PREVIOUS storefront's DOM on screen —
+// its branding, its tabs and its cart — because the guards below only asked
+// "is a storefront rendered?" and never "is it THIS storefront?".
+function storefrontIsMountedFor(c, targetId) {
+  const t = String(targetId || '').trim();
+  if (!c || !t) return false;
+  const mountedId = String(c.dataset.sfStoreId || '');
+  const mountedSlug = String(c.dataset.sfSlug || '');
+  return mountedId === t || mountedSlug === t || mountedSlug.toLowerCase() === t.toLowerCase();
+}
+function stampStorefrontMount(c, storeId, slug) {
+  if (!c) return;
+  c.dataset.sfStoreId = String(storeId || '');
+  c.dataset.sfSlug = String(slug || '');
 }
 
 async function renderStorefront(id) {
@@ -1148,8 +1159,15 @@ async function renderStorefront(id) {
   }
   if (!c) return;
 
-  // Show skeleton loader only if content container is not yet populated with storefront page container
-  if (!App.isBackgroundRefresh && (!c.children.length || c.innerHTML.includes('skeleton') || !c.querySelector('#storefront-page-container'))) {
+  // Show the skeleton unless the container already holds THIS storefront's page.
+  // Switching from storefront A to storefront B must never leave A's page visible
+  // while B loads — that cross-storefront bleed is why a shopper saw another
+  // store's tabs and cart on a brand-new, empty storefront.
+  if (!App.isBackgroundRefresh && (
+      !c.querySelector('#storefront-page-container') ||
+      c.innerHTML.includes('skeleton') ||
+      !storefrontIsMountedFor(c, id)
+  )) {
     c.innerHTML = `
       <div id="storefront-page-container" style="position:relative; width:100%; min-height:100vh; background:#fafafa; padding-bottom:60px;">
         <!-- Header/Banner Skeleton -->
@@ -1234,8 +1252,10 @@ async function renderStorefront(id) {
 
     if (!s) {
       // If a storefront is already on screen (background refresh / re-render race),
-      // never replace it with an error state.
-      if (storefrontPageIsRendered(c)) {
+      // never replace it with an error state — but ONLY when the mounted page
+      // really is this storefront. Keeping another store's page here would show
+      // the wrong store on this URL.
+      if (storefrontIsMountedFor(c, targetId)) {
         console.warn('[renderStorefront] Could not re-resolve store "' + targetId + '" — keeping the already-rendered storefront.');
         return;
       }
@@ -1259,6 +1279,9 @@ async function renderStorefront(id) {
 
     const realStoreId = s.id;
     App.currentStoreId = realStoreId;
+    // Mark which storefront this page belongs to, so later renders can tell
+    // "same storefront, keep it" from "different storefront, rebuild it".
+    stampStorefrontMount(c, realStoreId, s.slug || sf?.url_slug || '');
 
     // Merge freshly-fetched products into App.allProducts before rendering
     if (prodRes && prodRes.data && prodRes.data.length) {
@@ -1284,8 +1307,9 @@ async function renderStorefront(id) {
 
     if (!isLive && !isOwner && !isAdmin) {
       // A background re-render that failed to load the storefront record (sf) can
-      // briefly see status 'none' — never nuke an already-live storefront.
-      if (storefrontPageIsRendered(c)) {
+      // briefly see status 'none' — never nuke THIS storefront if it is already
+      // rendered. But never keep a DIFFERENT storefront's page either.
+      if (storefrontIsMountedFor(c, realStoreId)) {
         return;
       }
       // Brand the tab with the vendor's identity even on the construction page
@@ -1306,7 +1330,7 @@ async function renderStorefront(id) {
     // If storefront subscription expired, show unavailable page to visitors (owner/admin still see it)
     const subExpired = s.subscription_end && new Date(s.subscription_end) < new Date();
     if (subExpired && !isOwner && !isAdmin) {
-      if (storefrontPageIsRendered(c)) return;
+      if (storefrontIsMountedFor(c, realStoreId)) return;
       c.innerHTML = `
         <div class="empty-state" style="padding: 60px 20px; text-align: center;">
           <div style="font-size: 3.5rem; margin-bottom: 16px;">⏰</div>
@@ -3403,7 +3427,18 @@ window.updateStorefrontModalQty = function(delta) {
   qtyEl.textContent = val;
 };
 
+// Every storefront has its OWN cart, namespaced by store id. If a caller ever
+// passes an empty id we must resolve the store rather than fall back to a shared
+// key — a shared key is exactly how one storefront's item showed up in another.
+function resolveStorefrontCartStoreId(storeId) {
+  let id = String(storeId || '').trim();
+  if (!id) id = String(App.currentStoreId || '').trim();
+  return id;
+}
+
 window.addStorefrontCartItem = async function(storeId, productId) {
+  storeId = resolveStorefrontCartStoreId(storeId);
+  if (!storeId) { showToast('Could not identify this storefront. Please reload the page.', 'error'); return; }
   const qtyEl = document.getElementById('store-modal-qty');
   const qty = qtyEl ? parseInt(qtyEl.textContent) : 1;
   let p = App.allProducts.find(prod => String(prod.id) === String(productId));
@@ -3452,6 +3487,8 @@ window.addStorefrontCartItem = async function(storeId, productId) {
 window.renderStorefrontCart = async function(storeId) {
   const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
+  storeId = resolveStorefrontCartStoreId(storeId);
+  if (!storeId) return;
 
   const s = App.allStores.find(st => String(st.id) === String(storeId)) || {};
   const primaryColor = s.primary_color || '#e85d04';
@@ -3639,6 +3676,8 @@ async function renderStorefrontOrders(storeId, container, primaryColor) {
 }
 
 window.updateStorefrontCartItemQty = function(storeId, productId, delta) {
+  storeId = resolveStorefrontCartStoreId(storeId);
+  if (!storeId) return;
   const key = 'happa_store_cart_' + storeId;
   let storeCart = JSON.parse(localStorage.getItem(key) || '[]');
   const idx = storeCart.findIndex(item => String(item.id) === String(productId));
@@ -3656,6 +3695,8 @@ window.updateStorefrontCartItemQty = function(storeId, productId, delta) {
 };
 
 window.removeStorefrontCartItem = function(storeId, productId) {
+  storeId = resolveStorefrontCartStoreId(storeId);
+  if (!storeId) return;
   const key = 'happa_store_cart_' + storeId;
   let storeCart = JSON.parse(localStorage.getItem(key) || '[]');
   storeCart = storeCart.filter(item => String(item.id) !== String(productId));
@@ -3672,6 +3713,8 @@ window.removeStorefrontCartItem = function(storeId, productId) {
 window.renderStorefrontCheckout = function(storeId) {
   const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
+  storeId = resolveStorefrontCartStoreId(storeId);
+  if (!storeId) return;
 
   const s = App.allStores.find(st => String(st.id) === String(storeId)) || {};
   const primaryColor = s.primary_color || '#e85d04';
