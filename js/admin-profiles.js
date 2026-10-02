@@ -1091,7 +1091,7 @@ async function adminOpenVendorProfile(userId) {
   showPage('admin-vendor-profile');
   const c = document.getElementById('admin-vendor-profile-content');
   if (c) {
-    c.innerHTML = (typeof getVendorProfileSkeletonHTML === 'function') ? getVendorProfileSkeletonHTML() : `<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>`;
+    c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>`;
   }
 
   try {
