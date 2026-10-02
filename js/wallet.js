@@ -190,8 +190,7 @@ async function processDeposit(amount, method, network, accountNum, ref) {
     amount, method, network, account_number: accountNum, payment_ref: ref
   });
   if (!res || !res.txn) {
-    const msg = (res && res.error) || window.lastApiError || 'Transaction failed. Please try again.';
-    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    showApiErrorToast(res || window.lastApiError, 'Transaction failed. Please try again.');
     return;
   }
   const balAfter = res.balance;
@@ -221,9 +220,6 @@ async function showWithdrawalModal() {
   if (u.role !== 'vendor') {
     showToast('Only vendors can request withdrawals', 'warning'); return;
   }
-  if (!u.is_verified || !u.id_verified) {
-    showToast('Complete phone & ID verification before withdrawing', 'warning'); return;
-  }
 
   // Limits come from Admin → Settings (Wallet & Withdrawals) with hardcoded fallbacks.
   const settingsRes = await apiGet('settings', 'limit=200').catch(() => null);
@@ -231,8 +227,23 @@ async function showWithdrawalModal() {
   const sVal = (key, def) => (sRows.find(r => r.key === key) || {}).value ?? def;
   const minWd = parseFloat(sVal('min_withdrawal', MIN_WITHDRAWAL)) || MIN_WITHDRAWAL;
   const maxPendingWd = parseInt(sVal('max_pending_withdrawals', MAX_WITHDRAWAL_PENDING), 10) || MAX_WITHDRAWAL_PENDING;
+  // The processing window is an admin setting — this modal used to promise a
+  // fixed two-day window no matter what the admin had configured.
+  const wdDays = parseInt(sVal('withdrawal_days', 2), 10) || 2;
+  const wdLabel = `within ${wdDays} business day${wdDays === 1 ? '' : 's'}`;
   window._wdMin = minWd;
   window._wdMaxP = maxPendingWd;
+  window._wdDays = wdDays;
+
+  // Verification is required only when the admin's Settings demand it (the
+  // server enforces the same rule), so switching a toggle off no longer leaves
+  // vendors stuck behind a check the platform is not asking for.
+  const requirePhone = String(sVal('require_phone_verify', 'true')) !== 'false';
+  const requireId    = String(sVal('require_id_verify', 'true')) !== 'false';
+  if ((requirePhone && !u.is_verified) || (requireId && !u.id_verified)) {
+    showToast(`Complete ${requirePhone && !u.is_verified ? 'phone' : 'ID'} verification before withdrawing`, 'warning');
+    return;
+  }
 
   const balance = u.wallet_balance || 0;
 
@@ -315,7 +326,7 @@ async function showWithdrawalModal() {
       <span>Remaining Balance</span><strong id="wd-prev-balance" style="color:var(--success)">GHS 0.00</strong>
     </div>
     <div style="font-size:.75rem;color:var(--text-muted);margin-top:4px">
-      <i class="fas fa-info-circle"></i> Processed within 1–2 business days
+      <i class="fas fa-info-circle"></i> Processed ${wdLabel}
     </div>
   </div>
 
@@ -324,7 +335,7 @@ async function showWithdrawalModal() {
     <i class="fas fa-paper-plane"></i> Submit Withdrawal Request
   </button>
   <p style="text-align:center;font-size:.72rem;color:var(--text-muted);margin-top:8px">
-    Requests are reviewed and paid within 1–2 business days
+    Requests are reviewed and paid ${wdLabel}
   </p>`}
 </div>`);
 }
@@ -400,8 +411,7 @@ async function submitWithdrawal(balance) {
     amount, method, network, account_number: accountNum, note
   });
   if (!res || !res.txn) {
-    const msg = (res && res.error) || window.lastApiError || 'Failed to submit request. Try again.';
-    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    showApiErrorToast(res || window.lastApiError, 'Failed to submit the request. Please try again.');
     return;
   }
   const balAfter = res.balance;
@@ -409,8 +419,9 @@ async function submitWithdrawal(balance) {
   saveSessions();
 
   // Notify vendor
+  const wdDays = Math.max(1, parseInt(window._wdDays, 10) || 2);
   addNotification(u.id, 'system', '🏧 Withdrawal Requested',
-    `GHS ${amount.toFixed(2)} withdrawal request submitted. Processed within 1–2 business days.`);
+    `GHS ${amount.toFixed(2)} withdrawal request submitted. Processed within ${wdDays} business day${wdDays === 1 ? '' : 's'}.`);
 
   // Notify admin
   const adminUser = (App.allUsers || []).find(usr => usr.role === 'admin');

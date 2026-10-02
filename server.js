@@ -17,6 +17,8 @@ const access = require('./lib/access');
 const otp = require('./lib/otp');
 const notify = require('./lib/notify');
 const uploads = require('./lib/uploads');
+const storefrontShell = require('./lib/storefront-shell');
+const rendorPosts = require('./lib/rendor-posts');
 
 
 // Load environment variables from .env if present
@@ -2187,7 +2189,9 @@ app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
   if (!fn) return res.status(404).json({ error: 'Unknown wallet action.' });
   try {
     const out = await fn(walletAdapter(), access.getAccessContext(req), req.body || {});
-    if (!out.ok) return res.status(out.status).json({ error: out.error });
+    // Carry the engine's optional machine-readable hint (code/extra) so the UI
+    // can react — e.g. reprice instead of printing the failure verbatim.
+    if (!out.ok) return res.status(out.status).json({ error: out.error, ...(out.code ? { code: out.code } : {}), ...(out.extra || {}) });
     return res.json(out.data);
   } catch (err) {
     console.error('[Wallet]', req.params.action, 'error:', err && err.message || err);
@@ -2294,6 +2298,43 @@ async function notifyNewOrder(record) {
       }).catch(() => {});
     }
   } catch (e) {}
+}
+
+// ── Rendor post cap (see lib/rendor-posts.js) ───────────────────
+// How many posts a rendor holds right now — from the database when it is
+// reachable, else from db.json, exactly like every other read here.
+async function countHeldRendorPosts(rendorId) {
+  const id = String(rendorId || '');
+  if (!id) return 0;
+  if (supabase) {
+    try {
+      const { data, error } = await withSupaTimeout(
+        supabase.from('services').select('id,rendor_id,status').eq('rendor_id', id).limit(200), 3000
+      );
+      if (!error) return rendorPosts.countHeldPosts(data || [], id);
+    } catch (e) { /* fall through to the local copy */ }
+  }
+  const db = loadDb();
+  return rendorPosts.countHeldPosts(getTable(db, 'services') || [], id);
+}
+
+// Which rendor a write belongs to: a rendor's own writes are always their own
+// (owner fields are stripped from their body and re-stamped), while an admin
+// writing on someone's behalf names the rendor.
+function rendorIdForWrite(viewer, body, existing) {
+  if (viewer && String(viewer.role) === 'rendor') return String(viewer.userId || '');
+  return String((body && body.rendor_id) || (existing && existing.rendor_id) || '');
+}
+
+// null when the write is allowed, otherwise { status, error, code }.
+async function rendorPostLimitReached({ viewer, body, existing }) {
+  const rendorId = rendorIdForWrite(viewer, body, existing);
+  if (!rendorId) return null;
+  const merged = { ...(existing || {}), ...(body || {}) };
+  if (!rendorPosts.isHeldPost(merged)) return null;   // this write frees a slot
+  const held = await countHeldRendorPosts(rendorId);
+  if (!rendorPosts.exceedsLimit({ existing, body, heldCount: held })) return null;
+  return { status: 409, error: rendorPosts.limitMessage(held), code: 'rendor_post_limit' };
 }
 
 app.post('/api/:table', writeRateLimiter, async (req, res) => {
@@ -2473,6 +2514,14 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
   const viewer = access.getAccessContext(req);
   const allowed = access.assertPostAllowed(table, viewer, body);
   if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+
+  // A rendor holds at most MAX_POSTS posts at once (lib/rendor-posts.js).
+  // Enforced here as well as in the dashboard: the button is a courtesy, the
+  // API is the rule.
+  if (table === 'services') {
+    const over = await rendorPostLimitReached({ viewer, body, existing: null });
+    if (over) return res.status(over.status).json({ error: over.error, code: over.code });
+  }
   // Anonymous signup must never mint an admin, set a wallet balance, or
   // self-verify. Admins (creating users via the panel) keep full control.
   // The admin-approval guarantee lives server-side: vendor/rendor status comes
@@ -2528,7 +2577,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     // The name is optional on upload — make sure the key exists so the
     // validator can default a missing/blank name for a CREATE.
     if (!('name' in body)) body.name = '';
-    const pv = commerce.validateProductBody(body);
+    const pv = commerce.validateProductBody(body, { requirePrice: true });
     if (!pv.ok) return res.status(400).json({ error: pv.error });
   }
   // (#2) A product may only be filed under a store the writer owns.
@@ -2657,7 +2706,14 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       const stockCheck = commerce.stockRequirements(resolved.items, productsById);
       if (!stockCheck.ok) return res.status(409).json({ error: stockCheck.error });
 
-      const money = commerce.packageMoney(resolved.items, { storefront: isStorefrontRow });
+      // Commission comes from the admin's Settings → commission tiers when one
+      // is configured (COMMISSION_TIERS is only the default), so editing the
+      // tiers actually changes what is charged.
+      let commissionTiers = null;
+      try {
+        commissionTiers = commerce.parseCommissionTiers(await walletAdapter().getSetting('commission_tiers', '[]'));
+      } catch (e) { commissionTiers = null; }
+      const money = commerce.packageMoney(resolved.items, { storefront: isStorefrontRow, tiers: commissionTiers });
       body.gross_amount = money.gross;
       body.vendor_amount = money.vendorAmount;
       body.commission_amount = money.commission;
@@ -2980,6 +3036,11 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     }
     const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
     if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+    // Re-activating an archived post must not slip past the post cap.
+    if (table === 'services') {
+      const over = await rendorPostLimitReached({ viewer, body, existing: existingForAuth });
+      if (over) return res.status(over.status).json({ error: over.error, code: over.code });
+    }
     if (table === 'products') {
       const pv = commerce.validateProductBody(body);
       if (!pv.ok) return res.status(400).json({ error: pv.error });
@@ -3225,6 +3286,11 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     }
     const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
     if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+    // Re-activating an archived post must not slip past the post cap.
+    if (table === 'services') {
+      const over = await rendorPostLimitReached({ viewer, body, existing: existingForAuth });
+      if (over) return res.status(over.status).json({ error: over.error, code: over.code });
+    }
     if (table === 'products') {
       const pv = commerce.validateProductBody(body);
       if (!pv.ok) return res.status(400).json({ error: pv.error });
@@ -3588,6 +3654,78 @@ app.delete('/api/:table/:id', writeRateLimiter, async (req, res) => {
   auditLog({ actorId: viewer && viewer.userId, actorRole: viewer && viewer.role, action: 'delete_record', table, targetId: id });
   return res.status(204).send();
 });
+
+// ── Storefront link previews ────────────────────────────────────
+// /storefront/<slug> and /store-admin/<slug> answer with the SPA shell whose
+// <head> describes that store, so a storefront link a vendor shares unfurls as
+// the store (own name, description and logo) instead of as the marketplace.
+// Mirrors the Vercel function — see lib/storefront-shell.js.
+function requestOrigin(req) {
+  const host = String(req.headers.host || '').trim();
+  if (!host) return '';
+  const proto = String(req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http')).split(',')[0].trim() || 'http';
+  return `${proto}://${host}`;
+}
+
+async function findStorefrontBySlug(slug) {
+  const want = String(slug || '').trim().toLowerCase();
+  if (!want) return null;
+
+  if (supabase) {
+    try {
+      const { data: sfRows } = await withSupaTimeout(
+        supabase.from('storefronts').select('*').eq('url_slug', want).limit(1), 3000
+      );
+      const sf = (sfRows || [])[0] || null;
+      const storeId = sf && (sf.store_id || sf.id);
+      const storeQuery = storeId
+        ? supabase.from('stores').select('*').eq('id', storeId).limit(1)
+        : supabase.from('stores').select('*').eq('slug', want).limit(1);
+      const { data: stRows } = await withSupaTimeout(storeQuery, 3000);
+      const st = (stRows || [])[0] || null;
+      if (sf || st) {
+        return { storefront: sf ? serializeRecord(sf) : {}, store: st ? serializeRecord(st) : {} };
+      }
+    } catch (e) {
+      console.warn('[Storefront] slug lookup failed:', e && e.message || e);
+    }
+  }
+
+  const db = loadDb();
+  const sfs = getTable(db, 'storefronts') || [];
+  const stores = getTable(db, 'stores') || [];
+  const sf = sfs.find(r => r && String(r.url_slug || '').toLowerCase() === want) || null;
+  const wantedId = sf && (sf.store_id || sf.id);
+  const st = stores.find(r => r && (String(r.id) === String(wantedId) || (!wantedId && String(r.slug || '').toLowerCase() === want))) || null;
+  if (sf || st) {
+    return { storefront: sf ? serializeRecord(sf) : {}, store: st ? serializeRecord(st) : {} };
+  }
+  return null;
+}
+
+function serveStorefrontShell(kind) {
+  return async (req, res) => {
+    const slug = storefrontShell.slugFromPath(req.path) || String(req.params.slug || '');
+    let html = '';
+    try { html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8'); } catch (e) { /* fall through to the redirect */ }
+    if (!html) return res.redirect(302, `/#${kind}/${encodeURIComponent(slug)}`);
+    const found = await findStorefrontBySlug(slug);
+    const meta = storefrontShell.storefrontShareMeta({
+      storefront: found ? found.storefront : {},
+      store: found ? found.store : {},
+      slug,
+      origin: requestOrigin(req),
+      kind
+    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    res.setHeader('X-Robots-Tag', kind === 'store-admin' ? 'noindex, nofollow' : 'index, follow');
+    return res.status(200).send(storefrontShell.injectStorefrontMeta(html, meta));
+  };
+}
+
+app.get('/storefront/:slug', serveStorefrontShell('storefront'));
+app.get('/store-admin/:slug', serveStorefrontShell('store-admin'));
 
 // ── Static file exposure guard ──────────────────────────────────
 // The dev server must never serve sensitive files (db.json, .env,

@@ -77,6 +77,33 @@ function itemImage(i) {
   }
   return '';
 }
+
+// ── Order notifications: always address the *other* party ────────────
+// Buyer-side copy ("Your order … has been received by the vendor and is being
+// prepared") must never land in the vendor's own feed. That happens when one
+// account is both buyer and vendor of the same package — a vendor's own
+// test/self order (buyer_id === vendor_id) — because addressing `buyer_id`
+// addresses the vendor as well, and no label on the row can tell the two roles
+// apart afterwards. In that case the actor is the only audience, so we send a
+// vendor-side confirmation of the action they just took instead of buyer copy.
+//
+// A genuine buyer is untouched: for them buyer_id !== vendor_id, so they keep
+// receiving the buyer-facing wording.
+function notifyOrderParty(pkg, ref, buyer, vendor) {
+  if (!pkg) return false;
+  const buyerId  = pkg.buyer_id  ? String(pkg.buyer_id)  : '';
+  const vendorId = pkg.vendor_id ? String(pkg.vendor_id) : '';
+  // A guest order (every storefront order, and a main-site guest checkout) has no
+  // account behind buyer_id: there is nobody to deliver a notice to, and writing
+  // the row would leave an unreadable notification addressed to 'guest'. Those
+  // customers follow the order on the storefront's own orders tab instead.
+  if (!buyerId || buyerId === 'guest' || buyerId.indexOf('guest_') === 0) return false;
+  const selfOrder = buyerId === vendorId;
+  const copy = (selfOrder && vendor && vendor.title) ? vendor : buyer;
+  if (!copy || !copy.title) return false;
+  addNotification(buyerId, copy.type || 'order', copy.title, copy.message, copy.actionUrl || '', ref);
+  return true;
+}
 window.itemImage = itemImage;
 
 // Storefront orders are fully managed by the VENDOR — the admin never sees or
@@ -129,7 +156,7 @@ function buyerPackageCard(rawPkg) {
   return `
 <div class="package-card" onclick="showPackageDetailModal('${pkg.id}')">
   <div class="package-header">
-    <span class="package-code"><i class="fas fa-cube" style="margin-right:4px"></i>${pkg.package_code || '—'}</span>
+    ${orderCodeChip(pkg.package_code)}
     <span class="status-badge status-${ds.css}"><i class="fas ${ds.icon}" style="margin-right:3px"></i>${ds.text}</span>
   </div>
   <div class="package-body">
@@ -192,7 +219,7 @@ async function showPackageDetailModal(packageId) {
   showModal(`
 <div class="modal-handle"></div>
 <div class="modal-header">
-  <span class="modal-title">📦 ${pkg.package_code || 'Order Detail'}</span>
+  <span class="modal-title">📦 ${pkg.package_code ? orderCodeChip(pkg.package_code, { icon: false }) : 'Order Detail'}</span>
   <div class="modal-close" onclick="closeModalForce()"><i class="fas fa-times"></i></div>
 </div>
 <div class="modal-body" style="overflow-y:auto;max-height:80vh">
@@ -394,7 +421,9 @@ async function refreshBuyerOrdersList() {
 
   listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div>';
   const res  = await apiGet('packages', 'limit=200');
-  const pkgs = (res?.data || []).filter(p => buyerOwnsPackage(p, App.currentUser));
+  // Storefront orders stay on the storefront that took them — a storefront is a
+  // separate world from the main site (see the storefront checkout notes).
+  const pkgs = (res?.data || []).filter(p => !isStorefrontOrder(p) && buyerOwnsPackage(p, App.currentUser));
   listEl.innerHTML = pkgs.length
     ? pkgs.map(p => buyerPackageCard(p)).join('')
     : '<div class="empty-state" style="padding:30px"><i class="fas fa-inbox"></i><h3>No orders yet</h3><p>Your orders will appear here after checkout</p></div>';
@@ -495,12 +524,24 @@ async function updateVendorStatus(packageId, newStatus) {
     received:  `Your order ${pCode} has been received by the vendor and is being prepared.`,
     processed: `Your order ${pCode} is packed and ready for pickup.`
   };
-  if (msgs[newStatus] && pkg.buyer_id) {
+  // On a self order the vendor is the buyer, so the buyer copy above would land
+  // in their own feed and read as nonsense; they get their own action instead.
+  const vendorMsgs = {
+    received:  `You confirmed order ${pCode}. Pack it and mark it as packed when it is ready.`,
+    processed: `You marked order ${pCode} as packed and ready for pickup.`
+  };
+  if (msgs[newStatus]) {
     // `ref` proves the vendor shares this package with the buyer — the server
     // only lets a caller notify the other party on a shared record (#10).
-    addNotification(pkg.buyer_id, 'order',
-      newStatus === 'received' ? '✅ Order Received' : '📦 Order Packed', msgs[newStatus], '',
-      { table: 'packages', id: packageId });
+    notifyOrderParty(pkg, { table: 'packages', id: packageId },
+      {
+        title: newStatus === 'received' ? '✅ Order Received' : '📦 Order Packed',
+        message: msgs[newStatus]
+      },
+      {
+        title: newStatus === 'received' ? '✅ Order Confirmed' : '📦 Order Packed',
+        message: vendorMsgs[newStatus]
+      });
   }
 
   showToast(`Order marked as ${newStatus} ✅`, 'success');
@@ -605,10 +646,16 @@ async function confirmRejectOrder(packageId) {
     const productCost = parseFloat(pkg.gross_amount) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
     refundAmt = productCost + (parseFloat(pkg.delivery_fee) || 0);
   }
-  if (refundAmt > 0 && pkg.buyer_id) {
-    addNotification(pkg.buyer_id, 'order', '💰 Order Refunded',
-      `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`,
-      '', { table: 'packages', id: packageId });
+  if (refundAmt > 0) {
+    notifyOrderParty(pkg, { table: 'packages', id: packageId },
+      {
+        title: '💰 Order Refunded',
+        message: `Your order ${pCode} was rejected by the vendor. GHS ${refundAmt.toFixed(2)} refunded to your wallet. Reason: ${reason}`
+      },
+      {
+        title: '💰 Order Rejected',
+        message: `You rejected order ${pCode}. GHS ${refundAmt.toFixed(2)} was refunded to the buyer.`
+      });
   }
 
   // Restore product stock & update status back to active
@@ -842,9 +889,22 @@ async function finalizePackageDelivery(pkg, packageId, newStatus) {
     delivered:   ['📬 Order Delivered!',
       `Package ${pkg.package_code} has been delivered. You can now rate the store.`]
   };
-  if (notifs[newStatus])
-    addNotification(pkg.buyer_id, 'order', notifs[newStatus][0], notifs[newStatus][1], '',
-      { table: 'packages', id: packageId });
+  // Vendor-managed self orders: the deliverer is also the buyer, so they get
+  // their own dispatch/delivery confirmation rather than the buyer copy.
+  const selfNotifs = {
+    on_delivery: ['🚚 Order Dispatched',
+      `You marked order ${pkg.package_code} as on the way.`],
+    delivered:   ['📬 Order Delivered',
+      `You delivered order ${pkg.package_code}. Your earnings have been released.`]
+  };
+  if (notifs[newStatus]) {
+    notifyOrderParty(pkg, { table: 'packages', id: packageId },
+      { title: notifs[newStatus][0], message: notifs[newStatus][1] },
+      {
+        title: (selfNotifs[newStatus] || notifs[newStatus])[0],
+        message: (selfNotifs[newStatus] || notifs[newStatus])[1]
+      });
+  }
 }
 
 // ── Admin: re-fetch and re-render just the orders list ────
@@ -898,7 +958,7 @@ function adminPackageRowHTML(rawPkg, allUsers) {
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
-        <div style="font-weight:800;font-size:.92rem">📦 ${escHtml(pkg.package_code||'—')}</div>
+        <div style="font-weight:800;font-size:.92rem">📦 ${orderCodeChip(pkg.package_code)}</div>
         <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">
           Buyer: <strong>${buyer ? escHtml(buyer.name) : (pkg.buyer_name ? escHtml(pkg.buyer_name) : 'Guest')}</strong>
           &nbsp;·&nbsp; Vendor: <strong>${vendor ? escHtml(vendor.name) : 'Unknown'}</strong>
@@ -999,7 +1059,7 @@ function packageDetailHTML(rawPkg) {
   return `
 <div class="package-card">
   <div class="package-header">
-    <span class="package-code"><i class="fas fa-cube" style="margin-right:4px"></i>${escHtml(pCode)}</span>
+    ${orderCodeChip(pCode)}
     <span class="status-badge status-${vsLabel.css}" style="font-size:.72rem">${vsLabel.text}</span>
   </div>
   <div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#f8fafc;border:1px solid var(--border);font-size:.72rem;color:var(--text-muted)">

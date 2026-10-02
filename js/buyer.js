@@ -9,8 +9,8 @@ async function renderBuyerDashboard() {
   const u = App.currentUser;
 
   // Fetch orders & packages. Packages are fetched broadly and matched client-side
-  // (buyerOwnsPackage) so guest storefront orders placed with the buyer's
-  // email/phone still appear after they sign in.
+  // (buyerOwnsPackage) so guest orders placed with the buyer's email/phone still
+  // appear after they sign in.
   const [ordersRes, pkgsRes, refsRes, refBalance] = await Promise.all([
     apiGet('orders', `search=${u.id}&limit=50`),
     apiGet('packages', 'limit=200'),
@@ -18,12 +18,12 @@ async function renderBuyerDashboard() {
     calculateUserReferralBalance(u.id)
   ]);
 
-  const myOrders   = (ordersRes?.data || []).filter(o => o.buyer_id === u.id);
-  const myPackages = (pkgsRes?.data || []).filter(p => buyerOwnsPackage(p, u));
-  // Storefront orders also create packages; count them toward Total Orders even if
-  // they predate the orders-record mirroring (no order_id link).
-  const sfPkgsWithoutOrder = myPackages.filter(p => isStorefrontOrder(p) && !p.order_id);
-  const totalOrderCount    = myOrders.length + sfPkgsWithoutOrder.length;
+  // Storefront orders are excluded from the main site entirely: a storefront is
+  // its own world with its own customer identity, and its orders are tracked on
+  // that storefront's own Orders tab.
+  const myOrders   = (ordersRes?.data || []).filter(o => o.buyer_id === u.id && !isStorefrontOrder(o));
+  const myPackages = (pkgsRes?.data || []).filter(p => !isStorefrontOrder(p) && buyerOwnsPackage(p, u));
+  const totalOrderCount = myOrders.length;
   const myRefs     = (refsRes?.data || []).filter(r => r.referrer_id === u.id);
 
   // Saved stores
@@ -387,7 +387,7 @@ async function saveProfileSettings(userId) {
     }
     setBtn('failed');
     OptimisticUI.shake(btn);
-    showToast('Could not save profile: ' + (err?.message || 'network error'), 'error', 4000);
+    showApiErrorToast(err && err.message, 'Could not save your profile. Please try again.');
   }
 }
 

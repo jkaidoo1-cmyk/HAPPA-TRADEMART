@@ -182,7 +182,7 @@ async function _apDeleteUser(userId) {
   if (!delRes || !delRes.success) {
     // apiFetch returns null for server-rejected writes — the account is still
     // live. Never purge local state or report success on failure.
-    showToast('Account deletion failed on the server. Please try again.', 'error');
+    showToast("We couldn't delete this account. Please try again.", 'error');
     closeAdminPanel();
     return;
   }
@@ -239,7 +239,7 @@ async function _apDeleteProduct(prodId, userId) {
   if (!confirm('Delete this product permanently?')) return;
   const res = await apiDelete('products', prodId);
   if (!res) {
-    showToast('Delete failed — ' + (window.lastApiError || 'server rejected the delete'), 'error');
+    showApiErrorToast(window.lastApiError, 'Delete failed — the product is still live. Please try again.');
     return;
   }
   // Purge from every in-memory cache (home, shop, storefront, search, this view)
@@ -252,7 +252,15 @@ async function _apSaveProductEdit(prodId, userId, form) {
   new FormData(form).forEach((v,k)=>{ data[k]=v; });
   data.is_available = !!form.querySelector('[name=is_available]')?.checked;
   data.is_flash_sale = !!form.querySelector('[name=is_flash_sale]')?.checked;
-  data.price = parseFloat(data.price) || 0;
+  // Never coerce an unparseable price to 0: `parseFloat('') || 0` turned a
+  // mis-typed price into a free listing that then sold for GHS 0. Refuse it
+  // here and say why, instead of silently writing a price nobody chose.
+  const priceNum = parseFloat(data.price);
+  if (!Number.isFinite(priceNum) || priceNum < 0) {
+    showToast('Enter a valid price before saving — the product was not updated.', 'warning');
+    return;
+  }
+  data.price = priceNum;
   data.original_price = data.original_price ? parseFloat(data.original_price) : null;
   data.stock_qty = parseInt(data.stock_qty || '0');
   data.weight_kg = data.weight_kg ? parseFloat(data.weight_kg) : null;
@@ -292,7 +300,7 @@ async function _apSaveProductEdit(prodId, userId, form) {
     }
     setBtn('failed');
     OptimisticUI.shake(form);
-    showToast('Could not save product: ' + (err?.message || 'network error'), 'error', 4000);
+    showApiErrorToast(err && err.message, 'Could not save the product. Please try again.');
   }
 }
 
@@ -306,7 +314,7 @@ function _apPatchUserOptimistic(userId, patch, successMsg) {
     .then(() => { showToast(successMsg, 'success', 2000); })
     .catch(err => {
       if (snap && idx > -1) App.allUsers[idx] = snap;
-      showToast('Action failed: ' + (err?.message || 'network error'), 'error', 4000);
+      showApiErrorToast(err && err.message, 'That change could not be saved. Please try again.');
       throw err;
     });
 }
@@ -518,7 +526,7 @@ function _apRenderVendorPackages(userId, data) {
   wrap.innerHTML = pkgs.sort((a,b)=>(b.created_at||0)-(a.created_at||0)).map(p => `
     <div class="ap-pkg-card">
       <div class="ap-pkg-top">
-        <div><strong>#${p.package_code||'—'}</strong></div>
+        <div><strong>#${orderCodeChip(p.package_code)}</strong></div>
         <span class="status-badge status-${p.status||'pending'}" style="font-size:.65rem">${p.status||'pending'}</span>
       </div>
       <div class="ap-pkg-body">
@@ -603,7 +611,7 @@ async function _apSaveBuyerInfo(userId, form) {
     }
     setBtn('failed');
     OptimisticUI.shake(form);
-    showToast('Could not save: ' + (err?.message || 'network error'), 'error', 4000);
+    showApiErrorToast(err && err.message, 'Could not save your changes. Please try again.');
   }
 }
 async function _apSaveStore(storeId, form) {
@@ -635,7 +643,7 @@ async function _apSaveStore(storeId, form) {
     }
     setBtn('failed');
     OptimisticUI.shake(form);
-    showToast('Could not save store: ' + (err?.message || 'network error'), 'error', 4000);
+    showApiErrorToast(err && err.message, 'Could not save the store. Please try again.');
   }
 }
 
@@ -792,7 +800,7 @@ function _apRenderVendorPackagesForPage(userId, data) {
       ${pkgs.sort((a,b)=>(b.created_at||0)-(a.created_at||0)).map(p => `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:800;font-size:.9rem"><code>${p.package_code||'—'}</code></div>
+            <div style="font-weight:800;font-size:.9rem">${orderCodeChip(p.package_code)}</div>
             <div style="font-size:.78rem;color:var(--text-muted)">${p.origin_location||'—'} → ${p.dest_location||'—'} · ${(p.items||[]).length} item${(p.items||[]).length===1?'':'s'}
               ${(p.items||[]).some(i=>i.buyer_note)?'<span style="display:inline-block;margin-left:6px;color:#b45309;font-weight:800">• Buyer note</span>':''}
             </div>
@@ -1759,7 +1767,8 @@ async function saveRendorCustomPrice(userId) {
   } catch (_) {}
 
   if (!result && window.lastApiError) {
-    showToast('Server could not save the override — it will reset on page reload.', 'warning');
+    // Never blame "the server" in copy the admin reads — say what did not save.
+    showApiErrorToast(window.lastApiError, 'The custom price could not be saved. Please try again.');
   } else {
     showToast(price !== null ? `Custom price set: GHS ${price.toFixed(2)}` : 'Reverted to global price', 'success');
   }

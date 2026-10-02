@@ -45,7 +45,7 @@ function getUrlParam(key) {
   return new URLSearchParams(window.location.search).get(key);
 }
 
-// ── On load: handle URL params for deep linking ────────────
+// ── On load: handle URL params for deep linking ─────────────
 window.addEventListener('DOMContentLoaded', () => {
   const ref = getUrlParam('ref');
   if (ref) {
@@ -76,6 +76,27 @@ window.addEventListener('DOMContentLoaded', () => {
   if (product) setTimeout(() => openProduct(product), 500);
 });
 
+// ── Storefront public link ─────────────────────────────────
+// The canonical URL for a storefront is a PATH url — /storefront/<slug> — not a
+// hash one. The server answers that path with the SPA shell whose <head>
+// carries this store's own title, description and logo, so a storefront link
+// (the one a vendor copies, or the one "Visit Live Site" opens) previews in
+// WhatsApp as the store instead of as the main marketplace. A '#fragment' never
+// reaches the server, so no preview card built from a hash link could ever be
+// about the store. Both forms still route inside the app.
+function storefrontUrl(slug, mode) {
+  const clean = String(slug == null ? '' : slug)
+    .trim()
+    .replace(/^https?:\/\/[^/]+/i, '')
+    .replace(/^\/?(?:#\/?)?(?:storefront|store-admin)\//i, '')
+    .replace(/^#/, '')
+    .replace(/^\/+/, '');
+  const prefix = String(mode || '').toLowerCase() === 'admin' ? '/store-admin/' : '/storefront/';
+  const origin = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+  return origin + prefix + clean;
+}
+window.storefrontUrl = storefrontUrl;
+
 // ── Scroll to element ──────────────────────────────────────
 function scrollToEl(id) {
   const el = document.getElementById(id);
@@ -83,32 +104,113 @@ function scrollToEl(id) {
 }
 
 // ── Copy to clipboard ──────────────────────────────────────
-async function copyToClipboard(text) {
+// `navigator.clipboard` is undefined on an insecure origin (a LAN IP over
+// plain http) and on older mobile browsers, so the execCommand path stays as
+// the fallback rather than being deleted.
+async function copyText(text) {
+  const value = String(text == null ? '' : text);
   try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch { /* fall through to the legacy path */ }
+  try {
     const t = document.createElement('textarea');
-    t.value = text;
+    t.value = value;
+    t.setAttribute('readonly', '');
+    t.style.cssText = 'position:fixed;top:-1000px;left:0;opacity:0';
     document.body.appendChild(t);
     t.select();
-    document.execCommand('copy');
+    const ok = document.execCommand('copy');
     document.body.removeChild(t);
-    return true;
+    return ok;
+  } catch {
+    return false;
   }
 }
 
-// ── Image error handler ────────────────────────────────────
+async function copyToClipboard(text) {
+  return copyText(text);
+}
+
+// ── Order codes: tap to copy ───────────────────────────────
+// An order code is the one string a buyer, vendor and support agent actually
+// read back to each other, and it is printed next to a status badge rather than
+// sitting in a field, so selecting it by hand on a phone is fiddly. Every
+// surface that shows a code renders it through orderCodeChip() so the code is
+// always tappable.
+//
+// The click listener below is registered in the CAPTURE phase on purpose.
+// Chips are rendered inside cards whose inline onclick opens the order detail,
+// and a bubble-phase listener on document would run *after* that card handler
+// had already opened the modal. Capturing at the document lets us copy the code
+// and stop the click before it ever reaches the surrounding card.
+function orderCodeChip(code, opts) {
+  const value = String(code == null ? '' : code).trim();
+  const o = opts || {};
+  const style = o.style ? ` style="${o.style}"` : '';
+  if (!value) return `<span class="package-code"${style}>—</span>`;
+  const icon = o.icon === false ? '' : '<i class="fas fa-cube" style="margin-right:4px"></i>';
+  const cls = 'package-code copy-chip' + (o.className ? ' ' + o.className : '');
+  return `<span class="${cls}"${style} data-copy-order="${escHtml(value)}"`
+    + ` role="button" tabindex="0" title="Tap to copy ${escHtml(value)}">`
+    + `${icon}${escHtml(value)}<i class="fas fa-copy copy-chip-icon" aria-hidden="true"></i></span>`;
+}
+
+function markChipCopied(chip) {
+  const icon = chip.querySelector('.copy-chip-icon');
+  chip.classList.add('copied');
+  if (icon) { icon.classList.remove('fa-copy'); icon.classList.add('fa-check'); }
+  clearTimeout(chip._copyResetTimer);
+  chip._copyResetTimer = setTimeout(() => {
+    chip.classList.remove('copied');
+    if (icon) { icon.classList.remove('fa-check'); icon.classList.add('fa-copy'); }
+  }, 1500);
+}
+
+async function copyOrderCodeFromChip(chip) {
+  const value = chip.getAttribute('data-copy-order') || '';
+  if (!value) return;
+  const ok = await copyText(value);
+  if (ok) markChipCopied(chip);
+  if (typeof showToast === 'function') {
+    showToast(ok ? `Order code ${value} copied` : 'Could not copy — long-press the code instead', ok ? 'success' : 'warning');
+  }
+}
+
+function nearestCopyChip(node) {
+  return node && node.closest ? node.closest('[data-copy-order]') : null;
+}
+
+document.addEventListener('click', (ev) => {
+  const chip = nearestCopyChip(ev.target);
+  if (!chip) return;
+  // Capture phase: stop the enclosing card's onclick before it opens a modal.
+  ev.preventDefault();
+  ev.stopPropagation();
+  copyOrderCodeFromChip(chip);
+}, true);
+
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const chip = nearestCopyChip(ev.target);
+  if (!chip) return;
+  ev.preventDefault();
+  copyOrderCodeFromChip(chip);
+}, true);
+
+// ── Image error handler ──────────────────────────────────
 document.addEventListener('error', (e) => {
   if (e.target.tagName === 'IMG') {
     e.target.src = 'https://placehold.co/200x200?text=No+Image';
   }
 }, true);
 
-// ── Prevent double-tap zoom on buttons (iOS fix) ──────────
+// ── Prevent double-tap zoom on buttons (iOS fix) ────────────────
 // NOTE: We do NOT call e.preventDefault() here as it would block
 // onclick handlers from firing naturally and cause double-activation.
-// Instead we use CSS touch-action to suppress zoom without JS interception.
+// Instead we use CSS touch-action to suppress zoom without JS intervention.
 // The CSS rule `touch-action: manipulation` on buttons handles this.
 
 // ── Resumable upload kick-off ──────────────────────────────
@@ -468,3 +570,90 @@ function initLocationAutocomplete(inputId, options) {
 }
 
 
+
+// ── Turning failures into something a shopper can act on ─────────────────
+// window.lastApiError and server responses carry implementation detail by
+// design — "HTTP 500: Internal Server Error", "Server rejected the save:
+// Unknown resource", a bare "Failed to fetch", a raw permission sentence. Those
+// strings used to be printed straight into toasts, so a buyer occasionally got
+// told about the backend instead of what happened to their order.
+//
+// friendlyApiError() is the single place that decides what a person should read.
+// It keeps the technical text in the console for debugging, then returns a
+// sentence that says what happened and what to do next. Anything our own server
+// says in plain language is passed through — that copy is usually the most
+// useful thing we have (stock, balance, coupon problems are already specific).
+//
+// Used by every toast that reports a failed request.
+function friendlyApiError(raw, fallback) {
+  const generic = fallback || 'Something went wrong. Please try again.';
+  let text = '';
+  if (raw && typeof raw === 'object') text = String(raw.error || raw.message || '');
+  else text = String(raw == null ? '' : raw);
+  text = text.trim();
+
+  // Keep the detail where developers can find it, never on screen.
+  if (text) { try { console.warn('[API]', text); } catch (e) {} }
+  if (!text) return generic;
+
+  // Transport/implementation noise we always hide.
+  const internal = /^(server rejected (the )?\w+|timeout|failed to fetch|networkerror|network error|load failed|http \d+|typeerror|referenceerror|syntaxerror|unexpected token|json|unknown error|undefined|null|nan|error)$/i;
+  let cleaned = text
+    .replace(/^server rejected (the )?\w+:\s*/i, '')
+    .replace(/^http \d+:\s*/i, '')
+    .trim();
+  const lower = cleaned.toLowerCase();
+  // Status codes and transport wording live in the ORIGINAL text: stripping the
+  // "HTTP 500: " prefix first would hide the very signal that says "this is our
+  // fault, not yours" and the raw word would be shown instead.
+  const rawLower = text.toLowerCase();
+
+  // Never show a serialized error object, a stack trace, backend vocabulary or
+  // a placeholder.
+  if (/^[\[{]/.test(text) || /"[a-z_]+"\s*:/.test(text)) return generic;
+  if (/cannot read propert|is not a function|undefined is not|postgres|supabase|\bsql\b|foreign key|constraint|violation|stack|at object\.|relation |does not exist|duplicate key|invalid input syntax|too long for type|invalid uuid/i.test(rawLower)) return generic;
+  if (/unknown (resource|table|action)|no such table|not implemented|invalid json|malformed|unexpected token|bad json/i.test(rawLower)) return generic;
+
+  // Session and permission problems: say what to do, not who refused what.
+  if (/\b(401|unauthorized|unauthenticated)\b/.test(rawLower) || /session (has )?expired|sign in again|invalid token|jwt/.test(lower)) {
+    return 'Your session has ended. Please sign in again.';
+  }
+  if (/\b(403|forbidden)\b/.test(rawLower) || /admin access|only admins|permission|not allowed|not authorised|not authorized/.test(lower)) {
+    return "You don't have permission to do that.";
+  }
+  if (/\b404\b/.test(rawLower) || /not found/.test(lower)) {
+    return 'That is no longer available — it may have been removed. Please refresh the page.';
+  }
+
+  // Server-side fault or unreachable backend: never blame the user for these.
+  if (/\b5\d\d\b/.test(rawLower) || /internal server error|bad gateway|service unavailable|gateway timeout|upstream/.test(lower)) {
+    return 'Something went wrong on our end. Please try again in a moment.';
+  }
+  if (/quota|rate limit|too many requests/.test(rawLower)) {
+    return 'Too many requests right now. Please wait a moment and try again.';
+  }
+  if (/timed? ?out|taking too long/.test(lower)) {
+    return 'That took too long to respond. Please try again.';
+  }
+  // Offline / unreachable: actionable for the user.
+  if (/failed to fetch|networkerror|network error|load failed|offline|server unavailable|econnrefused|internet/.test(rawLower)) {
+    return 'You appear to be offline. Check your connection and try again.';
+  }
+  if (/no local (result|data)|local storage|localstorage/.test(rawLower)) {
+    return "We couldn't reach the marketplace. Check your connection and try again.";
+  }
+
+  // A plain sentence from our own server: pass it through when it is short and
+  // clean, otherwise fall back.
+  if (internal.test(cleaned)) return generic;
+  if (cleaned.length > 180) cleaned = cleaned.slice(0, 177).trimEnd() + '…';
+  return cleaned || generic;
+}
+window.friendlyApiError = friendlyApiError;
+
+// Toast an error without ever printing transport/backend detail at the user.
+function showApiErrorToast(raw, fallback) {
+  if (typeof showToast !== 'function') return;
+  showToast(friendlyApiError(raw, fallback), 'error');
+}
+window.showApiErrorToast = showApiErrorToast;

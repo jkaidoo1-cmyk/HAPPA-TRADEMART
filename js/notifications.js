@@ -334,6 +334,8 @@ function openNotificationPopup(notifId) {
     referral: 'fas fa-gift',
     system:   'fas fa-info-circle',
     wallet:   'fas fa-wallet',
+    earning:  'fas fa-coins',
+    support:  'fas fa-headset',
     promo:    'fas fa-tag',
     warning:  'fas fa-exclamation-triangle'
   };
@@ -346,6 +348,8 @@ function openNotificationPopup(notifId) {
     referral: { badgeBg: '#f3e8ff', text: '#5b21b6', iconBg: '#8b5cf6' },
     system:   { badgeBg: '#ffe5d9', text: '#9a3412', iconBg: '#e85d04' },
     wallet:   { badgeBg: '#d1fae5', text: '#065f46', iconBg: '#10b981' },
+    earning:  { badgeBg: '#d1fae5', text: '#065f46', iconBg: '#10b981' },
+    support:  { badgeBg: '#dbeafe', text: '#1e40af', iconBg: '#3b82f6' },
     promo:    { badgeBg: '#fce7f3', text: '#9d174d', iconBg: '#ec4899' },
     warning:  { badgeBg: '#fee2e2', text: '#991b1b', iconBg: '#ef4444' }
   };
@@ -398,6 +402,8 @@ function notifItemHTML(n) {
     referral: 'fas fa-gift',
     system:   'fas fa-info-circle',
     wallet:   'fas fa-wallet',
+    earning:  'fas fa-coins',
+    support:  'fas fa-headset',
     promo:    'fas fa-tag',
     warning:  'fas fa-exclamation-triangle'
   };
@@ -520,7 +526,7 @@ async function clearAllNotifications() {
       const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === null));
       await fetchServerNotifications(true);
       if (failed.length) {
-        showToast('Some notifications could not be removed from the server — retrying in background', 'warning');
+        showToast("A few notifications couldn't be deleted yet — we'll retry in the background.", 'warning');
         setTimeout(async () => {
           try {
             const res2 = await apiFetch('notifications?limit=200');
@@ -531,7 +537,7 @@ async function clearAllNotifications() {
             });
             await Promise.all(visible2.map(n => apiDelete('notifications', n.id)));
             await fetchServerNotifications(true);
-            showToast('Server-side notifications synced', 'success');
+            showToast('All notifications cleared', 'success');
           } catch (e) { /* silent */ }
         }, 3000);
       }

@@ -74,6 +74,9 @@ const App = {
   loadedPages: {},
   isBackgroundRefresh: false,
   activeTab: {},
+  // Public settings (support contacts, pricing, commission tiers, wallet
+  // limits…) loaded once per session by loadPublicSettings().
+  publicSettings: null,
 };
 
 let deferredInstallPrompt = null;
@@ -279,6 +282,8 @@ window.addEventListener('DOMContentLoaded', () => {
   initSearch();
   if (window.updateHeaderSearchForPage) window.updateHeaderSearchForPage();
   renderNotifBadge();
+  // One settings fetch for the whole session (see loadPublicSettings).
+  loadPublicSettings();
   // Cross-Tab Session & Wallet Balance Synchronization
   window.addEventListener('storage', (e) => {
     if (e.key === 'happa_user') {
@@ -382,7 +387,14 @@ window.addEventListener('DOMContentLoaded', () => {
 // ── Hash Route Resolver ─────────────────────────────────
 function resolveRouteFromHash(hashStr) {
   if (!hashStr || hashStr === '#' || hashStr === '#home') {
-    if (App.currentPage !== 'home') showPage('home');
+    // Unconditional on purpose. App.currentPage is initialised to 'home', and
+    // the DOMContentLoaded preamble removes .active + hides every .page before
+    // routing runs — so when the URL already carried #home (a reload or a
+    // bookmark on the Home tab), `App.currentPage !== 'home'` was false and the
+    // only call that makes #page-home visible never happened: blank white
+    // screen with all the data loaded behind it. showPage() is idempotent — it
+    // early-returns when home is already the active, visible page.
+    showPage('home');
     return true;
   }
   const cleanHash = hashStr.startsWith('#') ? hashStr.substring(1) : hashStr;
@@ -459,7 +471,11 @@ function resolveRouteFromHash(hashStr) {
           const sf = (App.allStorefronts || []).find(item => String(item.store_id) === String(App.currentStoreId));
           const slug = sf ? sf.url_slug : App.currentStoreId;
           try {
-            history.replaceState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, '', `#storefront/${slug}`);
+            // Keep the canonical /storefront/<slug> address a vendor would share
+            // (a storefront opened from a path URL must not fall back to the
+            // hash form, or the next copy of the address loses its preview).
+            history.replaceState({ page: 'storefront', entityId: App.currentStoreId, tab: 'home' }, '',
+              storefrontUrl(slug, App.currentPage === 'store-admin' ? 'admin' : 'storefront'));
           } catch(e){}
           showPage('storefront', App.currentStoreId);
         }
@@ -1019,8 +1035,7 @@ function openStorefrontInBrowser(kind, entityId) {
     s => String(s.store_id) === slugGuess || String(s.id) === slugGuess || String(s.url_slug) === slugGuess
   );
   const slug = (sf && sf.url_slug) || slugGuess;
-  const targetPath = kind === 'store-admin' ? `/store-admin/${slug}` : `/storefront/${slug}`;
-  const targetUrl = window.location.origin + targetPath;
+  const targetUrl = storefrontUrl(slug, kind === 'store-admin' ? 'admin' : 'storefront');
 
   // Dedupe per URL within a short window: startup + click + showPage can all
   // fire for one navigation — don't spawn multiple tabs for the same store.
@@ -1035,6 +1050,22 @@ function openStorefrontInBrowser(kind, entityId) {
   return true;
 }
 window.openStorefrontInBrowser = openStorefrontInBrowser;
+
+// True while the document itself was loaded from /storefront/<slug> or
+// /store-admin/<slug> (as opposed to the '#storefront/<slug>' deep link).
+function isPathAddressedStorefront() {
+  return /^\/(?:storefront|store-admin)\//.test(window.location.pathname || '');
+}
+
+// The canonical public URL for a storefront page: the slug when we know it,
+// otherwise whatever identifier we were given.
+function storefrontCanonicalUrl(storeId, mode) {
+  const id = String(storeId == null ? '' : storeId);
+  const sf = (App.allStorefronts || []).find(s => s && (String(s.store_id) === id || String(s.id) === id || String(s.url_slug) === id));
+  const store = (App.allStores || []).find(s => s && (String(s.id) === id || String(s.slug) === id));
+  const slug = (sf && sf.url_slug) || (store && store.slug) || id;
+  return storefrontUrl(slug, mode);
+}
 
 function showPage(pageId, entityId = null) {
   if (pageId === 'storefront' || pageId === 'store-admin') {
@@ -1092,6 +1123,14 @@ function showPage(pageId, entityId = null) {
       let hash = '#' + pageId;
       if (targetEntity && ['store-detail', 'storefront', 'store-admin', 'product', 'rendor-profile'].includes(pageId)) {
         hash += '/' + targetEntity;
+      }
+      // A storefront opened from a shared /storefront/<slug> link keeps that
+      // address while the visitor moves around inside it. Pushing a
+      // '#storefront/…' fragment on top of the path would leave the visitor
+      // (and the vendor's next copy) holding a URL whose preview card is the
+      // marketplace again — the exact thing this canonical form exists to fix.
+      if ((pageId === 'storefront' || pageId === 'store-admin') && isPathAddressedStorefront()) {
+        hash = storefrontCanonicalUrl(targetEntity, pageId === 'store-admin' ? 'admin' : 'storefront');
       }
       App._isProgrammaticNav = true;
       history.pushState({ page: pageId, entityId: targetEntity }, '', hash);
@@ -2293,7 +2332,45 @@ function waMeHref(number) {
 }
 
 // ── Settings Helper ───────────────────────────────────────
+// ── Settings: one shared cache + a live fallback ────────────
+// getSetting() used to fire its own request per call, so a single screen could
+// issue half a dozen. Worse, non-admin callers only receive the key allowlist
+// the server publishes (see PUBLIC_SETTINGS_KEYS in lib/access.js): a key
+// missing from that list returns nothing and the caller silently drops to its
+// hardcoded default — which is how an admin-set rendor fee kept displaying as
+// the generic GHS 30. One fetch per session fills this cache; a key that is not
+// in it still falls back to the old live lookup.
+async function loadPublicSettings() {
+  try {
+    const res = await apiGet('settings', 'limit=200');
+    // A failed read must not wipe the values already on screen.
+    if (!res) return App.publicSettings;
+    const rows = res?.data || (Array.isArray(res) ? res : []);
+    const map = {};
+    for (const r of rows) {
+      if (r && r.key != null) map[String(r.key)] = r.value;
+    }
+    App.publicSettings = map;
+    return map;
+  } catch (e) {
+    return App.publicSettings;
+  }
+}
+
+// Synchronous read of the cache — undefined when the key was never published
+// (or the cache has not loaded yet). The tier helpers use this because they run
+// inside render loops and cannot await.
+function cachedSetting(key) {
+  const s = App.publicSettings;
+  return s && Object.prototype.hasOwnProperty.call(s, key) ? s[key] : undefined;
+}
+
 async function getSetting(key, defaultValue = '') {
+  const cached = cachedSetting(key);
+  if (cached !== undefined) return cached;
+  if (!App.publicSettings) await loadPublicSettings();
+  const loaded = cachedSetting(key);
+  if (loaded !== undefined) return loaded;
   try {
     const res = await apiGet('settings', `search=${encodeURIComponent(key)}&limit=5`);
     const settings = res?.data || [];
@@ -3439,14 +3516,15 @@ async function renderPrivacyPage() {
 <h3 style="font-weight:700;font-size:.88rem;padding:0 16px;margin-bottom:8px">6. How long we keep your data</h3>
 <div class="card" style="margin:0 16px 16px">
   <div class="card-body" style="padding:0">
-    <p style="font-size:.84rem;color:var(--text-light);padding:12px 14px 8px;line-height:1.55">We retain your data only as long as needed to provide the Service and comply with legal obligations.</p>
+    <p style="font-size:.84rem;color:var(--text-light);padding:12px 14px 8px;line-height:1.55">Each period below is the <strong style="color:var(--text);font-weight:600">longest</strong> we keep that category — most of it goes sooner. When a period ends we delete the data, or strip out anything that identifies you and keep only anonymous totals.</p>
     ${[
-      ['Account profile',          'Until you delete your account + 30 days',          'Allows recovery if you change your mind'],
-      ['Orders &amp; invoices',    '7 years after the order date',                      'Required by Ghanaian tax law'],
-      ['Wallet transactions',      '7 years after the transaction date',                'Required by Ghanaian tax law'],
-      ['Support tickets',          '3 years after resolution',                          'For quality assurance and dispute reference'],
-      ['ID verification files',    'Until document expires or 5 years (whichever is first)', 'KYC compliance'],
-      ['Server logs',              '90 days',                                           'Security monitoring and abuse prevention'],
+      ['Account profile',          '30 days after you delete it',        'A chance to change your mind'],
+      ['Orders &amp; order history', '12 months after delivery',            'Dispute and refund window'],
+      ['Wallet transactions',      '12 months after the transaction',     'Keeps refunds and disputes auditable'],
+      ['Support tickets',          '6 months after the last reply',       'Time to follow up on a ticket'],
+      ['ID verification files',    'Within 30 days of the decision',     'We only need it to confirm identity'],
+      ['Product listings &amp; photos', 'Deleted with the listing or account', 'You control your own listings'],
+      ['Server logs',              '30 days',                              'Security and abuse prevention'],
     ].map(([data, period, reason], i) => `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:9px 14px;border-top:1px solid var(--border)">
       <div style="font-size:.81rem;font-weight:600;color:var(--text);flex:1">${data}</div>
@@ -3455,6 +3533,9 @@ async function renderPrivacyPage() {
         <div style="font-size:.71rem;color:var(--text-muted)">${reason}</div>
       </div>
     </div>`).join('')}
+    <p style="font-size:.78rem;color:var(--text-muted);padding:10px 14px;border-top:1px solid var(--border);line-height:1.55">
+      <i class="fas fa-info-circle" style="margin-right:4px"></i>If a law or a regulator requires us to keep one specific record longer than the periods above, we keep only that record, only for as long as the law requires, and we never extend it to your other data.
+    </p>
   </div>
 </div>
 
@@ -3638,7 +3719,7 @@ async function requestAccountDeletion() {
       return null;
     });
     if (!res || !res.success) {
-      showToast('Account deletion failed on the server. Please try again or contact support.', 'error');
+      showApiErrorToast(window.lastApiError, "We couldn't delete your account. Please try again, or contact support.");
       return;
     }
     showToast('Your account has been deleted. Signing out...', 'warning');

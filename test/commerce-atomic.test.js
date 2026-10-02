@@ -197,3 +197,72 @@ test('validateProductBody rejects the payloads that used to save as GHS null', (
   commerce.validateProductBody(patch);
   assert.equal('name' in patch, false, 'a partial update leaves the stored name untouched');
 });
+
+// ── "Price unavailable" / free-sale regression (2026-10-01) ──────────────
+// A product POST that carried NO price key at all passed validation, because
+// the guard only ran `if ('price' in body)`. The row was stored with
+// `price: null` — which the storefront renders as "Price unavailable" — and
+// resolveItems() prices a sale from the row with `Number(price) || 0`, so that
+// listing then checked out for GHS 0. Two independent guards now close it: a
+// create must carry a positive price, and checkout refuses a priceless line.
+test('a create must carry a real positive price', () => {
+  const create = { requirePrice: true };
+  // The exact shape that used to be accepted and stored as price: null.
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', stock_qty: 4 }, create).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', price: undefined }, create).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', price: null }, create).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', price: '' }, create).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', price: 'abc' }, create).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', price: 0 }, create).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', price: -1 }, create).ok, false);
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', price: 55 }, create).ok, true);
+  assert.equal(commerce.validateProductBody({ name: 'Shirt', price: '55' }, create).ok, true);
+});
+
+test('a partial update may still omit the price', () => {
+  // Every lazy PATCH in the app (toggle availability, archive, bump views)
+  // sends no price at all and must keep working.
+  assert.equal(commerce.validateProductBody({ is_available: false }).ok, true);
+  assert.equal(commerce.validateProductBody({ status: 'archived' }).ok, true);
+  // …but a price that IS sent must still be a real number.
+  assert.equal(commerce.validateProductBody({ price: null }).ok, false);
+  assert.equal(commerce.validateProductBody({ price: '' }).ok, false);
+});
+
+test('checkout refuses to price a product whose stored price is missing', () => {
+  const products = new Map([
+    ['p1', { id: 'p1', name: 'Striped shirt', price: null, stock_qty: 4 }],
+  ]);
+  const res = commerce.resolveItems([{ product_id: 'p1', qty: 1 }], products);
+  assert.equal(res.ok, false, 'a priceless row must never be sold');
+  assert.match(String(res.error), /no price set/i);
+
+  // Same for the other unusable shapes a bad write can leave behind.
+  for (const bad of [undefined, '', 'abc', NaN, -1]) {
+    const m = new Map([['p1', { id: 'p1', name: 'X', price: bad, stock_qty: 1 }]]);
+    assert.equal(
+      commerce.resolveItems([{ product_id: 'p1', qty: 1 }], m).ok,
+      false,
+      `price ${String(bad)} must not be sellable`
+    );
+  }
+});
+
+test('checkout still prices a real product from the row, and an explicit 0 stays the vendor\'s choice', () => {
+  const good = new Map([['p1', { id: 'p1', name: 'Shirt', price: 55, stock_qty: 4 }]]);
+  const priced = commerce.resolveItems([{ product_id: 'p1', qty: 2 }], good);
+  assert.equal(priced.ok, true);
+  assert.equal(priced.subtotal, 110, 'the client cannot influence the item price');
+
+  // 0 is expressible (a vendor giveaway) — it is a missing price, not a zero,
+  // that must never be silently treated as free.
+  const zero = new Map([['p1', { id: 'p1', name: 'Freebie', price: 0, stock_qty: 4 }]]);
+  assert.equal(commerce.resolveItems([{ product_id: 'p1', qty: 1 }], zero).ok, true);
+});
+
+test('an admin manual order may supply its own price for a priceless row', () => {
+  const products = new Map([['p1', { id: 'p1', name: 'Shirt', price: null, stock_qty: 4 }]]);
+  const res = commerce.resolveItems([{ product_id: 'p1', qty: 2, price: 30 }], products, { adminBypass: true });
+  assert.equal(res.ok, true);
+  assert.equal(res.subtotal, 60);
+});

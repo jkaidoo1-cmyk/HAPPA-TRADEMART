@@ -8,6 +8,8 @@
  */
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
@@ -21,6 +23,8 @@ const access = require('../lib/access');
 const otp = require('../lib/otp');
 const notify = require('../lib/notify');
 const uploads = require('../lib/uploads');
+const shell = require('../lib/storefront-shell');
+const rendorPosts = require('../lib/rendor-posts');
 
 const app = express();
 // Allow larger JSON payloads (product images are sent as base64 up to 5 images)
@@ -63,6 +67,10 @@ if (!String(process.env.SUPABASE_URL || '').trim() || !String(process.env.SUPABA
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   if (String(req.path || '').startsWith('/api/auth/')) return next();
+  // Public HTML for shared storefront links: a visitor arriving from a link
+  // (with no token, or with a token that expired while the tab sat idle) must
+  // still get the page rather than a JSON 401.
+  if (/^\/(?:storefront|store-admin)\//.test(String(req.path || ''))) return next();
   if (hasInvalidSession(req)) {
     return res.status(401).json({ error: 'Session expired. Please sign in again.' });
   }
@@ -2505,7 +2513,9 @@ app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
   if (!fn) return res.status(404).json({ error: 'Unknown wallet action.' });
   try {
     const out = await fn(walletAdapter(), access.getAccessContext(req), req.body || {});
-    if (!out.ok) return res.status(out.status).json({ error: out.error });
+    // Carry the engine's optional machine-readable hint (code/extra) so the UI
+    // can react — e.g. reprice instead of printing the failure verbatim.
+    if (!out.ok) return res.status(out.status).json({ error: out.error, ...(out.code ? { code: out.code } : {}), ...(out.extra || {}) });
     return res.json(out.data);
   } catch (err) {
     console.error('[Wallet]', req.params.action, 'error:', err && err.message || err);
@@ -2622,6 +2632,45 @@ async function notifyNewOrder(record) {
   } catch (e) {}
 }
 
+// ── Rendor post cap (see lib/rendor-posts.js) ───────────────────
+// How many posts a rendor holds right now. Reads the database and falls back to
+// the local mirror, like every other read in this file.
+async function countHeldRendorPosts(rendorId, supabase) {
+  const id = String(rendorId || '');
+  if (!id) return 0;
+  if (supabase) {
+    try {
+      const { data, error } = await withSupaTimeout(
+        supabase.from('services').select('id,rendor_id,status').eq('rendor_id', id).limit(200), 3000
+      );
+      if (!error) return rendorPosts.countHeldPosts(data || [], id);
+    } catch (e) { /* fall through to the local copy */ }
+  }
+  try {
+    dataStore.ensureTable('services');
+    return rendorPosts.countHeldPosts(dataStore.getStore().services || [], id);
+  } catch (e) { return 0; }
+}
+
+// Which rendor a write belongs to. A rendor's own writes are always their own
+// (owner fields are stripped from their body and re-stamped later), while an
+// admin writing on someone's behalf names the rendor.
+function rendorIdForWrite(viewer, body, existing) {
+  if (viewer && String(viewer.role) === 'rendor') return String(viewer.userId || '');
+  return String((body && body.rendor_id) || (existing && existing.rendor_id) || '');
+}
+
+// null when the write is allowed, otherwise { status, error, code }.
+async function rendorPostLimitReached({ viewer, body, existing, supabase }) {
+  const rendorId = rendorIdForWrite(viewer, body, existing);
+  if (!rendorId) return null;
+  const merged = { ...(existing || {}), ...(body || {}) };
+  if (!rendorPosts.isHeldPost(merged)) return null;   // this write frees a slot
+  const held = await countHeldRendorPosts(rendorId, supabase);
+  if (!rendorPosts.exceedsLimit({ existing, body, heldCount: held })) return null;
+  return { status: 409, error: rendorPosts.limitMessage(held), code: 'rendor_post_limit' };
+}
+
 app.post('/api/:table', writeRateLimiter, async (req, res) => {
   // Package side-effect tracking (guide §7/§8): pkgSale is set by the money
   // block, pkgApplied records stock reserved before the insert so a crash can
@@ -2685,6 +2734,14 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     const viewer = access.getAccessContext(req);
     const allowed = access.assertPostAllowed(table, viewer, body);
     if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+
+    // A rendor holds at most MAX_POSTS posts at once (lib/rendor-posts.js).
+    // Enforced here as well as in the dashboard: the button is a courtesy, the
+    // API is the rule.
+    if (table === 'services') {
+      const over = await rendorPostLimitReached({ viewer, body, existing: null, supabase });
+      if (over) return res.status(over.status).json({ error: over.error, code: over.code });
+    }
 
     // ── Idempotent replay guard — runs BEFORE any side effects ───────────
     // Re-POSTing an existing order/package id returns the original row without
@@ -2764,7 +2821,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       // validator can default a missing/blank name for a CREATE (a partial
       // PATCH below never reaches this line's normalization).
       if (!('name' in body)) body.name = '';
-      const pv = commerce.validateProductBody(body);
+      const pv = commerce.validateProductBody(body, { requirePrice: true });
       if (!pv.ok) return res.status(400).json({ error: pv.error });
       // (#2) A product may only be filed under a store the writer owns.
       if (body.store_id && !access.isAdmin(viewer)
@@ -2878,7 +2935,14 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       const stockCheck = commerce.stockRequirements(resolved.items, productsById);
       if (!stockCheck.ok) return res.status(409).json({ error: stockCheck.error });
 
-      const money = commerce.packageMoney(resolved.items, { storefront: isStorefrontRow });
+      // Commission comes from the admin's Settings → commission tiers when one
+      // is configured (COMMISSION_TIERS is only the default), so editing the
+      // tiers actually changes what is charged.
+      let commissionTiers = null;
+      try {
+        commissionTiers = commerce.parseCommissionTiers(await walletAdapter().getSetting('commission_tiers', '[]'));
+      } catch (e) { commissionTiers = null; }
+      const money = commerce.packageMoney(resolved.items, { storefront: isStorefrontRow, tiers: commissionTiers });
       body.gross_amount = money.gross;
       body.vendor_amount = money.vendorAmount;
       body.commission_amount = money.commission;
@@ -3270,7 +3334,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     // routes): JSON.stringify turns NaN into null, so the POST path used to
     // happily save price:null products that rendered as "GHS null" on the site.
     if (table === 'products') {
-      const pv = commerce.validateProductBody(body);
+      const pv = commerce.validateProductBody(body, { requirePrice: true });
       if (!pv.ok) return res.status(400).json({ error: pv.error });
     }
 
@@ -3453,6 +3517,11 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
       }
       const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
       if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+      // Re-activating an archived post must not slip past the post cap.
+      if (table === 'services') {
+        const over = await rendorPostLimitReached({ viewer, body, existing: existingForAuth, supabase });
+        if (over) return res.status(over.status).json({ error: over.error, code: over.code });
+      }
       if (table === 'products') {
         const pv = commerce.validateProductBody(body);
         if (!pv.ok) return res.status(400).json({ error: pv.error });
@@ -3708,6 +3777,11 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
       }
       const allowed = access.assertMutateAllowed(table, viewer, table === 'users' ? { id } : existingForAuth, body);
       if (!allowed.ok) return res.status(allowed.status).json({ error: allowed.error });
+      // Re-activating an archived post must not slip past the post cap.
+      if (table === 'services') {
+        const over = await rendorPostLimitReached({ viewer, body, existing: existingForAuth, supabase });
+        if (over) return res.status(over.status).json({ error: over.error, code: over.code });
+      }
       if (table === 'products') {
         const pv = commerce.validateProductBody(body);
         if (!pv.ok) return res.status(400).json({ error: pv.error });
@@ -4267,5 +4341,127 @@ app.getRecordCandidatesForTable = getRecordCandidatesForTable;
 app.prepareRecordForDb = prepareRecordForDb;
 app.serializeRecord = serializeRecord;
 app.writeWithCandidates = writeWithCandidates;
+
+// ── Storefront link previews ───────────────────────────────────
+// GET /storefront/:slug and /store-admin/:slug answer with the SPA shell whose
+// <head> describes THAT storefront, so a link a vendor shares unfurls as their
+// store (own name, description and logo) instead of as the marketplace. The
+// body is byte-for-byte the normal shell — the app boots as always and routes
+// from the path — so this only changes what a link preview and a crawler see.
+let _shellCache = { html: '', at: 0 };
+const SHELL_TTL_MS = 5 * 60 * 1000;
+
+function requestOrigin(req) {
+  const proto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim() || 'https';
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  return host ? `${proto}://${host}` : '';
+}
+
+async function readAppShell(req) {
+  const now = Date.now();
+  if (_shellCache.html && now - _shellCache.at < SHELL_TTL_MS) return _shellCache.html;
+
+  const candidates = [
+    path.join(process.cwd(), 'index.html'),
+    path.join(__dirname, '..', 'index.html'),
+    path.join(__dirname, 'index.html')
+  ];
+  for (const file of candidates) {
+    try {
+      const html = await fs.promises.readFile(file, 'utf8');
+      if (html && html.indexOf('<html') > -1) { _shellCache = { html, at: now }; return html; }
+    } catch (e) { /* try the next location */ }
+  }
+
+  // A serverless bundle does not always carry static files next to the
+  // function: fall back to this deployment's own /index.html. That path is a
+  // static route, never this handler, so it cannot recurse.
+  try {
+    const origin = requestOrigin(req);
+    if (origin) {
+      const resp = await fetch(origin + '/index.html', { headers: { 'Cache-Control': 'no-cache' } });
+      if (resp.ok) {
+        const html = await resp.text();
+        if (html && html.indexOf('<html') > -1) { _shellCache = { html, at: now }; return html; }
+      }
+    }
+  } catch (e) {
+    console.warn('[Storefront] could not fetch the app shell:', e && e.message || e);
+  }
+  return '';
+}
+
+async function findStorefrontBySlug(slug) {
+  const want = String(slug || '').trim().toLowerCase();
+  if (!want) return null;
+
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data: sfRows, error: sfErr } = await withSupaTimeout(
+        supabase.from('storefronts').select('*').eq('url_slug', want).limit(1), 3000
+      );
+      if (!sfErr) {
+        const sf = (sfRows || [])[0] || null;
+        const storeId = sf && (sf.store_id || sf.id);
+        const storeQuery = storeId
+          ? supabase.from('stores').select('*').eq('id', storeId).limit(1)
+          : supabase.from('stores').select('*').eq('slug', want).limit(1);
+        const { data: stRows } = await withSupaTimeout(storeQuery, 3000);
+        const st = (stRows || [])[0] || null;
+        if (sf || st) {
+          return { storefront: sf ? serializeRecord(sf) : {}, store: st ? serializeRecord(st) : {} };
+        }
+      }
+    } catch (e) {
+      console.warn('[Storefront] slug lookup failed:', e && e.message || e);
+    }
+  }
+
+  // Local store (dev, or Supabase unreachable): same row shape, same fields.
+  try {
+    dataStore.ensureTable('storefronts');
+    dataStore.ensureTable('stores');
+    const local = dataStore.getStore();
+    const sf = (local.storefronts || []).find(r => r && String(r.url_slug || '').toLowerCase() === want) || null;
+    const wantedId = sf && (sf.store_id || sf.id);
+    const st = (local.stores || []).find(r => r && (String(r.id) === String(wantedId) || (!wantedId && String(r.slug || '').toLowerCase() === want))) || null;
+    if (sf || st) {
+      return { storefront: sf ? serializeRecord(sf) : {}, store: st ? serializeRecord(st) : {} };
+    }
+  } catch (e) { /* no local copy either */ }
+  return null;
+}
+
+function storefrontShellHandler(kind) {
+  return async (req, res) => {
+    const slug = shell.slugFromPath(req.path) || String(req.params.slug || '');
+    const html = await readAppShell(req);
+    if (!html) {
+      // Never break the link: the hash route resolves to exactly the page this
+      // route would have served, just without the store's own preview card.
+      return res.redirect(302, `/#${kind}/${encodeURIComponent(slug)}`);
+    }
+    const found = await findStorefrontBySlug(slug);
+    const meta = shell.storefrontShareMeta({
+      storefront: found ? found.storefront : {},
+      store: found ? found.store : {},
+      slug,
+      origin: requestOrigin(req),
+      kind
+    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    res.setHeader('X-Robots-Tag', kind === 'store-admin' ? 'noindex, nofollow' : 'index, follow');
+    return res.status(200).send(shell.injectStorefrontMeta(html, meta));
+  };
+}
+
+app.get('/storefront/:slug', storefrontShellHandler('storefront'));
+app.get('/store-admin/:slug', storefrontShellHandler('store-admin'));
+
+app.findStorefrontBySlug = findStorefrontBySlug;
+app.readAppShell = readAppShell;
+app.requestOrigin = requestOrigin;
 
 module.exports = app;

@@ -507,7 +507,7 @@ async function renderAdminDashboard() {
         ${rejectedPkgs.slice(0,10).map(p => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:.82rem">
           <div>
-            <div style="font-weight:700">${escHtml(p.package_code||p.id)}</div>
+            <div style="font-weight:700">${orderCodeChip(p.package_code || p.id)}</div>
             <div style="font-size:.74rem;color:var(--text-muted)">Reason: ${escHtml(p.rejected_reason||'No reason specified')}</div>
           </div>
           <div style="text-align:right">
@@ -1657,7 +1657,7 @@ async function _doDeactivateRendorSub(userId) {
     closeModalForce();
     await loadAdminRendors();
   } catch (e) {
-    showToast('Failed to deactivate: ' + (e.message || 'Unknown error'), 'error');
+    showApiErrorToast(e && e.message, 'Could not deactivate this account. Please try again.');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-ban"></i> Yes, Deactivate'; }
   }
 }async function _doActivateRendorSub(userId) {
@@ -1709,7 +1709,7 @@ async function _doDeactivateRendorSub(userId) {
     closeModalForce();
     await loadAdminRendors();
   } catch(e) {
-    showToast('Activation failed: ' + ((window.lastApiError || e.message || 'Unknown error').replace(/^HTTP \d+: /, '')), 'error');
+    showApiErrorToast(window.lastApiError || (e && e.message), 'Could not activate the subscription. Please try again.');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-star"></i> Activate Subscription'; }
   }
 
@@ -2308,7 +2308,7 @@ async function activateUser(userId) {
     const list = document.getElementById('admin-users-list');
     if (list) list.innerHTML = users.map(u => adminUserRowHTML(u)).join('');
   } catch(e) {
-    showToast('Failed to activate user: ' + (e.message || e), 'error');
+    showApiErrorToast((e && e.message) || e, 'Could not activate this account. Please try again.');
   } finally {
     if (btn) { btn.disabled = false; }
   }
@@ -3522,7 +3522,7 @@ window.saveAdCampaign = async function(e, campaignId = null) {
     if (typeof loadAdminAds === 'function') await loadAdminAds();
   } catch (err) {
     console.error('Save ad campaign error:', err);
-    showToast('Failed to save campaign: ' + err.message, 'error');
+    showApiErrorToast(err && err.message, 'Could not save the campaign. Please try again.');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Save Campaign'; }
   }
 };

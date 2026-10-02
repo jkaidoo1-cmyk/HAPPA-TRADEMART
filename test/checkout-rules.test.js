@@ -112,6 +112,12 @@ before(async () => {
   assert.ok(store, 'fixture store-msku253he58z must exist in db.json');
   store.total_orders = 0;
   store.total_sales = 0;
+  // Commission now follows the admin's Settings tier table when one exists, so
+  // clear it here: these tests assert the built-in default policy. The
+  // setting-driven path has its own test below (and in admin-settings.test.js),
+  // and without this the suite would depend on whatever a developer happens to
+  // have saved in their local db.json.
+  db.settings = (db.settings || []).filter(s => s && s.key !== 'commission_tiers');
   fs.writeFileSync(testDb, JSON.stringify(db));
 
   const port = await freePort();
@@ -181,6 +187,71 @@ test('package POST derives money server-side and ignores client amounts', async 
   const afterStore = await getStore();
   assert.equal(Number(afterStore.total_orders), (Number(before.total_orders) || 0) + 1);
   assert.ok(Math.abs((Number(afterStore.total_sales) || 0) - ((Number(before.total_sales) || 0) + 300)) < 0.01);
+});
+
+test('the commission charged follows the admin Settings tier table', async () => {
+  const adminHeaders = { Authorization: `Bearer ${session.createSessionToken('rules-admin', 'admin')}` };
+  // What the admin saves in Settings → Commission Tiers.
+  const created = await api('/settings', {
+    method: 'POST',
+    headers: adminHeaders,
+    body: {
+      key: 'commission_tiers',
+      value: JSON.stringify([{ min: 1, max: 99999, pct: 25 }]),
+      label: 'commission_tiers',
+      type: 'json'
+    }
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const settingId = created.data && created.data.id;
+  // This sale moves the shared fixture product, and the tests that follow assert
+  // the exact stock state, so remember where it was and put it back afterwards.
+  const beforeProd = await getProd();
+  const beforeStore = await getStore();
+
+  try {
+    const res = await api('/packages', {
+      method: 'POST',
+      headers: buyerHeaders(),
+      body: {
+        id: 'rules-pkg-tiers',
+        store_id: 'store-msku253he58z',
+        buyer_id: BUYER_ID,
+        items: [{ id: 'prod-diag-1', name: 'Kente Shawl', qty: 1 }]
+      }
+    });
+    assert.equal(res.status, 201, JSON.stringify(res.data));
+    // 25% of the authoritative GHS 150 — the admin's rate, not the built-in 4%.
+    assert.equal(Number(res.data.gross_amount), 150);
+    assert.equal(Number(res.data.commission_amount), 37.5);
+    assert.equal(Number(res.data.vendor_amount), 112.5);
+  } finally {
+    // Restore the default policy and the fixture stock for the tests that follow.
+    if (settingId) await api('/settings/' + settingId, { method: 'DELETE', headers: adminHeaders });
+    if (beforeProd) {
+      await api('/products/prod-diag-1', {
+        method: 'PATCH',
+        headers: adminHeaders,
+        body: {
+          stock_qty: Number(beforeProd.stock_qty),
+          total_sold: Number(beforeProd.total_sold != null ? beforeProd.total_sold : beforeProd.sold_count),
+          sold_count: Number(beforeProd.total_sold != null ? beforeProd.total_sold : beforeProd.sold_count),
+          status: 'active',
+          is_available: true
+        }
+      });
+    }
+    if (beforeStore) {
+      await api('/stores/store-msku253he58z', {
+        method: 'PATCH',
+        headers: adminHeaders,
+        body: {
+          total_orders: Number(beforeStore.total_orders) || 0,
+          total_sales: Number(beforeStore.total_sales) || 0
+        }
+      });
+    }
+  }
 });
 
 test('replaying the same package id is a no-op for its owner', async () => {

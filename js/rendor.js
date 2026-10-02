@@ -62,6 +62,10 @@ async function renderRendorDashboard() {
   const postsRes = await apiGet('services', 'limit=200');
   const myPosts  = (postsRes?.data || []).filter(s => s.rendor_id === u.id && !s.deleted);
 
+  // Posts that occupy one of the rendor's slots (active or paused — see
+  // lib/rendor-posts.js). Archived ones do not count, so deleting frees a slot.
+  const heldPosts = _rendorHeldPosts(myPosts, u.id);
+
   const activePosts  = myPosts.filter(s => s.status === 'active').length;
   const displayName  = u.rendor_display_name || u.name;
   const serviceCat   = u.rendor_service_cat  || '—';
@@ -218,14 +222,14 @@ async function renderRendorDashboard() {
 <div class="tab-content" id="rendor-posts">
   <div class="dashboard-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <h3 style="font-weight:700;margin:0;font-size:.9rem">My Posts (${myPosts.length})</h3>
-      <button class="btn btn-primary btn-sm" onclick="showAddPostModal()"
-              style="background:linear-gradient(135deg,#7c3aed,#6d28d9);border-color:#7c3aed">
-        <i class="fas fa-plus"></i> New Post
-      </button>
+      <h3 id="rendor-posts-count" style="font-weight:700;margin:0;font-size:.9rem">My Posts (${heldPosts} of ${RENDOR_MAX_POSTS})</h3>
+      <span id="rendor-posts-add">${_rendorAddPostButtonHTML(heldPosts)}</span>
     </div>
     <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:14px;line-height:1.6">
-      <i class="fas fa-info-circle"></i> Posts are how clients discover what you offer. Include sample work, rates and how to reach you.
+      <i class="fas fa-info-circle"></i> Posts are how clients discover what you offer. Include sample work, rates and how to reach you. You can keep up to ${RENDOR_MAX_POSTS} posts at a time.
+    </p>
+    <p id="rendor-post-limit-note" style="font-size:.8rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:14px;line-height:1.6;display:${heldPosts >= RENDOR_MAX_POSTS ? '' : 'none'}">
+      <i class="fas fa-info-circle"></i> You have all ${RENDOR_MAX_POSTS} posts. Delete one to publish a new post.
     </p>
     <div id="rendor-posts-list">
       ${myPosts.length === 0
@@ -311,6 +315,31 @@ function _rendorContactHTML(u) {
 </p>`;
 }
 
+// ── How many posts a rendor may hold at once ──────────────
+// Mirror of lib/rendor-posts.js: active and paused posts each take a slot,
+// archived/removed ones do not. The API enforces the same rule, so this is the
+// explanation rather than the ceiling.
+const RENDOR_MAX_POSTS = 5;
+function _rendorHeldPosts(rows, rendorId) {
+  const discarded = ['archived', 'deleted', 'removed'];
+  return (rows || []).filter(p => p
+    && String(p.rendor_id) === String(rendorId)
+    && p.deleted !== true
+    && !discarded.includes(String(p.status || 'active').toLowerCase())).length;
+}
+function _rendorAddPostButtonHTML(heldCount) {
+  if (heldCount >= RENDOR_MAX_POSTS) {
+    return `<button class="btn btn-sm" disabled title="Delete a post to publish a new one"
+              style="background:#e5e7eb;border-color:#e5e7eb;color:#6b7280;cursor:not-allowed">
+        <i class="fas fa-lock"></i> Limit reached
+      </button>`;
+  }
+  return `<button class="btn btn-primary btn-sm" onclick="showAddPostModal()"
+            style="background:linear-gradient(135deg,#7c3aed,#6d28d9);border-color:#7c3aed">
+      <i class="fas fa-plus"></i> New Post
+    </button>`;
+}
+
 // ── Reload posts tab ──────────────────────────────────────
 async function loadRendorPosts() {
   const el = document.getElementById('rendor-posts-list');
@@ -318,6 +347,16 @@ async function loadRendorPosts() {
   el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div>';
   const res  = await apiGet('services', 'limit=200');
   const list = (res?.data || []).filter(s => s.rendor_id === App.currentUser.id && !s.deleted);
+  // The header (count, New Post button, at-limit note) is rendered with the
+  // dashboard, so it has to be refreshed here too — otherwise deleting a post
+  // would leave a locked button behind on the same screen.
+  const held = _rendorHeldPosts(list, App.currentUser.id);
+  const countEl = document.getElementById('rendor-posts-count');
+  if (countEl) countEl.textContent = `My Posts (${held} of ${RENDOR_MAX_POSTS})`;
+  const addEl = document.getElementById('rendor-posts-add');
+  if (addEl) addEl.innerHTML = _rendorAddPostButtonHTML(held);
+  const noteEl = document.getElementById('rendor-post-limit-note');
+  if (noteEl) noteEl.style.display = held >= RENDOR_MAX_POSTS ? '' : 'none';
   el.innerHTML = list.length === 0
     ? `<div class="empty-state" style="padding:24px 0">
          <i class="fas fa-newspaper"></i>
@@ -335,8 +374,8 @@ function rendorPostCardHTML(p) {
 <div class="card" style="margin-bottom:12px" id="rendor-post-${p.id}">
   <div class="card-body">
     ${p.image_url ? `
-    <img src="${escHtml(p.image_url)}" alt=""          style="width:100%;height:202px;object-fit:fill;display:block;border-radius:var(--radius-sm);margin-bottom:10px"
-         onerror="this.style.display='none'">` : ''}
+    <img src="${escHtml(p.image_url)}" alt=""          style="width:100%;height:202px;object-fit:cover;display:block;border-radius:var(--radius-sm);margin-bottom:10px"
+         onload="fitProductImage(this)" onerror="this.style.display='none'">` : ''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.9rem">${escHtml(p.title)}</div>
@@ -384,6 +423,11 @@ async function getRendorSubMonths() {
 async function renderRendorSubscription() {
   const el = document.getElementById('rendor-sub-content');
   if (!el) return;
+  // Admin can change the fee at any moment, and this page is often open for the
+  // whole session. Re-read the published settings so the fee quoted here is the
+  // one the server will charge — a stale cache is what made an admin-set GHS 10
+  // keep showing as the generic GHS 30.
+  if (typeof loadPublicSettings === 'function') await loadPublicSettings();
   // Re-fetch fresh user data so subscription status is current.
   // CRITICAL: preserve subscription fields locally — the server may strip them in some response paths.
   const subFields = { rendor_sub_status: App.currentUser.rendor_sub_status, rendor_sub_plan: App.currentUser.rendor_sub_plan, rendor_sub_expiry: App.currentUser.rendor_sub_expiry };
@@ -398,9 +442,12 @@ async function renderRendorSubscription() {
   const subExpiry = u.rendor_sub_expiry ? new Date(Number(u.rendor_sub_expiry)) : null;
   const subActive = subStatus === 'active' && subExpiry && subExpiry > new Date();
 
-  // Single price: per-rendor override wins, else global setting.
-  const price = await getRendorSubPrice(u);
+  // Per-rendor override wins, else the global fee. The fee is per month (the
+  // admin's own screens charge fee × months), so this card quotes the total for
+  // the configured cycle — and the server charges exactly that total.
+  const unitPrice = await getRendorSubPrice(u);
   const duration = await getRendorSubMonths();
+  const price = Math.round(unitPrice * duration * 100) / 100;
   const durationLabel = duration === 1 ? '1 Month' : duration + ' Months';
 
   // Status banner
@@ -463,8 +510,14 @@ async function renderRendorSubscription() {
 }
 
 // ── Step: Rendor pays subscription (storefront-style) ──
-async function requestRendorSubscription(total, months) {
+async function requestRendorSubscription(total, months, _repriced) {
   const u = App.currentUser;
+  // The button carried the price rendered earlier — re-read the fee so the modal
+  // states the amount the server will actually charge.
+  const freshMonths = Number(months) > 0 ? Number(months) : await getRendorSubMonths();
+  const freshUnit = await getRendorSubPrice(u);
+  const freshTotal = Math.round(freshUnit * freshMonths * 100) / 100;
+  if (Number.isFinite(freshTotal) && freshTotal > 0) { total = freshTotal; months = freshMonths; }
   const planLabel = months === 1 ? '1 Month' : months + ' Months';
 
   showModal(`
@@ -486,7 +539,7 @@ async function requestRendorSubscription(total, months) {
   </div>
   <button class="btn btn-block" id="sub-confirm-btn"
           style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed"
-          onclick="guardClick(this, () => confirmRendorSubscription(${total},${months}))">
+          onclick="guardClick(this, () => confirmRendorSubscription(${total},${months}${_repriced ? ',true' : ''}))">
     <i class="fas fa-lock"></i> Confirm &amp; Pay GHS ${total.toFixed(2)}
   </button>
   <button class="btn btn-ghost btn-block" onclick="closeModalForce()" style="margin-top:6px;color:var(--text-muted)">
@@ -498,7 +551,7 @@ async function requestRendorSubscription(total, months) {
 // ── Step: Confirm payment — activates instantly (server-side) ──
 // The wallet engine validates the amount, records the payment + revenue, and
 // sets rendor_sub_* itself — the client never touches those admin-only fields.
-async function confirmRendorSubscription(total, months) {
+async function confirmRendorSubscription(total, months, _repriced) {
   const phone = (document.getElementById('sub-momo-phone-input')?.value || '').trim();
   if (!phone || phone.replace(/\D/g, '').length < 9) {
     showToast('Please enter a valid MoMo phone number.', 'error');
@@ -518,9 +571,29 @@ async function confirmRendorSubscription(total, months) {
   }).catch(() => null);
 
   if (!res || res.error) {
-    const msg = (res && res.error) || window.lastApiError || 'Payment could not be processed. Please try again.';
-    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-lock"></i> Confirm &amp; Pay GHS ${total.toFixed(2)}`; }
+    // The fee moved while this screen was open (the server answers 400 with
+    // code 'price_changed' + the current figures). Say the new fee out loud and
+    // re-quote the payment screen once, so the rendor never pays a price they
+    // were not shown nor gets a bare "server rejected" wall.
+    if (res && res.code === 'price_changed') {
+      const newTotal = Number(res.expected);
+      const expiryMonths = Number(res.months) > 0 ? Number(res.months) : months;
+      showToast(Number.isFinite(newTotal) && newTotal > 0
+        ? `Subscription fee updated — it is now GHS ${newTotal.toFixed(2)}. Please confirm the new fee.`
+        : 'The subscription fee has changed. Please review it and try again.', 'warning', 5000);
+      closeModalForce();
+      // Pull the published settings before re-quoting, so the reopened payment
+      // screen reads the same figure the server just charged from — the local
+      // cache is exactly what went stale in the first place.
+      if (typeof loadPublicSettings === 'function') await loadPublicSettings();
+      await renderRendorSubscription();
+      if (!_repriced && Number.isFinite(newTotal) && newTotal > 0) {
+        requestRendorSubscription(newTotal, expiryMonths, true);
+      }
+      return;
+    }
+    showApiErrorToast(res, 'Payment could not be processed. Please try again.');
     return;
   }
 
@@ -785,7 +858,7 @@ function _showPostModal(post) {
   <!-- ── Image banner: full width, same size as published post ── -->
   <div id="post-img-upload-area"        style="width:100%;height:202px;cursor:pointer;position:relative;overflow:hidden;border-bottom:1px solid var(--border);background:${hasExistingImg ? 'transparent' : 'var(--bg-secondary,#f3f4f6)'};display:flex;align-items:center;justify-content:center">
     <img id="post-prev-img"
-         src="${hasExistingImg ? escHtml(post.image_url) : ''}"          style="width:100%;height:202px;object-fit:fill;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
+         src="${hasExistingImg ? escHtml(post.image_url) : ''}"          style="width:100%;height:202px;object-fit:cover;position:absolute;top:0;left:0;${hasExistingImg?'':'display:none'}">
     <div id="post-img-placeholder"
          style="display:${hasExistingImg?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:1;text-align:center;padding:16px">
       <i class="fas fa-image" style="color:#7c3aed;font-size:1.8rem"></i>
@@ -924,6 +997,19 @@ async function savePost(postId) {
   if (!title) { showToast('Please enter a post title', 'warning'); return; }
   if (!cat)   { showToast('Please select a category', 'warning'); return; }
   if (!App.currentUser) { showToast('You must be logged in', 'error'); return; }
+
+  // Post cap (the API enforces it too — this just avoids the round-trip and
+  // says why, instead of surfacing a rejected save).
+  if (!postId) {
+    try {
+      const res = await apiGet('services', 'limit=200');
+      const held = _rendorHeldPosts(res?.data || [], App.currentUser.id);
+      if (held >= RENDOR_MAX_POSTS) {
+        showToast(`You can keep ${RENDOR_MAX_POSTS} posts at a time. Delete one to publish a new post.`, 'warning', 5000);
+        return;
+      }
+    } catch (e) { /* let the server have the final word */ }
+  }
   if (!imageUrl && !postId) {
     if (!confirm('Publish without an image? Posts with images get more attention.')) return;
   }
@@ -950,7 +1036,9 @@ async function savePost(postId) {
   }
 
   if (!result) {
-    showToast('Failed to save post — please try again.', 'error');
+    // The server's own sentence (post limit, subscription lapsed) is more useful
+    // than a generic failure — and it is never transport noise after translation.
+    showApiErrorToast(window.lastApiError, 'Failed to save post — please try again.');
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = `<i class="fas fa-save"></i> ${postId ? 'Update Post' : 'Publish Post'}`;
@@ -968,7 +1056,13 @@ async function archivePost(postId) {
   const card = document.getElementById('rendor-post-' + postId);
   const btn = card?.querySelector('[onclick*=archivePost]');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
-  await apiPatch('services', postId, { status: 'archived' });
+  const removed = await apiPatch('services', postId, { status: 'archived' });
+  if (!removed) {
+    // The post is still on the profile, so never claim it was removed.
+    showApiErrorToast(window.lastApiError, 'Could not remove the post. Please try again.');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash-alt"></i>'; }
+    return;
+  }
   showToast('Post removed', 'info');
   loadRendorPosts();
 }

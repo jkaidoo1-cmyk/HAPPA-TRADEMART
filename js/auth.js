@@ -500,7 +500,12 @@ async function doLogin(e) {
     if (lastErr.includes('503') || /temporarily unavailable|could not be reached/i.test(lastErr)) {
       showToast('The service is temporarily unavailable. Please try again in a few minutes.', 'warning');
     } else {
-      showToast(authRes?.error || 'Invalid email or password. Please try again.', 'error');
+      // Never paste a transport error into the login screen: a wrong password
+      // and a dropped connection must not read the same. Our own plain sentence
+      // is used when there is one, otherwise the standard copy.
+      const serverMsg = String((authRes && authRes.error) || '').replace(/^HTTP \d+:\s*/i, '').trim();
+      const plain = serverMsg && !/failed to fetch|network|\b\d{3}\b|error:/i.test(serverMsg) ? serverMsg : '';
+      showToast(plain || 'Invalid email or password. Please try again.', 'error');
     }
     resetBtn();
     return;

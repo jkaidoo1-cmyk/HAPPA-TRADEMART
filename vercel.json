@@ -81,14 +81,14 @@
     },
     {
       "src": "/storefront/(.*)",
-      "dest": "/index.html",
+      "dest": "/api/index.js",
       "headers": {
         "Cache-Control": "public, max-age=0, must-revalidate"
       }
     },
     {
       "src": "/store-admin/(.*)",
-      "dest": "/index.html",
+      "dest": "/api/index.js",
       "headers": {
         "Cache-Control": "public, max-age=0, must-revalidate"
       }

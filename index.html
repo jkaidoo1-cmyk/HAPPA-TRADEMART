@@ -4,11 +4,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description"
-    content="HAPPA TRADEMART – Ghana's Premier Multi-Vendor Marketplace. Shop local stores and flash sales.">
+  <!-- The server answers /storefront/<slug> and /store-admin/<slug> with the block between
+       these two markers rewritten to that store's own title, description and og/twitter tags,
+       so a shared storefront link previews as the store instead of as the marketplace.
+       Nothing in the app reads the values in between. -->
   <meta name="keywords" content="Ghana marketplace, online shopping, vendors, HAPPA, trademart">
   <meta name="author" content="HAPPA TRADEMART">
+  <!-- happa:page-meta -->
+  <meta name="description"
+    content="HAPPA TRADEMART – Ghana's Premier Multi-Vendor Marketplace. Shop local stores and flash sales.">
   <title>HAPPA TRADEMART</title>
+  <!-- /happa:page-meta -->
   <script>
     // ── Instant Storefront Route Detection (runs before body/CSS parsing to eliminate main site flash) ──
     (function() {
@@ -28,7 +34,11 @@
     // background push notifications.
     (function() {
       if (!('serviceWorker' in navigator)) return;
-      var SW_VERSION = 'happa-v144';
+      // Must equal CACHE_NAME in sw.js (test/sw-version.test.js enforces it).
+      // It was stuck at v144 while sw.js moved to v159, so clients that had
+      // already healed at v144 never healed again — they kept serving the old
+      // cached JS long after a fix deployed.
+      var SW_VERSION = 'happa-v164';
       var lastCleaned = localStorage.getItem('sw_selfheal_version');
       if (lastCleaned === SW_VERSION) return; // already cleaned for this version
       localStorage.setItem('sw_selfheal_version', SW_VERSION);

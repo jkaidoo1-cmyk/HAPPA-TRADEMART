@@ -437,7 +437,7 @@ function buildPackageTrackCard(pkg) {
   <div style="padding:12px 14px">
     <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:.78rem;font-weight:700"><i class="fas fa-cube" style="margin-right:3px;color:var(--primary)"></i>${pkg.package_code || pkg.id || ''}</span>
+        ${orderCodeChip(pkg.package_code || pkg.id, { className: 'copy-chip-primary', style: 'font-size:.78rem;font-weight:700' })}
         <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
       </div>
       <div class="order-tracking-bar" style="margin-bottom:6px">

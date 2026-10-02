@@ -537,7 +537,7 @@ async function renderVendorDashboard() {
           <div style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:var(--primary-light);color:var(--primary);font-size:2rem;margin:0 auto 16px">🎨</div>
           <h2 style="font-weight:900;font-size:1.4rem;text-align:center;margin-bottom:8px">Build Your Own Standalone Storefront Website</h2>
           <p style="font-size:.9rem;color:var(--text-light);text-align:center;margin-bottom:20px;line-height:1.7;max-width:640px;margin-left:auto;margin-right:auto">
-            A <strong>Storefront</strong> is your dedicated, custom-branded web application (e.g. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;color:var(--primary);font-weight:700">happamart.com/#storefront/your-shop</code>). 
+            A <strong>Storefront</strong> is your dedicated, custom-branded web application (e.g. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;color:var(--primary);font-weight:700">happamart.com/storefront/your-shop</code>). 
             Unlike standard marketplace listings, your storefront gives you full brand identity with custom UI themes, custom brand colors, slogan, logo, business hours, shipping policies, and a direct link to share with your customers.
           </p>
 
@@ -651,15 +651,15 @@ async function renderVendorDashboard() {
               <div style="font-size:.83rem;line-height:1.5">
                 Your independent storefront URL is live and accepting customer orders:
                 <div style="margin-top:6px">
-                  <code style="background:#ecfdf5;padding:4px 10px;border-radius:6px;border:1px solid #a7f3d0;font-weight:700;font-size:.85rem;color:#047857">${window.location.origin}/#storefront/${sfSlug}</code>
+                  <code style="background:#ecfdf5;padding:4px 10px;border-radius:6px;border:1px solid #a7f3d0;font-weight:700;font-size:.85rem;color:#047857">${storefrontUrl(sfSlug)}</code>
                 </div>
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-sm btn-outline" style="border-color:#059669;color:#059669;background:#fff" onclick="navigator.clipboard.writeText('${window.location.origin}/#storefront/${sfSlug}'); showToast('Live storefront URL copied! 📋', 'success')">
+              <button class="btn btn-sm btn-outline" style="border-color:#059669;color:#059669;background:#fff" onclick="navigator.clipboard.writeText(${jsArg(storefrontUrl(sfSlug))}); showToast('Live storefront URL copied! 📋', 'success')">
                 <i class="fas fa-copy"></i> Copy Link
               </button>
-              <a href="#storefront/${sfSlug}" target="_blank" class="btn btn-sm btn-primary" style="background:#059669;border:none;color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+              <a href="${storefrontUrl(sfSlug)}" target="_blank" class="btn btn-sm btn-primary" style="background:#059669;border:none;color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
                 <i class="fas fa-external-link-alt"></i> Visit Live Site
               </a>
             </div>
@@ -692,15 +692,15 @@ async function renderVendorDashboard() {
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               ${sfPaidLive ? `
-              <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);border-radius:20px;padding:5px 10px;font-size:.7rem;cursor:pointer" onclick="navigator.clipboard.writeText('${window.location.origin}/#storefront/${sfSlug}');showToast('Link copied! 📋','success')" title="Copy storefront link">
+              <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);border-radius:20px;padding:5px 10px;font-size:.7rem;cursor:pointer" onclick="navigator.clipboard.writeText(${jsArg(storefrontUrl(sfSlug))});showToast('Link copied! 📋','success')" title="Copy storefront link">
                 <i class="fas fa-link" style="color:var(--primary);font-size:.65rem"></i>
-                <span style="font-weight:700;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${window.location.origin}/#storefront/${sfSlug}</span>
+                <span style="font-weight:700;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${storefrontUrl(sfSlug)}</span>
                 <i class="fas fa-copy" style="color:var(--text-light);font-size:.6rem"></i>
               </div>
               ` : `
               <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:20px;padding:5px 10px;font-size:.7rem" title="Activate your subscription to make this link live">
                 <i class="fas fa-lock" style="color:#94a3b8;font-size:.65rem"></i>
-                <span style="font-weight:700;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${window.location.origin}/#storefront/${sfSlug}</span>
+                <span style="font-weight:700;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${storefrontUrl(sfSlug)}</span>
                 <span style="font-weight:800;color:#f59e0b;font-size:.62rem">INACTIVE</span>
               </div>
               `}
@@ -739,7 +739,7 @@ async function renderVendorDashboard() {
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span>
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981"></span>
-                <span style="font-size:.7rem;color:#64748b;font-weight:700;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="preview-url-bar">${window.location.origin}/#storefront/${myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || ''}</span>
+                <span style="font-size:.7rem;color:#64748b;font-weight:700;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="preview-url-bar">${storefrontUrl(myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || '')}</span>
               </div>
               <div id="sf-preview-shell" style="max-width:375px;margin:0 auto;transition:max-width .3s ease;overflow:hidden;border-left:1px solid var(--border);border-right:1px solid var(--border);background:#f8f9fa;max-height:480px;position:relative;overflow-y:auto !important">
                 <div id="storefront-live-preview-box" style="min-height:100%"></div>
@@ -973,7 +973,7 @@ async function renderVendorDashboard() {
                 <div>
                   <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Store Slug / Friendly URL</label>
                   <div style="display:flex;align-items:center;gap:6px">
-                    <span style="font-size:.8rem;color:var(--text-muted)">${window.location.origin}/#storefront/</span>
+                    <span style="font-size:.8rem;color:var(--text-muted)">${window.location.origin}/storefront/</span>
                     <input type="text" id="store-slug" value="${sfSlug}" class="form-control" style="font-size:.8rem;font-weight:700" placeholder="my-store-link" oninput="window.handleSlugChange(this.value)">
                   </div>
                 </div>
@@ -1151,7 +1151,7 @@ function packageRowHTML(pkg) {
   return `
 <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
   ${rowImg ? `<img src="${rowImg}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">` : ''}
-  <code style="background:var(--secondary);color:var(--accent);padding:3px 7px;border-radius:4px;font-size:.75rem;font-weight:700;flex-shrink:0">${pkg.package_code||'—'}</code>
+  ${orderCodeChip(pkg.package_code, { style: 'background:var(--secondary);color:var(--accent);padding:3px 7px;border-radius:4px;font-size:.75rem;font-weight:700;flex-shrink:0;margin:0' })}
   <div style="flex:1;font-size:.8rem;color:var(--text-muted);min-width:0">${rowTitle} · ${pkg.origin_location||''}<br><span style="color:var(--primary);font-weight:700">${sourceLabel}</span></div>
   <span class="status-badge status-${pkg.status}">${pkg.status}</span>
 </div>`;
@@ -1333,8 +1333,10 @@ async function submitAddProduct(e, storeId, vendorId) {
     return;
   }
 
-  if (isNaN(price) || isNaN(stock)) {
-    showToast('Fill in price and stock with valid numbers', 'warning');
+  // A product with no usable price is not sellable, so refuse it here — the
+  // API enforces the same rule (a priceless row sold for GHS 0 at checkout).
+  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(stock)) {
+    showToast('Enter a price greater than 0 and a valid stock number', 'warning');
     setBtn('idle');
     return;
   }
@@ -1404,7 +1406,7 @@ async function submitAddProduct(e, storeId, vendorId) {
       }
     } else {
       // apiPost returned null — show meaningful error
-      const err = window.lastApiError || 'Server unavailable and local storage failed';
+      const err = window.lastApiError || 'The product could not be uploaded.';
       throw new Error(err);
     }
   } catch (err) {
@@ -1419,7 +1421,9 @@ async function submitAddProduct(e, storeId, vendorId) {
     // Re-open the modal so user doesn't lose their input
     showModal(_addProductModalHTML(storeId, vendorId, { name, desc, price: finalPrice, orig: finalOrig, stock, weight, cat, tags: tagsStr, isFlash, allowBuyerNote, buyerNotePrompt }));
     _rehydrateAddProductModal({ name, desc, price: finalPrice, orig: finalOrig, stock, weight, cat, tags: tagsStr, isFlash, allowBuyerNote, buyerNotePrompt }, images);
-    showToast(`Could not save product: ${err.message || 'network error'}`, 'error', 5000);
+    // err.message may be the raw server sentence — funnel it through the one
+    // place that turns transport noise into something a vendor can act on.
+    showApiErrorToast(err && err.message, 'Could not save the product. Please check the details and try again.');
   }
 }
 
@@ -1775,7 +1779,7 @@ async function saveProductEdit(productId) {
   if (!saved) {
     // Server refused the edit (e.g. blank price/name) — keep the modal open
     // and tell the vendor instead of pretending the update landed.
-    showToast(window.lastApiError || 'Save failed — the product was not updated.', 'error', 5000);
+    showApiErrorToast(window.lastApiError, 'Save failed — the product was not updated.');
     return;
   }
 
@@ -1822,7 +1826,7 @@ async function deleteVendorProduct(productId) {
   // still live for every other visitor, so the UI must NOT say "deleted".
   if (!res || !res.success) {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; }
-    showToast(window.lastApiError || 'Delete failed — the product is still live. Check your connection and try again.', 'error', 5000);
+    showApiErrorToast(window.lastApiError, 'Delete failed — the product is still live. Check your connection and try again.');
     return;
   }
   // Remove from global cache immediately so it doesn't reappear
@@ -2225,7 +2229,7 @@ async function submitVerificationDocuments(userId) {
     else renderVendorDashboard();
   } catch (err) {
     console.error(err);
-    showToast('Failed to submit documents: ' + (err?.message || 'Network error'), 'danger');
+    showApiErrorToast(err && err.message, 'Could not submit your documents. Please try again.');
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="fas fa-paper-plane" style="margin-right: 10px;"></i> Submit Verification Documents';
@@ -2391,8 +2395,7 @@ async function purchaseStore(storeId, price) {
     note: `Store purchase: ${storeCheck.name || storeId}`
   });
   if (!payRes || !payRes.txn) {
-    const msg = (payRes && payRes.error) || window.lastApiError || 'Payment could not be processed. Please try again.';
-    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    showApiErrorToast(payRes || window.lastApiError, 'Payment could not be processed. Please try again.');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-shopping-cart"></i> Buy'; }
     return;
   }
@@ -3282,7 +3285,7 @@ window.updateStorefrontPreview = function() {
 
   // Update preview URL bar
   const urlBar = document.getElementById('preview-url-bar');
-  if (urlBar) urlBar.textContent = `${window.location.origin}/#storefront/${slug}`;
+  if (urlBar) urlBar.textContent = storefrontUrl(slug);
 
   const previewBox = document.getElementById('storefront-live-preview-box');
   if (!previewBox) return;
@@ -4243,8 +4246,7 @@ window.confirmStorefrontSubscription = async function(storeId) {
     note: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`,
   });
   if (!payRes || payRes.error) {
-    const msg = (payRes && payRes.error) || window.lastApiError || 'Payment could not be processed. Please try again.';
-    showToast(String(msg).replace(/^HTTP \d+: /, ''), 'error');
+    showApiErrorToast(payRes || window.lastApiError, 'Payment could not be processed. Please try again.');
     return;
   }
   if (method === 'wallet' && payRes.balance != null) {

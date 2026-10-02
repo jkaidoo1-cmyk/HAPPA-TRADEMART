@@ -289,9 +289,9 @@ function rendorPostCardPublicHTML(post, rendor) {
 
     ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
 
-            style="width:100%;height:230px;object-fit:fill;display:block;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
+            style="width:100%;height:230px;object-fit:cover;display:block;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
 
-            onerror="this.style.display='none'">`
+            onload="fitProductImage(this)" onerror="this.style.display='none'">`
 
     : '';
 
@@ -2198,7 +2198,7 @@ async function _sdDeleteProduct(productId, productName, btn) {
 
     if (btn) { btn.disabled = false; btn.textContent = 'Del'; }
 
-    showToast(window.lastApiError || 'Delete failed — the product is still live. Try again.', 'error', 5000);
+    showApiErrorToast(window.lastApiError, 'Delete failed — the product is still live. Try again.');
 
     return;
 
@@ -2236,10 +2236,6 @@ async function _sdSaveProduct(productId, form) {
 
   data.is_flash_sale  = form.querySelector('[name=is_flash_sale]')?.checked ?? false;
 
-  if (data.name) data.slug = data.name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
-
-
-
   const product = (App.allProducts||[]).find(p => p.id === productId);
 
   if (data.image_url !== undefined) {
@@ -2257,14 +2253,17 @@ async function _sdSaveProduct(productId, form) {
 
 
   // Match the server's product rules — fail here, not after a rejected save.
-
+  // The name is OPTIONAL: a blank one is stored as "Untitled product", the same
+  // default the API applies, so a card never renders an empty title. Every
+  // other product writer (the add form, bulk add, the vendor edit modal) is
+  // name-optional too — this was the last place still bouncing an upload.
   if (!String(data.name || '').trim()) {
 
-    showToast('Product name is required.', 'warning');
-
-    return;
+    data.name = 'Untitled product';
 
   }
+
+  if (data.name) data.slug = data.name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
 
   if (isNaN(data.price)) {
 
@@ -2288,7 +2287,7 @@ async function _sdSaveProduct(productId, form) {
 
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save'; }
 
-    showToast(window.lastApiError || 'Save failed — the product was not updated.', 'error', 5000);
+    showApiErrorToast(window.lastApiError, 'Save failed — the product was not updated.');
 
     return;
 
@@ -2745,9 +2744,9 @@ function _rendorPublicPostCardHTML(post) {
 
     ? `<img src="${escHtml(post.image_url)}" alt="${escHtml(post.title)}"
 
-           style="width:100%;height:168px;object-fit:fill;display:block;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
+           style="width:100%;height:168px;object-fit:cover;display:block;border-radius:var(--radius-sm) var(--radius-sm) 0 0"
 
-           onerror="this.style.display='none'">`
+           onload="fitProductImage(this)" onerror="this.style.display='none'">`
 
     : '';
 
@@ -3318,7 +3317,7 @@ async function handleStorefrontOrderSearch(storeId, query, isEnter) {
         return `
         <div class="package-card" style="margin-bottom:8px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
           <div class="package-header" style="padding:10px 12px">
-            <span class="package-code" style="font-size:.78rem"><i class="fas fa-cube" style="margin-right:3px"></i>${pkg.package_code || pkg.id || ''}</span>
+            ${orderCodeChip(pkg.package_code || pkg.id, { style: 'font-size:.78rem' })}
             <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
           </div>
           <div style="padding:8px 12px 10px">
@@ -3592,35 +3591,33 @@ window.renderStorefrontCart = async function(storeId) {
 
 // Show the visitor's orders from THIS store inside the storefront's own cart
 // page, so buyers can track their order without leaving the store. Orders are
-// matched by: the package code just placed, the logged-in user, or the phone
-// number used at checkout (guests).
+// matched by the package code and phone number the visitor entered AT THIS
+// STORE — never by the main-site account, which belongs to another world (and on
+// a vendor's own phone is usually the vendor).
 async function renderStorefrontOrders(storeId, container, primaryColor) {
   if (!container) return;
-  const lastCode = localStorage.getItem('happa_last_package_code') || '';
-  const lastPhone = localStorage.getItem('happa_last_package_phone') || '';
+  // Tracking keys are per storefront, and only per storefront: `happa_last_package_*`
+  // belongs to the main site (js/checkout.js writes it, js/cart.js reads it), so a
+  // storefront must neither read nor write it — that is how one world's activity
+  // ended up surfacing in the other.
+  const lastCode = localStorage.getItem('happa_sf_last_code_' + storeId) || '';
+  const lastPhone = localStorage.getItem('happa_sf_last_phone_' + storeId) || '';
   try {
-    // A visitor asks only for the code they hold; a signed-in user gets their own
-    // rows. The full list is private to the parties involved.
-    const pkgQ = (!App.currentUser && lastCode)
+    // Ask for the code we hold when we have one (the search matches nothing else),
+    // otherwise fetch broadly and match on the phone used at this store.
+    const pkgQ = lastCode
       ? ('search=' + encodeURIComponent(lastCode) + '&limit=200')
       : 'limit=200';
     const pkgsRes = await apiGet('packages', pkgQ);
     const allPkgs = pkgsRes?.data || (Array.isArray(pkgsRes) ? pkgsRes : []);
     const norm = v => String(v || '').replace(/\D/g, '');
-    const u = App.currentUser;
-    const userId = u ? String(u.id) : '';
 
     const myPkgs = allPkgs
       .filter(p => String(p.store_id) === String(storeId) || String(p.storefront_id) === String(storeId))
       .filter(p => {
         if (lastCode && String(p.package_code || p.code || '') === lastCode) return true;
-        if (userId && String(p.buyer_id) === userId) return true;
         const pkgPhone = norm(p.buyer_phone || p.delivery_phone);
         if (lastPhone && pkgPhone && pkgPhone === norm(lastPhone)) return true;
-        if (u) {
-          if (norm(u.phone) && pkgPhone === norm(u.phone)) return true;
-          if (String(p.buyer_email || '').toLowerCase().trim() === String(u.email || '').toLowerCase().trim()) return true;
-        }
         return false;
       })
       .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
@@ -3666,7 +3663,7 @@ async function renderStorefrontOrders(storeId, container, primaryColor) {
           return `
         <div class="package-card" style="margin-bottom:8px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
           <div class="package-header" style="padding:10px 12px">
-            <span class="package-code" style="font-size:.78rem"><i class="fas fa-cube" style="margin-right:3px"></i>${pkg.package_code || pkg.id || ''}</span>
+            ${orderCodeChip(pkg.package_code || pkg.id, { style: 'font-size:.78rem' })}
             <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
           </div>
           <div style="padding:8px 12px 10px">
@@ -3735,6 +3732,40 @@ window.removeStorefrontCartItem = function(storeId, productId) {
   showToast('Item removed from cart', 'info');
 };
 
+// ── Storefront checkout is its own world ─────────────────────────────────
+// Nothing may cross between the main site and a storefront, or between two
+// storefronts. The signed-in account is the PLATFORM user — on a vendor's own
+// phone that is the vendor — so prefilling the delivery form from it put the
+// vendor's own name, phone and location on a customer order (and, on the
+// vendor's own store, made them the buyer of their own order). Delivery details
+// are therefore remembered per STORE, from what was typed at that store's
+// checkout, and the account profile is never read here.
+function sfBuyerInfoKey(storeId) {
+  const id = String(storeId == null ? '' : storeId).trim();
+  return id ? 'happa_sf_buyer_' + id : '';
+}
+function loadStorefrontBuyerInfo(storeId) {
+  const k = sfBuyerInfoKey(storeId);
+  if (!k) return {};
+  try {
+    const v = JSON.parse(localStorage.getItem(k) || '{}');
+    return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+  } catch (e) {
+    return {};
+  }
+}
+function saveStorefrontBuyerInfo(storeId, info) {
+  const k = sfBuyerInfoKey(storeId);
+  if (!k) return;
+  try {
+    localStorage.setItem(k, JSON.stringify({
+      name:    String(info && info.name    || ''),
+      phone:   String(info && info.phone   || ''),
+      address: String(info && info.address || '')
+    }));
+  } catch (e) {}
+}
+
 window.renderStorefrontCheckout = function(storeId) {
   const contentEl = getStoreTabContentEl();
   if (!contentEl) return;
@@ -3760,7 +3791,8 @@ window.renderStorefrontCheckout = function(storeId) {
   const platformFee = Number((subtotal * 0.01).toFixed(2));
   const total = Number((subtotal + platformFee).toFixed(2));
 
-  const user = App.currentUser || {};
+  // Prefill ONLY from delivery details entered at this storefront before.
+  const sfBuyer = loadStorefrontBuyerInfo(storeId);
 
   contentEl.innerHTML = `
     <div style="padding:16px; display:grid; gap:16px">
@@ -3775,15 +3807,15 @@ window.renderStorefrontCheckout = function(storeId) {
         <div class="card-body" style="padding:16px; display:grid; gap:12px">
           <div>
             <label style="display:block; font-size:0.75rem; font-weight:700; margin-bottom:4px">Full Name</label>
-            <input type="text" id="sf-ch-name" value="${escHtml(user.name || '')}" class="form-control" required placeholder="e.g. John Doe">
+            <input type="text" id="sf-ch-name" value="${escHtml(sfBuyer.name || '')}" class="form-control" required placeholder="e.g. John Doe">
           </div>
           <div>
             <label style="display:block; font-size:0.75rem; font-weight:700; margin-bottom:4px">Phone Number</label>
-            <input type="text" id="sf-ch-phone" value="${escHtml(user.phone || '')}" class="form-control" required placeholder="e.g. +233244123456">
+            <input type="text" id="sf-ch-phone" value="${escHtml(sfBuyer.phone || '')}" class="form-control" required placeholder="e.g. +233244123456">
           </div>
           <div>
             <label style="display:block; font-size:0.75rem; font-weight:700; margin-bottom:4px">Delivery Location / Address</label>
-            <input type="text" id="sf-ch-address" value="${escHtml(user.location || '')}" class="form-control" required placeholder="e.g. KNUST, Queen's Hall">
+            <input type="text" id="sf-ch-address" value="${escHtml(sfBuyer.address || '')}" class="form-control" required placeholder="e.g. KNUST, Queen's Hall">
           </div>
         </div>
       </div>
@@ -3871,7 +3903,6 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     return;
   }
 
-  const user = App.currentUser || {};
   // The passed amount is the item subtotal; the buyer is charged subtotal + 1% platform fee.
   const platformFee = Number((subtotalAmount * 0.01).toFixed(2));
   const buyerPayTotal = Number((subtotalAmount + platformFee).toFixed(2));
@@ -3933,10 +3964,13 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     package_code: pCode,
     store_id: storeId,
     vendor_id: vendorId,
-    buyer_id: user.id || 'guest',
+    // Guest identity by design: the storefront never borrows the signed-in
+    // main-site account (see the header comment above), so buyer_id stays 'guest'
+    // and no platform profile data is written onto a storefront order.
+    buyer_id: 'guest',
     buyer_name: name,
     buyer_phone: phone,
-    buyer_email: user.email || '',
+    buyer_email: '',
     delivery_name: name,
     delivery_phone: phone,
     delivery_address: address,
@@ -3993,10 +4027,10 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   // like a main-site order. It is tagged order_source 'storefront' so the admin's
   // orders-table views can exclude it (storefront orders are vendor-managed).
   const orderRec = await apiPost('orders', {
-    buyer_id: user.id || 'guest',
+    buyer_id: 'guest',
     buyer_name: name,
     buyer_phone: phone,
-    buyer_email: user.email || '',
+    buyer_email: '',
     items: storeCart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, image: i.image || (i.images && i.images[0]) || '', store_id: storeId, buyer_note: i.buyer_note || '' })),
     subtotal: grossAmt,
     platform_fee: platformFee,
@@ -4028,9 +4062,12 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   showToast('Order placed successfully! 🎉', 'success');
   localStorage.removeItem(key);
   try { localStorage.removeItem(pendKey); } catch (e) {}
-  // Store package code + buyer phone so the storefront cart page can auto-track it
-  try { localStorage.setItem('happa_last_package_code', pCode); } catch (e) {}
-  try { localStorage.setItem('happa_last_package_phone', phone); } catch (e) {}
+  // Remember this customer's delivery details for THIS storefront only, and the
+  // package code + phone so this store's cart page can auto-track the order.
+  // Nothing here is shared with the main site or with another storefront.
+  saveStorefrontBuyerInfo(storeId, { name, phone, address });
+  try { localStorage.setItem('happa_sf_last_code_' + storeId, pCode); } catch (e) {}
+  try { localStorage.setItem('happa_sf_last_phone_' + storeId, phone); } catch (e) {}
   // Make the new order instantly searchable in the header search-bar tracker.
   try { if (window.invalidatePackageSearchCache) window.invalidatePackageSearchCache(); } catch (e) {}
 
@@ -4225,7 +4262,11 @@ window.submitStorefrontAdminLogin = async function(form, storeId) {
   const foundUser = authRes && authRes.user ? authRes.user : null;
   if (!foundUser) {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-lock"></i> Sign in'; }
-    showToast((authRes && authRes.error) || 'Invalid email or password', 'danger');
+    // Same rule as the main sign-in screen: a failed login never surfaces
+    // transport wording, only a statement about the credentials.
+    const serverMsg = String((authRes && authRes.error) || '').replace(/^HTTP \d+:\s*/i, '').trim();
+    const plain = serverMsg && !/failed to fetch|network|\b\d{3}\b|error:/i.test(serverMsg) ? serverMsg : '';
+    showToast(plain || 'Invalid email or password', 'danger');
     return;
   }
   if (authRes.token) setAuthToken(authRes.token);

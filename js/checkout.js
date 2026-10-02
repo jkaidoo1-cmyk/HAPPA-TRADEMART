@@ -369,8 +369,7 @@ async function placeOrder() {
   if (!order) {
     if (setBtn) setBtn('failed');
     setTimeout(() => { if (setBtn) setBtn('idle'); }, 2000);
-    const realErr = String(window.lastApiError || '').replace(/^Server rejected the save: /, '').replace(/^HTTP \d+: /, '');
-    showToast(realErr || 'Order failed. Please try again.', 'error', 5000);
+    showApiErrorToast(window.lastApiError, 'Order failed. Please try again.');
     _placingOrder = false;
     if (btn) btn.disabled = false;
     return;
@@ -524,7 +523,7 @@ function renderOrderConfirmation(order, packages) {
     return `
     <div class="card" style="margin-top:12px;text-align:left">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
-        <span style="font-size:.82rem;font-weight:700"><i class="fas fa-cube" style="margin-right:4px;color:var(--primary)"></i>${pkg.package_code || pkg.id || ''}</span>
+        ${orderCodeChip(pkg.package_code || pkg.id, { className: 'copy-chip-primary', style: 'font-size:.82rem;font-weight:700' })}
         <span style="font-size:.7rem;background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:12px;font-weight:600">Processing</span>
       </div>
       <div style="padding:12px 14px">

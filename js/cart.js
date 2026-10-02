@@ -13,6 +13,14 @@ function addToCart(product, qty = 1, buyerNote = '') {
     showToast('This item is out of stock', 'error');
     return false;
   }
+  // A listing with no usable price must never reach the cart. The server now
+  // refuses to price such a line at checkout (Number(null) || 0 would have
+  // charged GHS 0 for it), so stop it here and tell the buyer why.
+  const priceNum = Number(product.price);
+  if (product.price == null || product.price === '' || !Number.isFinite(priceNum) || priceNum < 0) {
+    showToast('This item has no price set yet, so it cannot be ordered. Please tell the vendor.', 'warning', 4500);
+    return false;
+  }
 
   // ── Optimistic UI: capture pre-state, render immediately, ──
   const previousCart = JSON.parse(JSON.stringify(App.cart));
@@ -241,7 +249,7 @@ async function renderCartOrders() {
     return `
 <div class="package-card" style="margin-bottom:8px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
   <div class="package-header" style="padding:10px 12px">
-    <span class="package-code" style="font-size:.78rem"><i class="fas fa-cube" style="margin-right:3px"></i>${pkg.package_code || pkg.id || ''}</span>
+    ${orderCodeChip(pkg.package_code || pkg.id, { style: 'font-size:.78rem' })}
     <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
   </div>
   <div style="padding:8px 12px 10px">
@@ -320,7 +328,7 @@ async function trackPackageByCode() {
     result.innerHTML = `
 <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;cursor:pointer" onclick="showPackageDetailModal('${pkg.id}')">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <span style="font-size:.78rem;font-weight:700"><i class="fas fa-cube" style="margin-right:3px;color:var(--primary)"></i>${pkg.package_code || pkg.id || ''}</span>
+    ${orderCodeChip(pkg.package_code || pkg.id, { className: 'copy-chip-primary', style: 'font-size:.78rem;font-weight:700' })}
     <span class="status-badge status-${st.css}" style="font-size:.7rem;padding:3px 8px"><i class="fas ${st.icon}" style="margin-right:3px"></i>${st.text}</span>
   </div>
   <div class="order-tracking-bar" style="margin-bottom:6px">

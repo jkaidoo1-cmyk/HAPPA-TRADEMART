@@ -133,7 +133,13 @@ const OptimisticUI = {
         try { rollback(snap); } catch (e) { console.warn('rollback failed:', e); }
       }
       finalize(false);
-      if (error) showToast(error + (err?.message ? ` — ${err.message}` : ''), 'error', 4000);
+      // `error` is the caller's plain-language copy; err.message may be a raw
+      // server sentence, so it goes through the same translator as every other
+      // failed request instead of being pasted after a dash.
+      if (error) {
+        if (typeof showApiErrorToast === 'function') showApiErrorToast(err && err.message, error);
+        else showToast(error, 'error', 4000);
+      }
       throw err;
     }
   },

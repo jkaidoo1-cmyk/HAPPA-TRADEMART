@@ -63,7 +63,7 @@ async function loadAdminSettings() {
   // form with hardcoded defaults — an accidental "Save All" would then wipe
   // real settings with defaults. Keep whatever is on screen and warn.
   if (!res) {
-    showToast('⚠️ Could not load settings from the server. Values shown may be stale.', 'error');
+    showToast("⚠️ Couldn't load your latest settings. The values shown may be out of date — reload before saving.", 'error');
     return;
   }
 
@@ -113,8 +113,10 @@ async function loadAdminSettings() {
   if (typeof renderCouponsEditor === 'function') renderCouponsEditor();
 
   // Everything on screen now matches the database — remember it as the
-  // baseline the next save diffs against.
+  // baseline the next save diffs against. The shared public cache is refreshed
+  // too, so the tier helpers below read the same rows this page just loaded.
   markSettingsSaved();
+  if (typeof loadPublicSettings === 'function') loadPublicSettings();
 
 }
 
@@ -199,8 +201,11 @@ async function saveAdminSettings(e) {
     return;
   }
 
-  // Everything persisted — re-baseline so the next save only sends real diffs.
+  // Everything persisted — re-baseline so the next save only sends real diffs,
+  // and refresh the shared cache so every other screen picks up the new values
+  // without waiting for a reload.
   markSettingsSaved();
+  if (typeof loadPublicSettings === 'function') loadPublicSettings();
 
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save All Settings'; }
 
@@ -363,16 +368,42 @@ async function saveCommissionTiers(existingRows, dirtyKeys) {
   return out.every(ok => ok !== false);
 }
 
-// ── Runtime helper: get effective commission pct for a price ─
-function getEffectiveCommissionPct(price) {
-  const tiers = _commissionTiers && _commissionTiers.length ? _commissionTiers : null;
-  if (tiers) {
-    for (const t of tiers) {
-      const maxVal = t.max >= 99999 ? Infinity : t.max;
-      if (price >= t.min && price <= maxVal) return t.pct;
-    }
-    return tiers[tiers.length - 1]?.pct || 2;
+// ── Runtime helpers: effective commission pct ─────────────
+// `_commissionTiers` / `_referralCommissionTiers` are only populated while the
+// Admin → Settings page is open, so on every other screen (cart, vendor
+// dashboard, checkout) the admin's tier table was invisible and these helpers
+// fell back to the hardcoded COMMISSION constant — an admin's edited tiers never
+// reached a vendor's screen. The tier rows are now also published to every
+// client through the public settings cache (cachedSetting), which is available
+// synchronously and everywhere.
+function _tiersFromSetting(key) {
+  const raw = typeof cachedSetting === 'function' ? cachedSetting(key) : undefined;
+  if (raw == null || raw === '') return null;
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch (e) {
+    return null;
   }
+}
+
+function _pctFromTiers(tiers, amountOrPrice, fallbackPct) {
+  if (tiers && tiers.length) {
+    for (const t of tiers) {
+      const maxVal = Number(t.max) >= 99999 ? Infinity : Number(t.max);
+      if (amountOrPrice >= Number(t.min) && amountOrPrice <= maxVal) return Number(t.pct);
+    }
+    const last = tiers[tiers.length - 1];
+    return last ? Number(last.pct) : fallbackPct;
+  }
+  return fallbackPct;
+}
+
+function getEffectiveCommissionPct(price) {
+  const tiers = (_commissionTiers && _commissionTiers.length)
+    ? _commissionTiers
+    : _tiersFromSetting('commission_tiers');
+  if (tiers) return _pctFromTiers(tiers, price, 2);
   if (typeof COMMISSION !== 'undefined') {
     for (const [min, max, pct] of COMMISSION) {
       if (price >= min && price <= max) return pct;
@@ -381,17 +412,15 @@ function getEffectiveCommissionPct(price) {
   return 2;
 }
 
-// ── Runtime helper: get referral commission pct for a purchase amount ─
 function getEffectiveReferralCommissionPct(amount) {
-  const tiers = _referralCommissionTiers && _referralCommissionTiers.length ? _referralCommissionTiers : null;
-  if (tiers) {
-    for (const t of tiers) {
-      const maxVal = t.max >= 99999 ? Infinity : t.max;
-      if (amount >= t.min && amount <= maxVal) return t.pct;
-    }
-    return tiers[tiers.length - 1]?.pct || 3;
-  }
-  return 3; // absolute fallback
+  const tiers = (_referralCommissionTiers && _referralCommissionTiers.length)
+    ? _referralCommissionTiers
+    : _tiersFromSetting('referral_commission_tiers');
+  // With no tier table the flat rate from Settings applies — the same rule the
+  // server uses when it pays the reward (lib/wallet.js referralPctFor).
+  const flatRaw = typeof cachedSetting === 'function' ? cachedSetting('referral_reward_pct') : undefined;
+  const flat = Number.isFinite(parseFloat(flatRaw)) ? parseFloat(flatRaw) : 3;
+  return _pctFromTiers(tiers, amount, flat);
 }
 
 // ── Hero Banners Editor ─────────────────────────────────────
