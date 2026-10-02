@@ -9,16 +9,15 @@ async function renderVendorDashboard() {
     if (!App.currentUser) { showPage('auth'); return; }
     // Loading placeholder: the dashboard pulls the user, store, storefront,
     // products and packages before it can render, so a cold visit showed a
-    // completely blank panel for seconds. A skeleton beats a blank page.
+    // completely blank panel for seconds. A spinner beats a blank page.
     if (!c.innerHTML.trim() || c.dataset.rendering !== '1') {
       c.dataset.rendering = '1';
       c.innerHTML = `
-<div class="dashboard-wrap">
-  <div class="skeleton-row" style="margin-bottom:12px;width:100%;box-sizing:border-box;"><div class="skeleton-box avatar"></div><div class="skeleton-box lines"><div class="skeleton-box line1"></div><div class="skeleton-box line2"></div></div></div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
-    ${Array(4).fill('<div class="skeleton-box" style="height:74px;border-radius:12px;width:100%;display:block;"></div>').join('')}
+<div class="dashboard-wrap" style="display:flex;align-items:center;justify-content:center;padding:60px 20px;color:var(--text-muted)">
+  <div style="text-align:center">
+    <i class="fas fa-spinner fa-spin" style="font-size:1.8rem;color:var(--primary)"></i>
+    <div style="margin-top:10px;font-size:.85rem">Loading…</div>
   </div>
-  ${Array(3).fill('<div class="skeleton-box" style="height:110px;border-radius:14px;margin-bottom:12px;width:100%;display:block;"></div>').join('')}
 </div>`;
     }
   // Accept both 'vendor' and legacy 'seller' role
