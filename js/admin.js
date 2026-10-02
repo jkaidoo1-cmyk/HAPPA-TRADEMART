@@ -3371,6 +3371,15 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
     const date = new Date(c.end_date);
     return !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : defaultEndDate;
   })() : defaultEndDate;
+  const endTimeValue = c.end_date ? (() => {
+    const date = new Date(c.end_date);
+    if (!Number.isNaN(date.getTime())) {
+      const h = String(date.getHours()).padStart(2, '0');
+      const m = String(date.getMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+    return '23:59';
+  })() : '23:59';
   let budgets = c.store_budgets || {};
   if (typeof budgets === 'string') {
     try { budgets = JSON.parse(budgets); } catch(e) { budgets = {}; }
@@ -3397,8 +3406,11 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
               <input class="form-control" type="number" id="ad-camp-interval" min="1" max="120" value="${intervalVal}" onfocus="this.select()" required>
             </div>
             <div class="form-group">
-              <label class="form-label">Campaign End Date *</label>
-              <input class="form-control" type="date" id="ad-camp-end-date" value="${endDateValue}" min="${new Date().toISOString().slice(0,10)}" required>
+              <label class="form-label">Campaign Expiry (Date &amp; Time) *</label>
+              <div style="display:flex;gap:6px">
+                <input class="form-control" type="date" id="ad-camp-end-date" value="${endDateValue}" min="${new Date().toISOString().slice(0,10)}" required style="flex:1">
+                <input class="form-control" type="time" id="ad-camp-end-time" value="${endTimeValue}" required style="width:110px">
+              </div>
             </div>
           </div>
 
@@ -3477,8 +3489,17 @@ window.saveAdCampaign = async function(e, campaignId = null) {
   if (intervalVal > 120) intervalVal = 120;
 
   const rawEndDate = document.getElementById('ad-camp-end-date')?.value;
+  const rawEndTime = document.getElementById('ad-camp-end-time')?.value || '23:59';
   const defaultEndDate = new Date(Date.now() + (365 * 86400000)).toISOString();
-  const endDate = rawEndDate ? new Date(`${rawEndDate}T23:59:59.999Z`).toISOString() : defaultEndDate;
+  let endDate = defaultEndDate;
+  if (rawEndDate) {
+    const dtParsed = new Date(`${rawEndDate}T${rawEndTime}:00`);
+    if (!Number.isNaN(dtParsed.getTime())) {
+      endDate = dtParsed.toISOString();
+    } else {
+      endDate = new Date(`${rawEndDate}T23:59:59.999Z`).toISOString();
+    }
+  }
 
   const showStoreName = document.getElementById('ad-camp-storename')?.value === 'true';
 

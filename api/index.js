@@ -2529,7 +2529,10 @@ app.post('/api/wallet/:action', writeRateLimiter, async (req, res) => {
 // absolutes, so concurrent viewers aggregate. No PII, no session required.
 app.post('/api/ads/track', writeRateLimiter, async (req, res) => {
   try {
-    const body = req.body || {};
+    let body = req.body || {};
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) { body = {}; }
+    }
     const campaignId = String(body.campaign_id || '');
     const impressions = Math.max(0, Math.min(500, parseInt(body.impressions, 10) || 0));
     const clicks = Math.max(0, Math.min(100, parseInt(body.clicks, 10) || 0));

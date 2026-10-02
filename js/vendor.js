@@ -3502,7 +3502,7 @@ window.updateStorefrontPreview = function() {
                 ${getProductImageHTML(p)}
               </div>
               <div class="product-body" style="padding: 6px 8px; display:flex; flex-direction:column; gap:2px">
-                <div class="product-name" style="font-size:0.65rem; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                <div class="product-name" style="font-size:0.65rem; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
                 <div class="product-price" style="font-size:0.75rem">GHS ${p.price}</div>
                 <div class="product-meta" style="font-size:0.55rem; display:flex; align-items:center; gap:4px">
                   <span class="product-rating" style="font-size:0.55rem; color:#fbbf24"><i class="fas fa-star"></i> ${p.rating || p.avg_rating || '5.0'}</span>
@@ -3534,7 +3534,7 @@ window.updateStorefrontPreview = function() {
                 ${getProductImageHTML(p)}
               </div>
               <div class="product-body" style="padding:4px 6px; display:flex; flex-direction:column">
-                <div class="product-name" style="font-size:0.6rem; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                <div class="product-name" style="font-size:0.6rem; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
                 <div class="product-price" style="font-size:0.7rem">GHS ${p.price}</div>
               </div>
             </div>
@@ -3632,7 +3632,7 @@ window.updateStorefrontPreview = function() {
                 <div class="product-card">
                   <div class="product-img" style="height:60px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; overflow:hidden">${getProductImageHTML(p)}</div>
                   <div class="product-body" style="padding:6px 8px">
-                    <div class="product-name" style="font-size:.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                    <div class="product-name" style="font-size:.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
                     <div class="product-price" style="font-size:.75rem">GHS ${p.price}</div>
                   </div>
                 </div>`).join('')}
@@ -3646,7 +3646,7 @@ window.updateStorefrontPreview = function() {
                 <div class="product-card">
                   <div class="product-img" style="height:44px; display:flex; align-items:center; justify-content:center; font-size:1rem; overflow:hidden">${getProductImageHTML(p)}</div>
                   <div class="product-body" style="padding:4px 6px">
-                    <div class="product-name" style="font-size:.56rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                    <div class="product-name" style="font-size:.56rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
                     <div class="product-price" style="font-size:.66rem">GHS ${p.price}</div>
                   </div>
                 </div>`).join('')}
@@ -3673,7 +3673,7 @@ window.updateStorefrontPreview = function() {
               <div class="product-card">
                 <div class="product-img" style="height:40px; display:flex; align-items:center; justify-content:center; font-size:1rem; overflow:hidden">${getProductImageHTML(p)}</div>
                 <div class="product-body" style="padding:3px 5px">
-                  <div class="product-name" style="font-size:.52rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(p.name)}</div>
+                  <div class="product-name" style="font-size:.52rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
                   <div class="product-price" style="font-size:.6rem">GHS ${p.price}</div>
                 </div>
               </div>`).join('')}
@@ -4244,6 +4244,11 @@ window.confirmStorefrontSubscription = async function(storeId) {
     method,
     payment_ref: 'SUB-' + storeId + '-' + Date.now(),
     note: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`,
+    record_revenue: {
+      amount: amt,
+      reference: 'SUB-' + storeId + '-' + Date.now(),
+      description: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`
+    }
   });
   if (!payRes || payRes.error) {
     showApiErrorToast(payRes || window.lastApiError, 'Payment could not be processed. Please try again.');

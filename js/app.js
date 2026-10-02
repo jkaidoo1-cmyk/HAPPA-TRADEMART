@@ -3227,7 +3227,7 @@ if (typeof window !== 'undefined') {
 // records — always display them as blank instead (matches the share caption fix).
 function itemDisplayName(name) {
   const n = String(name || '').trim();
-  return (n === 'Other') ? '' : n;
+  return (n === 'Other' || /^untitled(\s+product)?$/i.test(n)) ? '' : n;
 }
 
 // Build a row of small item thumbnails for order cards. Items without an image
