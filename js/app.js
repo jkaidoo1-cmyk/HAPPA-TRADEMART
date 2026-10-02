@@ -821,28 +821,30 @@ function injectSkeletonLoaders(pageId) {
 
 function getVendorProfileSkeletonHTML() {
   return `
-    <div class="storefront-skeleton-wrapper" style="width:100%;min-height:100vh;background:#fafafa;padding:16px;box-sizing:border-box;">
+    <div class="storefront-skeleton-wrapper" style="width:100%;min-height:100vh;background:#fafafa;padding:0;box-sizing:border-box;">
       <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
-        <div style="background:#fff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.04);">
-          <div class="skeleton-box" style="width:100%;height:160px;display:block;"></div>
-          <div style="padding:16px;margin-top:-45px;display:flex;align-items:flex-end;gap:16px;position:relative;z-index:2;">
+        <div style="background:#fff;border-bottom:1px solid #e5e7eb;box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+          <div class="skeleton-box" style="width:100%;height:200px;display:block;border-radius:0;"></div>
+          <div style="padding:16px;margin-top:-50px;display:flex;align-items:flex-end;gap:16px;position:relative;z-index:2;">
             <div class="skeleton-box" style="width:84px;height:84px;border-radius:50%;border:4px solid #fff;flex-shrink:0;"></div>
             <div style="flex:1;display:flex;flex-direction:column;gap:8px;padding-bottom:6px;">
-              <div class="skeleton-box" style="width:48%;height:22px;border-radius:6px;"></div>
-              <div class="skeleton-box" style="width:28%;height:14px;border-radius:4px;"></div>
+              <div class="skeleton-box" style="width:60%;height:24px;border-radius:6px;"></div>
+              <div class="skeleton-box" style="width:35%;height:14px;border-radius:4px;"></div>
             </div>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
-          <div class="skeleton-box" style="height:64px;border-radius:12px;"></div>
-          <div class="skeleton-box" style="height:64px;border-radius:12px;"></div>
-          <div class="skeleton-box" style="height:64px;border-radius:12px;"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;">
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:10px;width:100%;"></div><div class="skeleton-box line1" style="height:16px;width:82%;"></div><div class="skeleton-box line2" style="height:14px;width:48%;"></div></div>
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:10px;width:100%;"></div><div class="skeleton-box line1" style="height:16px;width:82%;"></div><div class="skeleton-box line2" style="height:14px;width:48%;"></div></div>
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:10px;width:100%;"></div><div class="skeleton-box line1" style="height:16px;width:82%;"></div><div class="skeleton-box line2" style="height:14px;width:48%;"></div></div>
-          <div class="skeleton-card" style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:10px;width:100%;"></div><div class="skeleton-box line1" style="height:16px;width:82%;"></div><div class="skeleton-box line2" style="height:14px;width:48%;"></div></div>
+        <div style="padding:0 16px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+            <div class="skeleton-box" style="height:40px;border-radius:8px;"></div>
+            <div class="skeleton-box" style="height:40px;border-radius:8px;"></div>
+            <div class="skeleton-box" style="height:40px;border-radius:8px;"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;">
+            <div class="skeleton-card" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:8px;width:100%;"></div><div class="skeleton-box line1" style="height:14px;width:82%;"></div><div class="skeleton-box line2" style="height:12px;width:48%;"></div></div>
+            <div class="skeleton-card" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:8px;width:100%;"></div><div class="skeleton-box line1" style="height:14px;width:82%;"></div><div class="skeleton-box line2" style="height:12px;width:48%;"></div></div>
+            <div class="skeleton-card" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:8px;width:100%;"></div><div class="skeleton-box line1" style="height:14px;width:82%;"></div><div class="skeleton-box line2" style="height:12px;width:48%;"></div></div>
+            <div class="skeleton-card" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:8px;width:100%;"></div><div class="skeleton-box line1" style="height:14px;width:82%;"></div><div class="skeleton-box line2" style="height:12px;width:48%;"></div></div>
+          </div>
         </div>
       </div>
     </div>`;
