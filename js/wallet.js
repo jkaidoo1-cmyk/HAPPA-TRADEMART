@@ -645,18 +645,25 @@ function adminTxnRowHTML(t) {
   const type = t.type || 'other';
   const isCredit = ['deposit','earning','refund','referral_reward'].includes(type)
     || (type === 'admin_adjustment' && (parseFloat(t.amount) || 0) >= 0);
-  const color     = isCredit ? 'var(--success)' : 'var(--danger)';
-  const sign      = isCredit ? '+' : '-';
-  let typeLabel = { deposit:'Deposit', withdrawal:'Withdrawal', earning:'Earning',
-                    refund:'Refund', referral_reward:'Referral Reward',
-                    order_payment:'Order Payment', purchase:'Store Purchase',
-                    payment:'Payment', admin_adjustment:'Admin Adjustment',
-                    withdrawal_hold:'Withdrawal Hold' }[type] || type;
+  const isDebit  = ['withdrawal','payment','purchase','reversal','withdrawal_hold'].includes(type);
+  const color    = isCredit ? 'var(--success)' : (isDebit ? 'var(--danger)' : 'var(--text-muted)');
+  const sign     = isCredit ? '+' : '-';
+  let typeLabel = {
+    deposit:'Deposit', withdrawal:'Withdrawal', earning:'Earning',
+    refund:'Refund', referral_reward:'Referral Reward',
+    order_payment:'Order Payment', purchase:'Store Purchase',
+    payment:'Payment', admin_adjustment:'Admin Adjustment',
+    withdrawal_hold:'Withdrawal Hold', reversal:'Payout Reversal'
+  }[type] || type;
   const noteText = String(t.note || '').toLowerCase();
   if (t.type === 'earning' && noteText.includes('platform fee')) {
     typeLabel = 'Storefront Platform Fee';
-  } else if (t.type === 'earning' && noteText.includes('payout')) {
+  } else if (t.type === 'earning' && (noteText.includes('payout') || noteText.includes('direct payout'))) {
     typeLabel = 'Storefront Payout';
+  } else if (t.type === 'earning' && (noteText.includes('commission') || noteText.includes('platform earnings'))) {
+    typeLabel = 'Order Commission';
+  } else if (t.type === 'earning' && noteText.includes('referral')) {
+    typeLabel = 'Referral Reward';
   }
 
   // Resolve user info from user_id
@@ -747,107 +754,114 @@ function adminTxnRowHTML(t) {
 }
 
 async function setWithdrawalStatus(txnId, newStatus) {
-  if (!confirm(`Are you sure you want to change the withdrawal status to ${newStatus.toUpperCase()}?`)) {
-    renderAdminDashboard();
-    return;
-  }
+  const actionLabel = newStatus === 'completed' ? 'approve' : (newStatus === 'failed' ? 'reject' : 'update');
+  if (!confirm(`Are you sure you want to ${actionLabel} this withdrawal request?`)) return;
 
-  // Fetch the current transaction
+  // Fetch the pending transaction
   const txnRes = await apiGet(`wallet_transactions/${txnId}`);
   const txn = txnRes || null;
-  if (!txn) {
-    showToast('Transaction not found', 'error');
-    renderAdminDashboard();
-    return;
-  }
+  if (!txn) { showToast('Transaction not found', 'error'); return; }
 
   const oldStatus = txn.status || 'pending';
   if (oldStatus === newStatus) return;
 
-  const userId = txn.user_id;
   const amount = parseFloat(txn.amount) || 0;
+  const userId = txn.user_id;
 
-  // Fetch user to adjust wallet balance if needed
-  const userRes = await apiGet(`users/${userId}`);
-  const user = userRes || null;
-  if (!user) {
-    showToast('User not found', 'error');
-    renderAdminDashboard();
+  try {
+    if (newStatus === 'failed') {
+      // ── Rejection path ─────────────────────────────────────────────────────
+      // The balance was already held (debited) when the vendor submitted the
+      // request. Rejecting means returning the money: we add a 'refund' ledger
+      // row and credit the balance back atomically, then mark the original
+      // withdrawal as 'failed'.
+      const userRes = await apiGet(`users/${userId}`);
+      const user = userRes || null;
+      if (!user) { showToast('User not found', 'error'); return; }
+
+      const balBefore = parseFloat(user.wallet_balance || 0);
+      const balAfter  = Math.round((balBefore + amount) * 100) / 100;
+
+      // a. Refund ledger row
+      await apiPost('wallet_transactions', {
+        user_id: userId,
+        type: 'refund',
+        amount,
+        balance_before: balBefore,
+        balance_after:  balAfter,
+        payment_method: 'system',
+        reference: 'WD-REJ-' + txnId,
+        status: 'completed',
+        note: `Withdrawal rejected by admin — GHS ${amount.toFixed(2)} returned to wallet`,
+        reviewed_by: App.currentUser?.id || 'admin'
+      });
+      // b. Balance update
+      await apiPatch('users', userId, { wallet_balance: balAfter });
+      if (String(App.currentUser?.id) === String(userId)) {
+        App.currentUser.wallet_balance = balAfter;
+        saveSessions();
+      }
+      // c. Mark the original withdrawal as failed
+      await apiPatch('wallet_transactions', txnId, {
+        status: 'failed',
+        reviewed_by: App.currentUser?.id || 'admin',
+        note: `Rejected by admin — GHS ${amount.toFixed(2)} refunded to wallet`
+      });
+
+      addNotification(userId, 'system', '❌ Withdrawal Rejected',
+        `Your withdrawal of GHS ${amount.toFixed(2)} was rejected. The amount has been returned to your wallet.`);
+      showToast(`Withdrawal rejected — GHS ${amount.toFixed(2)} refunded to vendor.`, 'success');
+
+    } else if (newStatus === 'completed') {
+      // ── Approval path ──────────────────────────────────────────────────────
+      // Balance was already debited at request time. Just mark as completed.
+      await apiPatch('wallet_transactions', txnId, {
+        status: 'completed',
+        reviewed_by: App.currentUser?.id || 'admin'
+      });
+      addNotification(userId, 'system', '✅ Withdrawal Approved',
+        `Your withdrawal of GHS ${amount.toFixed(2)} has been processed and sent to your account.`);
+      showToast(`Withdrawal of GHS ${amount.toFixed(2)} approved successfully!`, 'success');
+
+    } else if (oldStatus === 'failed' && (newStatus === 'pending' || newStatus === 'completed')) {
+      // ── Re-processing a previously rejected withdrawal ─────────────────────
+      // The rejection already refunded the amount, so we must re-debit it.
+      const userRes = await apiGet(`users/${userId}`);
+      const user = userRes || null;
+      if (!user) { showToast('User not found', 'error'); return; }
+      const curBal = parseFloat(user.wallet_balance || 0);
+      if (curBal < amount) {
+        showToast(`Cannot reprocess: vendor balance GHS ${curBal.toFixed(2)} is less than GHS ${amount.toFixed(2)}`, 'error');
+        return;
+      }
+      const newBal = Math.round((curBal - amount) * 100) / 100;
+      // Re-debit ledger row
+      await apiPost('wallet_transactions', {
+        user_id: userId,
+        type: 'withdrawal_hold',
+        amount,
+        balance_before: curBal,
+        balance_after:  newBal,
+        payment_method: 'system',
+        reference: 'WD-REHOLD-' + Date.now(),
+        status: 'completed',
+        note: `Re-processing withdrawal — GHS ${amount.toFixed(2)} re-held`,
+        reviewed_by: App.currentUser?.id || 'admin'
+      });
+      await apiPatch('users', userId, { wallet_balance: newBal });
+      await apiPatch('wallet_transactions', txnId, {
+        status: newStatus,
+        reviewed_by: App.currentUser?.id || 'admin'
+      });
+      showToast('Withdrawal re-queued for processing.', 'success');
+    }
+  } catch (err) {
+    console.warn('[setWithdrawalStatus] error:', err);
+    showToast('Something went wrong updating the withdrawal.', 'error');
     return;
   }
 
-  let newBal = parseFloat(user.wallet_balance || 0);
-
-  // Transition rules:
-  if (newStatus === 'failed') {
-    // Transitioning to rejected: refund the held amount to vendor's wallet
-    newBal += amount;
-    // Post refund ledger
-    await apiPost('wallet_transactions', {
-      user_id: userId,
-      type: 'refund',
-      amount: amount,
-      balance_before: user.wallet_balance || 0,
-      balance_after: newBal,
-      payment_method: 'platform',
-      payment_ref: 'REFUND' + Date.now(),
-      network: '',
-      account_number: '',
-      status: 'completed',
-      note: `Withdrawal (${txn.payment_ref}) rejected — refunded to wallet`,
-      reviewed_by: App.currentUser?.id || 'admin'
-    });
-
-    addNotification(userId, 'system', '❌ Withdrawal Rejected',
-      `Your withdrawal of GHS ${amount.toFixed(2)} was rejected. The amount has been returned to your wallet.`);
-  } else if (oldStatus === 'failed' && (newStatus === 'pending' || newStatus === 'completed')) {
-    // If it was failed (refunded) and we move it back to pending or completed, we must re-deduct the funds!
-    if (newBal < amount) {
-      showToast(`Cannot change status: Vendor has insufficient balance (GHS ${newBal.toFixed(2)}) to deduct GHS ${amount.toFixed(2)}`, 'error');
-      renderAdminDashboard();
-      return;
-    }
-    newBal -= amount;
-    // Post hold ledger
-    await apiPost('wallet_transactions', {
-      user_id: userId,
-      type: 'withdrawal_hold',
-      amount: amount,
-      balance_before: user.wallet_balance || 0,
-      balance_after: newBal,
-      payment_method: 'platform',
-      payment_ref: 'HOLD' + Date.now(),
-      network: '',
-      account_number: '',
-      status: 'completed',
-      note: `Re-processing withdrawal (${txn.payment_ref}) — balance held`,
-      reviewed_by: App.currentUser?.id || 'admin'
-    });
-  }
-
-  // Update user wallet balance in DB if it changed
-  if (newBal !== parseFloat(user.wallet_balance || 0)) {
-    await apiPatch('users', userId, { wallet_balance: newBal });
-    if (App.currentUser?.id === userId) {
-      App.currentUser.wallet_balance = newBal;
-      saveSessions();
-    }
-  }
-
-  // Update transaction status
-  await apiPatch('wallet_transactions', txnId, {
-    status: newStatus,
-    reviewed_by: App.currentUser?.id || 'admin',
-    note: newStatus === 'failed' ? 'Rejected by admin — amount refunded to wallet' : (txn.note || '')
-  });
-
-  if (newStatus === 'completed') {
-    addNotification(userId, 'system', '✅ Withdrawal Approved',
-      `Your withdrawal of GHS ${amount.toFixed(2)} has been processed and sent to your account.`);
-  }
-
-  showToast(`Withdrawal status updated to ${newStatus.toUpperCase()} successfully!`, 'success');
-  renderAdminDashboard();
+  renderAdminTransactions('admin-txn-wrap');
 }
 
 async function approveWithdrawal(txnId, userId, amount) {

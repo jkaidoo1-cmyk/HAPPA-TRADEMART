@@ -47,12 +47,17 @@ async function renderAdminDashboard() {
   // Platform income: order commissions (on packages) + recorded fees & subscription payments (ledger)
   const pkgCommissions  = activePkgs.reduce((s, p) => s + (parseFloat(p.commission_amount) || 0), 0);
   const feeRev          = platformRevenue.filter(r => r.source === 'platform_fee').reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-  const newRendorSubRev    = platformRevenue.filter(r => r.source === 'rendor_subscription').reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
-  const legacyRendorSubRev = platformRevenue.filter(r => r.source === 'subscription' && /rendor subscription/i.test(String(r.description || ''))).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
-  const newStorefrontSubRev = platformRevenue.filter(r => r.source === 'storefront_subscription').reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
-  const legacyStorefrontSubRev = platformRevenue.filter(r => r.source === 'subscription' && /storefront subscription/i.test(String(r.description || ''))).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  // Merge both the canonical source name and any legacy 'subscription' rows into one figure per type.
+  const rendorSubRev = platformRevenue.filter(r =>
+    r.source === 'rendor_subscription' ||
+    (r.source === 'subscription' && /rendor subscription/i.test(String(r.description || '')))
+  ).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const storefrontSubRev = platformRevenue.filter(r =>
+    r.source === 'storefront_subscription' ||
+    (r.source === 'subscription' && /storefront subscription/i.test(String(r.description || '')))
+  ).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
   const platformFees    = pkgCommissions + feeRev;
-  const totalRevenue    = platformFees + newRendorSubRev + legacyRendorSubRev + newStorefrontSubRev + legacyStorefrontSubRev;
+  const totalRevenue    = platformFees + rendorSubRev + storefrontSubRev;
   const refundedAmt    = rejectedPkgs.reduce((s, p) => s + ((parseFloat(p.gross_amount || p.total) || 0) + (parseFloat(p.delivery_fee) || 0)), 0);
   const rejectionRate  = allPkgs.length ? ((rejectedPkgs.length / allPkgs.length) * 100).toFixed(1) : '0.0';
 
@@ -245,10 +250,8 @@ async function renderAdminDashboard() {
       <div class="card-header"><h3>💰 Revenue Sources</h3></div>
       <div class="card-body" style="padding:12px 16px;font-size:.85rem;display:grid;gap:8px">
         <div style="display:flex;justify-content:space-between"><span>Order Commissions &amp; Platform Fees</span><strong>GHS ${platformFees.toFixed(2)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>New Rendor Subscriptions</span><strong>GHS ${newRendorSubRev.toFixed(2)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>Legacy Rendor Subscription rows</span><strong>GHS ${legacyRendorSubRev.toFixed(2)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>New Storefront Subscriptions</span><strong>GHS ${newStorefrontSubRev.toFixed(2)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>Legacy Storefront Subscription rows</span><strong>GHS ${legacyStorefrontSubRev.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>Rendor Subscriptions</span><strong>GHS ${rendorSubRev.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>Storefront Subscriptions</span><strong>GHS ${storefrontSubRev.toFixed(2)}</strong></div>
         <div style="display:flex;justify-content:space-between;font-weight:800;font-size:.95rem;border-top:1px solid var(--border);padding-top:8px"><span>Total Platform Revenue</span><strong style="color:var(--primary)">GHS ${totalRevenue.toFixed(2)}</strong></div>
       </div>
     </div>
@@ -478,20 +481,22 @@ async function renderAdminDashboard() {
 <!-- ── Analytics ── -->
 <div class="tab-content ${activeTabId === 'admin-analytics' ? 'active' : ''}" id="admin-analytics">
   <div class="dashboard-wrap">
+
+    <!-- Revenue Overview KPIs -->
     <div class="stats-grid" style="margin-bottom:16px">
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-money-bill-wave" style="color:var(--success)"></i></div>
         <div class="stat-value">GHS ${grossRev.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
-        <div class="stat-label">Net Gross Revenue</div>
+        <div class="stat-label">Gross GMV (Orders)</div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-percentage" style="color:#1d4ed8"></i></div>
-        <div class="stat-value">GHS ${platformFees.toFixed(2)}</div>
-        <div class="stat-label">Platform Fees</div>
+        <div class="stat-icon" style="background:#ede9fe"><i class="fas fa-coins" style="color:#7c3aed"></i></div>
+        <div class="stat-value">GHS ${totalRevenue.toFixed(2)}</div>
+        <div class="stat-label">Total Platform Revenue</div>
       </div>
       <div class="stat-card" style="background:${rejectedPkgs.length ? '#fff5f5' : '#f9fafb'};border-color:${rejectedPkgs.length ? '#fca5a5' : '#e5e7eb'}">
         <div class="stat-icon" style="background:${rejectedPkgs.length ? '#fee2e2' : '#f3f4f6'}"><i class="fas fa-ban" style="color:${rejectedPkgs.length ? 'var(--danger)' : '#9ca3af'}"></i></div>
-        <div class="stat-value">${rejectedPkgs.length} (${rejectionRate}%)</div>
+        <div class="stat-value">${rejectedPkgs.length} <span style="font-size:.75rem;font-weight:500">(${rejectionRate}%)</span></div>
         <div class="stat-label">Rejected Orders</div>
       </div>
       <div class="stat-card">
@@ -500,10 +505,52 @@ async function renderAdminDashboard() {
         <div class="stat-label">Refunded to Buyers</div>
       </div>
     </div>
+
+    <!-- Revenue Breakdown -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><h3>💰 Revenue Breakdown</h3></div>
+      <div class="card-body" style="padding:12px 16px;font-size:.85rem;display:grid;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:600">Order Commissions</div>
+            <div style="font-size:.74rem;color:var(--text-muted)">% retained from each delivered order</div>
+          </div>
+          <strong>GHS ${pkgCommissions.toFixed(2)}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:600">Storefront Order Fees</div>
+            <div style="font-size:.74rem;color:var(--text-muted)">1% platform fee on each storefront checkout</div>
+          </div>
+          <strong>GHS ${feeRev.toFixed(2)}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:600">Rendor Subscriptions</div>
+            <div style="font-size:.74rem;color:var(--text-muted)">Monthly plans paid by rendors</div>
+          </div>
+          <strong>GHS ${rendorSubRev.toFixed(2)}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:600">Storefront Subscriptions</div>
+            <div style="font-size:.74rem;color:var(--text-muted)">Vendor storefront subscription payments</div>
+          </div>
+          <strong>GHS ${storefrontSubRev.toFixed(2)}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:.95rem;border-top:1.5px solid var(--border);padding-top:10px">
+          <span>Total Platform Revenue</span>
+          <strong style="color:var(--primary)">GHS ${totalRevenue.toFixed(2)}</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders by Location chart -->
     <div class="card" style="margin-bottom:14px">
       <div class="card-header"><h3>📊 Orders by Location</h3></div>
       <div class="card-body"><div class="chart-container"><canvas id="admin-loc-chart"></canvas></div></div>
     </div>
+
     ${rejectedPkgs.length ? `
     <div class="card" style="margin-bottom:14px;border-color:#fca5a5">
       <div class="card-header" style="background:#fef2f2">
@@ -523,6 +570,8 @@ async function renderAdminDashboard() {
         </div>`).join('')}
       </div>
     </div>` : ''}
+
+    <!-- Top Stores -->
     <div class="card">
       <div class="card-header"><h3>🏆 Top Stores by Revenue</h3></div>
       <div class="card-body" style="padding:0">
