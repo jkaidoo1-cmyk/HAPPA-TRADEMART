@@ -184,11 +184,11 @@ test('validateProductBody rejects the payloads that used to save as GHS null', (
   assert.equal(commerce.validateProductBody({ name: 'Shorts', price: '' }).ok, false);
   assert.equal(commerce.validateProductBody({ name: 'Shorts', price: 'abc' }).ok, false);
   assert.equal(commerce.validateProductBody({ name: 'Shorts', price: -5 }).ok, false);
-  // The name is OPTIONAL (a vendor may upload without one) — but it must never
-  // be stored blank, or the card, search and order lines would render empty.
+  // The name is OPTIONAL (a vendor may upload without one) — it should remain
+  // blank rather than being converted into a synthetic title.
   const blank = { name: '   ', price: 25 };
   assert.equal(commerce.validateProductBody(blank).ok, true);
-  assert.equal(blank.name, 'Untitled product', 'a blank name is defaulted, not rejected');
+  assert.equal(blank.name, '', 'a blank name stays blank instead of being auto-labeled');
   // Partial updates and complete creates still pass.
   assert.equal(commerce.validateProductBody({ stock_qty: 3 }).ok, true);
   assert.equal(commerce.validateProductBody({ name: 'Blue Shorts', price: 25, original_price: 40, stock_qty: 3 }).ok, true);

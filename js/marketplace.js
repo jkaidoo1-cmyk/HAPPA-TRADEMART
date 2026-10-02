@@ -2466,7 +2466,33 @@ async function renderRendorProfilePublic() {
 
 
   if (!App.isBackgroundRefresh) {
-    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+    c.innerHTML = `
+      <div style="display:grid;gap:12px;padding:0 12px 16px;">
+        <div style="background:linear-gradient(135deg,#7c3aed,#5b21b6);border-radius:0 0 18px 18px;padding:20px 16px 18px;color:#fff;margin:-1px -12px 0;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="skeleton-box" style="width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:linear-gradient(90deg, rgba(255,255,255,.12) 25%, rgba(255,255,255,.22) 50%, rgba(255,255,255,.12) 75%);"></div>
+            <div style="flex:1;display:grid;gap:8px;">
+              <div class="skeleton-box" style="width:52%;height:18px;border-radius:8px;background:linear-gradient(90deg, rgba(255,255,255,.12) 25%, rgba(255,255,255,.22) 50%, rgba(255,255,255,.12) 75%);"></div>
+              <div class="skeleton-box" style="width:68%;height:12px;border-radius:6px;background:linear-gradient(90deg, rgba(255,255,255,.12) 25%, rgba(255,255,255,.22) 50%, rgba(255,255,255,.12) 75%);"></div>
+            </div>
+            <div class="skeleton-box" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(90deg, rgba(255,255,255,.12) 25%, rgba(255,255,255,.22) 50%, rgba(255,255,255,.12) 75%);"></div>
+          </div>
+        </div>
+        <div class="skeleton-card" style="padding:16px;gap:12px;">
+          <div class="skeleton-box" style="width:80px;height:12px;border-radius:999px"></div>
+          <div class="skeleton-box" style="width:100%;height:12px;border-radius:6px"></div>
+          <div class="skeleton-box" style="width:92%;height:12px;border-radius:6px"></div>
+          <div class="skeleton-box" style="width:82%;height:12px;border-radius:6px"></div>
+        </div>
+        <div class="skeleton-card" style="padding:14px;gap:10px;">
+          <div class="skeleton-box" style="width:90px;height:12px;border-radius:999px"></div>
+          ${Array(3).fill('<div style="display:flex;align-items:center;gap:12px"><div class="skeleton-box" style="width:20px;height:20px;border-radius:50%"></div><div style="flex:1;display:grid;gap:6px"><div class="skeleton-box" style="width:32%;height:10px;border-radius:6px"></div><div class="skeleton-box" style="width:72%;height:12px;border-radius:6px"></div></div></div>').join('')}
+        </div>
+        <div class="skeleton-card" style="padding:12px;gap:10px;">
+          <div class="skeleton-box" style="width:120px;height:12px;border-radius:999px"></div>
+          ${Array(3).fill('<div style="display:flex;flex-direction:column;gap:8px"><div class="skeleton-box" style="width:100%;height:100px;border-radius:12px"></div><div class="skeleton-box" style="width:78%;height:14px;border-radius:6px"></div><div class="skeleton-box" style="width:52%;height:12px;border-radius:6px"></div></div>').join('')}
+        </div>
+      </div>`;
   }
 
 
