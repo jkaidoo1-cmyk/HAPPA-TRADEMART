@@ -1177,30 +1177,12 @@ async function renderStorefront(id) {
       c.innerHTML.includes('skeleton') ||
       !storefrontIsMountedFor(c, id)
   )) {
-    c.innerHTML = `
+    c.innerHTML = (typeof getVendorProfileSkeletonHTML === 'function') ? getVendorProfileSkeletonHTML() : `
       <div id="storefront-page-container" style="position:relative; width:100%; min-height:100vh; background:#fafafa; padding-bottom:60px;">
-        <!-- Header/Banner Skeleton -->
-        <div style="width:100%; height:180px; position:relative; overflow:hidden;" class="skeleton-box"></div>
-        <div style="padding:16px; margin-top:-50px; position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; text-align:center;">
-           <div class="skeleton-box" style="width:80px; height:80px; border-radius:50%; border:4px solid #fff; margin-bottom:10px;"></div>
-           <div class="skeleton-box" style="width:180px; height:24px; border-radius:4px; margin-bottom:8px;"></div>
-           <div class="skeleton-box" style="width:120px; height:14px; border-radius:4px;"></div>
-        </div>
-        
-        <!-- Search Toolbar Skeleton -->
-        <div style="padding:10px 14px; background:#ffffff; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;">
-           <div class="skeleton-box" style="height:38px; border-radius:25px; flex:1;"></div>
-           <div class="skeleton-box" style="height:38px; width:38px; border-radius:50%;"></div>
-        </div>
-
-        <!-- Product Grid Skeleton -->
+        <div style="width:100%; height:160px;" class="skeleton-box"></div>
         <div style="padding:16px;">
-          <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px;">
-            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
-            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
-            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
-            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
-          </div>
+          <div class="skeleton-box" style="width:80px; height:80px; border-radius:50%; border:4px solid #fff; margin-bottom:10px;"></div>
+          <div class="skeleton-box" style="width:180px; height:24px; border-radius:4px; margin-bottom:8px;"></div>
         </div>
       </div>`;
   }
