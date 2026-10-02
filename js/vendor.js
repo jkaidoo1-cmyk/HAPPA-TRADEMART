@@ -14,11 +14,11 @@ async function renderVendorDashboard() {
       c.dataset.rendering = '1';
       c.innerHTML = `
 <div class="dashboard-wrap">
-  <div class="skeleton-row" style="margin-bottom:12px"><div class="skeleton-box avatar"></div><div class="skeleton-box lines"><div class="skeleton-box line1"></div><div class="skeleton-box line2"></div></div></div>
+  <div class="skeleton-row" style="margin-bottom:12px;width:100%;box-sizing:border-box;"><div class="skeleton-box avatar"></div><div class="skeleton-box lines"><div class="skeleton-box line1"></div><div class="skeleton-box line2"></div></div></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
-    ${Array(4).fill('<div class="skeleton-box" style="height:74px;border-radius:12px"></div>').join('')}
+    ${Array(4).fill('<div class="skeleton-box" style="height:74px;border-radius:12px;width:100%;display:block;"></div>').join('')}
   </div>
-  ${Array(3).fill('<div class="skeleton-box" style="height:110px;border-radius:14px;margin-bottom:12px"></div>').join('')}
+  ${Array(3).fill('<div class="skeleton-box" style="height:110px;border-radius:14px;margin-bottom:12px;width:100%;display:block;"></div>').join('')}
 </div>`;
     }
   // Accept both 'vendor' and legacy 'seller' role
