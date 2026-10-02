@@ -189,18 +189,21 @@ window.addEventListener('DOMContentLoaded', () => {
     const anchor = e.target.closest('a[href]');
     if (!anchor) return;
     const href = anchor.getAttribute('href') || '';
-    const storefrontPatterns = [
-      /^\/storefront\//,
-      /^\/store\//,
-      /^\/store-admin\//,
-      /#storefront\//,
-      /#store-admin\//,
-    ];
-    const isStorefrontLink = storefrontPatterns.some(p => p.test(href));
+    // Resolve to an absolute URL BEFORE testing, so both the path-relative
+    // links ('/storefront/x') and the ABSOLUTE links storefrontUrl() builds
+    // ('https://host/storefront/x') are caught. The old test only matched
+    // hrefs that began with the path, so the vendor's own "Visit Live Site"
+    // link slipped through and opened inside the installed PWA.
+    let absUrl = null;
+    try { absUrl = new URL(href, window.location.origin); } catch (err) { absUrl = null; }
+    if (!absUrl) return;
+    const storefrontPaths = ['/storefront/', '/store/', '/store-admin/'];
+    const isStorefrontLink =
+      storefrontPaths.some(p => absUrl.pathname.startsWith(p)) ||
+      /(?:^|[#/])(storefront|store-admin)\//.test(absUrl.hash);
     if (isStorefrontLink) {
       e.preventDefault();
-      const absUrl = new URL(href, window.location.origin).href;
-      window.open(absUrl, '_blank', 'noopener,noreferrer');
+      window.open(absUrl.href, '_blank', 'noopener,noreferrer');
     }
   }, { capture: true });
 
@@ -385,6 +388,22 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
 // ── Hash Route Resolver ─────────────────────────────────
+// Activate a dashboard tab by id. switchTab() needs the tab BUTTON element, and
+// it only exists once the page has rendered — the page body is filled
+// asynchronously — so this retries briefly instead of assuming the element is
+// already there.
+function applyHashTab(tabId) {
+  const id = String(tabId || '').trim();
+  if (!id) return;
+  let tries = 0;
+  const attempt = () => {
+    const btn = document.querySelector(`[onclick*="${id}"]`);
+    if (btn && typeof switchTab === 'function') { switchTab(btn, id); return; }
+    if (tries++ < 10) setTimeout(attempt, 150);
+  };
+  setTimeout(attempt, 120);
+}
+
 function resolveRouteFromHash(hashStr) {
   if (!hashStr || hashStr === '#' || hashStr === '#home') {
     // Unconditional on purpose. App.currentPage is initialised to 'home', and
@@ -447,6 +466,18 @@ function resolveRouteFromHash(hashStr) {
   }
   if (route === 'profile' || route === 'dashboard') {
     showPage('dashboard');
+    return true;
+  }
+
+  // Storefront-renewal deep link used by the expiry reminder notification. It
+  // deliberately avoids the word "storefront": the startup preamble treats any
+  // hash containing that substring as a standalone-storefront link and would
+  // render a storefront shell instead of the vendor's dashboard. It is not in
+  // validPages (which is matched against App.currentPage) on purpose.
+  if (route === 'vendor-renew') {
+    if (!App.currentUser) { showPage('auth'); return true; }
+    showPage('dashboard'); // maps to vendor-dashboard for a vendor
+    applyHashTab('vendor-storefront');
     return true;
   }
 
@@ -539,7 +570,15 @@ function resolveRouteFromHash(hashStr) {
     if (App.currentUser) {
       prefetchPages.push('settings');
       if (App.currentUser.role === 'buyer') prefetchPages.push('buyer-dashboard');
-      else if (App.currentUser.role === 'vendor' || App.currentUser.role === 'seller') prefetchPages.push('vendor-dashboard', 'vendor-my-store', 'vendor-orders');
+      else if (App.currentUser.role === 'vendor' || App.currentUser.role === 'seller') {
+        prefetchPages.push('vendor-dashboard', 'vendor-my-store', 'vendor-orders');
+        // Sweep for storefront subscriptions about to lapse. Deliberately NOT
+        // tied to opening the dashboard, so a vendor who never visits it still
+        // gets the in-app alert and the web-push.
+        if (typeof window.checkStorefrontSubscriptionReminders === 'function') {
+          window.checkStorefrontSubscriptionReminders();
+        }
+      }
       else if (App.currentUser.role === 'rendor') prefetchPages.push('rendor-dashboard');
       else if (App.currentUser.role === 'admin') prefetchPages.push('admin-dashboard');
     }
@@ -819,40 +858,6 @@ function injectSkeletonLoaders(pageId) {
       </div>
     </div>`;
 
-function getVendorProfileSkeletonHTML() {
-  return `
-    <div class="storefront-skeleton-wrapper" style="width:100%;min-height:100vh;background:#fafafa;padding:0;box-sizing:border-box;">
-      <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
-        <div style="background:#fff;border-bottom:1px solid #e5e7eb;box-shadow:0 2px 10px rgba(0,0,0,0.04);">
-          <div class="skeleton-box" style="width:100%;height:200px;display:block;border-radius:0;"></div>
-          <div style="padding:16px;margin-top:-50px;display:flex;align-items:flex-end;gap:16px;position:relative;z-index:2;">
-            <div class="skeleton-box" style="width:84px;height:84px;border-radius:50%;border:4px solid #fff;flex-shrink:0;"></div>
-            <div style="flex:1;display:flex;flex-direction:column;gap:8px;padding-bottom:6px;">
-              <div class="skeleton-box" style="width:60%;height:24px;border-radius:6px;"></div>
-              <div class="skeleton-box" style="width:35%;height:14px;border-radius:4px;"></div>
-            </div>
-          </div>
-        </div>
-        <div style="padding:0 16px;">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
-            <div class="skeleton-box" style="height:40px;border-radius:8px;"></div>
-            <div class="skeleton-box" style="height:40px;border-radius:8px;"></div>
-            <div class="skeleton-box" style="height:40px;border-radius:8px;"></div>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;">
-            <div class="skeleton-card" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:8px;width:100%;"></div><div class="skeleton-box line1" style="height:14px;width:82%;"></div><div class="skeleton-box line2" style="height:12px;width:48%;"></div></div>
-            <div class="skeleton-card" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:8px;width:100%;"></div><div class="skeleton-box line1" style="height:14px;width:82%;"></div><div class="skeleton-box line2" style="height:12px;width:48%;"></div></div>
-            <div class="skeleton-card" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:8px;width:100%;"></div><div class="skeleton-box line1" style="height:14px;width:82%;"></div><div class="skeleton-box line2" style="height:12px;width:48%;"></div></div>
-            <div class="skeleton-card" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:12px;display:flex;flex-direction:column;gap:10px;"><div class="skeleton-box image" style="height:150px;border-radius:8px;width:100%;"></div><div class="skeleton-box line1" style="height:14px;width:82%;"></div><div class="skeleton-box line2" style="height:12px;width:48%;"></div></div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-if (typeof window !== 'undefined') {
-  window.getVendorProfileSkeletonHTML = getVendorProfileSkeletonHTML;
-}
-
   if (pageId === 'home') {
     const flashList = document.getElementById('flash-sale-list');
     const localList = document.getElementById('local-products-list');
@@ -874,12 +879,31 @@ if (typeof window !== 'undefined') {
   } else if (pageId === 'storefront') {
     const c = document.getElementById('storefront-content');
     if (c) {
-      c.innerHTML = getVendorProfileSkeletonHTML();
+      c.innerHTML = `
+        <div style="padding: 16px; display: grid; gap: 16px;">
+          <div class="skeleton-box" style="width: 100%; height: 150px; border-radius: 12px;"></div>
+          <div style="display: flex; align-items: center; gap: 14px; margin-top: -30px; padding: 0 12px; position: relative; z-index: 2;">
+            <div class="skeleton-box" style="width: 70px; height: 70px; border-radius: 50%; border: 3px solid #fff; flex-shrink: 0;"></div>
+            <div style="flex: 1; display: grid; gap: 8px; margin-top: 20px;">
+              <div class="skeleton-box" style="width: 50%; height: 18px; border-radius: 4px;"></div>
+              <div class="skeleton-box" style="width: 75%; height: 14px; border-radius: 4px;"></div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px;">
+            ${Array(4).fill(cardHtml).join('')}
+          </div>
+        </div>`;
     }
   } else if (pageId === 'store-detail') {
     const c = document.getElementById('store-detail-content');
     if (c) {
-      c.innerHTML = getVendorProfileSkeletonHTML();
+      c.innerHTML = `
+        <div style="padding: 16px; display: grid; gap: 16px;">
+          <div class="skeleton-box" style="width: 100%; height: 140px; border-radius: 12px;"></div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px;">
+            ${Array(4).fill(cardHtml).join('')}
+          </div>
+        </div>`;
     }
   } else if (pageId === 'rendor-profile') {
     const c = document.getElementById('rendor-profile-content');
