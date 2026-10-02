@@ -11,13 +11,15 @@ async function renderAdminDashboard() {
   }
 
   // Fetch all data in parallel
-  const [usersRes, storesRes, productsRes, ordersRes, pkgsRes, platformRevenueRes] = await Promise.all([
+  const [usersRes, storesRes, productsRes, ordersRes, pkgsRes, platformRevenueRes, txnsRes, referralsRes] = await Promise.all([
     apiGet('users',    'limit=500'),
     apiGet('stores',   'limit=500'),
     apiGet('products', 'limit=500'),
     apiGet('orders',   'limit=500'),
     apiGet('packages', 'limit=500'),
-    apiGet('platform_revenue', 'limit=500').catch(() => null)
+    apiGet('platform_revenue', 'limit=500').catch(() => null),
+    apiGet('wallet_transactions', 'limit=1000').catch(() => null),
+    apiGet('referrals', 'limit=500').catch(() => null)
   ]);
 
   const allUsers    = (usersRes?.data || []).filter(u => u.role !== 'admin');
@@ -28,10 +30,17 @@ async function renderAdminDashboard() {
   const allOrders   = (ordersRes?.data || []).filter(o => !isStorefrontOrder(o));
   const allPkgs     = (pkgsRes?.data || []).filter(p => !isStorefrontOrder(p));
   const platformRevenue = platformRevenueRes?.data || [];
+  const allTxns     = txnsRes?.data || [];
+  const allReferrals = referralsRes?.data || [];
 
-  App.allStores   = allStores;
-  App.allProducts = allProducts;
-  App.allUsers    = allUsers;
+  // Store globally for re-use in analytics and other sub-views
+  App.allStores      = allStores;
+  App.allProducts    = allProducts;
+  App.allUsers       = allUsers;
+  App.allTxns        = allTxns;
+  App.allReferrals   = allReferrals;
+  App.platformRevenue = platformRevenue;
+  App.allPkgs        = allPkgs;
 
   const buyers         = allUsers.filter(u => u.role === 'buyer');
   const vendors        = allUsers.filter(u => u.role === 'vendor');
@@ -208,7 +217,7 @@ async function renderAdminDashboard() {
       <div class="admin-action-btn" onclick="switchTab(null,'admin-users')">
         <i class="fas fa-users"></i><span>Manage Users</span>
       </div>
-      <div class="admin-action-btn" onclick="switchTab(null,'admin-analytics')">
+      <div class="admin-action-btn" onclick="switchTab(null,'admin-analytics');renderAdminAnalytics()">
         <i class="fas fa-chart-bar"></i><span>Analytics</span>
       </div>
       <div class="admin-action-btn" onclick="showAdminReviewsModal()">
@@ -481,110 +490,8 @@ async function renderAdminDashboard() {
 <!-- ── Analytics ── -->
 <div class="tab-content ${activeTabId === 'admin-analytics' ? 'active' : ''}" id="admin-analytics">
   <div class="dashboard-wrap">
-
-    <!-- Revenue Overview KPIs -->
-    <div class="stats-grid" style="margin-bottom:16px">
-      <div class="stat-card">
-        <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-money-bill-wave" style="color:var(--success)"></i></div>
-        <div class="stat-value">GHS ${grossRev.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
-        <div class="stat-label">Gross GMV (Orders)</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background:#ede9fe"><i class="fas fa-coins" style="color:#7c3aed"></i></div>
-        <div class="stat-value">GHS ${totalRevenue.toFixed(2)}</div>
-        <div class="stat-label">Total Platform Revenue</div>
-      </div>
-      <div class="stat-card" style="background:${rejectedPkgs.length ? '#fff5f5' : '#f9fafb'};border-color:${rejectedPkgs.length ? '#fca5a5' : '#e5e7eb'}">
-        <div class="stat-icon" style="background:${rejectedPkgs.length ? '#fee2e2' : '#f3f4f6'}"><i class="fas fa-ban" style="color:${rejectedPkgs.length ? 'var(--danger)' : '#9ca3af'}"></i></div>
-        <div class="stat-value">${rejectedPkgs.length} <span style="font-size:.75rem;font-weight:500">(${rejectionRate}%)</span></div>
-        <div class="stat-label">Rejected Orders</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background:#fef3c7"><i class="fas fa-undo" style="color:#d97706"></i></div>
-        <div class="stat-value">GHS ${refundedAmt.toFixed(2)}</div>
-        <div class="stat-label">Refunded to Buyers</div>
-      </div>
-    </div>
-
-    <!-- Revenue Breakdown -->
-    <div class="card" style="margin-bottom:14px">
-      <div class="card-header"><h3>💰 Revenue Breakdown</h3></div>
-      <div class="card-body" style="padding:12px 16px;font-size:.85rem;display:grid;gap:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-weight:600">Order Commissions</div>
-            <div style="font-size:.74rem;color:var(--text-muted)">% retained from each delivered order</div>
-          </div>
-          <strong>GHS ${pkgCommissions.toFixed(2)}</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-weight:600">Storefront Order Fees</div>
-            <div style="font-size:.74rem;color:var(--text-muted)">1% platform fee on each storefront checkout</div>
-          </div>
-          <strong>GHS ${feeRev.toFixed(2)}</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-weight:600">Rendor Subscriptions</div>
-            <div style="font-size:.74rem;color:var(--text-muted)">Monthly plans paid by rendors</div>
-          </div>
-          <strong>GHS ${rendorSubRev.toFixed(2)}</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-weight:600">Storefront Subscriptions</div>
-            <div style="font-size:.74rem;color:var(--text-muted)">Vendor storefront subscription payments</div>
-          </div>
-          <strong>GHS ${storefrontSubRev.toFixed(2)}</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:.95rem;border-top:1.5px solid var(--border);padding-top:10px">
-          <span>Total Platform Revenue</span>
-          <strong style="color:var(--primary)">GHS ${totalRevenue.toFixed(2)}</strong>
-        </div>
-      </div>
-    </div>
-
-    <!-- Orders by Location chart -->
-    <div class="card" style="margin-bottom:14px">
-      <div class="card-header"><h3>📊 Orders by Location</h3></div>
-      <div class="card-body"><div class="chart-container"><canvas id="admin-loc-chart"></canvas></div></div>
-    </div>
-
-    ${rejectedPkgs.length ? `
-    <div class="card" style="margin-bottom:14px;border-color:#fca5a5">
-      <div class="card-header" style="background:#fef2f2">
-        <h3 style="color:#991b1b"><i class="fas fa-exclamation-circle" style="color:var(--danger)"></i> Vendor Rejection Log (${rejectedPkgs.length})</h3>
-      </div>
-      <div class="card-body" style="padding:0">
-        ${rejectedPkgs.slice(0,10).map(p => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:.82rem">
-          <div>
-            <div style="font-weight:700">${orderCodeChip(p.package_code || p.id)}</div>
-            <div style="font-size:.74rem;color:var(--text-muted)">Reason: ${escHtml(p.rejected_reason||'No reason specified')}</div>
-          </div>
-          <div style="text-align:right">
-            <span class="status-badge status-rejected" style="font-size:.68rem">Rejected</span>
-            <div style="font-size:.74rem;color:var(--danger);font-weight:700">Refunded GHS ${((parseFloat(p.gross_amount||p.total)||0)+(parseFloat(p.delivery_fee)||0)).toFixed(2)}</div>
-          </div>
-        </div>`).join('')}
-      </div>
-    </div>` : ''}
-
-    <!-- Top Stores -->
-    <div class="card">
-      <div class="card-header"><h3>🏆 Top Stores by Revenue</h3></div>
-      <div class="card-body" style="padding:0">
-        ${allStores.sort((a,b)=>(b.total_sales||0)-(a.total_sales||0)).slice(0,5).map((s,i)=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
-          <span style="font-weight:700;color:var(--text-muted);width:16px">${i+1}</span>
-          <div style="flex:1">
-            <div style="font-weight:600;font-size:.875rem">${escHtml(s.name)}</div>
-            <div style="font-size:.75rem;color:var(--text-muted)">${s.location} · ${s.total_orders||0} orders</div>
-          </div>
-          <span style="font-weight:700;color:var(--primary)">GHS ${(s.total_sales||0).toLocaleString()}</span>
-        </div>`).join('')}
-      </div>
+    <div style="text-align:center;padding:40px;color:var(--text-muted)">
+      <i class="fas fa-spinner fa-spin"></i> Loading analytics…
     </div>
   </div>
 </div>
@@ -892,6 +799,8 @@ async function renderAdminDashboard() {
     if (activeTabId === 'admin-overview') {
       renderAdminRevenueChart(allPkgs, platformRevenue);
       renderAdminLocationChart(allOrders);
+    } else if (activeTabId === 'admin-analytics') {
+      renderAdminAnalytics();
     } else if (activeTabId === 'admin-orders' && typeof refreshAdminOrdersList === 'function') {
       refreshAdminOrdersList();
     } else if (activeTabId === 'admin-rendors' && typeof loadAdminRendors === 'function') {
@@ -2550,6 +2459,234 @@ function renderAdminLocationChart(orders) {
       plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
   });
 }
+
+// ─────────────────────────────────────────────────────────────
+// ADMIN ANALYTICS — comprehensive financial dashboard
+// ─────────────────────────────────────────────────────────────
+async function renderAdminAnalytics() {
+  const el = document.getElementById('admin-analytics');
+  if (!el) return;
+
+  el.innerHTML = `<div class="dashboard-wrap"><div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Calculating…</div></div>`;
+
+  // Use cached data from the initial dashboard load where possible
+  let allUsers       = App.allUsers       || [];
+  let allPkgs        = App.allPkgs        || [];
+  let platformRevenue= App.platformRevenue|| [];
+  let allTxns        = App.allTxns        || [];
+  let allReferrals   = App.allReferrals   || [];
+  let allStores      = App.allStores      || [];
+
+  // Fetch any data that wasn't loaded yet
+  try {
+    const [txnRes, refRes, pkgRes, usrRes, revRes, storeRes] = await Promise.all([
+      allTxns.length       ? null : apiGet('wallet_transactions', 'limit=1000').catch(()=>null),
+      allReferrals.length  ? null : apiGet('referrals',           'limit=500' ).catch(()=>null),
+      allPkgs.length       ? null : apiGet('packages',            'limit=500' ).catch(()=>null),
+      allUsers.length      ? null : apiGet('users',               'limit=500' ).catch(()=>null),
+      platformRevenue.length ? null : apiGet('platform_revenue',  'limit=500' ).catch(()=>null),
+      allStores.length     ? null : apiGet('stores',              'limit=500' ).catch(()=>null)
+    ]);
+    if (txnRes)   { allTxns        = txnRes?.data  || []; App.allTxns  = allTxns; }
+    if (refRes)   { allReferrals   = refRes?.data   || []; App.allReferrals = allReferrals; }
+    if (pkgRes)   { allPkgs        = (pkgRes?.data  || []).filter(p => !isStorefrontOrder(p)); App.allPkgs = allPkgs; }
+    if (usrRes)   { allUsers       = (usrRes?.data  || []).filter(u => u.role !== 'admin');     App.allUsers = allUsers; }
+    if (revRes)   { platformRevenue= revRes?.data   || []; App.platformRevenue = platformRevenue; }
+    if (storeRes) { allStores      = (storeRes?.data|| []).filter(s => s.vendor_id !== 'admin'); App.allStores = allStores; }
+  } catch(e) { console.warn('[Analytics] fetch error', e); }
+
+  const r2  = n => Math.round((Number(n)||0)*100)/100;
+  const fmt = n => r2(n).toFixed(2);
+  const fmtN= n => r2(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Package segments
+  const activePkgs    = allPkgs.filter(p => p.vendor_status !== 'rejected' && p.status !== 'cancelled');
+  const rejectedPkgs  = allPkgs.filter(p => p.vendor_status === 'rejected'  || p.status === 'cancelled');
+  const deliveredPkgs = activePkgs.filter(p => p.balance_released || p.settlement_status === 'released');
+  const pendingPkgs   = activePkgs.filter(p => !p.balance_released && p.settlement_status !== 'released');
+  const grossGMV      = r2(activePkgs.reduce((s,p) => s+(parseFloat(p.gross_amount||p.vendor_amount||p.total)||0), 0));
+
+  // Revenue by source
+  const pkgCommissions    = r2(activePkgs.reduce((s,p) => s+(parseFloat(p.commission_amount)||0), 0));
+  const storefrontFeeRev  = r2(platformRevenue.filter(r=>r.source==='platform_fee').reduce((s,r)=>s+(parseFloat(r.amount)||0),0));
+  const rendorSubRev      = r2(platformRevenue.filter(r=>r.source==='rendor_subscription'||(r.source==='subscription'&&/rendor subscription/i.test(String(r.description||'')))).reduce((s,r)=>s+(parseFloat(r.amount)||0),0));
+  const storefrontSubRev  = r2(platformRevenue.filter(r=>r.source==='storefront_subscription'||(r.source==='subscription'&&/storefront subscription/i.test(String(r.description||'')))).reduce((s,r)=>s+(parseFloat(r.amount)||0),0));
+  const totalRevenue      = r2(pkgCommissions+storefrontFeeRev+rendorSubRev+storefrontSubRev);
+
+  // Vendor earnings liability
+  const unreleasedVendorEarnings = r2(activePkgs.filter(p=>!p.balance_released&&p.settlement_status!=='released').reduce((s,p)=>s+(parseFloat(p.vendor_amount)||0),0));
+  const releasedVendorEarnings   = r2(activePkgs.filter(p=>p.balance_released||p.settlement_status==='released').reduce((s,p)=>s+(parseFloat(p.vendor_amount)||0),0));
+
+  // Withdrawals from ledger
+  const allWDs        = allTxns.filter(t=>t.type==='withdrawal');
+  const pendingWDs    = allWDs.filter(t=>t.status==='pending');
+  const approvedWDs   = allWDs.filter(t=>t.status==='completed');
+  const rejectedWDs   = allWDs.filter(t=>t.status==='failed');
+  const pendingWDTotal  = r2(pendingWDs.reduce( (s,t)=>s+(parseFloat(t.amount)||0),0));
+  const approvedWDTotal = r2(approvedWDs.reduce((s,t)=>s+(parseFloat(t.amount)||0),0));
+  const rejectedWDTotal = r2(rejectedWDs.reduce((s,t)=>s+(parseFloat(t.amount)||0),0));
+
+  // Referrals
+  const refTxns           = allTxns.filter(t=>t.type==='referral_reward'&&t.status==='completed');
+  const totalReferralPaid = r2(refTxns.reduce((s,t)=>s+(parseFloat(t.amount)||0),0));
+  const completedRefs     = allReferrals.filter(r=>r.status==='completed');
+  const pendingRefs       = allReferrals.filter(r=>r.status!=='completed');
+
+  // Refunds
+  const refundTxns    = allTxns.filter(t=>t.type==='refund'&&t.status==='completed');
+  const totalRefunded = r2(refundTxns.reduce((s,t)=>s+(parseFloat(t.amount)||0),0));
+  const rejectionRate = allPkgs.length ? ((rejectedPkgs.length/allPkgs.length)*100).toFixed(1) : '0.0';
+
+  // Wallet balances per role
+  const vendorUsers    = allUsers.filter(u=>u.role==='vendor');
+  const buyerUsers     = allUsers.filter(u=>u.role==='buyer');
+  const rendorUsers    = allUsers.filter(u=>u.role==='rendor');
+  const totalVendorBal = r2(vendorUsers.reduce((s,u)=>s+(parseFloat(u.wallet_balance)||0),0));
+  const totalBuyerBal  = r2(buyerUsers.reduce( (s,u)=>s+(parseFloat(u.wallet_balance)||0),0));
+  const totalUserBal   = r2(allUsers.reduce(   (s,u)=>s+(parseFloat(u.wallet_balance)||0),0));
+
+  // Top vendors by earnings (from ledger)
+  const vendorEarningMap = {};
+  allTxns.filter(t=>t.type==='earning'&&t.status==='completed').forEach(t=>{
+    vendorEarningMap[t.user_id]=(vendorEarningMap[t.user_id]||0)+(parseFloat(t.amount)||0);
+  });
+  const topVendors = Object.entries(vendorEarningMap)
+    .map(([uid,total])=>({user:allUsers.find(u=>String(u.id)===String(uid))||{name:'Unknown',id:uid},total:r2(total)}))
+    .sort((a,b)=>b.total-a.total).slice(0,5);
+
+  // HTML helpers
+  const sectionLabel = txt => `<div style="font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin:16px 0 8px">${txt}</div>`;
+  const row = (label, sub, value, color='var(--text)') =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div><div style="font-weight:600;font-size:.85rem">${label}</div>${sub?`<div style="font-size:.73rem;color:var(--text-muted)">${sub}</div>`:''}</div>
+      <strong style="color:${color};white-space:nowrap;margin-left:12px">${value}</strong>
+    </div>`;
+  const kpi = (icon,label,value,bg,color,border='') =>
+    `<div class="stat-card" style="${border?'border-color:'+border+';':''}">
+      <div class="stat-icon" style="background:${bg}"><i class="${icon}" style="color:${color}"></i></div>
+      <div class="stat-value" style="color:${color};font-size:1rem">${value}</div>
+      <div class="stat-label">${label}</div>
+    </div>`;
+
+  el.innerHTML = `<div class="dashboard-wrap">
+
+    ${sectionLabel('💰 Platform Revenue')}
+    <div class="stats-grid" style="margin-bottom:12px">
+      ${kpi('fas fa-coins','Total Platform Revenue','GHS '+fmtN(totalRevenue),'#ede9fe','#7c3aed')}
+      ${kpi('fas fa-money-bill-wave','Gross GMV (All Orders)','GHS '+fmtN(grossGMV),'#d1fae5','var(--success)')}
+      ${kpi('fas fa-percentage','Order Commissions','GHS '+fmt(pkgCommissions),'#dbeafe','#1d4ed8')}
+      ${kpi('fas fa-store-alt','Storefront Fees','GHS '+fmt(storefrontFeeRev),'#fff7ed','#ea580c')}
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><h3>📊 Revenue by Source</h3></div>
+      <div class="card-body" style="padding:8px 16px">
+        ${row('Order Commissions','Platform % retained from each delivered main-site order','GHS '+fmt(pkgCommissions))}
+        ${row('Storefront Order Fees','1% platform fee on every storefront checkout','GHS '+fmt(storefrontFeeRev))}
+        ${row('Rendor Subscriptions','Monthly subscription fees paid by rendors','GHS '+fmt(rendorSubRev),'#7c3aed')}
+        ${row('Storefront Subscriptions','Vendor storefront subscription payments','GHS '+fmt(storefrontSubRev),'#7c3aed')}
+        <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:.95rem;font-weight:800">
+          <span>Total Platform Revenue</span>
+          <strong style="color:var(--primary)">GHS ${fmtN(totalRevenue)}</strong>
+        </div>
+      </div>
+    </div>
+
+    ${sectionLabel('💸 Money Going Out (Outflows)')}
+    <div class="stats-grid" style="margin-bottom:12px">
+      ${kpi('fas fa-hourglass-half','Pending Vendor Payouts','GHS '+fmt(unreleasedVendorEarnings),'#fff7ed','#d97706','#fde68a')}
+      ${kpi('fas fa-check-circle','Released Vendor Earnings','GHS '+fmt(releasedVendorEarnings),'#d1fae5','var(--success)')}
+      ${kpi('fas fa-clock','Pending Withdrawals','GHS '+fmt(pendingWDTotal)+(pendingWDs.length?` <span style="font-size:.62rem;font-weight:600">(${pendingWDs.length})</span>`:''),'#fef9c3','#ca8a04',pendingWDs.length?'#fde68a':'')}
+      ${kpi('fas fa-paper-plane','Paid-Out Withdrawals','GHS '+fmt(approvedWDTotal),'#d1fae5','var(--success)')}
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><h3>📋 Outflow Detail</h3></div>
+      <div class="card-body" style="padding:8px 16px">
+        ${row('Unreleased Vendor Earnings','Orders active but vendor payout not yet triggered','GHS '+fmt(unreleasedVendorEarnings),'#d97706')}
+        ${row('Released Vendor Earnings','Total already credited to vendor wallets','GHS '+fmt(releasedVendorEarnings))}
+        ${row('Referral Rewards Paid','Total commissions paid to referrers via ledger','GHS '+fmt(totalReferralPaid),'#7c3aed')}
+        ${row('Pending Withdrawals','Vendor withdrawal requests awaiting admin action','GHS '+fmt(pendingWDTotal)+(pendingWDs.length?` (${pendingWDs.length} requests)`:''),(pendingWDs.length?'#d97706':'var(--text)'))}
+        ${row('Approved Withdrawals','Requests processed and payment sent out','GHS '+fmt(approvedWDTotal))}
+        ${row('Rejected Withdrawals','Requests cancelled — amounts returned to vendor wallets','GHS '+fmt(rejectedWDTotal),'var(--danger)')}
+        <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:.95rem;font-weight:800">
+          <span>Total Paid Out (vendor earnings + withdrawals + referrals)</span>
+          <strong style="color:var(--danger)">GHS ${fmt(r2(releasedVendorEarnings+approvedWDTotal+totalReferralPaid))}</strong>
+        </div>
+      </div>
+    </div>
+
+    ${sectionLabel('👛 Money Held in Wallets')}
+    <div class="stats-grid" style="margin-bottom:12px">
+      ${kpi('fas fa-wallet','All User Wallets','GHS '+fmtN(totalUserBal),'#dbeafe','#1d4ed8')}
+      ${kpi('fas fa-store','Vendor Wallets','GHS '+fmt(totalVendorBal),'#fce7f3','#be185d')}
+      ${kpi('fas fa-user','Buyer Wallets','GHS '+fmt(totalBuyerBal),'#d1fae5','var(--success)')}
+      ${kpi('fas fa-briefcase','Active Rendors',rendorUsers.length+' users','#ede9fe','#7c3aed')}
+    </div>
+
+    ${sectionLabel('❌ Refunds & Rejections')}
+    <div class="stats-grid" style="margin-bottom:12px">
+      ${kpi('fas fa-ban','Rejected Orders',rejectedPkgs.length+' <span style="font-size:.62rem">('+rejectionRate+'%)</span>',rejectedPkgs.length?'#fee2e2':'#f3f4f6',rejectedPkgs.length?'var(--danger)':'#9ca3af',rejectedPkgs.length?'#fca5a5':'')}
+      ${kpi('fas fa-undo','Total Refunded to Buyers','GHS '+fmt(totalRefunded),'#fef3c7','#d97706')}
+      ${kpi('fas fa-times-circle','Cancelled Withdrawals',rejectedWDs.length+' requests','#fef2f2','var(--danger)')}
+      ${kpi('fas fa-exclamation-triangle','Pending Referrals',pendingRefs.length+' unclaimed','#fff7ed','#ea580c')}
+    </div>
+
+    ${sectionLabel('🔗 Referral Programme')}
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><h3>🔗 Referrals</h3></div>
+      <div class="card-body" style="padding:8px 16px">
+        ${row('Total Referrals Created','All referral relationships registered',allReferrals.length+' referrals')}
+        ${row('Completed Referrals','Purchase was made and reward settled',completedRefs.length+' referrals')}
+        ${row('Pending Referrals','Referral link exists but no qualifying purchase yet',pendingRefs.length+' referrals',pendingRefs.length?'#d97706':'var(--text)')}
+        ${row('Total Rewards Paid','Sum of all referral_reward transactions credited','GHS '+fmt(totalReferralPaid),'#7c3aed')}
+      </div>
+    </div>
+
+    ${sectionLabel('🏆 Top Vendors by Earnings')}
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-body" style="padding:0">
+        ${topVendors.length ? topVendors.map((v,i)=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
+          <span style="font-weight:700;color:var(--text-muted);width:18px;flex-shrink:0">${i+1}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:.875rem">${escHtml(v.user.name||v.user.id)}</div>
+            <div style="font-size:.74rem;color:var(--text-muted)">${escHtml(v.user.email||'')}</div>
+          </div>
+          <span style="font-weight:700;color:var(--primary)">GHS ${fmt(v.total)}</span>
+        </div>`).join('') :
+        '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:.85rem">No earnings recorded yet</div>'}
+      </div>
+    </div>
+
+    ${sectionLabel('🏪 Top Stores by Sales')}
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-body" style="padding:0">
+        ${[...allStores].sort((a,b)=>(b.total_sales||0)-(a.total_sales||0)).slice(0,5).map((s,i)=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
+          <span style="font-weight:700;color:var(--text-muted);width:18px;flex-shrink:0">${i+1}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:.875rem">${escHtml(s.name)}</div>
+            <div style="font-size:.74rem;color:var(--text-muted)">${s.location||''} · ${s.total_orders||0} orders</div>
+          </div>
+          <span style="font-weight:700;color:var(--primary)">GHS ${(s.total_sales||0).toLocaleString()}</span>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    ${sectionLabel('📦 Orders at a Glance')}
+    <div class="card">
+      <div class="card-body" style="padding:8px 16px">
+        ${row('Total Order Packages','All packages ever created (main-site)',allPkgs.length+' packages')}
+        ${row('Active (not cancelled)','',activePkgs.length+' packages')}
+        ${row('Delivered &amp; Settled','Balance released to vendor',deliveredPkgs.length+' packages')}
+        ${row('In Progress','Active but vendor payout not yet released',pendingPkgs.length+' packages','#d97706')}
+        ${row('Rejected / Cancelled','',rejectedPkgs.length+' packages','var(--danger)')}
+      </div>
+    </div>
+
+  </div>`;
+}
+
+window.renderAdminAnalytics = renderAdminAnalytics;
 
 // ══════════════════════════════════════════════════════════
 // AD CAMPAIGN MANAGER
