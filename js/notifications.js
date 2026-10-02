@@ -354,7 +354,16 @@ function openNotificationPopup(notifId) {
     warning:  { badgeBg: '#fee2e2', text: '#991b1b', iconBg: '#ef4444' }
   };
   const theme = colorMap[n.type] || { badgeBg: '#ffe5d9', text: '#9a3412', iconBg: '#e85d04' };
-  
+
+  // A notification may carry an action_url. Web-push already uses it as the
+  // click target; surface it here too so an alert is actionable in-app instead
+  // of a dead end (e.g. "your storefront subscription expires" → renew).
+  const notifActionUrl = String(n.action_url || '').trim();
+  const actionHTML = notifActionUrl ? `
+    <button class="btn btn-primary btn-block" style="margin-top:18px;border-radius:14px" onclick="closeModalForce(); navigateNotificationAction(${jsArg(notifActionUrl)})">
+      <i class="fas fa-arrow-right"></i> ${escHtml(notificationActionLabel(notifActionUrl))}
+    </button>` : '';
+
   if (typeof showModal === 'function') {
     showModal(`
 <div style="position:relative; overflow:visible; margin:15px 5px -10px 5px; font-family:'Outfit', sans-serif">
@@ -375,6 +384,7 @@ function openNotificationPopup(notifId) {
     
     <h3 style="font-size:1.15rem; font-weight:900; color:#1f2937; line-height:1.4; margin-bottom:8px; font-family:'Outfit', sans-serif">${escHtml(n.title || '')}</h3>
     <p style="font-size:0.875rem; color:#4b5563; line-height:1.6; margin:0; word-break:break-word; font-family:'Outfit', sans-serif">${escHtml(n.message || '')}</p>
+    ${actionHTML}
   </div>
 </div>`, true); // center modal
 
@@ -392,6 +402,37 @@ function openNotificationPopup(notifId) {
     markNotifRead(notifId);
   }
 }
+
+// Button label for a notification CTA, derived from where it points.
+function notificationActionLabel(url) {
+  const hash = String(url || '').trim().replace(/^#/, '');
+  const route = hash.split('/')[0];
+  if (route === 'vendor-renew') return 'Renew / manage storefront';
+  if (route === 'vendor-dashboard') return 'Open my store';
+  if (route === 'buyer-dashboard' || route === 'rendor-dashboard') return 'Open my account';
+  if (route === 'admin-dashboard') return 'Open admin panel';
+  if (route === 'notifications') return 'Open notifications';
+  return 'View details';
+}
+
+// Follow a notification's action_url. External links leave the app; an in-app
+// '#page' / '#page:tab' route goes through the hash so the router, browser
+// history and the back button all stay consistent.
+function navigateNotificationAction(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return;
+  if (/^https?:\/\//i.test(raw)) { window.open(raw, '_blank', 'noopener,noreferrer'); return; }
+  const hash = raw.startsWith('#') ? raw : '#' + raw;
+  // Re-selecting the SAME hash fires no hashchange event, so route it directly
+  // in that case — otherwise a second click on the same alert silently does
+  // nothing while the URL already looks right.
+  if (window.location.hash === hash && typeof resolveRouteFromHash === 'function') {
+    resolveRouteFromHash(hash);
+    return;
+  }
+  window.location.hash = hash;
+}
+window.navigateNotificationAction = navigateNotificationAction;
 
 function notifItemHTML(n) {
   const typeClass  = 'notif-' + (n.type || 'system');

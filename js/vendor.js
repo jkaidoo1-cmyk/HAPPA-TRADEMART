@@ -103,6 +103,13 @@ async function renderVendorDashboard() {
   }
   App.myStore = myStore;
 
+  // Warn the vendor before a storefront subscription lapses (fire-and-forget:
+  // it never blocks or fails the dashboard render). Handed the store list we
+  // already fetched so it costs no extra round-trip.
+  if (typeof checkStorefrontSubscriptionReminders === 'function') {
+    checkStorefrontSubscriptionReminders(allStores);
+  }
+
   // Fetch vendor's products
   let myProducts = [];
   if (myStore) {
@@ -196,6 +203,46 @@ async function renderVendorDashboard() {
   const starterPrice = parseFloat(myStorefront?.plan_prices?.starter || myStore?.plan_prices?.starter || defaultStarterPrice);
   const growthPrice  = parseFloat(myStorefront?.plan_prices?.growth  || myStore?.plan_prices?.growth  || defaultGrowthPrice);
   const proPrice     = parseFloat(myStorefront?.plan_prices?.pro     || myStore?.plan_prices?.pro     || defaultProPrice);
+
+  // ── Storefront subscription / renewal state ──────────────────────────────
+  // The storefront tab had no way to RENEW: the plan grid only renders before the
+  // first payment, and the "Active & Live" banner offered nothing but a link. A
+  // live storefront also goes offline the moment its subscription lapses, so the
+  // renew control below is shown whenever there is a paid subscription on record
+  // — including an expired one, which is exactly when the vendor needs it.
+  // Plan + duration are chosen inside openStorefrontSubscribeModal, which extends
+  // from the current expiry when the subscription is still live.
+  const sfSubPlanKey  = (myStore?.subscription_plan || myStorefront?.subscription_plan || 'growth');
+  const sfSubMeta     = (typeof _STOREFRONT_PLANS_DEFAULTS !== 'undefined' && _STOREFRONT_PLANS_DEFAULTS[sfSubPlanKey]) || { name: 'Growth', icon: '🚀' };
+  const sfSubPrice    = ({ starter: starterPrice, growth: growthPrice, pro: proPrice })[sfSubPlanKey] || growthPrice;
+  const _sfSubEndRaw  = myStore?.subscription_end ? new Date(myStore.subscription_end) : null;
+  const sfSubEnd      = (_sfSubEndRaw && !isNaN(_sfSubEndRaw.getTime())) ? _sfSubEndRaw : null;
+  const sfSubDaysLeft = sfSubEnd ? Math.max(0, Math.ceil((sfSubEnd - new Date()) / 86400000)) : null;
+  const sfSubExpired  = !!(sfSubEnd && sfSubEnd < new Date());
+  const sfSubExpiring = !sfSubExpired && sfSubDaysLeft !== null && sfSubDaysLeft <= 7;
+  const sfHasPaidSub  = !!(myStore && (myStore.subscription_end || myStore.subscription_status === 'active' || myStorefront?.status === 'active'));
+  const sfRenewStrip  = sfHasPaidSub ? `
+    <div style="background:${sfSubExpired ? '#fef2f2' : sfSubExpiring ? '#fff7ed' : '#f0fdf4'};border:1.5px solid ${sfSubExpired ? '#fecaca' : sfSubExpiring ? '#fed7aa' : '#bbf7d0'};border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-weight:800;font-size:.92rem;color:${sfSubExpired ? '#991b1b' : sfSubExpiring ? '#9a3412' : '#14532d'}">
+          <i class="fas fa-${sfSubExpired ? 'times-circle' : sfSubExpiring ? 'exclamation-triangle' : 'check-circle'}"></i>
+          ${sfSubMeta.icon} ${escHtml(sfSubMeta.name)} Plan
+          <span style="font-weight:600;font-size:.8rem;opacity:.85">· GH₵ ${sfSubPrice}/mo</span>
+        </div>
+        <div style="font-size:.78rem;margin-top:3px;color:${sfSubExpired ? '#991b1b' : sfSubExpiring ? '#9a3412' : '#14532d'}">
+          ${!sfSubEnd
+            ? 'Renew at any time to keep your storefront live.'
+            : sfSubExpired
+              ? `Expired on <strong>${sfSubEnd.toLocaleDateString()}</strong> — your storefront is offline until you renew.`
+              : sfSubExpiring
+                ? `⚠️ Expires in <strong>${sfSubDaysLeft} day${sfSubDaysLeft !== 1 ? 's' : ''}</strong> — renewing adds time on top of your current expiry.`
+                : `Active until <strong>${sfSubEnd.toLocaleDateString()}</strong> — extend any time; time is added on top.`}
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="window.openStorefrontSubscribeModal('${myStore.id}','${sfSubPlanKey}',${sfSubPrice})">
+        <i class="fas fa-sync"></i> ${sfSubExpired ? 'Renew Now' : 'Renew / Extend'}
+      </button>
+    </div>` : '';
 
   // Referral reward is a percentage of the item's vendor amount (same tiers the
   // payout in orders.js uses) — never a fixed amount.
@@ -529,6 +576,7 @@ async function renderVendorDashboard() {
 <div class="tab-content" id="vendor-storefront">
   <div class="dashboard-wrap">
     ${myStore ? `
+      ${sfRenewStrip}
 
       <!-- State 1: No Storefront Created Yet (storefront_status is 'none' or not set) -->
       ${(!myStorefront || !myStorefront.status || myStorefront.status === 'none') ? `
@@ -4319,5 +4367,93 @@ window.isStorefrontSubscriptionActive = function(store) {
   if (!store.subscription_end) return false;
   return new Date(store.subscription_end) > new Date();
 };
+
+// ── Storefront subscription expiry reminders ────────────────────────────────
+// A lapsed subscription silently switches the storefront to "Under
+// Construction" for every visitor, and vendors were never warned — they found
+// out from lost sales. There is no server-side cron in this project, so the
+// sweep runs client-side for the signed-in vendor and posts the alert through
+// /api/notify, which stores the row AND dispatches the web-push, so an installed
+// vendor is reached even with the tab closed (push is delivered by the OS).
+const SF_REMINDER_DAYS = 7;
+const SF_REMINDER_FINAL_DAYS = 1;
+const SF_REMINDER_KEY_PREFIX = 'happa_sf_expiry_notice_';
+
+// Stage ranks escalate week → final day → expired and never go backwards, so a
+// vendor gets at most three alerts per billing cycle instead of one per load.
+function _sfReminderStage(daysLeft, expired) {
+  if (expired) return 3;
+  if (daysLeft <= SF_REMINDER_FINAL_DAYS) return 2;
+  if (daysLeft <= SF_REMINDER_DAYS) return 1;
+  return 0;
+}
+
+// `knownStores` lets callers that already fetched the store list hand it over
+// instead of paying for a second round-trip.
+async function checkStorefrontSubscriptionReminders(knownStores) {
+  try {
+    const u = App.currentUser;
+    if (!u || !u.id || (u.role !== 'vendor' && u.role !== 'seller')) return;
+    if (typeof addNotification !== 'function') return;
+
+    let allStores = Array.isArray(knownStores) && knownStores.length ? knownStores
+      : (Array.isArray(App.allStores) && App.allStores.length ? App.allStores : null);
+    if (!allStores) {
+      const res = await apiGet('stores', 'limit=200').catch(() => null);
+      allStores = res?.data || [];
+    }
+
+    const now = new Date();
+    const mine = allStores.filter(s => s && String(s.vendor_id) === String(u.id));
+
+    for (const store of mine) {
+      // subscription_end only exists after the first payment, so this skips
+      // vendors who have never subscribed (they see the plan grid, not a reminder).
+      const raw = store.subscription_end ? new Date(store.subscription_end) : null;
+      const end = raw && !isNaN(raw.getTime()) ? raw : null;
+      if (!end) continue;
+
+      const expired = end < now;
+      const daysLeft = Math.max(0, Math.ceil((end - now) / 86400000));
+      const stage = _sfReminderStage(daysLeft, expired);
+      if (stage === 0) continue;
+
+      // Keyed on the EXPIRY, not just the store: once the vendor renews, the new
+      // expiry re-arms the whole ladder for the next cycle.
+      const endISO = end.toISOString();
+      const key = SF_REMINDER_KEY_PREFIX + String(store.id);
+      let seen = null;
+      try { seen = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { seen = null; }
+      if (seen && seen.end === endISO && Number(seen.stage) >= stage) continue;
+
+      const planKey = store.subscription_plan || 'growth';
+      const planName = (typeof _STOREFRONT_PLANS_DEFAULTS !== 'undefined' && _STOREFRONT_PLANS_DEFAULTS[planKey]?.name) || 'Storefront';
+      const storeName = store.name || 'your store';
+
+      const title = stage === 3
+        ? '🔴 Storefront offline — subscription expired'
+        : stage === 2
+          ? '⚠️ Storefront expires tomorrow'
+          : `⏳ Storefront expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
+
+      const message = stage === 3
+        ? `Your ${planName} plan for "${storeName}" expired on ${end.toLocaleDateString()}. Visitors now see an "Under Construction" page instead of your store. Renew to bring it back online.`
+        : `Your ${planName} plan for "${storeName}" ${stage === 2 ? 'expires tomorrow' : 'expires on ' + end.toLocaleDateString()}. Renew now — time you buy is added on top of your current expiry, so nothing is lost.`;
+
+      // Record BEFORE sending: a failed request must not retry on every page
+      // load. A later stage (or the next expiry) still gets through.
+      try { localStorage.setItem(key, JSON.stringify({ end: endISO, stage, at: Date.now() })); } catch (e) {}
+
+      // '#vendor-renew' is a dedicated route that opens the vendor dashboard AND
+      // activates the Storefront tab, where the renew control lives. Push uses
+      // the same value as its click target, so the alert stays actionable from
+      // the notification tray as well as in-app.
+      await addNotification(u.id, 'subscription', title, message, '#vendor-renew', null);
+    }
+  } catch (err) {
+    console.warn('[Storefront Reminder] skipped:', err && err.message || err);
+  }
+}
+window.checkStorefrontSubscriptionReminders = checkStorefrontSubscriptionReminders;
 
 
