@@ -2252,15 +2252,9 @@ async function _sdSaveProduct(productId, form) {
 
 
 
-  // Match the server's product rules — fail here, not after a rejected save.
-  // The name is OPTIONAL: a blank one is stored as "Untitled product", the same
-  // default the API applies, so a card never renders an empty title. Every
-  // other product writer (the add form, bulk add, the vendor edit modal) is
-  // name-optional too — this was the last place still bouncing an upload.
+  // A product name is optional. Leave it blank when the vendor does not provide one.
   if (!String(data.name || '').trim()) {
-
-    data.name = 'Untitled product';
-
+    data.name = '';
   }
 
   if (data.name) data.slug = data.name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
@@ -3416,7 +3410,7 @@ window.openStorefrontProductModal = async function(productId) {
         <img src="${img}" style="width:100%; height:100%; object-fit:cover; display:block" onload="fitProductImage(this)" onerror="this.src='https://placehold.co/400x300?text=Product'">
       </div>
       <div style="padding:20px; display:grid; gap:12px">
-        <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name) || 'Untitled product')}</h3>
+        <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name) || '')}</h3>
         <div style="display:flex; justify-content:space-between; align-items:center">
           <span style="font-size:1.25rem; font-weight:900; color:${primaryColor}">${formatPrice(p.price)}</span>
           <span style="font-size:0.75rem; background:#f3f4f6; padding:3px 8px; border-radius:12px; color:var(--text-muted)">In Stock: ${p.stock_qty || 0}</span>

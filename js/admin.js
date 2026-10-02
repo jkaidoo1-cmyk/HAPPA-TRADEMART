@@ -47,9 +47,12 @@ async function renderAdminDashboard() {
   // Platform income: order commissions (on packages) + recorded fees & subscription payments (ledger)
   const pkgCommissions  = activePkgs.reduce((s, p) => s + (parseFloat(p.commission_amount) || 0), 0);
   const feeRev          = platformRevenue.filter(r => r.source === 'platform_fee').reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-  const subscriptionRev = platformRevenue.filter(r => r.source === 'subscription').reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const newRendorSubRev    = platformRevenue.filter(r => r.source === 'rendor_subscription').reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const legacyRendorSubRev = platformRevenue.filter(r => r.source === 'subscription' && /rendor subscription/i.test(String(r.description || ''))).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const newStorefrontSubRev = platformRevenue.filter(r => r.source === 'storefront_subscription').reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const legacyStorefrontSubRev = platformRevenue.filter(r => r.source === 'subscription' && /storefront subscription/i.test(String(r.description || ''))).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
   const platformFees    = pkgCommissions + feeRev;
-  const totalRevenue    = platformFees + subscriptionRev;
+  const totalRevenue    = platformFees + newRendorSubRev + legacyRendorSubRev + newStorefrontSubRev + legacyStorefrontSubRev;
   const refundedAmt    = rejectedPkgs.reduce((s, p) => s + ((parseFloat(p.gross_amount || p.total) || 0) + (parseFloat(p.delivery_fee) || 0)), 0);
   const rejectionRate  = allPkgs.length ? ((rejectedPkgs.length / allPkgs.length) * 100).toFixed(1) : '0.0';
 
@@ -242,7 +245,10 @@ async function renderAdminDashboard() {
       <div class="card-header"><h3>💰 Revenue Sources</h3></div>
       <div class="card-body" style="padding:12px 16px;font-size:.85rem;display:grid;gap:8px">
         <div style="display:flex;justify-content:space-between"><span>Order Commissions &amp; Platform Fees</span><strong>GHS ${platformFees.toFixed(2)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>Storefront Subscriptions</span><strong>GHS ${subscriptionRev.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>New Rendor Subscriptions</span><strong>GHS ${newRendorSubRev.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>Legacy Rendor Subscription rows</span><strong>GHS ${legacyRendorSubRev.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>New Storefront Subscriptions</span><strong>GHS ${newStorefrontSubRev.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>Legacy Storefront Subscription rows</span><strong>GHS ${legacyStorefrontSubRev.toFixed(2)}</strong></div>
         <div style="display:flex;justify-content:space-between;font-weight:800;font-size:.95rem;border-top:1px solid var(--border);padding-top:8px"><span>Total Platform Revenue</span><strong style="color:var(--primary)">GHS ${totalRevenue.toFixed(2)}</strong></div>
       </div>
     </div>
@@ -1693,7 +1699,7 @@ async function _doDeactivateRendorSub(userId) {
     // Record platform revenue for this subscription payment
     if (price > 0) {
       await apiPost('platform_revenue', {
-        source: 'subscription',
+        source: 'rendor_subscription',
         amount: price,
         reference: 'RENDORSUB-' + userId + '-' + Date.now(),
         description: `Rendor Subscription: ${planLabel} plan (GHS ${price.toFixed(2)})`,
@@ -3251,6 +3257,11 @@ async function loadAdminAds() {
         spentObj = raw ? JSON.parse(raw) : {};
       } catch(e){}
 
+      const expiresAt = c.end_date ? new Date(c.end_date) : null;
+      const expiresLabel = expiresAt && !Number.isNaN(expiresAt.getTime())
+        ? expiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+        : 'No expiry set';
+
       const eligibleProds = products.filter(p => p.status !== 'archived' && storeIds.includes(p.store_id));
 
       const storeRowsHTML = storeIds.map(sid => {
@@ -3287,6 +3298,9 @@ async function loadAdminAds() {
                   <span>⏱️ ${c.interval_value || 3}s per slide</span>
                   <span>📦 ${eligibleProds.length} active products</span>
                   <span>🏪 ${storeIds.length} stores participating</span>
+                </div>
+                <div style="font-size:.72rem;color:${expiresAt && expiresAt.getTime() < Date.now() ? 'var(--danger)' : 'var(--text-muted)'};margin-top:8px;font-weight:600">
+                  📅 Expires on ${expiresLabel}
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
                   <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:96px;text-align:center">
@@ -3352,6 +3366,11 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
   const intervalVal = c.interval_value || 3;
   const pages = Array.isArray(c.pages) ? c.pages : ['home', 'shop', 'stores'];
   const storeIds = Array.isArray(c.store_ids) ? c.store_ids.map(String) : allStores.map(s => String(s.id));
+  const defaultEndDate = new Date(Date.now() + (365 * 86400000)).toISOString().slice(0, 10);
+  const endDateValue = c.end_date ? (() => {
+    const date = new Date(c.end_date);
+    return !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : defaultEndDate;
+  })() : defaultEndDate;
   let budgets = c.store_budgets || {};
   if (typeof budgets === 'string') {
     try { budgets = JSON.parse(budgets); } catch(e) { budgets = {}; }
@@ -3378,12 +3397,17 @@ window.showAddAdCampaignModal = async function(campaignId = null) {
               <input class="form-control" type="number" id="ad-camp-interval" min="1" max="120" value="${intervalVal}" onfocus="this.select()" required>
             </div>
             <div class="form-group">
-              <label class="form-label">Show Store Name Badge</label>
-              <select class="form-control form-select" id="ad-camp-storename">
-                <option value="true" ${showStoreName ? 'selected' : ''}>Yes — Display Store Badge</option>
-                <option value="false" ${!showStoreName ? 'selected' : ''}>No — Hide Store Badge</option>
-              </select>
+              <label class="form-label">Campaign End Date *</label>
+              <input class="form-control" type="date" id="ad-camp-end-date" value="${endDateValue}" min="${new Date().toISOString().slice(0,10)}" required>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Show Store Name Badge</label>
+            <select class="form-control form-select" id="ad-camp-storename">
+              <option value="true" ${showStoreName ? 'selected' : ''}>Yes — Display Store Badge</option>
+              <option value="false" ${!showStoreName ? 'selected' : ''}>No — Hide Store Badge</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -3452,6 +3476,10 @@ window.saveAdCampaign = async function(e, campaignId = null) {
   if (isNaN(intervalVal) || intervalVal < 1) intervalVal = 3;
   if (intervalVal > 120) intervalVal = 120;
 
+  const rawEndDate = document.getElementById('ad-camp-end-date')?.value;
+  const defaultEndDate = new Date(Date.now() + (365 * 86400000)).toISOString();
+  const endDate = rawEndDate ? new Date(`${rawEndDate}T23:59:59.999Z`).toISOString() : defaultEndDate;
+
   const showStoreName = document.getElementById('ad-camp-storename')?.value === 'true';
 
   if (!name) { showToast('Please enter a campaign name', 'warning'); return; }
@@ -3496,6 +3524,7 @@ window.saveAdCampaign = async function(e, campaignId = null) {
     interval_value: intervalVal,
     interval_unit: 'seconds',
     show_store_name: showStoreName,
+    end_date: endDate,
     updated_at: new Date().toISOString()
   };
 
@@ -3506,7 +3535,7 @@ window.saveAdCampaign = async function(e, campaignId = null) {
     } else {
       payload.id = 'adc-' + Date.now();
       payload.start_date = new Date().toISOString();
-      payload.end_date = new Date(Date.now() + (365 * 86400000)).toISOString();
+      payload.end_date = endDate;
       payload.created_at = new Date().toISOString();
       result = await apiPost('ad_campaigns', payload);
     }

@@ -151,6 +151,44 @@ test('wallet transactions preserve ledger metadata without leaking store-only al
   assert.equal(serialized.about_us, undefined);
 });
 
+test('admin ad campaign modal exposes an explicit expiry date and saves it', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '../js/admin.js'), 'utf8');
+
+  assert.match(src, /id="ad-camp-end-date"/);
+  assert.match(src, /payload\.end_date/);
+  assert.match(src, /end_date: endDate/);
+});
+
+test('admin analytics distinguishes rendor subscription revenue from storefront subscription revenue', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const adminSrc = fs.readFileSync(path.join(__dirname, '../js/admin.js'), 'utf8');
+  const walletSrc = fs.readFileSync(path.join(__dirname, '../lib/wallet.js'), 'utf8');
+
+  assert.match(walletSrc, /source: 'rendor_subscription'/);
+  assert.match(walletSrc, /source: 'storefront_subscription'/);
+  assert.match(adminSrc, /New Rendor Subscriptions/);
+  assert.match(adminSrc, /Legacy Rendor Subscription rows/);
+  assert.match(adminSrc, /New Storefront Subscriptions/);
+  assert.match(adminSrc, /Legacy Storefront Subscription rows/);
+  assert.match(adminSrc, /r\.source === 'rendor_subscription'/);
+  assert.match(adminSrc, /r\.source === 'storefront_subscription'/);
+});
+
+test('products with no name stay blank instead of being auto-labeled as untitled', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const appSrc = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  const marketSrc = fs.readFileSync(path.join(__dirname, '../js/marketplace.js'), 'utf8');
+
+  assert.doesNotMatch(appSrc, /Untitled product/i);
+  assert.doesNotMatch(marketSrc, /Untitled product/i);
+  assert.doesNotMatch(appSrc, /data\.name = 'Untitled product'/i);
+  assert.doesNotMatch(marketSrc, /data\.name = 'Untitled product'/i);
+});
+
 test('wallet engine: rendors are blocked from every wallet action (no wallet)', async () => {
   const wallet = require('../lib/wallet.js');
   const RENDOR = { userId: 'rendor-9', role: 'rendor' };
