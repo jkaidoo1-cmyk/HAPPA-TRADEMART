@@ -1177,12 +1177,30 @@ async function renderStorefront(id) {
       c.innerHTML.includes('skeleton') ||
       !storefrontIsMountedFor(c, id)
   )) {
-    c.innerHTML = (typeof getVendorProfileSkeletonHTML === 'function') ? getVendorProfileSkeletonHTML() : `
+    c.innerHTML = `
       <div id="storefront-page-container" style="position:relative; width:100%; min-height:100vh; background:#fafafa; padding-bottom:60px;">
-        <div style="width:100%; height:160px;" class="skeleton-box"></div>
+        <!-- Header/Banner Skeleton -->
+        <div style="width:100%; height:180px; position:relative; overflow:hidden;" class="skeleton-box"></div>
+        <div style="padding:16px; margin-top:-50px; position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; text-align:center;">
+           <div class="skeleton-box" style="width:80px; height:80px; border-radius:50%; border:4px solid #fff; margin-bottom:10px;"></div>
+           <div class="skeleton-box" style="width:180px; height:24px; border-radius:4px; margin-bottom:8px;"></div>
+           <div class="skeleton-box" style="width:120px; height:14px; border-radius:4px;"></div>
+        </div>
+        
+        <!-- Search Toolbar Skeleton -->
+        <div style="padding:10px 14px; background:#ffffff; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;">
+           <div class="skeleton-box" style="height:38px; border-radius:25px; flex:1;"></div>
+           <div class="skeleton-box" style="height:38px; width:38px; border-radius:50%;"></div>
+        </div>
+
+        <!-- Product Grid Skeleton -->
         <div style="padding:16px;">
-          <div class="skeleton-box" style="width:80px; height:80px; border-radius:50%; border:4px solid #fff; margin-bottom:10px;"></div>
-          <div class="skeleton-box" style="width:180px; height:24px; border-radius:4px; margin-bottom:8px;"></div>
+          <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px;">
+            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
+            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
+            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
+            <div class="skeleton-card" style="background:#fff; border-radius:12px; border:1px solid #e5e7eb; padding:8px; display:flex; flex-direction:column; gap:8px;"><div class="skeleton-box image" style="height:140px; border-radius:8px; width:100%"></div><div class="skeleton-box line1" style="height:14px; width:85%"></div><div class="skeleton-box line2" style="height:12px; width:55%"></div></div>
+          </div>
         </div>
       </div>`;
   }
@@ -1709,7 +1727,7 @@ async function renderStorefront(id) {
                   : headerHTML;
 
   c.innerHTML = `
-    <div id="storefront-page-container" style="position:relative">
+    <div id="storefront-page-container" style="position:relative; display:flex; flex-direction:column; min-height:100vh">
       ${customStyles}
       ${adminToolbarHTML}
 
@@ -1735,13 +1753,69 @@ async function renderStorefront(id) {
       </div>
       ${layout === 'compact' ? '</div>' : ''}
 
-      <!-- Main Content Area -->
-      <div class="store-tab-content" id="store-tab-content"></div>
-
-      <!-- Bottom bar: © Powered by HAPPA TRADEMART -->
-      <div style="text-align:center; padding:10px 12px 18px; font-size:.65rem; color:var(--text-muted); border-top:1px solid var(--border); margin-top:12px">
-        © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
+      <!-- Main Content Area.
+           flex:1 makes this the only growing child, so the footer stays at the
+           bottom of the viewport even while it is empty — switchStorefrontTab
+           awaits the network BEFORE writing here, and an empty content div used
+           to let the footer jump up under the search bar behind a blank page. -->
+      <div class="store-tab-content" id="store-tab-content" style="flex:1 0 auto">
+        <div style="text-align:center;padding:48px 16px;color:var(--text-muted)">
+          <i class="fas fa-spinner fa-spin" style="font-size:1.6rem;color:${primaryColor}"></i>
+          <div style="margin-top:10px;font-size:.82rem">Loading store…</div>
+        </div>
       </div>
+
+      <!-- Theme-Adaptive Storefront Footer (About, Contact, Policies, Social) -->
+      <footer class="storefront-footer" style="${footerStyle}">
+        <div class="sf-footer-grid" style="max-width:1100px; margin:0 auto; font-size:.72rem">
+
+          <!-- Left Side: About + Hours & Contact directly under it -->
+          <div style="display:flex; flex-direction:column; gap:10px">
+            <div>
+              <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
+                <i class="fas fa-store" style="color:${primaryColor}"></i> About ${escHtml(s.name)}
+              </h4>
+              <p style="line-height:1.35; color:${footerTextColor}; margin-bottom:4px">${escHtml(description)}</p>
+              ${socialLinksHTML}
+            </div>
+
+            <div>
+              <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
+                <i class="fas fa-clock" style="color:${primaryColor}"></i> Hours & Contact
+              </h4>
+              <div style="display:grid; gap:4px; color:${footerTextColor}">
+                <div><i class="fas fa-calendar-alt" style="width:16px; color:${primaryColor}"></i> ${escHtml(business_hours)}</div>
+                <div><i class="fas fa-map-marker-alt" style="width:16px; color:${primaryColor}"></i> ${s.location || '—'}</div>
+                ${(() => {
+                  const vendorObj = (App.allUsers || []).find(u => String(u.id) === String(s.vendor_id)) || {};
+                  const storeEmail = s.email || vendorObj.email || '';
+                  const storePhone = s.phone || vendorObj.phone || '';
+                  let contactHTML = '';
+                  if (storeEmail) contactHTML += `<div><i class="fas fa-envelope" style="width:16px; color:${primaryColor}"></i> ${escHtml(storeEmail)}</div>`;
+                  if (storePhone) contactHTML += `<div><i class="fas fa-phone" style="width:16px; color:${primaryColor}"></i> ${escHtml(storePhone)}</div>`;
+                  return contactHTML;
+                })()}
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Side: Store Policies -->
+          <div>
+            <h4 style="font-size:.76rem; font-weight:800; color:${footerHeadingColor}; margin-bottom:4px; display:flex; align-items:center; gap:5px">
+              <i class="fas fa-shield-alt" style="color:${primaryColor}"></i> Store Policies
+            </h4>
+            <div style="display:grid; gap:6px; color:${footerTextColor}">
+              <div><strong style="color:${footerHeadingColor}">Shipping:</strong><br>${escHtml(shipping_policy)}</div>
+              <div style="margin-top:4px"><strong style="color:${footerHeadingColor}">Returns:</strong><br>${escHtml(return_policy)}</div>
+            </div>
+          </div>
+
+        </div>
+
+        <div style="border-top:1px solid ${footerDividerColor}; margin-top:8px; padding-top:6px; text-align:center; color:${footerTextColor}; font-size:.65rem">
+          © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
+        </div>
+      </footer>
     </div>
   `;
 
