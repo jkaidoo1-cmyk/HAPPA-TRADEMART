@@ -337,6 +337,7 @@ function openNotificationPopup(notifId) {
     earning:  'fas fa-coins',
     support:  'fas fa-headset',
     promo:    'fas fa-tag',
+    subscription: 'fas fa-sync-alt',
     warning:  'fas fa-exclamation-triangle'
   };
   const icon = iconMap[n.type] || 'fas fa-bell';
@@ -351,6 +352,7 @@ function openNotificationPopup(notifId) {
     earning:  { badgeBg: '#d1fae5', text: '#065f46', iconBg: '#10b981' },
     support:  { badgeBg: '#dbeafe', text: '#1e40af', iconBg: '#3b82f6' },
     promo:    { badgeBg: '#fce7f3', text: '#9d174d', iconBg: '#ec4899' },
+    subscription: { badgeBg: '#fef3c7', text: '#92400e', iconBg: '#f59e0b' },
     warning:  { badgeBg: '#fee2e2', text: '#991b1b', iconBg: '#ef4444' }
   };
   const theme = colorMap[n.type] || { badgeBg: '#ffe5d9', text: '#9a3412', iconBg: '#e85d04' };
@@ -446,6 +448,7 @@ function notifItemHTML(n) {
     earning:  'fas fa-coins',
     support:  'fas fa-headset',
     promo:    'fas fa-tag',
+    subscription: 'fas fa-sync-alt',
     warning:  'fas fa-exclamation-triangle'
   };
   const icon = iconMap[n.type] || 'fas fa-bell';

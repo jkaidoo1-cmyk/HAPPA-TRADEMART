@@ -2499,7 +2499,9 @@ function shareRendorProfile(rendorId, name) {
   const url = window.location.origin + '/#rendor-profile/' + rendorId;
   const text = `Check out ${name} on HAPPA TRADEMART — ${url}`;
   if (navigator.share) {
-    navigator.share({ title: name, text, url }).catch(() => {});
+    // Send the link ONLY via `url` — putting it in `text` too makes the share
+    // sheet append both, so the message shows the link twice.
+    navigator.share({ title: name, text: `Check out ${name} on HAPPA TRADEMART`, url }).catch(() => {});
   } else if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(() => showToast('Profile link copied! 📋', 'success'));
   } else {
@@ -2630,6 +2632,12 @@ async function renderRendorProfilePublic() {
 
   const avatar      = displayName.charAt(0).toUpperCase();
 
+  // Profile picture when the rendor uploaded one — falls back to the letter
+  // avatar below if the image fails to load.
+  const avatarPic   = rendor.avatar_url
+    ? `<img src="${escHtml(rendor.avatar_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;position:absolute;inset:0" onerror="this.remove()">`
+    : '';
+
 
 
   // Build contact rows (only show if value exists)
@@ -2664,9 +2672,11 @@ async function renderRendorProfilePublic() {
 
   <div style="display:flex;align-items:center;gap:14px">
 
-    <div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:800;color:#fff;flex-shrink:0;border:2px solid rgba(255,255,255,.4)">
+    <div style="position:relative;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:800;color:#fff;flex-shrink:0;border:2px solid rgba(255,255,255,.4)">
 
       ${avatar}
+
+      ${avatarPic}
 
     </div>
 

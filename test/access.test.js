@@ -273,6 +273,44 @@ test('access: anonymous mutations are rejected; owners/admins pass', () => {
   assert.equal(access.assertMutateAllowed('packages', ADMIN, pkg, {}).ok, true);
 });
 
+test('access: a store owner cannot write the subscription/billing fields', () => {
+  const VENDOR = { userId: 'vendor-1', role: 'vendor' };
+  const ownStore = { id: 'st-1', vendor_id: 'vendor-1' };
+  // Every billing field is rejected for the owner: otherwise subscription_end
+  // could be written first and then satisfy the "payment required" storefront
+  // activation gate with the value the client just supplied.
+  for (const f of access.STORE_ADMIN_ONLY_FIELDS) {
+    assert.equal(
+      access.assertMutateAllowed('stores', VENDOR, ownStore, { [f]: 'x' }).ok, false,
+      `${f} must not be writable by the store owner`
+    );
+  }
+  // Ordinary store edits still pass for the owner.
+  assert.equal(access.assertMutateAllowed('stores', VENDOR, ownStore, { name: 'New name' }).ok, true);
+  // An admin may grant or adjust a subscription directly.
+  assert.equal(
+    access.assertMutateAllowed('stores', ADMIN, ownStore,
+      { subscription_status: 'active', subscription_end: '2099-01-01T00:00:00.000Z' }).ok,
+    true
+  );
+  // A non-owner is blocked on a store that is not theirs.
+  assert.equal(access.assertMutateAllowed('stores', VENDOR, { id: 'st-2', vendor_id: 'other' }, { name: 'x' }).ok, false);
+});
+
+test('access: stripStoreAdminFields removes only the billing fields', () => {
+  const body = {
+    name: 'Shop', status: 'active',
+    subscription_plan: 'pro', subscription_status: 'active',
+    subscription_start: '2020-01-01T00:00:00.000Z', subscription_end: '2099-01-01T00:00:00.000Z',
+    subscription_months: 12, subscription_method: 'wallet'
+  };
+  access.stripStoreAdminFields(body);
+  for (const f of access.STORE_ADMIN_ONLY_FIELDS) assert.ok(!(f in body), `${f} must be stripped`);
+  // Non-billing fields (including the separate storefront `status` gate) survive.
+  assert.equal(body.name, 'Shop');
+  assert.equal(body.status, 'active');
+});
+
 test('access: rendors can never self-activate or self-quote a subscription', () => {
   const RENDOR = { userId: 'rendor-1', role: 'rendor' };
   const self = { id: 'rendor-1' };

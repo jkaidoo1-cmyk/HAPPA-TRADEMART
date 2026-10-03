@@ -94,7 +94,10 @@ async function renderRendorDashboard() {
   c.innerHTML = `
 <!-- ── Profile banner ── -->
 <div class="rendor-profile-banner">
-  <div class="rendor-avatar">${displayName.charAt(0).toUpperCase()}</div>
+  <div class="rendor-avatar" style="position:relative;overflow:hidden">
+    ${displayName.charAt(0).toUpperCase()}
+    ${u.avatar_url ? `<img src="${escHtml(u.avatar_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">` : ''}
+  </div>
   <div class="rendor-profile-info">
     <div class="rendor-profile-name">${escHtml(displayName)}</div>
     <div class="rendor-profile-cat"><i class="fas fa-briefcase"></i> ${escHtml(serviceCat)}</div>
@@ -1078,6 +1081,32 @@ function showEditRendorProfileModal() {
 </div>
 <div class="modal-body">
   <div class="form-group">
+    <label class="form-label">Profile Picture</label>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#5b21b6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.5rem;color:#fff;flex-shrink:0;position:relative;overflow:hidden;border:2px solid var(--border)">
+        ${(u.rendor_display_name||u.name||'?').charAt(0).toUpperCase()}
+        <img id="rp-avatar-thumb" src="${escHtml(u.avatar_url||'')}" alt="" style="${u.avatar_url?'':'display:none'};position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%">
+      </div>
+      <div style="flex:1;min-width:0">
+        <input type="file" id="rp-avatar-file" accept="image/*" style="display:none" onchange="pickRendorAvatar(this)">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-sm" id="rp-avatar-upload-btn"
+                  onclick="document.getElementById('rp-avatar-file').click()"
+                  style="background:var(--bg-secondary);color:var(--text);border:1px solid var(--border)">
+            <i class="fas fa-camera"></i> Upload photo
+          </button>
+          <button type="button" class="btn btn-sm" id="rp-avatar-remove-btn" onclick="removeRendorAvatar()"
+                  style="background:transparent;color:var(--danger);border:1px solid var(--border);${u.avatar_url?'':'display:none'}">
+            <i class="fas fa-trash"></i> Remove
+          </button>
+        </div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:6px">Square photo · JPG, PNG or WEBP · up to 15 MB</div>
+      </div>
+    </div>
+    <input type="hidden" id="rp-avatar-b64">
+    <input type="hidden" id="rp-avatar-keep" value="${escHtml(u.avatar_url||'')}">
+  </div>
+  <div class="form-group">
     <label class="form-label">Display / Brand Name *</label>
     <input class="form-control" id="rp-name" type="text" value="${escHtml(u.rendor_display_name||u.name)}">
   </div>
@@ -1107,12 +1136,54 @@ function showEditRendorProfileModal() {
 </div>`);
 }
 
+// ── Profile picture (Edit Profile modal) ─────────────────
+// Compresses to a square JPEG like every other upload in the app and keeps the
+// base64 in a hidden field; only a CHANGED picture is sent on save.
+async function pickRendorAvatar(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const maxBytes = 15 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    showToast('Image too large. Max 15MB.', 'warning');
+    input.value = '';
+    return;
+  }
+  try {
+    const b64 = await squareImage(file, 512, 0.75);
+    const hid = document.getElementById('rp-avatar-b64');
+    if (hid) hid.value = b64;
+    const thumb = document.getElementById('rp-avatar-thumb');
+    if (thumb) { thumb.src = b64; thumb.style.display = 'block'; }
+    const rmBtn = document.getElementById('rp-avatar-remove-btn');
+    if (rmBtn) rmBtn.style.display = '';
+  } catch (e) {
+    showToast('Failed to process image', 'error');
+  }
+}
+
+function removeRendorAvatar() {
+  const hid = document.getElementById('rp-avatar-b64');
+  if (hid) hid.value = '';
+  // Empty `keep` too — saveRendorProfile then PATCHes avatar_url to '' so the
+  // picture actually disappears server-side, not just in this modal.
+  const keep = document.getElementById('rp-avatar-keep');
+  if (keep) keep.value = '';
+  const input = document.getElementById('rp-avatar-file');
+  if (input) input.value = '';
+  const thumb = document.getElementById('rp-avatar-thumb');
+  if (thumb) { thumb.src = ''; thumb.style.display = 'none'; }
+  const rmBtn = document.getElementById('rp-avatar-remove-btn');
+  if (rmBtn) rmBtn.style.display = 'none';
+}
+
 async function saveRendorProfile() {
   const displayName = document.getElementById('rp-name')?.value.trim();
   const cat         = document.getElementById('rp-cat')?.value;
   const bio         = document.getElementById('rp-bio')?.value.trim();
   const price       = parseFloat(document.getElementById('rp-price')?.value) || 0;
   const tags        = document.getElementById('rp-tags')?.value.trim();
+  const avatarNew   = (document.getElementById('rp-avatar-b64')?.value || '').trim();
+  const avatarKeep  = (document.getElementById('rp-avatar-keep')?.value || '').trim();
 
   if (!displayName) { showToast('Display name is required', 'warning'); return; }
   if (!bio)         { showToast('Please describe your services', 'warning'); return; }
@@ -1127,6 +1198,10 @@ async function saveRendorProfile() {
     rendor_starting_price: price,
     rendor_tags:           tags,
   };
+  // Only touch avatar_url when it actually changed — re-sending an unchanged
+  // base64 photo would balloon every profile save for nothing.
+  const avatarNext = avatarNew || avatarKeep;
+  if (avatarNext !== (App.currentUser.avatar_url || '')) patch.avatar_url = avatarNext;
   await apiPatch('users', App.currentUser.id, patch);
   Object.assign(App.currentUser, patch);
   saveSessions();

@@ -9,7 +9,7 @@
 // match SW_VERSION in index.html — test/sw-version.test.js fails the build if
 // the two drift, because a stale SW_VERSION silently disables the one-time
 // cache self-heal and leaves returning clients running old JS.
-const CACHE_NAME      = 'happa-v165';
+const CACHE_NAME      = 'happa-v166';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install
@@ -96,9 +96,6 @@ self.addEventListener('fetch', event => {
   // These pages must always open in the real browser, not inside the PWA.
   const storefrontPaths = ['/storefront/', '/store/', '/store-admin/'];
   const isStorefrontNav = storefrontPaths.some(p => url.pathname.startsWith(p));
-  // Also detect hash-based storefront routes served through index.html
-  const isStorefrontHash =
-    url.pathname === '/' || url.pathname.endsWith('/index.html') || url.pathname === '';
   if (isStorefrontNav && request.mode === 'navigate') {
     // Let the browser handle it natively — don't touch the request
     return;

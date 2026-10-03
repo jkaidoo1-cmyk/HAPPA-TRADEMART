@@ -126,6 +126,74 @@ async function renderVendorDashboard() {
   const activeVendorPkgs   = myPackages.filter(p => p.vendor_status !== 'rejected' && p.status !== 'cancelled');
   const rejectedVendorPkgs = myPackages.filter(p => p.vendor_status === 'rejected' || p.status === 'cancelled');
 
+  // ── Wallet-tab earnings math ───────────────────────────────────────────
+  // A completed sale must never be invisible. `vendor_amount` is derived
+  // server-side on newer packages but older rows predate it — without a
+  // fallback a released order summed to 0 and appeared in NEITHER card. Fall
+  // back to gross minus commission, which is exactly how vendor_amount is
+  // computed. "Earned" keys on the order being complete (delivered OR the
+  // payout flag OR the wallet's own settlement record) rather than any single
+  // field, so a package whose `balance_released` write failed is still
+  // acknowledged — the wallet engine writes settlement_status:'released'
+  // independently, and the ADMIN earnings view already treats that as paid
+  // (js/admin.js). Every active package lands in exactly one of Total Earned /
+  // Pending Release.
+  const pkgVendorAmt = (p) => {
+    const v = parseFloat(p && p.vendor_amount);
+    if (Number.isFinite(v)) return v;
+    const gross = parseFloat(p && (p.gross_amount || p.total)) || 0;
+    const comm  = parseFloat(p && p.commission_amount) || 0;
+    return Math.max(0, parseFloat((gross - comm).toFixed(2)));
+  };
+  const pkgIsComplete = (p) =>
+    p.balance_released === true || p.balance_released === 'true' ||
+    p.settlement_status === 'released' ||
+    ['delivered', 'confirmed'].includes(String(p.status || '')) ||
+    String(p.admin_status || '') === 'delivered';
+  const totalEarnedGHS    = activeVendorPkgs.filter(pkgIsComplete).reduce((s, p) => s + pkgVendorAmt(p), 0);
+  const pendingReleaseGHS = activeVendorPkgs.filter(p => !pkgIsComplete(p)).reduce((s, p) => s + pkgVendorAmt(p), 0);
+
+  // ── Top Products ───────────────────────────────────────────────────────
+  // `sold_count` is a denormalised counter on the product row: it only moves
+  // at checkout, is wiped by a product re-create, and the product itself is
+  // auto-deleted once it sells out — so the list could omit or zero the very
+  // item an order just sold. Units counted from THIS vendor's own packages are
+  // used as a floor, so a completed sale always shows. When the product row
+  // itself is gone (sold out and auto-deleted), a synthetic row is rebuilt from
+  // the package item so the sale is still listed instead of silently dropped.
+  const soldFromOrders = {};
+  const soldProductInfo = {};
+  myPackages.forEach(p => {
+    if (!p || p.status === 'cancelled' || p.vendor_status === 'rejected') return;
+    (Array.isArray(p.items) ? p.items : []).forEach(it => {
+      const pid = String((it && (it.product_id || it.id)) || '');
+      if (!pid) return;
+      soldFromOrders[pid] = (soldFromOrders[pid] || 0) + (parseInt(it && it.qty, 10) || 0);
+      if (!soldProductInfo[pid]) {
+        const img = (it && (it.image || it.images?.[0])) || '';
+        soldProductInfo[pid] = {
+          id: pid,
+          name: (it && it.name) || 'Deleted product',
+          price: parseFloat(it && it.price) || 0,
+          images: img ? [img] : []
+        };
+      }
+    });
+  });
+  const productSoldCount = (p) => Math.max(
+    parseInt(p.sold_count || p.total_sold, 10) || 0,
+    soldFromOrders[String(p.id)] || 0
+  );
+  // Union of live products and sold-but-deleted ones, so a completed sale is
+  // always a candidate for Top Products.
+  const topProductRows = (() => {
+    const liveIds = new Set(myProducts.map(p => String(p.id)));
+    const ghosts = Object.keys(soldFromOrders)
+      .filter(pid => !liveIds.has(pid) && soldFromOrders[pid] > 0)
+      .map(pid => soldProductInfo[pid] || { id: pid, name: 'Deleted product', price: 0, images: [] });
+    return [...myProducts, ...ghosts];
+  })();
+
   // Fetch storefront (separate entity) for this vendor's store, if any
   let myStorefront = null;
   if (myStore && myStore.id) {
@@ -367,12 +435,12 @@ async function renderVendorDashboard() {
     <div class="stats-grid" style="margin-bottom:16px">
       <div class="stat-card">
         <div class="stat-icon" style="background:#d1fae5"><i class="fas fa-coins" style="color:var(--success)"></i></div>
-        <div class="stat-value">GHS ${activeVendorPkgs.filter(p=>p.balance_released).reduce((s,p)=>s+(parseFloat(p.vendor_amount)||0),0).toFixed(2)}</div>
+        <div class="stat-value">GHS ${totalEarnedGHS.toFixed(2)}</div>
         <div class="stat-label">Total Earned</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background:#fef3c7"><i class="fas fa-hourglass-half" style="color:#d97706"></i></div>
-        <div class="stat-value">GHS ${activeVendorPkgs.filter(p=>!p.balance_released).reduce((s,p)=>s+(parseFloat(p.vendor_amount)||0),0).toFixed(2)}</div>
+        <div class="stat-value">GHS ${pendingReleaseGHS.toFixed(2)}</div>
         <div class="stat-label">Pending Release</div>
       </div>
       <div class="stat-card" style="background:${rejectedVendorPkgs.length ? '#fff5f5' : '#f9fafb'};border-color:${rejectedVendorPkgs.length ? '#fca5a5' : '#e5e7eb'}">
@@ -436,12 +504,12 @@ async function renderVendorDashboard() {
     <div class="card" style="margin-top:14px">
       <div class="card-header"><h3>🏆 Top Products</h3></div>
       <div class="card-body" style="padding:0">
-        ${myProducts.sort((a,b)=>(b.sold_count||0)-(a.sold_count||0)).slice(0,5).map((p,i) => `
+        ${topProductRows.slice().sort((a,b)=>productSoldCount(b)-productSoldCount(a)).slice(0,5).map((p,i) => `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
           <span style="font-weight:700;color:var(--text-muted);width:16px">${i+1}</span>
           <img src="${p.images?.[0]||'https://placehold.co/40x40?text=P'}" style="width:36px;height:36px;border-radius:6px;object-fit:cover" onerror="this.src='https://placehold.co/40x40?text=P'">
-          <div style="flex:1;font-size:.82rem"><strong>${escHtml(p.name)}</strong><br><span style="color:var(--text-muted)">${p.sold_count||0} sold · GHS ${p.price}</span></div>
-          <span style="font-weight:700;color:var(--primary)">GHS ${((p.sold_count||0)*p.price).toFixed(0)}</span>
+          <div style="flex:1;font-size:.82rem"><strong>${escHtml(p.name)}</strong><br><span style="color:var(--text-muted)">${productSoldCount(p)} sold · GHS ${p.price}</span></div>
+          <span style="font-weight:700;color:var(--primary)">GHS ${((productSoldCount(p))*p.price).toFixed(0)}</span>
         </div>`).join('')}
       </div>
     </div>
@@ -1084,27 +1152,32 @@ async function renderVendorDashboard() {
 function renderVendorChart(packages = []) {
   const canvas = document.getElementById('vendor-sales-chart');
   if (!canvas) return;
-  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const data = [0, 0, 0, 0, 0, 0, 0];
-
+  // The card is titled "Sales This Month", so the window is the current
+  // calendar month — one bucket per day. The old version bucketed Mon→Sun of
+  // the current week, which silently hid every order placed before Monday, and
+  // it also gated on a `'confirmed'` status this codebase never writes (only
+  // pending / in_transit / delivered / cancelled), so an order completed on an
+  // earlier day of the month read as zero sales.
   const now = new Date();
-  const currentDay = now.getDay();
-  const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - distanceToMonday);
-  startOfWeek.setHours(0,0,0,0);
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const labels = Array.from({ length: daysInMonth }, (_, i) => String(i + 1));
+  const data = new Array(daysInMonth).fill(0);
 
-  packages.forEach(p => {
-    if (!['delivered', 'confirmed'].includes(p.status)) return;
-    if (!p.created_at) return;
-    const pDate = new Date(p.created_at);
-    if (pDate >= startOfWeek) {
-      const dayIdx = pDate.getDay();
-      const mappedIdx = dayIdx === 0 ? 6 : dayIdx - 1;
-      if (mappedIdx >= 0 && mappedIdx < 7) {
-        data[mappedIdx] += parseFloat(p.gross_amount || p.vendor_amount || 0);
-      }
-    }
+  const activePackages = packages.filter(p =>
+    p && p.status !== 'cancelled' && p.vendor_status !== 'rejected');
+
+  activePackages.forEach(p => {
+    // A sale belongs on the day it happened: the completion date when the
+    // order has been delivered, otherwise the day it was placed. That way an
+    // order created last month and completed this month lands in this month's
+    // chart instead of disappearing.
+    const when = p.delivered_date || p.created_at;
+    if (!when) return;
+    const d = new Date(when);
+    if (Number.isNaN(d.getTime())) return;
+    if (d < startOfMonth || d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) return;
+    data[d.getDate() - 1] += parseFloat(p.gross_amount || p.vendor_amount || p.total || 0) || 0;
   });
 
   const roundedData = data.map(v => parseFloat(v.toFixed(2)));
@@ -1112,16 +1185,20 @@ function renderVendorChart(packages = []) {
   // Chart.js loads from a CDN — if it's blocked or failed to load, degrade
   // gracefully instead of throwing and killing the dashboard.
   if (typeof Chart === 'undefined') {
-    canvas.outerHTML = '<div style="padding:28px;text-align:center;color:var(--text-muted);font-size:.82rem"><i class="fas fa-chart-bar" style="font-size:1.6rem;display:block;margin-bottom:8px;opacity:.5"></i>Weekly sales chart unavailable (chart library failed to load)</div>';
+    canvas.outerHTML = '<div style="padding:28px;text-align:center;color:var(--text-muted);font-size:.82rem"><i class="fas fa-chart-bar" style="font-size:1.6rem;display:block;margin-bottom:8px;opacity:.5"></i>Monthly sales chart unavailable (chart library failed to load)</div>';
     return;
   }
   if (window._vendorChart) window._vendorChart.destroy();
   window._vendorChart = new Chart(canvas, {
     type: 'bar',
-    data: { labels: days, datasets: [{ label: 'GHS', data: roundedData, backgroundColor: 'rgba(232,93,4,0.8)', borderRadius: 6 }] },
+    data: { labels, datasets: [{ label: 'GHS', data: roundedData, backgroundColor: 'rgba(232,93,4,0.8)', borderRadius: 6 }] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => 'GHS '+v } } } }
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => 'GHS '+v } },
+        // One bucket per day of the month — auto-skip so 31 labels stay legible.
+        x: { ticks: { autoSkip: true, maxRotation: 0, minRotation: 0, maxTicksLimit: 16 } }
+      } }
   });
 }
 
@@ -4043,62 +4120,6 @@ async function _getSfUpgradePrices(store) {
 // Mutable reference updated at render time so all helpers use current prices
 let STOREFRONT_PLANS = _getSfPlans({});
 
-window.getSubscriptionBannerHTML = function(store) {
-  const sub = store.subscription_status;
-  const plan = store.subscription_plan;
-  const end = store.subscription_end ? new Date(store.subscription_end) : null;
-  const now = new Date();
-  const planInfo = STOREFRONT_PLANS[plan] || null;
-
-  if (!sub || sub === 'none' || !end) {
-    return `
-      <div style="background:#fff7ed;border:1.5px solid #fed7aa;color:#9a3412;border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <div><i class="fas fa-exclamation-circle"></i> <strong>No Active Subscription</strong>
-          <div style="font-size:.75rem;margin-top:3px">Choose a plan to keep your storefront running.</div>
-        </div>
-        <button class="btn btn-sm" style="background:#ea580c;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','growth',${(store.plan_prices?.growth || 100).toFixed(2)})">
-          <i class="fas fa-sync"></i> Subscribe Now
-        </button>
-      </div>`;
-  }
-
-  const daysLeft = Math.max(0, Math.ceil((end - now) / 86400000));
-  const expiring = daysLeft <= 7;
-  const expired = end < now;
-
-  if (expired) {
-    return `
-      <div style="background:#fef2f2;border:1.5px solid #fecaca;color:#991b1b;border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <div><i class="fas fa-times-circle"></i> <strong>Subscription Expired</strong>
-          <div style="font-size:.75rem;margin-top:3px">Your ${planInfo ? planInfo.name : plan} plan expired on ${end.toLocaleDateString()}. Renew to restore storefront access.</div>
-        </div>
-        <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${store.plan_prices?.[plan] || (planInfo ? planInfo.price : 100)})">
-          <i class="fas fa-sync"></i> Renew Now
-        </button>
-      </div>`;
-  }
-
-  const bg = expiring ? '#fff7ed' : '#f0fdf4';
-  const border = expiring ? '#fed7aa' : '#bbf7d0';
-  const col = expiring ? '#9a3412' : '#14532d';
-  const icon = expiring ? 'fa-exclamation-triangle' : 'fa-check-circle';
-
-  return `
-    <div style="background:${bg};border:1.5px solid ${border};color:${col};border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <div>
-        <i class="fas ${icon}"></i>
-        <strong>${planInfo ? planInfo.icon + ' ' + planInfo.name : plan} Plan</strong>
-        — GH₵ ${planInfo ? planInfo.price : '?'}/mo
-        <div style="font-size:.75rem;margin-top:3px">
-          ${expiring ? `⚠️ Expires in <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong>` : `Active until <strong>${end.toLocaleDateString()}</strong>`}
-        </div>
-      </div>
-      <button class="btn btn-sm" style="background:${expiring ? '#ea580c' : '#16a34a'};color:#fff;border:none" onclick="window.openStorefrontSubscribeModal('${store.id}','${plan}',${store.plan_prices?.[plan] || (planInfo ? planInfo.price : 100)})">
-        <i class="fas fa-sync"></i> ${expiring ? 'Renew Now' : 'Manage Plan'}
-      </button>
-    </div>`;
-};
-
 window.openStorefrontSubscribeModal = async function(storeId, preSelectedPlan, price) {
   const existing = document.getElementById('storefront-sub-modal');
   if (existing) existing.remove();
@@ -4286,16 +4307,20 @@ window.confirmStorefrontSubscription = async function(storeId) {
   // payment) and records platform revenue atomically — the client never patches
   // wallet_balance directly (that path is admin-only) nor posts revenue rows.
   const amt = parseFloat(total);
-  const payRes = await apiWallet('pay', {
+  // The server both charges AND grants the subscription: it derives the price
+  // itself (per-store plan_prices → global setting → default, minus the
+  // multi-month discount), writes the store's billing fields, and records
+  // platform revenue. The client never PATCHes subscription_* — that path is
+  // now rejected precisely so a vendor cannot self-activate a storefront
+  // without a real payment.
+  const payRes = await apiWallet('storefront-subscribe', {
+    store_id: storeId,
+    plan: planKey,
+    months,
     amount: amt,
     method,
     payment_ref: 'SUB-' + storeId + '-' + Date.now(),
-    note: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`,
-    record_revenue: {
-      amount: amt,
-      reference: 'SUB-' + storeId + '-' + Date.now(),
-      description: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`
-    }
+    note: `Storefront Subscription: ${plan.name} (${months} month(s)) — ${App.allStores[idx].name || ''} via ${method === 'momo' ? 'MoMo' : 'wallet'}`
   });
   if (!payRes || payRes.error) {
     showApiErrorToast(payRes || window.lastApiError, 'Payment could not be processed. Please try again.');
@@ -4308,24 +4333,21 @@ window.confirmStorefrontSubscription = async function(storeId) {
     if (typeof updateWalletUI === 'function') updateWalletUI();
   }
 
-  // Update store subscription fields
+  // Reflect the server-granted subscription locally. subscription_start comes
+  // back preserved across renewals; subscription_end is the server's figure.
+  const serverEnd = payRes.subscription_end || newEnd.toISOString();
   App.allStores[idx].subscription_plan = planKey;
   App.allStores[idx].subscription_status = 'active';
-  App.allStores[idx].subscription_start = now.toISOString();
-  App.allStores[idx].subscription_end = newEnd.toISOString();
+  App.allStores[idx].subscription_start = payRes.subscription_start || App.allStores[idx].subscription_start || now.toISOString();
+  App.allStores[idx].subscription_end = serverEnd;
   App.allStores[idx].subscription_months = months;
   App.allStores[idx].subscription_method = method;
 
   try { localStorage.setItem('happa_all_stores', JSON.stringify(App.allStores)); } catch(e){}
 
-  // Persist the paid subscription on the store FIRST — the storefront may only
-  // be switched live by the server when that paid subscription is on record.
-  const storePatched = await apiPatch('stores', storeId, {
-    subscription_plan: planKey,
-    subscription_status: 'active',
-    subscription_start: now.toISOString(),
-    subscription_end: newEnd.toISOString()
-  }).catch(() => null);
+  // The server already stored the paid subscription; only the storefront record
+  // still needs to go live below. `storePatched` mirrors that server write.
+  const storePatched = true;
 
   // Update storefront record status to active
   let sfPatched = null;
@@ -4341,7 +4363,7 @@ window.confirmStorefrontSubscription = async function(storeId) {
     // Money has been taken — never claim success if the go-live write failed.
     showToast('Payment received, but the storefront could not be switched live automatically. Please retry — it will go live without a second charge.', 'warning');
   } else {
-    showToast(`🎉 ${plan.name} plan activated! Storefront subscription runs until ${newEnd.toLocaleDateString()}.`, 'success');
+    showToast(`🎉 ${plan.name} plan activated! Storefront subscription runs until ${new Date(serverEnd).toLocaleDateString()}.`, 'success');
   }
 
   // Notify admin of subscription payment
@@ -4399,7 +4421,10 @@ async function checkStorefrontSubscriptionReminders(knownStores) {
     let allStores = Array.isArray(knownStores) && knownStores.length ? knownStores
       : (Array.isArray(App.allStores) && App.allStores.length ? App.allStores : null);
     if (!allStores) {
-      const res = await apiGet('stores', 'limit=200').catch(() => null);
+      // Scope the fetch to this vendor. A plain list fetch is truncated by
+      // `limit`, so a store that sorts past the page would never be checked;
+      // `vendor_id` keeps the result to the one store a vendor owns.
+      const res = await apiGet('stores', `vendor_id=${encodeURIComponent(u.id)}&limit=500`).catch(() => null);
       allStores = res?.data || [];
     }
 

@@ -56,15 +56,23 @@ async function renderAdminDashboard() {
   // Platform income: order commissions (on packages) + recorded fees & subscription payments (ledger)
   const pkgCommissions  = activePkgs.reduce((s, p) => s + (parseFloat(p.commission_amount) || 0), 0);
   const feeRev          = platformRevenue.filter(r => r.source === 'platform_fee').reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-  // Merge both the canonical source name and any legacy 'subscription' rows into one figure per type.
-  const rendorSubRev = platformRevenue.filter(r =>
-    r.source === 'rendor_subscription' ||
-    (r.source === 'subscription' && /rendor subscription/i.test(String(r.description || '')))
-  ).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
-  const storefrontSubRev = platformRevenue.filter(r =>
-    r.source === 'storefront_subscription' ||
-    (r.source === 'subscription' && /storefront subscription/i.test(String(r.description || '')))
-  ).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  // Subscription revenue is split by type AND by row shape so the admin can see
+  // where a figure comes from: the canonical source name written by the wallet
+  // engine, versus older 'subscription' rows identified only by their text.
+  const rendorSubRevNew = platformRevenue
+    .filter(r => r.source === 'rendor_subscription')
+    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const rendorSubRevLegacy = platformRevenue
+    .filter(r => r.source === 'subscription' && /rendor subscription/i.test(String(r.description || '')))
+    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const storefrontSubRevNew = platformRevenue
+    .filter(r => r.source === 'storefront_subscription')
+    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const storefrontSubRevLegacy = platformRevenue
+    .filter(r => r.source === 'subscription' && /storefront subscription/i.test(String(r.description || '')))
+    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const rendorSubRev = rendorSubRevNew + rendorSubRevLegacy;
+  const storefrontSubRev = storefrontSubRevNew + storefrontSubRevLegacy;
   const platformFees    = pkgCommissions + feeRev;
   const totalRevenue    = platformFees + rendorSubRev + storefrontSubRev;
   const refundedAmt    = rejectedPkgs.reduce((s, p) => s + ((parseFloat(p.gross_amount || p.total) || 0) + (parseFloat(p.delivery_fee) || 0)), 0);
@@ -124,9 +132,6 @@ async function renderAdminDashboard() {
         <p style="font-size:.78rem;color:var(--text-muted);margin-top:2px">Choose stores whose products appear on the ad banners across Home, Shop &amp; Stores pages.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" onclick="runAdsDiagnostic()" title="Run diagnostic to check if campaign creation is working" style="font-size:.72rem">
-          <i class="fas fa-stethoscope"></i> Diagnose
-        </button>
         <button class="btn btn-primary btn-sm" onclick="showAddAdCampaignModal()">
           <i class="fas fa-plus"></i> New Campaign
         </button>
@@ -259,8 +264,10 @@ async function renderAdminDashboard() {
       <div class="card-header"><h3>💰 Revenue Sources</h3></div>
       <div class="card-body" style="padding:12px 16px;font-size:.85rem;display:grid;gap:8px">
         <div style="display:flex;justify-content:space-between"><span>Order Commissions &amp; Platform Fees</span><strong>GHS ${platformFees.toFixed(2)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>Rendor Subscriptions</span><strong>GHS ${rendorSubRev.toFixed(2)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>Storefront Subscriptions</span><strong>GHS ${storefrontSubRev.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>New Rendor Subscriptions</span><strong>GHS ${rendorSubRevNew.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>Legacy Rendor Subscription rows</span><strong>GHS ${rendorSubRevLegacy.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>New Storefront Subscriptions</span><strong>GHS ${storefrontSubRevNew.toFixed(2)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>Legacy Storefront Subscription rows</span><strong>GHS ${storefrontSubRevLegacy.toFixed(2)}</strong></div>
         <div style="display:flex;justify-content:space-between;font-weight:800;font-size:.95rem;border-top:1px solid var(--border);padding-top:8px"><span>Total Platform Revenue</span><strong style="color:var(--primary)">GHS ${totalRevenue.toFixed(2)}</strong></div>
       </div>
     </div>
@@ -2683,6 +2690,21 @@ async function renderAdminAnalytics() {
       </div>
     </div>
 
+    ${rejectedPkgs.length ? `
+    ${sectionLabel('🚫 Rejection Log')}
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        ${rejectedPkgs.slice(0, 20).map(p => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
+          <div style="min-width:0">
+            <div style="font-weight:700;font-size:.85rem">${orderCodeChip(p.package_code || p.id)}</div>
+            <div style="font-size:.74rem;color:var(--text-muted)">${escHtml(p.buyer_name || 'Guest')} · ${formatDate(p.created_at)}</div>
+          </div>
+          <span class="status-badge status-cancelled">${escHtml(p.status || 'rejected')}</span>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
+
   </div>`;
 }
 
@@ -3779,105 +3801,6 @@ window.deleteAdCampaign = async function(campaignId) {
   if (typeof refreshAdBanners === 'function') await refreshAdBanners();
   showToast('Ad campaign deleted! 🗑️', 'success');
   await loadAdminAds();
-};
-
-// ── Ad Campaign Diagnostic ─────────────────────────────────────────────────
-window.runAdsDiagnostic = async function() {
-  const container = document.getElementById('admin-ads-list');
-  const diagId = `adc-diag-${Date.now()}`;
-  let steps = [];
-
-  const log = (ok, msg) => { steps.push({ ok, msg }); };
-
-  // 1. Server health
-  try {
-    const r = await fetch('/api');
-    const d = await r.json();
-    log(true, `Server: ${d.backend} mode (v${d.version})`);
-  } catch(e) {
-    log(false, `Server unreachable: ${e.message}`);
-  }
-
-  // 2. Can we fetch ad_campaigns?
-  try {
-    const r = await fetch('/api/ad_campaigns?limit=10');
-    const d = await r.json();
-    const count = (d.data || d)?.length ?? '?';
-    log(true, `GET /api/ad_campaigns → ${count} campaigns`);
-  } catch(e) {
-    log(false, `GET failed: ${e.message}`);
-  }
-
-  // 3. Can we POST a campaign?
-  let posted = false;
-  try {
-    const r = await fetch('/api/ad_campaigns', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: diagId,
-        name: 'Diagnostic Test Campaign',
-        pages: ['home'],
-        store_ids: [],
-        store_budgets: '{}',
-        interval_value: 3,
-        status: 'active',
-        created_at: new Date().toISOString()
-      })
-    });
-    if (r.status === 201) {
-      posted = true;
-      log(true, `POST /api/ad_campaigns → 201 Created ✓`);
-    } else {
-      const txt = await r.text();
-      log(false, `POST returned ${r.status}: ${txt.slice(0,80)}`);
-    }
-  } catch(e) {
-    log(false, `POST failed: ${e.message}`);
-  }
-
-  // 4. Can we GET the newly posted campaign in the list?
-  if (posted) {
-    try {
-      const r = await fetch('/api/ad_campaigns?limit=200');
-      const d = await r.json();
-      const found = (d.data || d || []).some(c => c.id === diagId);
-      log(found, found ? `New campaign found in list ✓` : `NEW CAMPAIGN NOT IN LIST — cache bug?`);
-    } catch(e) {
-      log(false, `Re-fetch after POST failed: ${e.message}`);
-    }
-    // Cleanup
-    await fetch(`/api/ad_campaigns/${diagId}`, { method: 'DELETE' }).catch(() => {});
-    log(true, `Cleanup done`);
-  }
-
-  // 5. Check DOM
-  const adsListEl = document.getElementById('admin-ads-list');
-  log(!!adsListEl, adsListEl ? `#admin-ads-list found in DOM ✓` : `#admin-ads-list MISSING from DOM!`);
-
-  const storesFn = typeof window.showAddAdCampaignModal;
-  log(storesFn === 'function', `showAddAdCampaignModal: ${storesFn}`);
-  const saveFn = typeof window.saveAdCampaign;
-  log(saveFn === 'function', `saveAdCampaign: ${saveFn}`);
-
-  // Render results
-  const html = steps.map(s =>
-    `<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:.8rem">
-      <span style="color:${s.ok ? '#16a34a' : '#dc2626'};font-weight:700;flex-shrink:0">${s.ok ? '✅' : '❌'}</span>
-      <span>${s.msg}</span>
-    </div>`
-  ).join('');
-
-  const allOk = steps.every(s => s.ok);
-  const diagHtml = `
-    <div style="background:${allOk ? '#f0fdf4' : '#fef2f2'};border:1px solid ${allOk ? '#bbf7d0' : '#fecaca'};border-radius:10px;padding:16px;margin-bottom:16px">
-      <div style="font-weight:700;margin-bottom:8px;font-size:.85rem">${allOk ? '✅ All checks passed — try creating a campaign now!' : '❌ Issues found — see details below'}</div>
-      ${html}
-      <div style="margin-top:10px;font-size:.72rem;color:#6b7280">If you see ✅ for all POST/GET steps but campaigns still don't appear, please do a hard refresh (Ctrl+Shift+R).</div>
-    </div>`;
-
-  if (container) container.insertAdjacentHTML('afterbegin', diagHtml);
-  else document.getElementById('admin-ads')?.insertAdjacentHTML('afterbegin', diagHtml);
 };
 
 window.toggleStorefrontProductVisibility = async function(sfId, value) {

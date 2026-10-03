@@ -256,6 +256,53 @@ test('wallet engine: rendor-subscribe activates instantly like a storefront plan
   assert.equal(dup.data.already, true);
 });
 
+test('wallet engine: storefront-subscribe grants the plan server-side and rejects underpayment', async () => {
+  const wallet = require('../lib/wallet.js');
+  const VENDOR = { userId: 'vendor-sf1', role: 'vendor' };
+  let store = { id: 'st-sf1', vendor_id: 'vendor-sf1', subscription_status: null, subscription_start: null, subscription_end: null };
+  const user = { id: 'vendor-sf1', wallet_balance: 500 };
+  const revenueRows = [];
+  const settings = { storefront_price_growth: '100' };
+  const adapter = {
+    loadUser: async () => user,
+    saveUser: async () => true,
+    loadStore: async () => store,
+    saveStore: async (id, patch) => { store = { ...store, ...patch }; return true; },
+    getSetting: async (key, def) => (key in settings ? settings[key] : def),
+    listUserTxns: async () => [],
+    insert: async (table, rec) => { if (table === 'platform_revenue') revenueRows.push(rec); return rec; },
+    update: async () => {}
+  };
+
+  // Underpayment is refused — the price comes from the server, not the client.
+  const under = await wallet.subscribeStorefront(adapter, VENDOR, { store_id: 'st-sf1', plan: 'growth', months: 1, amount: 1, method: 'momo', payment_ref: 'S-1' });
+  assert.equal(under.ok, false);
+  assert.equal(under.status, 400);
+
+  // A second vendor can never subscribe a store that is not theirs.
+  const other = await wallet.subscribeStorefront(adapter, { userId: 'vendor-9', role: 'vendor' }, { store_id: 'st-sf1', plan: 'growth', months: 1, amount: 100, method: 'momo', payment_ref: 'S-x' });
+  assert.equal(other.ok, false);
+  assert.equal(other.status, 403);
+
+  // A correct payment grants the plan and writes the billing fields server-side.
+  const res = await wallet.subscribeStorefront(adapter, VENDOR, { store_id: 'st-sf1', plan: 'growth', months: 1, amount: 100, method: 'momo', payment_ref: 'S-2' });
+  assert.equal(res.ok, true);
+  assert.equal(store.subscription_status, 'active');
+  assert.equal(store.subscription_plan, 'growth');
+  assert.ok(new Date(store.subscription_end).getTime() > Date.now());
+  assert.equal(revenueRows.length, 1);
+  assert.equal(revenueRows[0].source, 'storefront_subscription');
+  assert.equal(revenueRows[0].amount, 100);
+
+  // A renewal extends the expiry (5% off 3 months = GHS 285) but keeps the start date.
+  const firstStart = store.subscription_start;
+  const firstEnd = new Date(store.subscription_end).getTime();
+  const res2 = await wallet.subscribeStorefront(adapter, VENDOR, { store_id: 'st-sf1', plan: 'growth', months: 3, amount: 285, method: 'momo', payment_ref: 'S-4' });
+  assert.equal(res2.ok, true);
+  assert.equal(store.subscription_start, firstStart, 'renewal must preserve the original start date');
+  assert.ok(new Date(store.subscription_end).getTime() > firstEnd + 60 * 86400000);
+});
+
 test('notification API persists a targeted user notification and returns it to that user', async () => {
   const http = require('node:http');
   const app = require('../api/index.js');

@@ -2143,6 +2143,42 @@ function walletAdapter() {
       const row = getTable(db, 'settings').find(r => r.key === key);
       return row ? row.value : def;
     },
+    async loadStore(id) {
+      let st = null;
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('stores').select('*').eq('id', String(id)).maybeSingle();
+          if (!error && data) st = serializeRecord(data);
+        } catch (e) {}
+      }
+      const db = loadDb();
+      const lc = getTable(db, 'stores').find(x => String(x.id) === String(id));
+      return lc ? { ...(st || {}), ...lc } : st;
+    },
+    async saveStore(id, patch) {
+      // Mirrors saveUser: returns true only when the write reached the
+      // authoritative store.
+      let ok = false;
+      if (supabase) {
+        try {
+          let existing = null;
+          const { data } = await supabase.from('stores').select('*').eq('id', String(id)).maybeSingle();
+          if (data) existing = serializeRecord(data);
+          const merged = serializeRecord({ ...(existing || {}), ...patch, id: String(id) });
+          const dbRecord = prepareRecordForDb('stores', merged, existing);
+          await supabase.from('stores').update(dbRecord).eq('id', String(id));
+          ok = true;
+        } catch (e) { console.warn('[Wallet] Supabase saveStore failed:', e && e.message || e); }
+      }
+      try {
+        const db = loadDb();
+        const idx = getTable(db, 'stores').findIndex(x => String(x.id) === String(id));
+        if (idx !== -1) { db.stores[idx] = { ...db.stores[idx], ...patch }; saveDb(db); }
+        if (!supabase) ok = true;
+      } catch (e) { console.warn('[Wallet] local saveStore failed:', e && e.message || e); }
+      invalidateApiCache('stores');
+      return ok;
+    },
     async listUserTxns(userId) {
       let supa = [];
       if (supabase) {
@@ -2179,6 +2215,7 @@ const WALLET_ACTIONS = {
   pay: wallet.pay,
   purchase: wallet.purchase,
   'rendor-subscribe': wallet.rendorSubscribe,
+  'storefront-subscribe': wallet.subscribeStorefront,
   'storefront-payout': wallet.storefrontPayout,
   'release-delivery': wallet.releaseDelivery,
   'refund-reject': wallet.refundReject
@@ -2399,6 +2436,11 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer.userId)) {
       return res.status(403).json({ error: 'You can only manage your own store.' });
     }
+    // Billing state is granted by verified payment, never written directly by
+    // the owner. The editor echoes the whole record back on save, so IGNORE
+    // these fields (the stored subscription is preserved) instead of rejecting
+    // the save — the value the client sent is never used.
+    if (!access.isAdmin(viewer)) access.stripStoreAdminFields(body);
 
     // (#16) MERGE with the existing row, never reset it: an omitted field
     // keeps its stored value instead of falling back to a default (the old
@@ -3017,6 +3059,38 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     body = expanded.body;
   }
 
+  // Server-side convenience: when a months value is supplied without an
+  // explicit expiry, compute the subscription expiry by extending from the
+  // current expiry (if in the future) or from now. Admin-granted only — a
+  // non-admin's subscription_* fields are rejected by assertMutateAllowed.
+  // Mirrors the api/index.js handler so both backends behave identically.
+  try {
+    const now = Date.now();
+    if (table === 'stores' || table === 'storefronts') {
+      const months = Number(body.subscription_months);
+      if (months && !('subscription_end' in body)) {
+        let existingStore = null;
+        if (supabase) {
+          try {
+            const { data } = await supabase.from('stores').select('subscription_end, subscription_start').eq('id', id).maybeSingle();
+            if (data) existingStore = serializeRecord(data);
+          } catch (e) {}
+        }
+        if (!existingStore) {
+          const dbM = loadDb();
+          existingStore = getTable(dbM, 'stores').find(s => String(s.id) === String(id)) || null;
+        }
+        const currentEnd = existingStore && existingStore.subscription_end ? new Date(existingStore.subscription_end) : null;
+        const startFrom = (currentEnd && currentEnd.getTime() > now) ? currentEnd : new Date(now);
+        const newEnd = new Date(startFrom);
+        newEnd.setMonth(newEnd.getMonth() + months);
+        body.subscription_end = newEnd.toISOString();
+        body.subscription_start = body.subscription_start || (existingStore && existingStore.subscription_start) || startFrom.toISOString();
+        body.subscription_status = 'active';
+      }
+    }
+  } catch (e) {}
+
   // ── Access control (storefronts are checked inside their branch after the
   // store is resolved — a PUT upsert may carry the owner id in its body) ──
   if (table !== 'storefronts') {
@@ -3113,6 +3187,11 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer.userId)) {
       return res.status(403).json({ error: 'You can only manage your own store.' });
     }
+    // Billing state is granted by verified payment, never written directly by
+    // the owner. The editor echoes the whole record back on save, so IGNORE
+    // these fields (the stored subscription is preserved) instead of rejecting
+    // the save — the value the client sent is never used.
+    if (!access.isAdmin(viewer)) access.stripStoreAdminFields(body);
     // Payment enforcement: going live is EARNED by payment, not a flag a
     // client can freely set. Only an admin, or a paid-up store (active
     // subscription ending in the future), may set status 'active'.
@@ -3266,6 +3345,35 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     body = expanded.body;
   }
 
+  // Server-side convenience: extend the subscription when a months value is
+  // supplied without an explicit expiry (admin grants). Mirrors api/index.js.
+  try {
+    const now = Date.now();
+    if (table === 'stores' || table === 'storefronts') {
+      const months = Number(body.subscription_months);
+      if (months && !('subscription_end' in body)) {
+        let existingStore = null;
+        if (supabase) {
+          try {
+            const { data } = await supabase.from('stores').select('subscription_end, subscription_start').eq('id', id).maybeSingle();
+            if (data) existingStore = serializeRecord(data);
+          } catch (e) {}
+        }
+        if (!existingStore) {
+          const dbM = loadDb();
+          existingStore = getTable(dbM, 'stores').find(s => String(s.id) === String(id)) || null;
+        }
+        const currentEnd = existingStore && existingStore.subscription_end ? new Date(existingStore.subscription_end) : null;
+        const startFrom = (currentEnd && currentEnd.getTime() > now) ? currentEnd : new Date(now);
+        const newEnd = new Date(startFrom);
+        newEnd.setMonth(newEnd.getMonth() + months);
+        body.subscription_end = newEnd.toISOString();
+        body.subscription_start = body.subscription_start || (existingStore && existingStore.subscription_start) || startFrom.toISOString();
+        body.subscription_status = 'active';
+      }
+    }
+  } catch (e) {}
+
   // ── Access control (storefronts are checked inside their branch after the
   // store is resolved — a PATCH/PUT may carry only { status } with no owner id) ──
   if (table !== 'storefronts') {
@@ -3372,6 +3480,11 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if (!access.isAdmin(viewer) && String(st.vendor_id || body.vendor_id || '') !== String(viewer.userId)) {
       return res.status(403).json({ error: 'You can only manage your own store.' });
     }
+    // Billing state is granted by verified payment, never written directly by
+    // the owner. The editor echoes the whole record back on save, so IGNORE
+    // these fields (the stored subscription is preserved) instead of rejecting
+    // the save — the value the client sent is never used.
+    if (!access.isAdmin(viewer)) access.stripStoreAdminFields(body);
     // Payment enforcement: going live is EARNED by payment, not a flag a
     // client can freely set. Only an admin, or a paid-up store (active
     // subscription ending in the future), may set status 'active'.

@@ -1176,6 +1176,7 @@ html.is-storefront-root body #main-content {
 .notif-delivery .notif-icon { background: #d1fae5; color: var(--success); }
 .notif-stock .notif-icon { background: #fef3c7; color: #d97706; }
 .notif-referral .notif-icon { background: #ede9fe; color: #7c3aed; }
+.notif-subscription .notif-icon { background: #fef3c7; color: #d97706; }
 .notif-system .notif-icon { background: var(--bg); color: var(--text-light); }
 .notif-content { flex: 1; min-width: 0; }
 .notif-title { font-size: 0.875rem; font-weight: 600; color: var(--text); }
