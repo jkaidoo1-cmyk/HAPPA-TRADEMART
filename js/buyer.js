@@ -196,19 +196,19 @@ async function renderBuyerDashboard() {
         <div style="display:flex;flex-direction:column;gap:8px">
           <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">1</div>
-            <div style="color:var(--text-light)">Copy and share your referral link with friends</div>
+            <div style="color:var(--text-light)">Share your referral link — or any product from the site. Product shares carry your code automatically.</div>
           </div>
           <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">2</div>
-            <div style="color:var(--text-light)">They click your link — taken straight to signup, already linked to you. No code needed!</div>
+            <div style="color:var(--text-light)">Friends who sign up through your link become your referrals — track them in Referral History below.</div>
           </div>
           <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">3</div>
-            <div style="color:var(--text-light)">When they sign up your referral count goes up — track your impact in Referral History below!</div>
+            <div style="color:var(--text-light)">When your referrals shop, you earn a reward — it's added to your coupon balance above.</div>
           </div>
           <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">✓</div>
-            <div style="color:var(--text-light)">Help grow the community — the more you share, the bigger the marketplace becomes for everyone!</div>
+            <div style="color:var(--text-light)">Enter your coupon code at checkout and your balance comes off what you pay — an instant discount. The more you share, the more you save!</div>
           </div>
         </div>
       </div>

@@ -261,6 +261,10 @@ async function renderRendorServices(grid, empty, counter) {
 
 function rendorPostCardPublicHTML(post, rendor) {
 
+  // Keep the full objects for the share buttons — the inline onclick handler
+  // passes ids only, and the caption needs the rendor's own description/image.
+  rememberPostForShare(post, rendor);
+
   const name     = escHtml(rendor?.rendor_display_name || rendor?.name || 'Rendor');
 
   const cat      = escHtml(post.category || '—');
@@ -349,7 +353,7 @@ function rendorPostCardPublicHTML(post, rendor) {
 
       <button class="btn btn-sm" style="background:transparent;color:#7c3aed;border:1px solid var(--border);font-size:.75rem"
               title="Share this post"
-              onclick="event.stopPropagation();shareRendorPost('${rendor?.id || ''}','${jsArg(rendor?.rendor_display_name || rendor?.name || '')}','${jsArg(post.title || '')}','${jsArg(post.price != null ? post.price : '')}')">
+              onclick="event.stopPropagation();shareRendorPost('${jsArg(post.id || '')}','${rendor?.id || ''}','${jsArg(post.title || '')}','${jsArg(post.price != null ? post.price : '')}')">
 
         <i class="fas fa-share-alt"></i> Share
 
@@ -2503,41 +2507,132 @@ function openRendorProfile(rendorId) {
   showPage('rendor-profile');
 }
 
-function shareRendorProfile(rendorId, name) {
-  const url = window.location.origin + '/#rendor-profile/' + rendorId;
-  const text = `Check out ${name} on HAPPA TRADEMART — ${url}`;
-  if (navigator.share) {
-    // Send the link ONLY via `url` — putting it in `text` too makes the share
-    // sheet append both, so the message shows the link twice.
-    navigator.share({ title: name, text: `Check out ${name} on HAPPA TRADEMART`, url }).catch(() => {});
-  } else if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => showToast('Profile link copied! 📋', 'success'));
-  } else {
-    prompt('Copy this link:', text);
+// ── Share ───────────────────────────────────────────────────────
+// Cards and the profile renderer register the FULL rendor/post objects here so
+// the share buttons can send the picture plus everything the rendor wrote
+// (bio, tags, price, description) instead of a single title line. Declared with
+// `var` so it is reachable from inline onclick handlers, and every reader
+// guards it with typeof so the unit tests can run the share functions in
+// isolation without the module scope.
+var RENDOR_SHARE_STORE = { profiles: {}, posts: {} };
+
+function rememberRendorForShare(rendor) {
+  if (rendor && rendor.id) RENDOR_SHARE_STORE.profiles[rendor.id] = rendor;
+}
+
+function rememberPostForShare(post, rendor) {
+  if (post && post.id) RENDOR_SHARE_STORE.posts[post.id] = { post: post, rendor: rendor || null };
+  if (rendor && rendor.id) rememberRendorForShare(rendor);
+}
+
+// Attach the picture to a web share. Targets that accept files often DROP the
+// `url` field, so when a file rides along the link moves into the caption — it
+// stays visible exactly once either way. Resolves true when the sheet was
+// shown (or the user cancelled it), false so the caller can fall back to the
+// plain text+url payload.
+async function shareWithImage(payload, imageUrl, linkUrl) {
+  try {
+    if (!imageUrl || typeof navigator.canShare !== 'function' || typeof File === 'undefined') return false;
+    const res = await fetch(imageUrl);
+    if (!res.ok) return false;
+    const blob = await res.blob();
+    if (!blob.type || blob.type.indexOf('image/') !== 0) return false;
+    const ext = (blob.type.split('/')[1] || 'jpeg').replace('+xml', '').replace('jpeg', 'jpg');
+    const file = new File([blob], 'happa-share.' + ext, { type: blob.type });
+    if (!navigator.canShare({ files: [file] })) return false;
+    const text = linkUrl ? (payload.text ? payload.text + '\n\n' + linkUrl : linkUrl) : payload.text;
+    await navigator.share({ title: payload.title, text: text, files: [file] });
+    return true;
+  } catch (e) {
+    // User cancelling the sheet must not trigger a second share attempt.
+    return !!(e && e.name === 'AbortError');
   }
 }
 
-// Share a single rendor POST. Posts have no page of their own — they are
-// rendered inside the rendor's public profile — so the link points there, same
-// as the card's own "View Profile" button. The caption carries the post's title
-// and price so the shared message says what is being shared instead of only
-// naming the rendor. As in shareRendorProfile the URL is passed ONLY via `url`:
-// repeating it in `text` makes the share sheet append the link twice.
-function shareRendorPost(rendorId, rendorName, postTitle, postPrice) {
-  const url  = window.location.origin + '/#rendor-profile/' + rendorId;
-  const name = String(rendorName || 'a service provider');
-  const title = String(postTitle || '').trim();
-  const priceVal = parseFloat(postPrice);
-  const price = (title && Number.isFinite(priceVal)) ? ` — GHS ${priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2)}` : '';
-  const lead = title ? `${title}${price}` : name;
-  const text = `${lead}\nShared by ${name} on HAPPA TRADEMART\n${url}`;
+function shareRendorProfile(rendorId, name) {
+  const url = window.location.origin + '/#rendor-profile/' + rendorId;
+  // Full profile registered by the post cards / profile renderer; guarded with
+  // typeof so the unit tests can run this function without the module scope.
+  const store = (typeof RENDOR_SHARE_STORE !== 'undefined' && RENDOR_SHARE_STORE) || null;
+  const r = (store && store.profiles && store.profiles[rendorId]) || {};
+  const nm = r.rendor_display_name || r.name || String(name || 'a service provider');
+  const lines = [r.rendor_service_cat ? nm + ' — ' + r.rendor_service_cat : nm];
+  const bio = String(r.rendor_bio || '').trim().replace(/\s+/g, ' ');
+  if (bio) lines.push(bio.length > 240 ? bio.slice(0, 237) + '…' : bio);
+  const facts = [];
+  const price = parseFloat(r.rendor_starting_price);
+  if (Number.isFinite(price) && price > 0) facts.push('From GHS ' + (price % 1 === 0 ? price.toFixed(0) : price.toFixed(2)));
+  if (r.location) facts.push(String(r.location));
+  if (facts.length) lines.push(facts.join(' · '));
+  const tags = String(r.rendor_tags || '').split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+  if (tags.length) lines.push('Skills: ' + tags.slice(0, 6).join(', '));
+  lines.push('Book ' + nm + ' directly on HAPPA TRADEMART');
+  const detail = lines.join('\n');
+  const clipboard = detail + '\n' + url;
 
   if (navigator.share) {
-    navigator.share({ title: title || name, text: `${lead}\nShared by ${name} on HAPPA TRADEMART`, url }).catch(() => {});
+    // Link ONLY via `url` — putting it in `text` too makes the share sheet
+    // append both, so the message shows the link twice. When the picture
+    // travels as a file the target may drop `url`, so shareWithImage moves the
+    // link into the caption instead (still exactly once).
+    const payload = { title: nm, text: detail, url: url };
+    if (typeof shareWithImage === 'function' && r.avatar_url) {
+      shareWithImage(payload, r.avatar_url, url).then(function (done) {
+        if (!done) navigator.share(payload).catch(function () {});
+      });
+    } else {
+      navigator.share(payload).catch(function () {});
+    }
   } else if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => showToast('Post link copied! 📋', 'success'));
+    navigator.clipboard.writeText(clipboard).then(function () { showToast('Profile link copied! 📋', 'success'); });
   } else {
-    prompt('Copy this link:', text);
+    prompt('Copy this link:', clipboard);
+  }
+}
+
+// Share a single rendor POST. Posts have no page of their own — they render
+// inside the rendor's public profile — so the link points there, same as the
+// card's own "View Profile" button. The caption now carries everything the
+// rendor filled in (title, price, category, description) and, when the target
+// accepts files, the post picture rides along as an attachment. As in
+// shareRendorProfile the URL is passed ONLY via `url` unless a file is
+// attached, because repeating it in `text` makes the sheet append it twice.
+function shareRendorPost(postId, rendorId, legacyTitle, legacyPrice) {
+  const url = window.location.origin + '/#rendor-profile/' + rendorId;
+  const store = (typeof RENDOR_SHARE_STORE !== 'undefined' && RENDOR_SHARE_STORE) || null;
+  const entry = (store && store.posts && store.posts[postId]) || null;
+  const post = (entry && entry.post) || {};
+  const rendor = (entry && entry.rendor) || null;
+  const name = rendor ? (rendor.rendor_display_name || rendor.name || '') : '';
+  const title = String(post.title || legacyTitle || '').trim();
+  const priceVal = parseFloat(post.price != null ? post.price : legacyPrice);
+  const price = Number.isFinite(priceVal) && priceVal > 0
+    ? 'GHS ' + (priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2))
+    : '';
+  const lines = [];
+  if (title) lines.push(title + (price ? ' — ' + price : ''));
+  const cat = post.category || (rendor && rendor.rendor_service_cat) || '';
+  if (cat) lines.push(String(cat));
+  const desc = String(post.description || '').trim().replace(/\s+/g, ' ');
+  if (desc) lines.push(desc.length > 320 ? desc.slice(0, 317) + '…' : desc);
+  lines.push('By ' + (name || 'a service provider') + ' on HAPPA TRADEMART');
+  const detail = lines.join('\n');
+  const clipboard = detail + '\n' + url;
+
+  if (navigator.share) {
+    const payload = { title: title || name || 'Service on HAPPA TRADEMART', text: detail, url: url };
+    const image = post.image_url || (rendor && rendor.avatar_url) || '';
+    if (typeof shareWithImage === 'function' && image) {
+      shareWithImage(payload, image, url).then(function (done) {
+        if (!done) navigator.share(payload).catch(function () {});
+      });
+    } else {
+      navigator.share(payload).catch(function () {});
+    }
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(clipboard).then(function () { showToast('Post link copied! 📋', 'success'); });
+  } else {
+    prompt('Copy this link:', clipboard);
   }
 }
 
@@ -2613,6 +2708,10 @@ async function renderRendorProfilePublic() {
     return;
   }
 
+  // The share button on the profile header reads the full object from the
+  // store so its message can carry the bio, tags, price and picture.
+  rememberRendorForShare(rendor);
+
   // An active-subscription rendor is public. The owner or an admin may still
   // preview an expired profile (with a notice); everyone else gets the same
   // "not available" screen the listings imply.
@@ -2650,11 +2749,10 @@ async function renderRendorProfilePublic() {
 
     : '';
 
-  const tags        = rendor.rendor_tags
-
-    ? rendor.rendor_tags.split(',').map(t => t.trim()).filter(Boolean)
-
-    : [];
+  // rendor_tags arrives as an array from the API and as a CSV string from the
+  // edit-profile form — String() normalises both (a bare .split on the array
+  // threw and blanked the whole profile page).
+  const tags        = String(rendor.rendor_tags || '').split(',').map(t => t.trim()).filter(Boolean);
 
   const verified    = rendor.id_verified
 

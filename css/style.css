@@ -2225,7 +2225,10 @@ html.is-storefront-root body #main-content {
   .filter-bar { padding: 10px 24px; }
 
   /* Tab nav — override vertical fix for non-dashboard tab navs */
-  .tab-nav:not(#vendor-tabs):not(#buyer-tabs):not(#admin-tabs) {
+  /* Rendor tabs became a vertical sidebar (see the #rendor-tabs block below);
+     without excluding it here this higher-specificity row rule wins the cascade
+     and squeezes the sidebar's labels sideways against the panel. */
+  .tab-nav:not(#vendor-tabs):not(#buyer-tabs):not(#admin-tabs):not(#rendor-tabs) {
     gap: 6px;
     padding: 0 24px;
     flex-direction: row;
