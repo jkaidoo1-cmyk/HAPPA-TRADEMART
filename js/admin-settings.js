@@ -82,9 +82,10 @@ async function loadAdminSettings() {
 
   // Populate announcement fields (outside the form — loaded separately)
   const announcementFields = [
-    { key: 'announcement_active', id: 'setting-announcement-active', type: 'checkbox', default: 'false' },
-    { key: 'announcement_text',   id: 'setting-announcement-text',   type: 'textarea', default: ''      },
-    { key: 'announcement_type',   id: 'setting-announcement-type',   type: 'select',   default: 'info'  },
+    { key: 'announcement_active',  id: 'setting-announcement-active',  type: 'checkbox', default: 'false' },
+    { key: 'announcement_text',    id: 'setting-announcement-text',    type: 'textarea', default: ''      },
+    { key: 'announcement_type',    id: 'setting-announcement-type',    type: 'select',   default: 'info'  },
+    { key: 'announcement_audience', id: 'setting-announcement-audience', type: 'select',  default: 'all'   },
   ];
   for (const cfg of announcementFields) {
     const row = rows.find(r => r.key === cfg.key);

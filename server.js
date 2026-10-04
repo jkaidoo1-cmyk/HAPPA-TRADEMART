@@ -2120,6 +2120,42 @@ function walletAdapter() {
       const lp = findPkg(getTable(db, 'packages').map(serializeRecord), id);
       return lp ? { ...(p || {}), ...lp } : p;
     },
+    async loadOrder(id) {
+      if (!id) return null;
+      let o = null;
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('orders').select('*').eq('id', String(id)).maybeSingle();
+          if (!error && data) o = serializeRecord(data);
+        } catch (e) {}
+      }
+      const db = loadDb();
+      const lo = getTable(db, 'orders').find(x => String(x.id) === String(id));
+      return lo ? { ...(o || {}), ...lo } : o;
+    },
+    // Resolve a referral/share code (or a legacy user id) to its user. Used to
+    // credit the sharer of a product purchase — public reads scrub
+    // referral_code, so only the server can turn the code into an id.
+    async findUserByReferralCode(code) {
+      const raw = String(code || '').trim();
+      if (!raw) return null;
+      const db = loadDb();
+      let u = getTable(db, 'users').find(x =>
+        String(x.id) === raw ||
+        (String(x.referral_code || '') && String(x.referral_code).toUpperCase() === raw.toUpperCase())
+      ) || null;
+      if (u) return u;
+      if (supabase) {
+        try {
+          let { data } = await supabase.from('users').select('*').eq('id', raw).limit(1);
+          if (!(data && data[0])) {
+            ({ data } = await supabase.from('users').select('*').eq('referral_code', raw.toUpperCase()).limit(1));
+          }
+          if (data && data[0]) u = serializeRecord(data[0]);
+        } catch (e) {}
+      }
+      return u;
+    },
     async loadAdmin() {
       let a = null;
       if (supabase) {
@@ -2204,7 +2240,50 @@ function walletAdapter() {
       }
       const db = loadDb();
       const local = getTable(db, 'referrals').filter(r => String(r.referred_id) === String(referredId) && String(r.status) === 'active');
-      return mergeById(supa, local);
+      const merged = mergeById(supa, local);
+      if (merged.length || !referredId || String(referredId) === 'anonymous') return merged;
+      // Legacy signups predate server-side attribution: their account carries
+      // the sharer's CODE in users.referred_by with no referrals row, so they
+      // would never earn a reward. Resolve the code (or id) once, persist a real
+      // row — the buyer's Referral History reads the table too — and return it.
+      try {
+        const usersL = getTable(db, 'users');
+        const buyerL = usersL.find(u => String(u.id) === String(referredId));
+        const rawRef = String(buyerL && buyerL.referred_by || '').trim();
+        if (!rawRef || rawRef === String(referredId)) return merged;
+        let refUL = usersL.find(u => String(u.id) === rawRef)
+          || usersL.find(u => String(u.referral_code || '') && String(u.referral_code).toUpperCase() === rawRef.toUpperCase())
+          || null;
+        if (!refUL && supabase) {
+          try {
+            let { data } = await supabase.from('users').select('*').eq('id', rawRef).limit(1);
+            if (data && data[0]) refUL = serializeRecord(data[0]);
+            else {
+              ({ data } = await supabase.from('users').select('*').eq('referral_code', rawRef.toUpperCase()).limit(1));
+              if (data && data[0]) refUL = serializeRecord(data[0]);
+            }
+          } catch (e) {}
+        }
+        if (!refUL || String(refUL.id) === String(referredId)) return merged;
+        const nowIso = new Date().toISOString();
+        const legacyRow = {
+          id: `ref-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`,
+          referrer_id: String(refUL.id),
+          referred_id: String(referredId),
+          referred_email: (buyerL && buyerL.email) || '',
+          type: 'basic', reward_pct: 3, reward_amount: 0, order_id: '',
+          status: 'active', referrer_store_id: '',
+          created_at: nowIso, updated_at: nowIso
+        };
+        getTable(db, 'referrals').push(legacyRow);
+        saveDb(db);
+        if (supabase) {
+          try { supabase.from('referrals').insert(prepareRecordForDb('referrals', serializeRecord(legacyRow))).then(() => {}).catch(() => {}); } catch (e) {}
+        }
+        return [legacyRow];
+      } catch (e) {
+        return merged;
+      }
     }
   };
 }
@@ -2827,6 +2906,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
                 wRow.value = JSON.stringify(list);
                 wRow.updated_at = new Date().toISOString();
                 saveDb(dbW);
+                invalidateApiCache('settings'); // the admin's coupon list must not serve the stale count
                 if (supabase) {
                   supabase.from('settings').update({ value: wRow.value, updated_at: wRow.updated_at }).eq('id', String(wRow.id)).then(() => {}).catch(() => {});
                 }
@@ -2872,7 +2952,7 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
   }
 
   // REF- personal-referral coupons: the used allowance is server-managed now.
-  if (table === 'orders' && viewer && String(body.coupon_code || '').startsWith('REF-')) {
+  if (table === 'orders' && viewer && String(body.coupon_code || '').toUpperCase().startsWith('REF-')) {
     const used = parseFloat(body.discount) || 0;
     if (used > 0) {
       try {
@@ -2935,6 +3015,12 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     } else if (table === 'services') {
       body.rendor_id = ownId; // always the session rendor — never client-chosen
     } else if (table === 'referrals') {
+      // A referral row describes a signed-in account. The signup client posts
+      // this BEFORE it stores its session token, and stamping those rows
+      // 'anonymous' produced garbage that matched no buyer at reward time.
+      if (!_postViewer) {
+        return res.status(401).json({ error: 'Sign in to record a referral.' });
+      }
       // The new account records who referred it: the referred side is always
       // the session, and the referrer must be a real account.
       body.referred_id = ownId;
@@ -2942,7 +3028,48 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       if (!referrerId || !(await userExistsById(referrerId))) {
         return res.status(400).json({ error: 'Referrer not found.' });
       }
+      // Idempotent: signup attribution also runs server-side when the account
+      // row is inserted (below) — two rows for one pair would pay out twice.
+      const dbRefDup = loadDb();
+      const dupRef = getTable(dbRefDup, 'referrals').find(r =>
+        String(r.referrer_id) === referrerId &&
+        String(r.referred_id) === String(_postViewer.userId) &&
+        String(r.status || '') === 'active');
+      if (dupRef) return res.status(200).json(serializeRecord(dupRef));
     }
+  }
+
+  // ── Referral attribution, resolved at account creation ───────────────────
+  // The signup form sends referred_by as the sharer's referral CODE (from ?ref=
+  // links and product-share links), but public user reads PII-scrub referral_code
+  // — the browser can never resolve code → id, which is why no referral row was
+  // ever recorded and nobody ever earned. Resolve it HERE (local + Supabase),
+  // stamp the referrer's id on the new account, and remember it for the side
+  // effects (referrals row, counter, alert) that run once the row exists.
+  let _signupReferrerId = '';
+  if (table === 'users' && String(body.referred_by || '').trim()) {
+    const signupRefRaw = String(body.referred_by).trim();
+    try {
+      const dbRefA = loadDb();
+      const usersRef = getTable(dbRefA, 'users');
+      let signupRefUser = usersRef.find(u => String(u.id) === signupRefRaw)
+        || usersRef.find(u => String(u.referral_code || '') && String(u.referral_code).toUpperCase() === signupRefRaw.toUpperCase())
+        || null;
+      if (!signupRefUser && supabase) {
+        try {
+          let { data } = await withSupaTimeout(supabase.from('users').select('*').eq('id', signupRefRaw).limit(1), 2000);
+          if (data && data[0]) signupRefUser = serializeRecord(data[0]);
+          else {
+            ({ data } = await withSupaTimeout(supabase.from('users').select('*').eq('referral_code', signupRefRaw.toUpperCase()).limit(1), 2000));
+            if (data && data[0]) signupRefUser = serializeRecord(data[0]);
+          }
+        } catch (e) {}
+      }
+      if (signupRefUser && String(signupRefUser.id) !== String(body.id)) {
+        _signupReferrerId = String(signupRefUser.id);
+        body.referred_by = _signupReferrerId;
+      }
+    } catch (e) {}
   }
 
   const db = loadDb();
@@ -3001,6 +3128,56 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
   const record = normalizeRecord(table, body);
   rows.push(record);
   saveDb(db);
+
+  // Referral side effects (signup attribution resolved above): the referrals row
+  // the reward engine keys on, the referrer's counter (the client's PATCH was
+  // admin-only and never landed), and the signup alert (the client's queued
+  // alert was sent from an anonymous session and never fired). Runs after the
+  // user row exists so a failed insert never leaves an orphan referral.
+  if (table === 'users' && _signupReferrerId) {
+    try {
+      const dbRefB = loadDb();
+      const refsB = getTable(dbRefB, 'referrals');
+      if (!refsB.find(r => String(r.referrer_id) === _signupReferrerId && String(r.referred_id) === String(record.id))) {
+        const nowIso = new Date().toISOString();
+        const refRowB = {
+          id: `ref-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`,
+          referrer_id: _signupReferrerId,
+          referred_id: String(record.id),
+          referred_email: body.email || '',
+          type: 'basic', reward_pct: 3, reward_amount: 0, order_id: '',
+          status: 'active', referrer_store_id: '',
+          created_at: nowIso, updated_at: nowIso
+        };
+        refsB.push(refRowB);
+        const refUserB = getTable(dbRefB, 'users').find(u => String(u.id) === _signupReferrerId);
+        if (refUserB) refUserB.referral_count = (parseInt(refUserB.referral_count, 10) || 0) + 1;
+        const notifB = {
+          id: `not-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`,
+          user_id: _signupReferrerId, type: 'referral',
+          title: '🎁 New Referral Signup!',
+          message: `${record.name || body.name || 'A friend'} joined using your referral link!`,
+          is_read: false, action_url: '',
+          created_at: nowIso, updated_at: nowIso
+        };
+        getTable(dbRefB, 'notifications').push(notifB);
+        saveDb(dbRefB);
+        if (supabase) {
+          try { supabase.from('referrals').insert(prepareRecordForDb('referrals', serializeRecord(refRowB))).then(() => {}).catch(() => {}); } catch (e) {}
+          try { supabase.from('notifications').insert(prepareRecordForDb('notifications', serializeRecord(notifB))).then(() => {}).catch(() => {}); } catch (e) {}
+          if (refUserB) {
+            try { supabase.from('users').update({ referral_count: refUserB.referral_count }).eq('id', _signupReferrerId).then(() => {}).catch(() => {}); } catch (e) {}
+          }
+        }
+        dispatchPushNotification({
+          user_id: _signupReferrerId,
+          title: notifB.title,
+          body: notifB.message,
+          url: './?page=buyer&tab=referrals'
+        }).catch(err => console.warn('[Push] Auto dispatch error:', err.message));
+      }
+    } catch (e) {}
+  }
 
   if (table === 'notifications' && record && record.user_id && record.title) {
     dispatchPushNotification({

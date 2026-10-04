@@ -748,158 +748,61 @@ async function doRegister(e) {
 
     return;
 
-  }
-
-
-
-  // Handle referral — look up referrer by their referral_code, record the link
-
-  // Commission is earned on every future purchase by this user (not at registration)
-
+  }  // Handle referral — attribution is resolved SERVER-SIDE when the account row
+  // is created: the browser only ever holds the sharer's referral CODE (?ref=
+  // link or product-share cookie), and public user reads PII-scrub referral_code,
+  // so the old client-side code → id lookup never found anyone and NO referral
+  // was ever recorded. The server stamps referred_by with the referrer's id,
+  // creates the referrals row, bumps the counter and alerts the referrer.
+  // Here we only keep the client-side UX: auto-save the referrer's store.
   if (ref) {
+    // The server echoes the RESOLVED id — a value different from the code —
+    // when attribution succeeded. Equal values mean the referrer was unknown.
+    const referrerId = (created.referred_by && String(created.referred_by) !== ref) ? String(created.referred_by) : '';
+    if (referrerId) {
+      try {
+        const refUserRes = await apiFetch('users/' + encodeURIComponent(referrerId)).catch(() => null);
+        const referrer = refUserRes && (refUserRes.data || refUserRes);
 
-    // Search broadly then match exact referral_code (codes look like 'VKOF1234')
+        // ── Auto-save the referrer's store for the new user ──────
+        // If the referrer is a vendor with an active store, add it to the new user's saved stores
+        if (referrer && referrer.role === 'vendor') {
+          const storeRes = await apiGet('stores', `limit=200`);
+          const referrerStore = (storeRes?.data || []).find(s =>
+            s.vendor_id === referrer.id && s.status === 'active'
+          );
 
-    const refRes = await apiGet('users', `search=${encodeURIComponent(ref)}&limit=50`);
+          if (referrerStore) {
+            // Save the store ID to localStorage so it's in the saved list when they browse
+            try {
+              const savedRaw = localStorage.getItem('happa_saved');
+              const saved = savedRaw ? JSON.parse(savedRaw) : [];
+              if (!saved.includes(referrerStore.id)) {
+                saved.unshift(referrerStore.id); // add to front so it shows first
+                localStorage.setItem('happa_saved', JSON.stringify(saved));
+                App.savedStores = saved;
+              }
+            } catch(err) { console.warn('Could not auto-save store', err); }
 
-    const allRefUsers = refRes?.data || [];
+            // Also store metadata so we can highlight the store after login
+            sessionStorage.setItem('referral_store_id', referrerStore.id);
+            sessionStorage.setItem('referral_store_name', referrerStore.name || '');
 
-    // Also try a second search with lower-case just in case
-
-    let referrer = allRefUsers.find(u => (u.referral_code || '').toUpperCase() === ref);
-
-    if (!referrer) {
-
-      // Fallback: fetch up to 200 users and scan for the code
-
-      const wideRes = await apiGet('users', 'limit=200');
-
-      referrer = (wideRes?.data || []).find(u => (u.referral_code || '').toUpperCase() === ref);
-
-    }
-
-    if (referrer) {
-
-      // Persist the referrer's USER ID on the new account (the referral code
-
-      // string is not comparable to a user id — the balance calculator and any
-
-      // server logic key on the id). referral_* counters stay admin-managed.
-
-      await apiPatch('users', created.id, { referred_by: referrer.id }).catch(() => {});
-
-      // Create referral record — reward_amount stays 0 until a purchase is made
-
-      await apiPost('referrals', {
-
-        referrer_id:   referrer.id,
-
-        referred_id:   created.id,
-
-        referred_email: email,
-
-        type:          'basic',
-
-        reward_pct:    3,
-
-        reward_amount: 0,
-
-        order_id:      '',
-
-        status:        'active',
-
-        referrer_store_id: ''
-
-      });
-
-      // Increment referrer's referral_count immediately (best-effort: users may
-
-      // not patch other users' admin-managed counters, so failures are ignored).
-
-      const newCount = (referrer.referral_count || 0) + 1;
-
-      await apiPatch('users', referrer.id, { referral_count: newCount }).catch(() => {});
-
-      // Notify the referrer — queued, because the caller is still anonymous here
-
-      pendingReferralNotifs.push({
-        to: referrer.id,
-        type: 'referral',
-        title: '🎁 New Referral Signup!',
-        message: `${name} joined using your referral link! Your store gets saved for them automatically.`
-      });
-
-
-
-      // ── Auto-save the referrer's store for the new user ──────
-
-      // If the referrer is a vendor with an active store, add it to the new user's saved stores
-
-      if (referrer.role === 'vendor') {
-
-        const storeRes = await apiGet('stores', `limit=200`);
-
-        const referrerStore = (storeRes?.data || []).find(s =>
-
-          s.vendor_id === referrer.id && s.status === 'active'
-
-        );
-
-        if (referrerStore) {
-
-          // Save the store ID to localStorage so it's in the saved list when they browse
-
-          try {
-
-            const savedRaw = localStorage.getItem('happa_saved');
-
-            const saved = savedRaw ? JSON.parse(savedRaw) : [];
-
-            if (!saved.includes(referrerStore.id)) {
-
-              saved.unshift(referrerStore.id); // add to front so it shows first
-
-              localStorage.setItem('happa_saved', JSON.stringify(saved));
-
-              App.savedStores = saved;
-
-            }
-
-          } catch(err) { console.warn('Could not auto-save store', err); }
-
-
-
-          // Also store metadata so we can highlight the store after login
-
-          sessionStorage.setItem('referral_store_id', referrerStore.id);
-
-          sessionStorage.setItem('referral_store_name', referrerStore.name || '');
-
-
-
-          pendingReferralNotifs.push({
-            to: created.id,
-            type: 'referral',
-            title: '🏪 Store Saved For You!',
-            message: `"${referrerStore.name}" has been saved to your stores. Check it out in the marketplace!`
-          });
-
+            pendingReferralNotifs.push({
+              to: created.id,
+              type: 'referral',
+              title: '🏪 Store Saved For You!',
+              message: `"${referrerStore.name}" has been saved to your stores. Check it out in the marketplace!`
+            });
+          }
         }
-
+      } catch (err) {
+        console.warn('[Referral] Post-signup step failed:', err);
       }
-
-    }
-
-    if (!referrer) {
-
-      console.warn('[Referral] Code not found:', ref, '— referral not recorded');
-
     }
 
     // Always clear the session referral so it doesn't re-apply on future registrations
-
     sessionStorage.removeItem('pending_ref');
-
   }
 
 

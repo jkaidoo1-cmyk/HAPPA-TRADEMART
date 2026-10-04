@@ -366,7 +366,10 @@ function updateWithdrawPreview(balance) {
   const prevAmt = document.getElementById('wd-prev-amount');
   const prevBal = document.getElementById('wd-prev-balance');
   if (!preview) return;
-  if (amount >= MIN_WITHDRAWAL && amount <= balance) {
+  // The modal stores the ADMIN's minimum (window._wdMin) when it opens — the
+  // hardcoded constant must not reject an amount the admin allows.
+  const minWd = parseFloat(window._wdMin) || MIN_WITHDRAWAL;
+  if (amount >= minWd && amount <= balance) {
     preview.style.display = 'block';
     if (prevAmt) prevAmt.textContent = `GHS ${amount.toFixed(2)}`;
     if (prevBal) prevBal.textContent = `GHS ${(balance - amount).toFixed(2)}`;

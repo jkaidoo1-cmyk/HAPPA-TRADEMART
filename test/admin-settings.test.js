@@ -223,4 +223,203 @@ test('the withdrawal window shown to vendors comes from Settings', () => {
     !/1–2 business days/.test(walletSrc),
     'the hardcoded "1–2 business days" promise is back — the admin sets this window'
   );
+  // The vendor dashboard card had the same hardcoded promise (and a hardcoded
+  // minimum) — the admin's Settings must drive those displays too.
+  const vendorSrc = read('js/vendor.js');
+  assert.ok(!/1–2 business days/.test(vendorSrc), 'js/vendor.js hardcodes the withdrawal window again');
+  assert.ok(vendorSrc.includes('withdrawalWindowLabel()'), 'the vendor card no longer renders the admin window');
+  assert.ok(vendorSrc.includes('minWithdrawalAmount()'), 'the vendor card no longer renders the admin minimum');
+  assert.ok(vendorSrc.includes('commissionRateRowsHTML()'), 'the vendor Commission Rates table fell back to hardcoded tiers');
+});
+
+// ── 5. Client displays must render the admin's values ───────────────────
+// getCommission, the vendor Commission Rates table, the withdrawal minimum
+// and the announcement banner were all client displays that ignored Settings:
+// the admin saved "Settings saved successfully!" and every screen kept
+// showing the hardcoded value (or, for announcements, showed nothing at all).
+
+/** Extract a top-level function from source (brace-balanced). */
+function extractFn(src, sig) {
+  const start = src.indexOf(sig);
+  assert.ok(start !== -1, `${sig} is missing`);
+  let i = src.indexOf('{', start);
+  assert.ok(i !== -1, `could not find the body of ${sig}`);
+  let depth = 0;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
+      depth--;
+      if (depth === 0) { i++; break; }
+    }
+  }
+  assert.equal(depth, 0, `could not isolate the body of ${sig}`);
+  return src.slice(start, i);
+}
+
+const APP_COMMISSION = [[1, 50, 8], [51, 100, 6], [101, 500, 4], [501, 1000, 3], [1001, Infinity, 2]];
+
+function makeFakeDoc() {
+  const main = { children: [], firstChild: null, insertBefore(el) { this.children.unshift(el); this.firstChild = el; } };
+  const doc = {
+    _banner: null,
+    getElementById(id) {
+      if (id === 'main-content') return main;
+      if (id === 'announcement-banner') return doc._banner;
+      return null;
+    },
+    createElement() {
+      const el = {
+        _id: '', style: {}, innerHTML: '', removed: false,
+        remove() { el.removed = true; if (doc._banner === el) { doc._banner = null; main.children = main.children.filter(x => x !== el); main.firstChild = main.children[0] || null; } }
+      };
+      Object.defineProperty(el, 'id', {
+        get() { return el._id; },
+        set(v) { el._id = v; if (v === 'announcement-banner') doc._banner = el; }
+      });
+      return el;
+    }
+  };
+  return doc;
+}
+
+function makeAppEnv(settings = {}, opts = {}) {
+  const src = read('js/app.js');
+  const names = ['commissionTiersList', 'getCommission', 'commissionRateRowsHTML', 'minWithdrawalAmount', 'withdrawalWindowLabel', 'renderAnnouncementBanner'];
+  const bodies = names.map(n => extractFn(src, `function ${n}`)).join('\n\n');
+  const doc = opts.doc || makeFakeDoc();
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const make = new Function('cachedSetting', 'document', 'escHtml', 'COMMISSION', 'MIN_WITHDRAWAL', 'App',
+    bodies + '\nreturn { getCommission, commissionRateRowsHTML, minWithdrawalAmount, withdrawalWindowLabel, renderAnnouncementBanner };');
+  const env = make(
+    k => (Object.prototype.hasOwnProperty.call(settings, k) ? settings[k] : undefined),
+    doc, esc, APP_COMMISSION, 10,
+    opts.app || { currentUser: null });
+  env._doc = doc;
+  return env;
+}
+
+test('getCommission charges the admin\'s tier, not the hardcoded table', () => {
+  const env = makeAppEnv({ commission_tiers: JSON.stringify([{ min: 1, max: 50, pct: 20 }, { min: 51, max: 99999, pct: 5 }]) });
+  assert.equal(env.getCommission(10), 20, 'the admin tier must win for a GHS 10 item');
+  assert.equal(env.getCommission(500), 5);
+
+  // Cache not loaded yet → the built-in table, exactly as before.
+  const cold = makeAppEnv({});
+  assert.equal(cold.getCommission(10), 8);
+  assert.equal(cold.getCommission(10000), 2);
+
+  // Garbage in the setting must fall back, never charge 0%.
+  const broken = makeAppEnv({ commission_tiers: 'not json' });
+  assert.equal(broken.getCommission(10), 8);
+});
+
+test('the vendor Commission Rates table renders the admin\'s percentages', () => {
+  const env = makeAppEnv({ commission_tiers: JSON.stringify([{ min: 1, max: 99999, pct: 15 }]) });
+  const html = env.commissionRateRowsHTML();
+  assert.match(html, /GHS 1–\+/, 'the open-ended tier row must render');
+  assert.match(html, /<td>15%<\/td>/, 'the admin\'s rate must be shown to the vendor');
+  assert.match(html, /<td>85%<\/td>/);
+
+  const cold = makeAppEnv({});
+  assert.match(cold.commissionRateRowsHTML(), /8%/, 'the fallback table applies only before the cache loads');
+});
+
+test('the withdrawal minimum and window shown to vendors come from Settings', () => {
+  const env = makeAppEnv({ min_withdrawal: '75', withdrawal_days: '1' });
+  assert.equal(env.minWithdrawalAmount(), 75);
+  assert.equal(env.withdrawalWindowLabel(), '1 business day');
+
+  const cold = makeAppEnv({});
+  assert.equal(cold.minWithdrawalAmount(), 10, 'fallback keeps the old constant');
+  assert.equal(cold.withdrawalWindowLabel(), '2 business days');
+
+  const silly = makeAppEnv({ min_withdrawal: '0', withdrawal_days: '-4' });
+  assert.equal(silly.minWithdrawalAmount(), 10, 'a zero minimum must not let 0-GHS withdrawals through');
+  assert.equal(silly.withdrawalWindowLabel(), '2 business days');
+});
+
+test('the announcement banner renders only while the admin has it active', () => {
+  // Active + text → banner inserted with the admin's message and type.
+  const env = makeAppEnv({ announcement_active: 'true', announcement_text: 'Free delivery weekend', announcement_type: 'warning' });
+  env.renderAnnouncementBanner();
+  const banner = env._doc._banner;
+  assert.ok(banner, 'an active announcement must produce a banner');
+  assert.match(banner.innerHTML, /Free delivery weekend/);
+  assert.match(banner.innerHTML, /⚠️/, 'the admin\'s chosen type must be shown');
+
+  // Re-render updates in place instead of stacking duplicates.
+  env.renderAnnouncementBanner();
+  assert.equal(env._doc.getElementById('announcement-banner'), banner);
+
+  // Turning it off removes it.
+  const off = makeAppEnv({ announcement_active: 'false', announcement_text: 'ignored' });
+  off.renderAnnouncementBanner();
+  assert.equal(off._doc._banner, null, 'an inactive announcement must not render');
+
+  // Active with empty text renders nothing (no empty strip).
+  const blank = makeAppEnv({ announcement_active: 'true', announcement_text: '   ' });
+  blank.renderAnnouncementBanner();
+  assert.equal(blank._doc._banner, null, 'an empty announcement must not render');
+});
+
+test('announcement settings are readable by the clients that render them', () => {
+  const accessSrc = read('lib/access.js');
+  for (const key of ['announcement_active', 'announcement_text', 'announcement_type', 'announcement_audience']) {
+    assert.ok(access.PUBLIC_SETTINGS_KEYS.has(key), `${key} is missing from PUBLIC_SETTINGS_KEYS — non-admins would never see the banner`);
+  }
+  // Sanity: the keys really are read through the scanned pattern so the
+  // allowlist test above keeps covering them.
+  assert.match(read('js/app.js'), /cachedSetting\('announcement_active'\)/);
+  assert.match(read('js/app.js'), /cachedSetting\('announcement_audience'\)/);
+});
+
+test('the announcement banner reaches only the audience the admin picked', () => {
+  const base = { announcement_active: 'true', announcement_text: 'Buyers only deal', announcement_audience: 'buyer' };
+
+  // A buyer sees it.
+  const buyer = makeAppEnv(base, { app: { currentUser: { role: 'buyer' } } });
+  buyer.renderAnnouncementBanner();
+  assert.ok(buyer._doc._banner, 'a buyer must see a buyers-only announcement');
+
+  // A vendor does not.
+  const vendor = makeAppEnv(base, { app: { currentUser: { role: 'vendor' } } });
+  vendor.renderAnnouncementBanner();
+  assert.equal(vendor._doc._banner, null, 'a vendors role is outside a buyers-only audience');
+
+  // Signed-out visitors do not either (no role to match).
+  const anon = makeAppEnv(base, { app: { currentUser: null } });
+  anon.renderAnnouncementBanner();
+  assert.equal(anon._doc._banner, null, 'signed-out visitors are outside a targeted audience');
+
+  // Legacy 'seller' accounts are vendors for matching purposes.
+  const sellerTargeted = makeAppEnv(
+    { announcement_active: 'true', announcement_text: 'Sellers', announcement_audience: 'vendor' },
+    { app: { currentUser: { role: 'seller' } } });
+  sellerTargeted.renderAnnouncementBanner();
+  assert.ok(sellerTargeted._doc._banner, "a legacy 'seller' must count as a vendor");
+
+  // Audience 'all' (or key absent → defaults to all) keeps the old broadcast behaviour.
+  for (const audience of ['all', undefined]) {
+    const env = makeAppEnv(
+      { announcement_active: 'true', announcement_text: 'For everyone', announcement_audience: audience },
+      { app: { currentUser: { role: 'rendor' } } });
+    env.renderAnnouncementBanner();
+    assert.ok(env._doc._banner, `audience ${audience} must still reach every role`);
+  }
+});
+
+test('the admin can choose the audience and sendAnnouncement filters recipients', () => {
+  const adminSrc = read('js/admin.js');
+  // The picker exists with the four requested targets.
+  assert.match(adminSrc, /id="setting-announcement-audience"/);
+  for (const v of ['all', 'buyer', 'vendor', 'rendor']) {
+    assert.match(adminSrc, new RegExp(`value="${v}"`), `the audience select must offer "${v}"`);
+  }
+  // The audience is persisted so every client can filter the banner…
+  assert.match(adminSrc, /upsert\('announcement_audience'/);
+  // …and recipients are filtered by it (not the whole user table).
+  assert.match(adminSrc, /audience === 'all' \? allUsers : allUsers\.filter/,
+    'sendAnnouncement must filter recipients by the chosen audience');
+  // loadAdminSettings restores the saved audience into the select.
+  assert.match(read('js/admin-settings.js'), /key: 'announcement_audience'/);
 });

@@ -750,7 +750,7 @@ async function renderAdminDashboard() {
     <div class="card" style="margin-top:20px;border:2px solid #fde68a">
       <div class="card-header" style="background:linear-gradient(90deg,#fef9c3,#fef3c7)">
         <h3 style="color:#92400e">📢 Platform Announcement</h3>
-        <span style="font-size:.72rem;color:#92400e;font-weight:600">Broadcast to all users</span>
+        <span style="font-size:.72rem;color:#92400e;font-weight:600">Broadcast to your chosen audience</span>
       </div>
       <div class="card-body">
         <div class="form-group">
@@ -763,10 +763,19 @@ async function renderAdminDashboard() {
           </select>
         </div>
         <div class="form-group">
+          <label class="form-label">Send To</label>
+          <select class="form-control form-select" id="setting-announcement-audience">
+            <option value="all">🌍 All users</option>
+            <option value="buyer">🛍️ Buyers only</option>
+            <option value="vendor">🏪 Vendors only</option>
+            <option value="rendor">🎨 Rendors only</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label class="form-label">Announcement Message</label>
           <textarea class="form-control" id="setting-announcement-text" rows="3"
             placeholder="e.g. 🎉 Flash sale this weekend — up to 50% off selected stores!"></textarea>
-          <div class="form-hint">This banner will appear on the home &amp; marketplace page for all users</div>
+          <div class="form-hint">The banner and notification go only to the selected audience</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.85rem">
@@ -1742,6 +1751,7 @@ async function sendAnnouncement() {
   const text    = document.getElementById('setting-announcement-text')?.value.trim();
   const type    = document.getElementById('setting-announcement-type')?.value || 'info';
   const active  = document.getElementById('setting-announcement-active')?.checked ?? true;
+  const audience = document.getElementById('setting-announcement-audience')?.value || 'all';
 
   if (!text) { showToast('Please enter an announcement message', 'warning'); return; }
 
@@ -1757,22 +1767,31 @@ async function sendAnnouncement() {
     else    await apiPost('settings', { key, value: String(value), label: key, type: 'text', updated_at: new Date().toISOString() });
   };
   await Promise.all([
-    upsert('announcement_text',   text),
-    upsert('announcement_type',   type),
-    upsert('announcement_active', String(active))
+    upsert('announcement_text',     text),
+    upsert('announcement_type',     type),
+    upsert('announcement_active',   String(active)),
+    upsert('announcement_audience', audience)
   ]);
 
-  // Send as in-app notification to ALL non-admin users (saved to DB so they receive it)
+  // Publish immediately: the site banner reads the same settings rows, and the
+  // cached public settings must not keep showing the previous announcement.
+  try { App.publicSettings = null; await loadPublicSettings(); renderAnnouncementBanner(); } catch (e) {}
+
+  // Send as in-app notification to the selected audience (saved to DB so they receive it)
   const typeIconMap = { info: '📢', success: '✅', warning: '⚠️', danger: '🚨' };
   const icon = typeIconMap[type] || '📢';
   const usersRes = await apiGet('users', 'limit=500');
   const allUsers = (usersRes?.data || []).filter(u => u.status !== 'deleted' && u.role !== 'admin');
+  // Legacy accounts may still carry the old 'seller' role — treat them as vendors.
+  const roleOf = u => (u.role === 'seller' ? 'vendor' : u.role);
+  const targets = audience === 'all' ? allUsers : allUsers.filter(u => roleOf(u) === audience);
+  const audienceLabel = { all: 'user', buyer: 'buyer', vendor: 'vendor', rendor: 'rendor' }[audience] || 'user';
 
   // Post each notification to the DB so it appears when users open their notifications
   // Process in small batches of 10 to avoid overloading the API
   const BATCH = 10;
-  for (let i = 0; i < allUsers.length; i += BATCH) {
-    const batch = allUsers.slice(i, i + BATCH);
+  for (let i = 0; i < targets.length; i += BATCH) {
+    const batch = targets.slice(i, i + BATCH);
     await Promise.all(batch.map(u =>
       apiPost('notifications', {
         user_id:    u.id,
@@ -1793,7 +1812,7 @@ async function sendAnnouncement() {
   if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Announcement'; }
   const msg = document.getElementById('announcement-sent-msg');
   if (msg) { msg.style.display = 'block'; setTimeout(() => msg.style.display = 'none', 3000); }
-  showToast(`📢 Announcement sent to ${allUsers.length} user(s)!`, 'success');
+  showToast(`📢 Announcement sent to ${targets.length} ${audienceLabel}${targets.length === 1 ? '' : 's'}!`, 'success');
 }
 
 async function clearAnnouncement() {
@@ -1810,6 +1829,8 @@ async function clearAnnouncement() {
     upsert('announcement_active', 'false'),
     upsert('announcement_text',   '')
   ]);
+  // Remove the banner right away (the rows are what the banner reads).
+  try { App.publicSettings = null; await loadPublicSettings(); renderAnnouncementBanner(); } catch (e) {}
   showToast('Announcement cleared', 'info');
 }
 

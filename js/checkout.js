@@ -181,8 +181,20 @@ function selectPayment(method) {
   renderCheckout();
 }
 
+// Personal referral coupon 'REF-<userId>' — the id is everything after the
+// 'REF-' prefix (ids contain dashes: use-123-456, uuids, buyer-test-1), and
+// the comparison is case-insensitive because the input is uppercased for the
+// regular coupon lookup. Returns { isReferral, match }.
+function referralCouponMatch(codeInput, userId) {
+  const raw = String(codeInput || '').trim();
+  if (raw.toUpperCase().slice(0, 4) !== 'REF-') return { isReferral: false, match: false };
+  const uid = raw.slice(4);
+  return { isReferral: true, match: !!userId && uid.toUpperCase() === String(userId).toUpperCase() };
+}
+
 async function applyCoupon() {
-  const code = document.getElementById('checkout-coupon')?.value.trim().toUpperCase();
+  const rawCode = document.getElementById('checkout-coupon')?.value.trim() || '';
+  const code = rawCode.toUpperCase();
   const msg = document.getElementById('coupon-msg');
   if (!code) {
     App.appliedCoupon = null;
@@ -194,9 +206,9 @@ async function applyCoupon() {
   if (msg) msg.innerHTML = '<span><i class="fas fa-spinner fa-spin"></i> Validating…</span>';
   try {
     // Intercept Personal Referral Coupons
-    if (code.startsWith('REF-')) {
-      const parts = code.split('-');
-      if (parts.length > 1 && String(parts[1]) === String(App.currentUser?.id)) {
+    const refMatch = referralCouponMatch(rawCode, App.currentUser?.id);
+    if (refMatch.isReferral) {
+      if (refMatch.match) {
         const balance = await calculateUserReferralBalance(App.currentUser.id);
         if (balance > 0) {
           if (msg) msg.innerHTML = '<span style="color:var(--success)"><i class="fas fa-check"></i> Referral Balance applied!</span>';
@@ -229,8 +241,18 @@ async function applyCoupon() {
       // used_by.length for legacy coupons created before used_count existed.
       const usedCount = (parseInt(validCoupon.used_count) || 0) || (usedBy.length || 0);
       const maxUses = parseInt(validCoupon.max_uses) || 0;
+      // Mirror the server's checks so a dead coupon doesn't show "applied" and
+      // then fail the order with a 409 (lib/commerce.js computeDiscount).
+      const expiry = validCoupon.expires_at || validCoupon.expiry;
+      const expired = !!expiry && Number.isFinite(Date.parse(expiry)) && Date.parse(expiry) < Date.now();
 
-      if (currentUserId && usedBy.includes(currentUserId)) {
+      if (validCoupon.active === false) {
+        if (msg) msg.innerHTML = '<span style="color:var(--danger)">This coupon is no longer active</span>';
+        App.appliedCoupon = null;
+      } else if (expired) {
+        if (msg) msg.innerHTML = '<span style="color:var(--danger)">This coupon has expired</span>';
+        App.appliedCoupon = null;
+      } else if (currentUserId && usedBy.includes(currentUserId)) {
         if (msg) msg.innerHTML = '<span style="color:var(--danger)">You have already used this coupon</span>';
         App.appliedCoupon = null;
       } else if (maxUses > 0 && usedCount >= maxUses) {

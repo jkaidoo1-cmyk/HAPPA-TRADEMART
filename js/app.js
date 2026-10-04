@@ -286,7 +286,8 @@ window.addEventListener('DOMContentLoaded', () => {
   if (window.updateHeaderSearchForPage) window.updateHeaderSearchForPage();
   renderNotifBadge();
   // One settings fetch for the whole session (see loadPublicSettings).
-  loadPublicSettings();
+  // The announcement banner reads the same cache, so render it once warm.
+  loadPublicSettings().then(() => { try { renderAnnouncementBanner(); } catch (e) {} });
   // Cross-Tab Session & Wallet Balance Synchronization
   window.addEventListener('storage', (e) => {
     if (e.key === 'happa_user') {
@@ -763,6 +764,13 @@ setInterval(async () => {
       if (data && data.token) setAuthToken(data.token);
     }
   } catch(_) {} // silent — not critical
+  // Same cadence: refresh the public settings cache so a long-lived dashboard
+  // eventually picks up admin changes (commission tiers, withdrawal minimums,
+  // announcements) instead of showing them only after a full reload.
+  try {
+    await loadPublicSettings();
+    renderAnnouncementBanner();
+  } catch(_) {}
 }, 30 * 60 * 1000); // every 30 minutes
 
 window.addEventListener('storage', (e) => {
@@ -1630,6 +1638,13 @@ function updateNavForUser() {
     if (cartBtn)  cartBtn.style.display  = 'none';
     if (cartBnav) cartBnav.style.display = 'none';
   }
+
+  // A targeted announcement is only for some roles, so signing in/out (or
+  // switching accounts) can make the banner appear or disappear. Re-render it
+  // against the identity that is now active. No-op when nothing is cached yet.
+  if (typeof renderAnnouncementBanner === 'function' && App.publicSettings) {
+    try { renderAnnouncementBanner(); } catch (e) {}
+  }
 }
 
 // ── Vendor My Store — renders as a full home page section ─
@@ -2452,11 +2467,121 @@ async function getSetting(key, defaultValue = '') {
 }
 
 // ── Commission Calculator ─────────────────────────────────
+// Reads the admin's Settings → commission_tiers first. The COMMISSION
+// constant is only the fallback for the brief window before the public
+// settings cache has loaded — using it alone is why an admin's edited
+// commission never reached the cart, product and vendor screens.
+// Tier shape: [{min, max, pct}] with max >= 99999 meaning "no upper bound"
+// (legacy rows shaped [min, max, pct] are accepted too).
+function commissionTiersList() {
+  try {
+    const raw = typeof cachedSetting === 'function' ? cachedSetting('commission_tiers') : undefined;
+    if (raw == null || raw === '') return null;
+    const tiers = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(tiers) && tiers.length ? tiers : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function getCommission(price) {
+  const tiers = commissionTiersList();
+  if (tiers) {
+    const p = Number(price) || 0;
+    const bound = t => {
+      if (Array.isArray(t)) return { min: Number(t[0]), max: Number(t[1]) >= 99999 ? Infinity : Number(t[1]), pct: Number(t[2]) };
+      const max = Number(t.max) >= 99999 ? Infinity : Number(t.max);
+      return { min: Number(t.min), max, pct: Number(t.pct) };
+    };
+    for (const t of tiers) {
+      const b = bound(t);
+      if (p >= b.min && p <= b.max) return b.pct;
+    }
+    return bound(tiers[tiers.length - 1]).pct || 2;
+  }
   for (const [min, max, pct] of COMMISSION) {
     if (price >= min && price <= max) return pct;
   }
   return 2;
+}
+
+// Row HTML for the vendor dashboard's "Commission Rates" table — the admin's
+// tiers, falling back to the same defaults getCommission uses.
+function commissionRateRowsHTML() {
+  const rows = (commissionTiersList() || COMMISSION).map(t =>
+    Array.isArray(t) ? { min: t[0], max: t[1], pct: t[2] } : t);
+  return rows.map(t => {
+    const max = Number(t.max) >= 99999 || t.max === Infinity ? '+' : t.max;
+    const pct = Number(t.pct) || 0;
+    return `<tr><td>GHS ${t.min}–${max}</td><td>${pct}%</td><td>${100 - pct}%</td></tr>`;
+  }).join('');
+}
+
+// Minimum withdrawal from Admin → Settings (Wallet & Withdrawals); the
+// hardcoded MIN_WITHDRAWAL constant is only the pre-cache fallback.
+function minWithdrawalAmount() {
+  try {
+    const raw = typeof cachedSetting === 'function' ? cachedSetting('min_withdrawal') : undefined;
+    const v = parseFloat(raw);
+    if (Number.isFinite(v) && v > 0) return v;
+  } catch (e) {}
+  return typeof MIN_WITHDRAWAL !== 'undefined' ? MIN_WITHDRAWAL : 50;
+}
+
+// Processing window from Admin → Settings (Wallet & Withdrawals). The vendor
+// dashboard card used to promise a fixed "1–2 business days" no matter what
+// the admin configured.
+function withdrawalWindowLabel() {
+  let days = 2;
+  try {
+    const raw = typeof cachedSetting === 'function' ? cachedSetting('withdrawal_days') : undefined;
+    const v = parseInt(raw, 10);
+    if (Number.isFinite(v) && v > 0) days = v;
+  } catch (e) {}
+  return `${days} business day${days === 1 ? '' : 's'}`;
+}
+
+// ── Platform announcement banner ──────────────────────────
+// Admin → Settings saves announcement_text/type (and sendAnnouncement's active
+// flag) "for banner display", but nothing ever rendered a banner — the three
+// keys were written and never read. Render it at the top of the app (hidden on
+// storefront views along with the rest of #main-content) with a per-load
+// dismiss that does not switch the announcement off for everyone.
+function renderAnnouncementBanner() {
+  try {
+    const main = document.getElementById('main-content');
+    if (!main) return;
+    const active = String(cachedSetting('announcement_active') || '') === 'true';
+    const text = String(cachedSetting('announcement_text') || '').trim();
+    let el = document.getElementById('announcement-banner');
+    if (!active || !text) { if (el) el.remove(); return; }
+    // Respect the audience the admin chose: a buyers-only announcement must not
+    // render for vendors/rendors (or for signed-out visitors). Legacy 'seller'
+    // accounts count as vendors. An unreadable/absent key behaves as 'all'.
+    const audience = String(cachedSetting('announcement_audience') ?? 'all');
+    if (audience !== 'all') {
+      const rawRole = (typeof App !== 'undefined' && App.currentUser && App.currentUser.role) || '';
+      const role = rawRole === 'seller' ? 'vendor' : rawRole;
+      if (role !== audience) { if (el) el.remove(); return; }
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'announcement-banner';
+      main.insertBefore(el, main.firstChild);
+    }
+    const type = String(cachedSetting('announcement_type') || 'info');
+    const themes = {
+      info:    { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', icon: '📢' },
+      success: { bg: '#f0fdf4', fg: '#15803d', border: '#bbf7d0', icon: '✅' },
+      warning: { bg: '#fffbeb', fg: '#92400e', border: '#fde68a', icon: '⚠️' },
+      danger:  { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', icon: '🚨' }
+    };
+    const th = themes[type] || themes.info;
+    el.style.cssText = `display:flex;gap:10px;align-items:flex-start;background:${th.bg};color:${th.fg};border-bottom:1.5px solid ${th.border};padding:10px 16px;font-size:.84rem;font-weight:600;line-height:1.5`;
+    el.innerHTML = `<span style="flex-shrink:0">${th.icon}</span>` +
+      `<span style="flex:1;white-space:pre-wrap">${escHtml(text)}</span>` +
+      `<button type="button" aria-label="Dismiss announcement" onclick="this.closest('#announcement-banner')?.remove()" style="background:none;border:none;color:${th.fg};font-size:1rem;line-height:1;cursor:pointer;opacity:.6;flex-shrink:0;padding:0">✕</button>`;
+  } catch (e) {}
 }
 
 // ── Package Code Generator ────────────────────────────────

@@ -451,8 +451,8 @@ async function renderVendorDashboard() {
       <div class="card-body" style="display:flex;gap:10px;align-items:flex-start">
         <i class="fas fa-info-circle" style="color:var(--info);margin-top:2px;flex-shrink:0"></i>
         <div style="font-size:.82rem;color:var(--text-light);line-height:1.6">
-          Withdrawal requests are reviewed and paid within <strong>1–2 business days</strong>.
-          Minimum withdrawal is <strong>GHS ${MIN_WITHDRAWAL}</strong>.
+          Withdrawal requests are reviewed and paid within <strong id="vendor-withdrawal-window">${withdrawalWindowLabel()}</strong>.
+          Minimum withdrawal is <strong id="vendor-min-withdrawal">GHS ${minWithdrawalAmount()}</strong>.
           Vendor must be fully verified (phone + ID) to withdraw.
         </div>
       </div>
@@ -479,8 +479,8 @@ async function renderVendorDashboard() {
       <div class="card-body" style="padding:0">
         <table class="commission-table">
           <thead><tr><th>Price Range</th><th>Platform Takes</th><th>You Keep</th></tr></thead>
-          <tbody>
-            ${(typeof COMMISSION !== 'undefined' ? COMMISSION : [[1,50,8],[51,100,6],[101,500,4],[501,1000,3],[1001,Infinity,2]]).map(([min,max,pct]) => `<tr><td>GHS ${min}–${max === Infinity ? '+' : max}</td><td>${pct}%</td><td>${100-pct}%</td></tr>`).join('')}
+          <tbody id="vendor-commission-rows">
+            ${commissionRateRowsHTML()}
           </tbody>
         </table>
       </div>
@@ -1127,6 +1127,17 @@ async function renderVendorDashboard() {
     if (typeof window.updateStorefrontPreview === 'function') {
       window.updateStorefrontPreview();
     }
+    // Re-fill the Commission Rates table and the withdrawal minimum once the
+    // public settings cache is guaranteed warm — a first paint that raced the
+    // boot fetch used to show the hardcoded fallbacks forever.
+    getSetting('commission_tiers', '').then(() => {
+      const tb = document.getElementById('vendor-commission-rows');
+      if (tb) tb.innerHTML = commissionRateRowsHTML();
+      const mw = document.getElementById('vendor-min-withdrawal');
+      if (mw) mw.textContent = `GHS ${minWithdrawalAmount()}`;
+      const ww = document.getElementById('vendor-withdrawal-window');
+      if (ww) ww.textContent = withdrawalWindowLabel();
+    }).catch(() => {});
   }, 200);
   c.dataset.rendering = '0';
   } catch (err) {
