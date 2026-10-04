@@ -345,7 +345,15 @@ function rendorPostCardPublicHTML(post, rendor) {
 
     <!-- CTA -->
 
-    <div style="margin-top:10px;display:flex;justify-content:flex-end">
+    <div style="margin-top:10px;display:flex;justify-content:flex-end;gap:8px">
+
+      <button class="btn btn-sm" style="background:transparent;color:#7c3aed;border:1px solid var(--border);font-size:.75rem"
+              title="Share this post"
+              onclick="event.stopPropagation();shareRendorPost('${rendor?.id || ''}','${jsArg(rendor?.rendor_display_name || rendor?.name || '')}','${jsArg(post.title || '')}','${jsArg(post.price != null ? post.price : '')}')">
+
+        <i class="fas fa-share-alt"></i> Share
+
+      </button>
 
       <button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border-color:#7c3aed;font-size:.75rem"
 
@@ -2509,6 +2517,30 @@ function shareRendorProfile(rendorId, name) {
   }
 }
 
+// Share a single rendor POST. Posts have no page of their own — they are
+// rendered inside the rendor's public profile — so the link points there, same
+// as the card's own "View Profile" button. The caption carries the post's title
+// and price so the shared message says what is being shared instead of only
+// naming the rendor. As in shareRendorProfile the URL is passed ONLY via `url`:
+// repeating it in `text` makes the share sheet append the link twice.
+function shareRendorPost(rendorId, rendorName, postTitle, postPrice) {
+  const url  = window.location.origin + '/#rendor-profile/' + rendorId;
+  const name = String(rendorName || 'a service provider');
+  const title = String(postTitle || '').trim();
+  const priceVal = parseFloat(postPrice);
+  const price = (title && Number.isFinite(priceVal)) ? ` — GHS ${priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2)}` : '';
+  const lead = title ? `${title}${price}` : name;
+  const text = `${lead}\nShared by ${name} on HAPPA TRADEMART\n${url}`;
+
+  if (navigator.share) {
+    navigator.share({ title: title || name, text: `${lead}\nShared by ${name} on HAPPA TRADEMART`, url }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => showToast('Post link copied! 📋', 'success'));
+  } else {
+    prompt('Copy this link:', text);
+  }
+}
+
 
 
 // ── Render Rendor Public Profile Page ────────────────────
@@ -2985,7 +3017,21 @@ async function renderStoresRendorSection() {
 
     sec.style.display = '';
 
-    list.innerHTML = rendorCards.map(r => storesRendorCardHTML(r)).join('');
+    // Count each rendor's visible posts so the card can show how many services
+
+    // they actually offer instead of only a name and a category.
+
+    const postCounts = {};
+
+    (postsRes?.data || []).forEach(s => {
+
+      if (s.status !== 'active' || s.deleted || !rendorMap[s.rendor_id]) return;
+
+      postCounts[s.rendor_id] = (postCounts[s.rendor_id] || 0) + 1;
+
+    });
+
+    list.innerHTML = rendorCards.map(r => storesRendorCardHTML(r, postCounts[r.id] || 0)).join('');
 
   } catch (e) {
 
@@ -2999,7 +3045,7 @@ async function renderStoresRendorSection() {
 
 // Compact profile card for the Stores page (mirrors storeCardHTML structure)
 
-function storesRendorCardHTML(r) {
+function storesRendorCardHTML(r, postCount) {
 
   const displayName = r.rendor_display_name || r.name || 'Rendor';
 
@@ -3019,13 +3065,53 @@ function storesRendorCardHTML(r) {
 
     : '';
 
+
+
+  // The bio and skill tags are the part of a rendor profile this compact card
+
+  // used to drop entirely, even though the section header promised "tap a card
+
+  // for full profile & contact info". Clamped to two lines so the card stays
+
+  // the same height as a store card in the grid.
+
+  const bio   = String(r.rendor_bio || '').trim();
+
+  const chips = String(r.rendor_tags || '').split(',').map(t => t.trim()).filter(Boolean).slice(0, 4);
+
+  const tagsHTML = chips.length
+
+    ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${chips.map(t => `<span style="font-size:.66rem;background:var(--bg-secondary,#f3f4f6);border:1px solid var(--border);color:var(--text-muted);border-radius:20px;padding:2px 8px">${escHtml(t)}</span>`).join('')}</div>`
+
+    : '';
+
+
+
+  // Optional: the Stores section already fetched the posts, so it passes the
+
+  // count. Search callers that don't have one simply omit the pill.
+
+  const posts = Number(postCount);
+
+  const postPill = Number.isFinite(posts) && posts > 0
+
+    ? `<span style="font-size:.7rem;color:var(--text-muted);font-weight:700"><i class="fas fa-layer-group"></i> ${posts} service${posts === 1 ? '' : 's'}</span>`
+
+    : '';
+
   return `
 
 <div class="rendor-post-card" onclick="openRendorProfile('${r.id}')">
 
-  <div style="padding:12px;display:flex;align-items:center;gap:11px">
+  <div style="padding:12px;display:flex;align-items:flex-start;gap:11px">
 
-    <div class="rendor-post-avatar" style="width:46px;height:46px;font-size:1.15rem">${escHtml(avatar)}</div>
+    <div class="rendor-post-avatar" style="width:52px;height:52px;font-size:1.3rem;position:relative;overflow:hidden;flex-shrink:0">
+
+      ${escHtml(avatar)}
+
+      ${r.avatar_url ? `<img src="${escHtml(r.avatar_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : ''}
+
+    </div>
 
     <div style="flex:1;min-width:0">
 
@@ -3043,11 +3129,15 @@ function storesRendorCardHTML(r) {
 
       </div>
 
-      ${startPrice ? `<div style="margin-top:3px">${startPrice}</div>` : ''}
+      ${startPrice || postPill ? `<div style="margin-top:5px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">${startPrice}${postPill}</div>` : ''}
+
+      ${bio ? `<div style="font-size:.75rem;color:var(--text-light);margin-top:6px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escHtml(bio)}</div>` : ''}
+
+      ${tagsHTML}
 
     </div>
 
-    <i class="fas fa-chevron-right" style="color:var(--text-muted);font-size:.8rem;flex-shrink:0"></i>
+    <i class="fas fa-chevron-right" style="color:var(--text-muted);font-size:.8rem;flex-shrink:0;align-self:center"></i>
 
   </div>
 

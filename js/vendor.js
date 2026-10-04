@@ -312,10 +312,6 @@ async function renderVendorDashboard() {
       </button>
     </div>` : '';
 
-  // Referral reward is a percentage of the item's vendor amount (same tiers the
-  // payout in orders.js uses) — never a fixed amount.
-  const refPct = (typeof getEffectiveReferralCommissionPct === 'function') ? getEffectiveReferralCommissionPct(100) : 3;
-
   const activeTabId = (App.activeTab && App.activeTab['vendor-dashboard']) || 'vendor-overview';
 
     c.innerHTML = `
@@ -578,10 +574,6 @@ async function renderVendorDashboard() {
           <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">4</div>
             <div style="color:var(--text-light)">The more referrals you get, the more people see your store — boosting your sales and reach</div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:flex-start;font-size:.82rem">
-            <div style="width:22px;height:22px;border-radius:50%;background:#f59e0b;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:.7rem">5</div>
-            <div style="color:var(--text)">Referrals earn <strong>${refPct}% of each approved item's value</strong> — paid to their wallet</div>
           </div>
         </div>
       </div>

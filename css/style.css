@@ -2414,8 +2414,20 @@ html.is-storefront-root body #main-content {
 @media (min-width: 1024px) {
   #rendor-dashboard-content {
     display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
     flex: 1;
     min-height: 0;
+  }
+  /* The profile banner and the subscription strip sit ABOVE the tab row. They
+     are siblings of the sidebar in the DOM, so without pinning them to their
+     own full-width lines the flex row turns them into columns too and squeezes
+     the sidebar and panel into slivers beside them. */
+  #rendor-dashboard-content > .rendor-profile-banner,
+  #rendor-dashboard-content > .rendor-sub-strip {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 100%;
   }
   #rendor-tabs {
     flex-direction: column;
@@ -2423,10 +2435,10 @@ html.is-storefront-root body #main-content {
     border-right: 2px solid var(--border);
     overflow-x: hidden;
     overflow-y: auto;
-    flex-shrink: 0;
+    flex: 0 0 190px;
     width: 190px;
     position: sticky;
-    top: 0;
+    top: var(--nav-h);
     max-height: calc(100vh - var(--nav-h) - 56px);
     padding: 16px 0;
     background: #fff;
@@ -2449,9 +2461,11 @@ html.is-storefront-root body #main-content {
     background: #ede9fe;
     color: #7c3aed;
   }
+  /* min-width:0 lets the panel shrink below its content instead of forcing a
+     horizontal scrollbar; the page scrolls as a whole, like mobile does. */
   #rendor-dashboard-content > .tab-content {
-    flex: 1;
-    max-height: calc(100vh - var(--nav-h) - 56px);
+    flex: 1 1 0;
+    min-width: 0;
     display: none;
   }
   #rendor-dashboard-content > .tab-content.active { display: block; }

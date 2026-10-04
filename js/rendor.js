@@ -112,7 +112,7 @@ async function renderRendorDashboard() {
 </div>
 
 <!-- ── Subscription status strip ── -->
-<div style="background:${subActive?'#ecfdf5':'#fef2f2'};border-bottom:1px solid ${subActive?'#a7f3d0':'#fecaca'};padding:8px 16px;display:flex;align-items:center;gap:8px;font-size:.8rem">
+<div class="rendor-sub-strip" style="background:${subActive?'#ecfdf5':'#fef2f2'};border-bottom:1px solid ${subActive?'#a7f3d0':'#fecaca'};padding:8px 16px;display:flex;align-items:center;gap:8px;font-size:.8rem">
   <i class="fas fa-${subActive?'check-circle':'exclamation-circle'}" style="color:${subActive?'var(--success)':'var(--danger)'}"></i>
   <span style="flex:1;color:${subActive?'#065f46':'#991b1b'}">
     <strong>Subscription:</strong> ${subLabel}
