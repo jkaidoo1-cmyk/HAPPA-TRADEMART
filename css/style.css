@@ -587,7 +587,10 @@ html.is-storefront-root body #main-content {
   gap: 8px;
   overflow-x: auto;
   position: sticky;
-  top: var(--nav-h);
+  /* Sticky is relative to #main-content, which already starts below the fixed
+     top nav — `var(--nav-h)` here counted the nav twice and parked the bar a
+     nav-height below the scroller's top edge (a blank band above it). */
+  top: 0;
   z-index: 100;
 }
 .filter-bar::-webkit-scrollbar { display: none; }
@@ -2209,7 +2212,11 @@ html.is-storefront-root body #main-content {
     align-items: center;
     gap: 12px;
     position: sticky;
-    top: var(--nav-h);
+    /* Pin to the top of #main-content (the scroller) — NOT var(--nav-h), which
+       is viewport-relative. The header is the first child, so the double offset
+       showed as a blank nav-height strip between the nav and the header even
+       before any scrolling. */
+    top: 0;
     z-index: 100;
   }
   #page-admin-vendor-profile #admin-vendor-profile-content,
@@ -2455,7 +2462,9 @@ html.is-storefront-root body #main-content {
     flex: 0 0 190px;
     width: 190px;
     position: sticky;
-    top: var(--nav-h);
+    /* Scroller-relative (#main-content already clears the nav): `top: 0` pins
+       the tabs to the top of the scrollport instead of a nav-height below it. */
+    top: 0;
     max-height: calc(100vh - var(--nav-h) - 56px);
     padding: 16px 0;
     background: #fff;
@@ -3046,7 +3055,9 @@ html.is-storefront-root body #main-content {
   }
   .profile-contact-card {
     position: sticky;
-    top: calc(var(--nav-h) + 12px);
+    /* Inside #main-content, so 12px is measured from the scroller top (already
+       below the nav) — adding var(--nav-h) here dropped the card 64px too low. */
+    top: 12px;
     align-self: start;
   }
 }
