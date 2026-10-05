@@ -474,6 +474,8 @@ window.isProductListable = function(product) {
   if (!product) return false;
   if ((parseInt(product.stock_qty) || 0) <= 0) return false;
   if (product.status === 'sold_out' || product.status === 'archived') return false;
+  // Hidden while the owner has an open account-deletion request (admin review).
+  if (product.status === 'pending_deletion') return false;
   return true;
 };
 
@@ -500,7 +502,9 @@ window.shouldShowProductOnMainWebsite = function(product) {
 window.isStoreVisibleOnMain = function(store) {
   if (!store) return false;
   const st = String(store.status || '').toLowerCase();
-  if (['suspended', 'inactive', 'pending', 'rejected', 'deleted', 'archived'].includes(st)) return false;
+  // 'pending_deletion' hides a store whose owner asked to delete their account
+  // (the admin reviews the request before the real cascade delete runs).
+  if (['suspended', 'inactive', 'pending', 'rejected', 'deleted', 'archived', 'pending_deletion'].includes(st)) return false;
   return st === 'active' || String(store.storefront_status || '').toLowerCase() === 'active';
 };
 

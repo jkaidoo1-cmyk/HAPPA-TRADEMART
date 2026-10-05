@@ -179,6 +179,11 @@ window.addEventListener('DOMContentLoaded', () => {
   // If the app is already installed as a PWA, intercept any <a> click or
   // programmatic navigation that targets a storefront/store-admin URL
   // and open it in the default browser instead.
+  // This is only the safety net: what actually keeps storefronts out of the
+  // installed app is the manifest `scope` (./index.html). Chrome confines a
+  // navigation to the app window only while the URL is inside the scope, and
+  // /storefront/<slug> now sits outside it — so even a link we miss here opens
+  // in the browser on desktop rather than as another app window.
   const isPWA = () =>
     window.matchMedia('(display-mode: standalone)').matches ||
     window.matchMedia('(display-mode: fullscreen)').matches ||
@@ -962,7 +967,14 @@ function _setBrowserIcon(logoUrl) {
   if (tile) tile.setAttribute('content', full);
 }
 
-function updatePWAManifest(name, logoUrl, themeColor) {
+// `opts.reset` marks the marketplace's own pages: they must advertise the REAL
+// /manifest.json again. A generated blob manifest used to replace it on every
+// page, and because that blob carried no `scope`, the installed app adopted the
+// whole origin — which is what let a storefront link (/storefront/<slug>) open
+// inside the installed app instead of the browser. The real manifest declares
+// `scope: ./index.html`, so storefront URLs are out of scope and Chrome hands
+// them to the browser. Store-detail branding (below) still gets its own blob.
+function updatePWAManifest(name, logoUrl, themeColor, opts) {
   const currentHash = window.location.hash || '';
   const currentSearch = window.location.search || '';
   const isStorefrontView = document.body.classList.contains('is-storefront-view') || 
@@ -1010,6 +1022,11 @@ function updatePWAManifest(name, logoUrl, themeColor) {
   // Keep the tab icon in sync (reset path passes the stock HAPPA icon,
   // which restores the default branding)
   _setBrowserIcon(fullLogoUrl);
+
+  if (opts && opts.reset) {
+    link.setAttribute('href', '/manifest.json?v=2');
+    return;
+  }
 
   const dynamicManifest = {
     name: name,
@@ -1169,7 +1186,7 @@ function showPage(pageId, entityId = null) {
 
   // Reset PWA manifest when leaving store detail, storefront or store-admin page
   if (pageId !== 'store-detail' && pageId !== 'storefront' && pageId !== 'store-admin') {
-    updatePWAManifest('HAPPAMART', '/images/icon-192.png', '#e85d04');
+    updatePWAManifest('HAPPAMART', '/images/icon-192.png', '#e85d04', { reset: true });
   }
 
   // map dashboard route
@@ -1596,12 +1613,19 @@ function updateNavForUser() {
   // Bottom nav — hide entirely for admins or when on a storefront
   const bottomNav = document.getElementById('bottom-nav');
   if (bottomNav) {
+    // #main-content reserves the bottom nav's height as padding (see the
+    // desktop #main-content rule) so long pages scroll clear of it. When the
+    // nav is hidden that reservation has to go too, or every page carries a
+    // strip of scrollable emptiness at the bottom.
+    const mainEl = document.getElementById('main-content');
     if (isAdmin || isStorefront) {
       bottomNav.style.display = 'none';
       document.body.style.paddingBottom = '0';
+      if (mainEl) mainEl.style.paddingBottom = '0';
     } else {
       bottomNav.style.display = '';
       document.body.style.paddingBottom = '';
+      if (mainEl) mainEl.style.paddingBottom = '';
     }
   }
 
@@ -3904,22 +3928,21 @@ async function saveNotificationPrefs(userId) {
 
 async function requestAccountDeletion() {
   if (!App.currentUser) { showToast('Please sign in first', 'warning'); return; }
-  if (confirm('Are you sure you want to permanently delete your account? This action is irreversible.\n\nAll your data including store, notifications, and orders will be deleted immediately.')) {
-    // DELETE /api/auth/account runs the full cascade server-side for the
-    // session user. The generic DELETE /api/users/:id is admin-only, so the
-    // old path (delegating to _apDeleteUser) 403'd for regular users and the
-    // account silently survived every deletion attempt.
-    const res = await apiFetch('auth/account', { method: 'DELETE' }).catch(err => {
-      console.error('Account deletion error:', err);
-      return null;
-    });
-    if (!res || !res.success) {
-      showApiErrorToast(window.lastApiError, "We couldn't delete your account. Please try again, or contact support.");
-      return;
-    }
-    showToast('Your account has been deleted. Signing out...', 'warning');
-    if (typeof logout === 'function') logout(true);
+  const ok = confirm('Request account deletion?\n\nEverything you own — your store, storefront, products and services — will be hidden immediately, and an administrator will review your request before the account is permanently deleted.\n\nContinue?');
+  if (!ok) return;
+  // A REQUEST, not an immediate delete: the server hides all of the user's
+  // public rows and notifies the main admin, who runs the real cascade delete
+  // (or restores the account) after review.
+  const res = await apiFetch('auth/request-deletion', { method: 'POST' }).catch(err => {
+    console.error('Account deletion request error:', err);
+    return null;
+  });
+  if (!res || !res.success) {
+    showApiErrorToast(window.lastApiError, "We couldn't submit your deletion request. Please try again, or contact support.");
+    return;
   }
+  showToast('Deletion request received. Your listings are hidden while it is reviewed.', 'warning');
+  if (typeof logout === 'function') logout(true);
 }
 
 window._autoCreateStoreLock = window._autoCreateStoreLock || {};

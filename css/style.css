@@ -83,17 +83,20 @@ ul { list-style: none; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ----- Page Sections ----- */
+/* Pages are NOT offset by the top nav here — #main-content is (see below).
+   The duplicate nav offset that used to live on .page/.page.active is what put
+   a blank strip between the nav and every page header. */
 .page { 
   display: none !important;
   position: relative;
   width: 100%;
-  margin-top: var(--nav-h);
+  margin-top: 0;
 }
 .page.active { 
   display: block !important;
   position: relative;
   width: 100%;
-  margin-top: var(--nav-h);  /* keep nav offset even when active */
+  margin-top: 0;  /* #main-content carries the one nav offset — see #main-content */
 }
 #page-storefront, #page-store-admin {
   margin-top: 0 !important;
@@ -278,13 +281,20 @@ html.is-storefront-root body #main-content {
 .bottom-nav-item .badge { top: 0; right: 20%; }
 
 /* ----- Main Content ----- */
+/* The whole app is offset by the fixed top nav ONCE, here. Pages used to add
+   their own `margin-top: var(--nav-h)` on top of this, which both doubled the
+   blank strip under the nav and left a dead 64px band at the top of this
+   scroll container — content was pushed down inside a box that was itself
+   already sized for the nav. Keeping the offset on the single scroll container
+   means the content starts flush under the nav and scrolls through the full
+   height. */
 #main-content {
-  margin-top: 0;
+  margin-top: var(--nav-h);
   height: calc(100vh - var(--nav-h));
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
-  scroll-padding-top: calc(var(--nav-h) + 12px);
+  scroll-padding-top: 12px;
   padding-bottom: calc(var(--bottom-h) + env(safe-area-inset-bottom));
 }
 
@@ -327,12 +337,13 @@ html.is-storefront-root body #main-content {
   position: relative;
   width: 100%;
   margin-top: 0;
-  padding-top: 12px;
+  padding-top: 0;  /* #main-content already clears the fixed top nav */
 }
 .page.active { 
   display: block !important;
   position: relative;
   width: 100%;
+  margin-top: 0;   /* beat the legacy .page.active nav offset above */
 }
 
 /* ----- Product Cards ----- */
@@ -2075,7 +2086,10 @@ html.is-storefront-root body #main-content {
   #main-content {
     min-height: calc(100vh - var(--nav-h) - var(--bottom-h));
     background: #f0f2f5;
-    padding: 0;
+    /* Reserve room for the fixed bottom nav so a long page scrolls clear of
+       it. updateNavForUser() zeroes this out when the nav is hidden
+       (admins and storefronts), exactly like it does for the body padding. */
+    padding: 0 0 var(--bottom-h);
   }
 
   /* ── DASHBOARD: two-column sidebar layout ── */

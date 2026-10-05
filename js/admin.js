@@ -1903,7 +1903,8 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
   }
   const statusColor = {
     active: 'var(--success)', suspended: 'var(--danger)',
-    pending_approval: '#d97706', deleted: 'var(--text-muted)'
+    pending_approval: '#d97706', deleted: 'var(--text-muted)',
+    pending_deletion: '#b45309'
   }[u.status || 'active'] || 'var(--text-muted)';
 
   return `
@@ -1919,7 +1920,7 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
         <div style="font-weight:700;font-size:.875rem">${escHtml(u.name)}</div>
         <div style="font-size:.75rem;color:var(--text-muted)">${u.email}${u.phone ? ' · ' + u.phone : ''}</div>
         <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap">
-          <span style="font-size:.7rem;padding:2px 7px;border-radius:10px;background:${statusColor}22;color:${statusColor};font-weight:700">${u.status || 'active'}</span>
+          <span style="font-size:.7rem;padding:2px 7px;border-radius:10px;background:${statusColor}22;color:${statusColor};font-weight:700">${u.status === 'pending_deletion' ? 'pending deletion' : (u.status || 'active')}</span>
           ${u.location ? `<span style="font-size:.7rem;color:var(--text-muted)">${u.location}</span>` : ''}
           ${u.is_verified  ? '<span class="status-badge status-paid" style="font-size:.65rem">Phone ✓</span>'  : ''}
           ${u.id_verified  ? '<span class="status-badge status-paid" style="font-size:.65rem">ID ✓</span>'    : ((u.id_image || u.proof_sales_1) ? '<span class="status-badge status-pending" style="font-size:.65rem;background:#fff7ed;color:#ea580c;border:1px solid #fdba74">🪪 ID Submitted</span>' : '')}
@@ -1976,7 +1977,8 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
 function adminUserRowHTML(u) {
   const statusColor = {
     active: 'var(--success)', suspended: 'var(--danger)',
-    pending_approval: '#d97706', deleted: 'var(--text-muted)'
+    pending_approval: '#d97706', deleted: 'var(--text-muted)',
+    pending_deletion: '#b45309'
   }[u.status || 'active'] || 'var(--text-muted)';
 
   // Role-specific accent colour for left border
@@ -2001,7 +2003,7 @@ function adminUserRowHTML(u) {
         <div style="font-weight:700;font-size:.875rem">${escHtml(u.name)}</div>
         <div style="font-size:.75rem;color:var(--text-muted)">${u.email} · <strong style="text-transform:capitalize">${u.role}</strong></div>
         <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap">
-          <span style="font-size:.7rem;padding:2px 7px;border-radius:10px;background:${statusColor}22;color:${statusColor};font-weight:700">${u.status || 'active'}</span>
+          <span style="font-size:.7rem;padding:2px 7px;border-radius:10px;background:${statusColor}22;color:${statusColor};font-weight:700">${u.status === 'pending_deletion' ? 'pending deletion' : (u.status || 'active')}</span>
           ${u.location ? `<span style="font-size:.7rem;color:var(--text-muted)">${u.location}</span>` : ''}
           ${u.is_verified ? '<span class="status-badge status-paid" style="font-size:.65rem">Phone ✓</span>' : ''}
           ${u.id_verified ? '<span class="status-badge status-paid" style="font-size:.65rem">ID ✓</span>'   : ''}

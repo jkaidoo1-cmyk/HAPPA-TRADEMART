@@ -350,6 +350,51 @@ async function _apRevokeIdVerify(userId) {
   }
   catch (e) {}
 }
+// Status pill text: 'pending_deletion' is the one status that needs a human
+// label — the rest already read fine.
+function _apStatusLabel(status) {
+  const s = String(status || 'active');
+  return s === 'pending_deletion' ? 'pending deletion' : s;
+}
+
+// Account-control button for the current status. An open deletion request is
+// DISMISSED (which also republishes the hidden listings) rather than plain
+// activated — one obvious action to clear the request.
+function _apStatusControl(userId, status) {
+  if (status === 'pending_deletion') {
+    return _apBtn('ap-action-green', 'fas fa-undo', 'Dismiss Deletion Request', '_apRestoreDeletion(\'' + userId + '\')');
+  }
+  if (status === 'active') {
+    return _apBtn('ap-action-red', 'fas fa-ban', 'Suspend Account', '_apSuspendUser(\'' + userId + '\')');
+  }
+  return _apBtn('ap-action-green', 'fas fa-check-circle', 'Activate Account', '_apActivateUser(\'' + userId + '\')');
+}
+
+// Approve the user's request to stay: clear the pending status and publish back
+// everything the deletion request hid. The real delete remains the Danger Zone.
+async function _apRestoreDeletion(userId) {
+  if (!confirm('Dismiss this deletion request and restore the account? Their hidden listings will be published again.')) return;
+  showToast('Restoring account…', 'info');
+  const res = await apiFetch('auth/deletion/restore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId })
+  }).catch(err => {
+    console.error('Restore account error:', err);
+    return null;
+  });
+  if (!res || !res.success) {
+    showApiErrorToast(window.lastApiError, "We couldn't restore this account. Please try again.");
+    return;
+  }
+  if (App.allUsers) {
+    const u = App.allUsers.find(x => String(x.id) === String(userId));
+    if (u) { u.status = 'active'; u.deletion_requested_at = null; }
+  }
+  showToast('Account restored ✅', 'success');
+  closeAdminPanel();
+}
+
 async function _apSuspendUser(userId) {
   try { await _apPatchUserOptimistic(userId, { status: 'suspended' }, 'Account suspended'); }
   catch (e) {}
@@ -937,7 +982,7 @@ async function adminOpenBuyerProfile(userId) {
   const joinedDate = u.registered_at
     ? new Date(u.registered_at).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})
     : '—';
-  const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#7c3aed'}[u.status] || 'var(--text-muted)';
+  const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#7c3aed',pending_deletion:'#b45309'}[u.status] || 'var(--text-muted)';
   const PANEL_ID = 'ap-buyer-modal';
   const nameSafe = jsArg(u.name||'');
 
@@ -962,7 +1007,7 @@ async function adminOpenBuyerProfile(userId) {
         <div class="ap-identity-sub">${u.email||''}</div>
         <div class="ap-identity-pills">
           <span class="ap-role-badge" style="background:#dbeafe;color:#1e40af">Buyer</span>
-          <span class="ap-status-pill" style="background:${statusColor}22;color:${statusColor}">${u.status||'active'}</span>
+          <span class="ap-status-pill" style="background:${statusColor}22;color:${statusColor}">${_apStatusLabel(u.status)}</span>
           ${u.is_verified?'<span class="ap-verify-pill">📱 Phone ✓</span>':''}
           ${u.id_verified?'<span class="ap-verify-pill">🪪 ID ✓</span>':''}
         </div>
@@ -992,7 +1037,7 @@ async function adminOpenBuyerProfile(userId) {
         <div class="ap-section-title" style="margin-top:18px">Verification</div>
         ${_apRow('Phone Verified',u.is_verified?'✅ Yes':'❌ No')}
         ${_apRow('ID Verified',u.id_verified?'✅ Yes':'❌ No')}
-        ${_apRow('Account Status','<span style="color:'+statusColor+';font-weight:800">'+(u.status||'active')+'</span>')}
+        ${_apRow('Account Status','<span style="color:'+statusColor+';font-weight:800">'+_apStatusLabel(u.status)+'</span>')}
         <div class="ap-section-title" style="margin-top:18px">Edit Account Info</div>
         <form onsubmit="event.preventDefault();_apSaveBuyerInfo('${userId}',this)">
           <div class="form-group">
@@ -1024,9 +1069,7 @@ async function adminOpenBuyerProfile(userId) {
           ${u.id_verified
             ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\''+userId+'\')')
             : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\''+userId+'\')')}
-          ${u.status==='active'
-            ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\''+userId+'\')')
-            : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\''+userId+'\')')}
+          ${_apStatusControl(userId, u.status)}
         </div>
         ${_apRoleSection(userId,u.role||'buyer')}
         ${_apPasswordSection(userId)}
@@ -1065,9 +1108,7 @@ async function adminOpenBuyerProfile(userId) {
           ${u.id_verified
             ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\''+userId+'\')')
             : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\''+userId+'\')')}
-          ${u.status==='active'
-            ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\''+userId+'\')')
-            : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\''+userId+'\')')}
+          ${_apStatusControl(userId, u.status)}
         </div>
         ${_apRoleSection(userId,u.role||'buyer')}
         ${_apPasswordSection(userId)}
@@ -1141,7 +1182,7 @@ async function adminOpenVendorProfile(userId) {
       } catch(e) {}
     }
 
-    const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#b45309'}[u.status] || 'var(--text-muted)';
+    const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#b45309',pending_deletion:'#b45309'}[u.status] || 'var(--text-muted)';
     const nameSafe    = escHtml(u.name||'').replace(/'/g,"\\'");
 
     // Render into the page content div
@@ -1160,7 +1201,7 @@ async function adminOpenVendorProfile(userId) {
         <div style="color:rgba(255,255,255,.75);font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.email || ''}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
           <span style="background:#fffbea;color:#b45309;padding:3px 8px;border-radius:100px;font-weight:800;font-size:.7rem">Vendor</span>
-          <span style="background:${statusColor}22;color:${statusColor};padding:3px 8px;border-radius:100px;font-weight:800;font-size:.7rem">${u.status||'active'}</span>
+          <span style="background:${statusColor}22;color:${statusColor};padding:3px 8px;border-radius:100px;font-weight:800;font-size:.7rem">${_apStatusLabel(u.status)}</span>
           ${u.is_verified ? '<span style="background:#d1fae5;color:#065f46;padding:3px 8px;border-radius:100px;font-weight:700;font-size:.7rem"><i class="fas fa-check"></i> Phone</span>' : ''}
           ${u.id_verified ? '<span style="background:#d1fae5;color:#065f46;padding:3px 8px;border-radius:100px;font-weight:700;font-size:.7rem"><i class="fas fa-id-card"></i> ID</span>' : ''}
           ${store?.status==='active' ? '<span style="background:#d1fae5;color:#065f46;padding:3px 8px;border-radius:100px;font-weight:700;font-size:.7rem"><i class="fas fa-store"></i> Store Live</span>' : ''}
@@ -1202,7 +1243,7 @@ async function adminOpenVendorProfile(userId) {
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Verification</div>
       ${_apRow('Phone Verified', u.is_verified ? '✅ Yes' : '❌ No')}
       ${_apRow('ID Verified', u.id_verified ? '✅ Yes' : '❌ No')}
-      ${_apRow('Account Status', '<span style="color:' + statusColor + ';font-weight:800">' + (u.status||'active') + '</span>')}
+      ${_apRow('Account Status', '<span style="color:' + statusColor + ';font-weight:800">' + _apStatusLabel(u.status) + '</span>')}
 
       <!-- Verification Documents Section -->
       <div style="margin-top:14px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md)">
@@ -1267,9 +1308,7 @@ async function adminOpenVendorProfile(userId) {
         ${u.id_verified
           ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\'' + userId + '\')')
           : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\'' + userId + '\')')}
-        ${u.status === 'active'
-          ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\'' + userId + '\')')
-          : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\'' + userId + '\')')}
+        ${_apStatusControl(userId, u.status)}
         ${_apBtn('ap-action-teal','fas fa-eye','Preview as Vendor','setTimeout(()=>previewAsRole(\'vendor\'),100)')}
       </div>
       ${_apRoleSection(userId, u.role||'vendor')}
@@ -1426,9 +1465,7 @@ async function adminOpenVendorProfile(userId) {
         ${u.id_verified
           ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\'' + userId + '\')')
           : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\'' + userId + '\')')}
-        ${u.status === 'active'
-          ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\'' + userId + '\')')
-          : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\'' + userId + '\')')}
+        ${_apStatusControl(userId, u.status)}
         ${_apBtn('ap-action-teal','fas fa-eye','Preview as Vendor','setTimeout(()=>previewAsRole(\'vendor\'),100)')}
       </div>
       ${_apRoleSection(userId, u.role||'vendor')}
@@ -1498,7 +1535,7 @@ async function adminOpenRendorProfile(userId) {
   const joinedDate = u.registered_at
     ? new Date(u.registered_at).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})
     : '—';
-  const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#7c3aed'}[u.status] || 'var(--text-muted)';
+  const statusColor = {active:'var(--success)',suspended:'var(--danger)',pending_approval:'#7c3aed',pending_deletion:'#b45309'}[u.status] || 'var(--text-muted)';
   const nameSafe = jsArg(u.name||'');
 
   // Subscription status
@@ -1520,7 +1557,7 @@ async function adminOpenRendorProfile(userId) {
         <div style="color:rgba(255,255,255,.75);font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.email || ''}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
           <span style="background:#ede9fe;color:#4c1d95;padding:3px 8px;border-radius:100px;font-weight:800;font-size:.7rem">Rendor</span>
-          <span style="background:${statusColor}22;color:${statusColor};padding:3px 8px;border-radius:100px;font-weight:800;font-size:.7rem">${u.status||'active'}</span>
+          <span style="background:${statusColor}22;color:${statusColor};padding:3px 8px;border-radius:100px;font-weight:800;font-size:.7rem">${_apStatusLabel(u.status)}</span>
           ${u.is_verified ? '<span style="background:#d1fae5;color:#065f46;padding:3px 8px;border-radius:100px;font-weight:700;font-size:.7rem"><i class="fas fa-check"></i> Phone</span>' : ''}
           ${u.id_verified ? '<span style="background:#d1fae5;color:#065f46;padding:3px 8px;border-radius:100px;font-weight:700;font-size:.7rem"><i class="fas fa-id-card"></i> ID</span>' : ''}
           ${subActive ? '<span style="background:#d1fae5;color:#065f46;padding:3px 8px;border-radius:100px;font-weight:700;font-size:.7rem"><i class="fas fa-star"></i> Sub Active</span>' : ''}
@@ -1574,7 +1611,7 @@ async function adminOpenRendorProfile(userId) {
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Verification</div>
       ${_apRow('Phone Verified', u.is_verified ? '✅ Yes' : '❌ No')}
       ${_apRow('ID Verified', u.id_verified ? '✅ Yes' : '❌ No')}
-      ${_apRow('Account Status', '<span style="color:' + statusColor + ';font-weight:800">' + (u.status||'active') + '</span>')}
+      ${_apRow('Account Status', '<span style="color:' + statusColor + ';font-weight:800">' + _apStatusLabel(u.status) + '</span>')}
 
       <!-- Verification Documents Section (same as vendor/buyer profiles) -->
       <div style="margin-top:14px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md)">
@@ -1643,9 +1680,7 @@ async function adminOpenRendorProfile(userId) {
         ${u.id_verified
           ? _apBtn('ap-action-gray','fas fa-id-card-alt','Revoke ID','_apRevokeIdVerify(\'' + userId + '\')')
           : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\'' + userId + '\')')}
-        ${u.status === 'active'
-          ? _apBtn('ap-action-red','fas fa-ban','Suspend Account','_apSuspendUser(\'' + userId + '\')')
-          : _apBtn('ap-action-green','fas fa-check-circle','Activate Account','_apActivateUser(\'' + userId + '\')')}
+        ${_apStatusControl(userId, u.status)}
         ${subActive
           ? _apBtn('ap-action-gray','fas fa-star-slash','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
           : _apBtn('ap-action-purple','fas fa-star','Activate Sub','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')')}

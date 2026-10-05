@@ -21,6 +21,11 @@ product/
 html_out.txt
 scratch_imgtest.json
 ws_output.bin
+# Leftovers from local e2e runs of the deletion-request suite
+db-test*.json
+db-del-e2e.json
+test-run.log
+server-test-*.log
 # One-off utility scripts (not part of the app)
 simple-server.py
 simple-server.ps1

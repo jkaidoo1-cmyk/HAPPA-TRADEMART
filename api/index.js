@@ -25,6 +25,7 @@ const notify = require('../lib/notify');
 const uploads = require('../lib/uploads');
 const shell = require('../lib/storefront-shell');
 const rendorPosts = require('../lib/rendor-posts');
+const deletion = require('../lib/deletion');
 
 const app = express();
 // Allow larger JSON payloads (product images are sent as base64 up to 5 images)
@@ -280,7 +281,10 @@ const TXN_META_FIELDS = [
 
 const USER_META_FIELDS = [
   'id_image', 'proof_sales_1', 'proof_sales_2', 'proof_sales_3', 'proof_share',
-  'rendor_sub_price_override'
+  'rendor_sub_price_override',
+  // Set when a user requests account deletion; packed into `extra` on slim
+  // Supabase schemas so the request timestamp survives.
+  'deletion_requested_at'
 ];
 
 function packUserMeta(record, existingExtra) {
@@ -981,6 +985,177 @@ app.delete('/api/auth/account', writeRateLimiter, async (req, res) => {
     return res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Account deletion REQUESTS ───────────────────────────────────────────────
+// Mirror of server.js. A user requests deletion instead of deleting outright:
+// their public rows are hidden, the main admin is notified, and the admin runs
+// the real cascade delete (or restores the account) when they have reviewed it.
+
+function createNotificationRow(fields) {
+  const record = serializeRecord({
+    id: String(generateId()),
+    user_id: fields.user_id,
+    type: fields.type || 'system',
+    title: fields.title,
+    message: fields.message || '',
+    action_url: fields.action_url || '',
+    is_read: false,
+    created_at: new Date().toISOString(),
+  });
+  try {
+    dataStore.ensureTable('notifications');
+    dataStore.getStore().notifications.push(record);
+    dataStore.saveToFile();
+  } catch (e) {
+    console.warn('[Notify] Local store write failed:', e.message);
+  }
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const dbRecord = prepareRecordForDb('notifications', serializeRecord(record));
+      supabase.from('notifications').insert(dbRecord).then(() => {}).catch(() => {});
+    } catch (e) {}
+  }
+  dispatchPushNotificationApi({
+    user_id: record.user_id,
+    title: record.title,
+    body: record.message || '',
+    url: record.action_url || './',
+  }).catch(() => {});
+  return record;
+}
+
+function contentRowsForApi() {
+  for (const t of ['stores', 'storefronts', 'products', 'services', 'ad_campaigns']) dataStore.ensureTable(t);
+  const store = dataStore.getStore();
+  return {
+    stores: store.stores || [],
+    storefronts: store.storefronts || [],
+    products: store.products || [],
+    services: store.services || [],
+    ad_campaigns: store.ad_campaigns || [],
+  };
+}
+
+// Best-effort Supabase mirror of a content-status flip.
+async function syncContentStatusToSupabase(id, fromStatus, toStatus) {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  for (const { table, col } of deletion.CONTENT_TABLES) {
+    try {
+      await supabase.from(table).update({ status: toStatus }).eq(col, id).eq('status', fromStatus);
+    } catch (e) {}
+    if (table === 'stores') {
+      try {
+        await supabase.from('stores').update({ status: toStatus }).eq(col, id).eq('storefront_status', fromStatus);
+      } catch (e) {}
+    }
+  }
+}
+
+async function loadUserRow(id) {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await withSupaTimeout(supabase.from('users').select('*').eq('id', id).maybeSingle(), 3000);
+      if (data) return unpackUserMeta(serializeRecord(data));
+    } catch (e) {}
+  }
+  dataStore.ensureTable('users');
+  const row = (dataStore.getStore().users || []).find(u => String(u.id) === id);
+  return row ? serializeRecord(row) : null;
+}
+
+app.post('/api/auth/request-deletion', writeRateLimiter, async (req, res) => {
+  try {
+    const viewer = access.getAccessContext(req);
+    if (!viewer || !viewer.userId) {
+      return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+    }
+    if (String(viewer.userId) === 'admin') {
+      return res.status(400).json({ error: 'The main admin account cannot request deletion.' });
+    }
+    const id = String(viewer.userId);
+    const user = await loadUserRow(id);
+    if (!user) return res.status(404).json({ error: 'Account not found.' });
+
+    if (deletion.isPendingDeletion(user.status)) {
+      return res.json({ success: true, status: deletion.PENDING_DELETION, alreadyRequested: true });
+    }
+
+    user.status = deletion.PENDING_DELETION;
+    user.deletion_requested_at = new Date().toISOString();
+
+    // Supabase is the production source of truth when configured.
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const payload = prepareRecordForDb('users', user, null);
+        await withSupaTimeout(supabase.from('users').update(payload).eq('id', id), 3000);
+      } catch (e) { console.warn('[Deletion] user status mirror failed:', e.message); }
+    }
+
+    // Hide public content in the local store; Supabase mirrored separately.
+    const hidden = deletion.hideUserContent(contentRowsForApi(), id);
+    dataStore.ensureTable('users');
+    {
+      const store = dataStore.getStore();
+      const idx = store.users.findIndex(u => String(u.id) === id);
+      if (idx !== -1) store.users[idx] = { ...store.users[idx], status: deletion.PENDING_DELETION, deletion_requested_at: user.deletion_requested_at };
+    }
+    await syncContentStatusToSupabase(id, 'active', deletion.PENDING_DELETION);
+    dataStore.saveToFile();
+
+    auditLog({ actorId: id, actorRole: viewer.role, action: 'request_delete_account', table: 'users', targetId: id });
+    createNotificationRow(deletion.deletionRequestNotification(user));
+    invalidateApiCache('users');
+    ['stores', 'storefronts', 'products', 'services', 'ad_campaigns'].forEach(invalidateApiCache);
+    return res.json({ success: true, status: deletion.PENDING_DELETION, hidden });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/deletion/restore', writeRateLimiter, async (req, res) => {
+  try {
+    const viewer = access.getAccessContext(req);
+    if (!access.isAdmin(viewer)) return res.status(403).json({ error: 'Admin access required.' });
+    const id = String((req.body && req.body.user_id) || '').trim();
+    if (!id) return res.status(400).json({ error: 'A user id is required.' });
+    const user = await loadUserRow(id);
+    if (!user) return res.status(404).json({ error: 'Account not found.' });
+    if (!deletion.isPendingDeletion(user.status)) {
+      return res.status(400).json({ error: 'This account has no open deletion request.' });
+    }
+
+    user.status = 'active';
+    user.deletion_requested_at = null;
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const payload = prepareRecordForDb('users', user, null);
+        await withSupaTimeout(supabase.from('users').update(payload).eq('id', id), 3000);
+      } catch (e) { console.warn('[Deletion] user restore mirror failed:', e.message); }
+    }
+
+    const restored = deletion.restoreUserContent(contentRowsForApi(), id);
+    dataStore.ensureTable('users');
+    {
+      const store = dataStore.getStore();
+      const idx = store.users.findIndex(u => String(u.id) === id);
+      if (idx !== -1) store.users[idx] = { ...store.users[idx], status: 'active', deletion_requested_at: null };
+    }
+    await syncContentStatusToSupabase(id, deletion.PENDING_DELETION, 'active');
+    dataStore.saveToFile();
+
+    auditLog({ actorId: viewer.userId, actorRole: viewer.role, action: 'restore_delete_account', table: 'users', targetId: id });
+    invalidateApiCache('users');
+    ['stores', 'storefronts', 'products', 'services', 'ad_campaigns'].forEach(invalidateApiCache);
+    return res.json({ success: true, status: 'active', restored });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
