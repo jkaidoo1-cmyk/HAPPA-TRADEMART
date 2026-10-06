@@ -38,7 +38,7 @@
       // It was stuck at v144 while sw.js moved to v159, so clients that had
       // already healed at v144 never healed again — they kept serving the old
       // cached JS long after a fix deployed.
-      var SW_VERSION = 'happa-v184';
+      var SW_VERSION = 'happa-v185';
       var lastCleaned = localStorage.getItem('sw_selfheal_version');
       if (lastCleaned === SW_VERSION) return; // already cleaned for this version
       localStorage.setItem('sw_selfheal_version', SW_VERSION);
@@ -288,7 +288,7 @@
           const sfContent = document.getElementById('storefront-content');
           if (sfContent && (!sfContent.children.length || sfContent.innerHTML.includes('fa-spinner'))) {
             sfContent.innerHTML = `
-              <div class="storefront-skeleton-wrapper" style="width:100%;min-height:100vh;background:#fafafa;padding-bottom:60px">
+              <div class="storefront-skeleton-wrapper" style="width:100%;min-height:100vh;min-height:100dvh;background:#fafafa;padding-bottom:60px">
                 <div style="background:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb">
                   <div style="display:flex;align-items:center;gap:14px">
                     <div class="skeleton-box" style="width:48px;height:48px;border-radius:50%"></div>

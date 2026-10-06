@@ -1190,7 +1190,7 @@ async function renderStorefront(id) {
       !storefrontIsMountedFor(c, id)
   )) {
     c.innerHTML = `
-      <div id="storefront-page-container" style="position:relative; width:100%; min-height:100vh; background:#fafafa; padding-bottom:60px;">
+      <div id="storefront-page-container" style="position:relative; width:100%; min-height:100vh; min-height:100dvh; background:#fafafa; padding-bottom:60px;">
         <!-- Header/Banner Skeleton -->
         <div style="width:100%; height:180px; position:relative; overflow:hidden;" class="skeleton-box"></div>
         <div style="padding:16px; margin-top:-50px; position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; text-align:center;">
@@ -1747,7 +1747,7 @@ async function renderStorefront(id) {
                   : headerHTML;
 
   c.innerHTML = `
-    <div id="storefront-page-container" style="position:relative; display:flex; flex-direction:column; min-height:100vh">
+    <div id="storefront-page-container" style="position:relative; display:flex; flex-direction:column; min-height:100vh; min-height:100dvh">
       ${customStyles}
       ${adminToolbarHTML}
 
@@ -4464,7 +4464,7 @@ window.renderStorefrontAdminPortalPage = async function(storeId) {
   if (!isOwner) {
     // Show branded Login Form
     container.innerHTML = `
-      <div style="min-height:100vh; background:#f4f6f9; display:flex; align-items:center; justify-content:center; padding:20px; font-family:sans-serif">
+      <div style="min-height:100vh; min-height:100dvh; background:#f4f6f9; display:flex; align-items:center; justify-content:center; padding:20px; font-family:sans-serif">
         <div class="card" style="width:100%; max-width:400px; box-shadow:0 10px 25px rgba(0,0,0,0.08); border-radius:12px; overflow:hidden">
           <div style="background:${primaryColor}; padding:24px; text-align:center; color:#fff">
             <h2 style="font-size:1.3rem; font-weight:800; margin:0">${escHtml(s.name)}</h2>
@@ -4501,7 +4501,7 @@ window.renderStorefrontAdminPortalPage = async function(storeId) {
 
   // Render control center dashboard
   container.innerHTML = `
-    <div style="background:#f4f6f9; min-height:100vh; display:flex; flex-direction:column">
+    <div style="background:#f4f6f9; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column">
       <!-- Branded Standalone Admin Header -->
       <div style="background:#fff; border-bottom:1.5px solid var(--border); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:100">
         <div style="display:flex; align-items:center; gap:8px">

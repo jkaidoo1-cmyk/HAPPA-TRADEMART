@@ -1266,8 +1266,10 @@ function showPage(pageId, entityId = null) {
       if (!App.isBackgroundRefresh && App.prevPage !== pageId) {
         mainContent.scrollTop = 0;
       }
-      mainContent.style.height = '100vh';
-      mainContent.style.paddingBottom = '0';
+      // Height and bottom padding now come from the `.is-storefront-view
+      // #main-content` rule in css/style.css, so the shell can follow the
+      // *visible* viewport (100dvh) instead of being locked to 100vh by an
+      // inline style, which hid the storefront footer behind the mobile URL bar.
     }
   } else {
     document.body.classList.remove('is-storefront-view');
@@ -1279,6 +1281,8 @@ function showPage(pageId, entityId = null) {
       if (!App.isBackgroundRefresh && App.prevPage !== pageId) {
         mainContent.scrollTop = 0;
       }
+      // The `.is-storefront-view` class just removed above is what sized this
+      // element full-bleed, so clearing the inline overrides is enough here.
       mainContent.style.height = '';
       mainContent.style.paddingBottom = '';
     }

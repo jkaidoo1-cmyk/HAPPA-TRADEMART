@@ -98,6 +98,72 @@ test('hiding the bottom nav clears the reserve', () => {
   );
 });
 
+test('the app shell is sized from the visible viewport, not the large one', () => {
+  // The reserve only works if the scroller ends where the user can SEE. On a
+  // phone, 100vh is the large viewport (URL bar hidden), so a shell sized with
+  // it runs past the bottom of the screen while the URL bar is up: the last
+  // stretch of #main-content — the entire bottom-nav reserve — sits in that
+  // off-screen strip and the final card on a page (the home page's Services
+  // card was the report) stays cut off behind the nav with no way to scroll to
+  // it. 100dvh tracks the dynamic viewport, so the reserve always lands on the
+  // visible bottom edge.
+  const shellRules = {
+    html: blocks.filter(b => b.selector === 'html'),
+    body: blocks.filter(b => b.selector === 'body'),
+    '#main-content': blocks.filter(b => b.selector === '#main-content'),
+  };
+
+  for (const [selector, rules] of Object.entries(shellRules)) {
+    assert.ok(rules.length > 0, `${selector} rule is missing`);
+    assert.ok(
+      rules.some(r => /dvh/.test(r.body)),
+      `${selector} must be sized with dvh — with vh the bottom of the shell is off-screen on mobile`
+    );
+    // The vh line has to come first so browsers without dvh still get a value.
+    for (const rule of rules.filter(r => /dvh/.test(r.body))) {
+      const vhAt = rule.body.indexOf('100vh');
+      const dvhAt = rule.body.indexOf('100dvh');
+      assert.ok(
+        vhAt !== -1 && vhAt < dvhAt,
+        `the 100vh fallback must be declared before 100dvh in the ${selector} rule`
+      );
+    }
+  }
+
+  // The storefront view is full-bleed: no navs, so it fills the visible area.
+  const sfRule = blocks.find(b => /is-storefront-view #main-content/.test(b.selector));
+  assert.ok(sfRule, 'the storefront-view #main-content rule is missing');
+  assert.ok(/height\s*:\s*100vh\s*;\s*height\s*:\s*100dvh/.test(sfRule.body),
+    'the storefront shell must set 100dvh with a 100vh fallback');
+  assert.ok(/padding-bottom\s*:\s*0/.test(sfRule.body),
+    'the storefront shell must clear the bottom-nav reserve');
+
+  // …and showPage() must not re-lock the height with an inline 100vh.
+  const app = fs.readFileSync(path.join(ROOT, 'js', 'app.js'), 'utf-8');
+  assert.ok(
+    !/mainContent\.style\.height\s*=\s*'100vh'/.test(app),
+    "showPage() must not pin #main-content to 100vh inline — it overrides the CSS dvh"
+  );
+});
+
+test('full-height pages inside the shell use dvh too', () => {
+  const files = [
+    ['js/marketplace.js', fs.readFileSync(path.join(ROOT, 'js', 'marketplace.js'), 'utf-8')],
+    ['js/auth.js', fs.readFileSync(path.join(ROOT, 'js', 'auth.js'), 'utf-8')],
+    ['index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf-8')],
+  ];
+  for (const [name, src] of files) {
+    const vhUses = src.match(/min-height:100vh/g) || [];
+    const dvhUses = src.match(/min-height:100dvh/g) || [];
+    assert.ok(vhUses.length > 0, `${name} should still carry a 100vh fallback`);
+    assert.equal(
+      dvhUses.length,
+      vhUses.length,
+      `${name}: every min-height:100vh needs a matching min-height:100dvh, or that page keeps a strip of unreachable space`
+    );
+  }
+});
+
 test('the storefront editor keeps a save action once its own header card is gone', () => {
   const vendor = fs.readFileSync(path.join(ROOT, 'js', 'vendor.js'), 'utf-8');
   assert.ok(

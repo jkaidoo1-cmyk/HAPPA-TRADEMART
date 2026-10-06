@@ -20,7 +20,7 @@ function renderAuth() {
 
   c.innerHTML = `
 
-<div class="auth-container" style="min-height:100vh;padding-top:0;padding-bottom:var(--bottom-h)">
+<div class="auth-container" style="min-height:100vh;min-height:100dvh;padding-top:0;padding-bottom:var(--bottom-h)">
 
   <div class="auth-header">
 
@@ -1038,7 +1038,7 @@ function showPendingScreen() {
 
     c.innerHTML = `
 
-<div class="auth-container" style="min-height:100vh;padding-top:0">
+<div class="auth-container" style="min-height:100vh;min-height:100dvh;padding-top:0">
 
   <div class="auth-header">
 
