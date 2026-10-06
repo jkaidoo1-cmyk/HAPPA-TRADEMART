@@ -254,14 +254,14 @@ async function renderVendorDashboard() {
   const sfHours = myStorefront?.business_hours || myStore?.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM';
   const sfShipping = myStorefront?.shipping_policy || myStore?.shipping_policy || '';
   const sfReturn = myStorefront?.return_policy || myStore?.return_policy || '';
-  const sfFacebook = myStorefront?.facebook_url || myStore?.facebook_url || '';
+  // Social links: WhatsApp is stored in the store's `whatsapp` column and the
+  // TikTok link in the store's `extra` JSONB (there is no tiktok column — see
+  // the storefronts projection in server.js / api/index.js); both are projected
+  // back onto the storefront record the editor reads.
+  const sfWhatsapp = myStorefront?.whatsapp_number || myStore?.whatsapp || '';
   const sfInstagram = myStorefront?.instagram_url || myStore?.instagram_url || '';
-  const sfYoutube = myStorefront?.youtube_url || myStore?.youtube_url || '';
+  const sfTiktok = myStorefront?.tiktok_url || myStore?.tiktok_url || '';
   const sfSlug = myStorefront?.url_slug || myStore?.slug || myStore?.name?.toLowerCase()?.replace(/[^a-z0-9]+/g, '-') || '';
-  // The storefront URL is only genuinely live once the vendor has PAID: the admin
-  // approval sets 'approved_pending_payment' and only the payment flow sets 'active'.
-  // Until then the link must be presented as inactive (not shareable as "live").
-  const sfPaidLive = myStorefront?.status === 'active';
   const sfMetaDesc = myStorefront?.meta_description || myStore?.meta_description || '';
 
   const defaultStarterPrice = parseInt(await getSetting('storefront_price_starter', '50')) || 50;
@@ -390,7 +390,7 @@ async function renderVendorDashboard() {
 </div>
 
 <!-- ── Products Tab ── -->
-<div class="tab-content" id="vendor-products">
+<div class="tab-content ${activeTabId === 'vendor-products' ? 'active' : ''}" id="vendor-products">
   <div class="dashboard-wrap">
     ${myStore ? `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px">
@@ -411,7 +411,7 @@ async function renderVendorDashboard() {
 
 
 <!-- Wallet Tab (Earnings + Wallet) -->
-<div class="tab-content" id="vendor-wallet">
+<div class="tab-content ${activeTabId === 'vendor-wallet' ? 'active' : ''}" id="vendor-wallet">
   <div class="dashboard-wrap">
 
     <!-- Balance Header -->
@@ -514,7 +514,7 @@ async function renderVendorDashboard() {
 
 
 <!-- ── Referral Tab ── -->
-<div class="tab-content" id="vendor-referral">
+<div class="tab-content ${activeTabId === 'vendor-referral' ? 'active' : ''}" id="vendor-referral">
   <div class="dashboard-wrap">
     <!-- Referral Link Card -->
     <div class="referral-code-card" style="margin-bottom:16px">
@@ -595,7 +595,7 @@ async function renderVendorDashboard() {
 </div>
 
 <!-- ── Verify Tab ── -->
-<div class="tab-content" id="vendor-verify">
+<div class="tab-content ${activeTabId === 'vendor-verify' ? 'active' : ''}" id="vendor-verify">
   <div class="dashboard-wrap">
     <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px">Vendor Verification</h3>
     <div class="verify-steps">
@@ -633,7 +633,7 @@ async function renderVendorDashboard() {
 </div>
 
 <!-- ── Storefront Tab ── -->
-<div class="tab-content" id="vendor-storefront">
+<div class="tab-content ${activeTabId === 'vendor-storefront' ? 'active' : ''}" id="vendor-storefront">
   <div class="dashboard-wrap">
     ${myStore ? `
       ${sfRenewStrip}
@@ -773,7 +773,7 @@ async function renderVendorDashboard() {
           </div>
         ` : ''}
 
-        <!-- ── Storefront Studio ── -->
+        <!-- ── Storefront editor styles (shared by the customization cards) ── -->
         <style>
           .sfsec{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden}
           .sfsec-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
@@ -790,58 +790,90 @@ async function renderVendorDashboard() {
           .sftile .sftag{position:relative;z-index:2;font-size:.62rem;font-weight:800;background:rgba(255,255,255,.88);color:var(--text);padding:4px 12px;border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
           .sfdevbtn{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:4px 8px;font-size:.65rem;font-weight:800;cursor:pointer;color:var(--text-light);transition:all .15s}
           .sfdevbtn.on{border-color:var(--primary);color:var(--primary);background:var(--primary-light)}
+
+          /* ── Live preview container ──────────────────────────────
+             Base (desktop): the preview sits inline in the form column.
+             Narrow screens: the same nodes become a slide-out side panel that
+             the vendor pulls in from the right edge with the handle button. */
+          .sf-preview-panel{width:100%;max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:0}
+          .sf-preview-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+          .sf-preview-frame{overflow:hidden;border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow-md)}
+          .sf-preview-note{margin-top:6px;text-align:center;font-size:.65rem;color:var(--text-light)}
+          .sf-preview-handle,.sf-preview-backdrop,.sf-preview-close{display:none}
+
+          @media (max-width:1023px){
+            /* Off-canvas drawer anchored to the right edge, under the top nav
+               and above the bottom nav. Uses transform (not the right offset)
+               so the browser can animate the slide. */
+            .sf-preview-panel{
+              position:fixed;top:var(--nav-h);right:0;bottom:var(--bottom-h);
+              z-index:1200;width:min(94vw,400px);max-width:400px;margin:0;
+              padding:14px 14px 18px;background:var(--bg);border-left:1px solid var(--border);
+              box-shadow:-10px 0 32px rgba(0,0,0,.22);
+              transform:translateX(105%);transition:transform .28s ease;
+              overflow-y:auto;overscroll-behavior:contain;
+            }
+            .sf-preview-panel.open{transform:translateX(0)}
+            /* Let the preview grow to fill the drawer instead of the inline 480px cap. */
+            .sf-preview-panel .sf-preview-frame{flex:1;display:flex;flex-direction:column;min-height:0}
+            .sf-preview-panel #sf-preview-shell{max-height:none !important;flex:1;min-height:0}
+            .sf-preview-panel .sf-preview-close{display:inline-flex;align-items:center;justify-content:center}
+
+            /* Pull-out tab on the right edge — the only way in on mobile.
+               White with an orange outline so it reads as a control rather
+               than a solid brand block that competes with the Save button. */
+            .sf-preview-handle{
+              display:flex;flex-direction:column;align-items:center;gap:7px;
+              position:fixed;right:0;top:38%;z-index:1150;
+              padding:12px 7px;border:1.5px solid var(--primary);border-right:0;
+              border-radius:10px 0 0 10px;background:#fff;color:var(--primary);
+              font-size:.66rem;font-weight:800;letter-spacing:.5px;cursor:pointer;
+              box-shadow:-3px 0 14px rgba(0,0,0,.14);
+              transition:opacity .2s ease,transform .2s ease;
+            }
+            .sf-preview-handle span{writing-mode:vertical-rl;text-orientation:mixed}
+            .sf-preview-handle i{font-size:.85rem}
+            .sf-preview-handle:active{transform:scale(.96)}
+            /* Hide the tab while the drawer is open — the close button takes over. */
+            body.sf-preview-open .sf-preview-handle{opacity:0;pointer-events:none}
+
+            .sf-preview-backdrop{
+              display:block;position:fixed;top:var(--nav-h);right:0;bottom:var(--bottom-h);left:0;
+              z-index:1100;background:rgba(15,23,42,.45);opacity:0;pointer-events:none;
+              transition:opacity .25s ease;
+            }
+            .sf-preview-backdrop.open{opacity:1;pointer-events:auto}
+          }
         </style>
-        <div style="background:linear-gradient(135deg,${sfPrimaryColor}18 0%,${sfPrimaryColor}08 100%);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:16px">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-            <div>
-              <h3 style="font-size:1.1rem;font-weight:900;margin:0 0 2px"><i class="fas fa-palette" style="color:var(--primary)"></i> Storefront Studio</h3>
-              <div style="font-size:.72rem;color:var(--text-light)">Design your store — changes preview live as you type.</div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              ${sfPaidLive ? `
-              <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);border-radius:20px;padding:5px 10px;font-size:.7rem;cursor:pointer" onclick="navigator.clipboard.writeText(${jsArg(storefrontUrl(sfSlug))});showToast('Link copied! 📋','success')" title="Copy storefront link">
-                <i class="fas fa-link" style="color:var(--primary);font-size:.65rem"></i>
-                <span style="font-weight:700;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${storefrontUrl(sfSlug)}</span>
-                <i class="fas fa-copy" style="color:var(--text-light);font-size:.6rem"></i>
-              </div>
-              ` : `
-              <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:20px;padding:5px 10px;font-size:.7rem" title="Activate your subscription to make this link live">
-                <i class="fas fa-lock" style="color:#94a3b8;font-size:.65rem"></i>
-                <span style="font-weight:700;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${storefrontUrl(sfSlug)}</span>
-                <span style="font-weight:800;color:#f59e0b;font-size:.62rem">INACTIVE</span>
-              </div>
-              `}
-              ${myStorefront.status !== 'pending_approval' ? `
-                <button class="btn btn-sm btn-primary" style="box-shadow:0 2px 8px ${sfPrimaryColor}40" onclick="window.saveVendorStoreSettings('${myStore.id}')">
-                  <i class="fas fa-save"></i> Save
-                </button>
-              ` : ''}
-              ${(myStorefront.status === 'draft' || myStorefront.status === 'rejected') ? `
-                <button class="btn btn-sm" style="background:#16a34a;border:none;color:#fff" onclick="window.submitStorefrontRequest('${myStore.id}')">
-                  <i class="fas fa-paper-plane"></i> Submit
-                </button>
-              ` : ''}
-            </div>
-          </div>
-        </div>
 
         <div id="sf-status-card" style="margin-bottom:8px"></div>
 
         <!-- ── Customization Form Body (always visible when storefront exists) ── -->
         <div style="display:flex;flex-direction:column;gap:20px;${myStorefront.status === 'pending_approval' ? 'opacity:.7;pointer-events:none;' : ''}">
           
-          <!-- Top: Live Preview -->
-          <div style="width:100%;max-width:420px;margin:0 auto">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <!-- Top: Live Preview.
+               Desktop keeps the inline device card; on mobile the same block is
+               reparented by CSS into a pull-out panel fixed to the right edge
+               (see the .sf-preview-* rules above), so the editor stays usable
+               on a small screen instead of scrolling past a shrunken mock. -->
+          <button type="button" class="sf-preview-handle" id="sf-preview-handle"
+                  onclick="window.sfTogglePreview()" aria-controls="sf-preview-panel" aria-expanded="false"
+                  title="Open live preview">
+            <i class="fas fa-eye"></i><span>Preview</span>
+          </button>
+          <div class="sf-preview-backdrop" id="sf-preview-backdrop" onclick="window.sfTogglePreview(false)"></div>
+          <div class="sf-preview-panel" id="sf-preview-panel">
+            <div class="sf-preview-head">
               <div style="font-size:.7rem;font-weight:800;color:var(--text-light);display:flex;align-items:center;gap:6px;letter-spacing:.3px">
                 <i class="fas fa-eye" style="color:var(--primary)"></i> LIVE PREVIEW
               </div>
               <div style="display:flex;gap:4px">
                 <button class="sfdevbtn on" id="sfdev-phone" onclick="window.sfPreviewDevice('mobile')"><i class="fas fa-mobile-alt"></i></button>
                 <button class="sfdevbtn" id="sfdev-full" onclick="window.sfPreviewDevice('full')"><i class="fas fa-desktop"></i></button>
+                <button class="sfdevbtn sf-preview-close" onclick="window.sfTogglePreview(false)" aria-label="Close preview"><i class="fas fa-times"></i></button>
               </div>
             </div>
-            <div class="card" style="overflow:hidden;border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow-md)">
+            <div class="card sf-preview-frame">
               <div style="background:#f1f5f9;padding:8px 12px;display:flex;align-items:center;gap:8px">
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span>
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>
@@ -852,7 +884,7 @@ async function renderVendorDashboard() {
                 <div id="storefront-live-preview-box" style="min-height:100%"></div>
               </div>
             </div>
-            <div style="margin-top:6px;text-align:center;font-size:.65rem;color:var(--text-light)"><i class="fas fa-sync-alt" style="margin-right:3px"></i> Edits sync here in real time</div>
+            <div class="sf-preview-note"><i class="fas fa-sync-alt" style="margin-right:3px"></i> Edits sync here in real time</div>
           </div>
 
           <!-- Bottom: Form Inputs -->
@@ -1057,19 +1089,19 @@ async function renderVendorDashboard() {
             </div>
 
             <div class="card">
-              <div class="sfsec-h"><div class="sfsec-ico" style="background:#ede9fe;color:#7c3aed"><i class="fab fa-facebook"></i></div><div><h3>🔗 Social Links</h3><p>Connect your social profiles</p></div></div>
+              <div class="sfsec-h"><div class="sfsec-ico" style="background:#dcfce7;color:#22c55e"><i class="fab fa-whatsapp"></i></div><div><h3>🔗 Social Links</h3><p>Connect your social profiles</p></div></div>
               <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
                 <div style="display:flex;align-items:center;gap:8px">
-                  <i class="fab fa-facebook" style="color:#1877f2;width:20px;text-align:center"></i>
-                  <input type="text" id="store-facebook" value="${sfFacebook}" class="form-control" placeholder="Facebook URL" oninput="window.updateStorefrontPreview()">
+                  <i class="fab fa-whatsapp" style="color:#25d366;width:20px;text-align:center"></i>
+                  <input type="text" id="store-whatsapp" value="${sfWhatsapp}" class="form-control" placeholder="WhatsApp number or link (e.g. 024 000 0000)" oninput="window.updateStorefrontPreview()">
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
                   <i class="fab fa-instagram" style="color:#e1306c;width:20px;text-align:center"></i>
-                  <input type="text" id="store-instagram" value="${sfInstagram}" class="form-control" placeholder="Instagram URL" oninput="window.updateStorefrontPreview()">
+                  <input type="text" id="store-instagram" value="${sfInstagram}" class="form-control" placeholder="Instagram URL or @handle" oninput="window.updateStorefrontPreview()">
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
-                  <i class="fab fa-youtube" style="color:#ff0000;width:20px;text-align:center"></i>
-                  <input type="text" id="store-youtube" value="${sfYoutube}" class="form-control" placeholder="YouTube Channel URL" oninput="window.updateStorefrontPreview()">
+                  <i class="fab fa-tiktok" style="color:#111827;width:20px;text-align:center"></i>
+                  <input type="text" id="store-tiktok" value="${sfTiktok}" class="form-control" placeholder="TikTok URL or @handle" oninput="window.updateStorefrontPreview()">
                 </div>
               </div>
             </div>
@@ -1124,6 +1156,15 @@ async function renderVendorDashboard() {
   setTimeout(() => {
     try { renderVendorChart(myPackages); } catch(e) { console.warn('[vendor] chart render failed:', e); }
     loadVendorReferralHistory(u.id);
+    // Only the Overview tab carries a conditional `active` class historically;
+    // every other tab fell through to the click handler for its first paint.
+    // A remembered tab that is restored *by the render itself* therefore never
+    // ran that handler — the Storefront tab rendered blank until it was clicked
+    // again. The `active` classes above fixed the visibility; hydrate the one
+    // tab whose contents are built by a click handler on this pass.
+    if (activeTabId === 'vendor-wallet') {
+      try { renderWalletHistory('vendor-txn-list'); } catch(e) { console.warn('[vendor] wallet hydrate failed:', e); }
+    }
     if (typeof window.updateStorefrontPreview === 'function') {
       window.updateStorefrontPreview();
     }
@@ -2600,6 +2641,12 @@ function switchTab(el, tabId) {
 
   target.classList.add('active');
 
+  // The storefront editor's mobile preview is a fixed overlay — close it on any
+  // tab switch so it cannot linger on top of another tab.
+  if (typeof window.sfTogglePreview === 'function' && document.body.classList.contains('sf-preview-open')) {
+    window.sfTogglePreview(false);
+  }
+
   if (el) {
     el.classList.add('active');
   } else if (container) {
@@ -3408,6 +3455,11 @@ window.updateStorefrontPreview = function() {
   const hours = document.getElementById('store-hours')?.value || 'Mon - Sat: 8:00 AM - 6:00 PM';
   const shipping = document.getElementById('store-shipping-policy')?.value || 'Instant delivery.';
   const returns = document.getElementById('store-return-policy')?.value || '7-day replacement.';
+  // Footer socials — these are part of the storefront footer, so the preview
+  // footer renders them too (it previously ignored them entirely).
+  const whatsapp = document.getElementById('store-whatsapp')?.value || '';
+  const instagram = document.getElementById('store-instagram')?.value || '';
+  const tiktok = document.getElementById('store-tiktok')?.value || '';
   const font_family = document.getElementById('store-font-family')?.value || 'Outfit';
 
   // Update preview URL bar
@@ -3675,23 +3727,28 @@ window.updateStorefrontPreview = function() {
   let prevFooterStyle = '';
   let prevFooterTextColor = '#9ca3af';
   let prevFooterHeadingColor = '#ffffff';
+  let prevFooterDividerColor = `color-mix(in srgb, ${primary} 25%, #1f2937)`;
 
   if (window.previewTheme === 'modern') {
     prevFooterStyle = `background: color-mix(in srgb, ${secondary} 30%, rgba(15, 23, 42, 0.85)); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px 12px 0 0; margin-top: 10px; padding: 14px 12px; color: #cbd5e1;`;
     prevFooterHeadingColor = '#ffffff';
     prevFooterTextColor = '#cbd5e1';
+    prevFooterDividerColor = 'rgba(255, 255, 255, 0.15)';
   } else if (window.previewTheme === 'neumorphic') {
     prevFooterStyle = `background: color-mix(in srgb, ${secondary} 10%, #faf9f6); border-radius: 14px 14px 0 0; margin-top: 10px; padding: 14px 12px; color: var(--text-muted); box-shadow: inset 1px 1px 4px rgba(165,175,190,0.25), inset -1px -1px 4px #ffffff; border-top: 1px solid rgba(255,255,255,0.8);`;
     prevFooterHeadingColor = 'var(--text)';
     prevFooterTextColor = 'var(--text-muted)';
+    prevFooterDividerColor = 'rgba(0, 0, 0, 0.08)';
   } else if (window.previewTheme === 'bold') {
     prevFooterStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primary} 30%, #000) 0%, ${secondary} 100%); color: #e2e8f0; padding: 14px 12px; margin-top: 10px; border-top: 3px solid ${primary};`;
     prevFooterHeadingColor = '#ffffff';
     prevFooterTextColor = '#e2e8f0';
+    prevFooterDividerColor = `color-mix(in srgb, ${primary} 40%, #334155)`;
   } else if (window.previewTheme === 'minimal') {
     prevFooterStyle = `background: #ffffff; color: #64748b; padding: 12px; margin-top: 10px; border-top: 1px solid var(--border);`;
     prevFooterHeadingColor = 'var(--text)';
     prevFooterTextColor = '#64748b';
+    prevFooterDividerColor = 'var(--border)';
   } else {
     prevFooterStyle = `background: linear-gradient(135deg, color-mix(in srgb, ${primary} 20%, #0f172a) 0%, color-mix(in srgb, ${secondary} 35%, #030712) 100%); color: #9ca3af; padding: 14px 12px; margin-top: 10px; border-top: 2px solid ${primary};`;
     prevFooterHeadingColor = '#ffffff';
@@ -3713,15 +3770,55 @@ window.updateStorefrontPreview = function() {
       <div style="width:22px; height:22px; border-radius:50%; background:${primary}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:.6rem"><i class="fas fa-shopping-cart"></i></div>
     </div>`;
 
+  // Footer socials, resolved through the same socialHref() helper the real
+  // storefront footer uses, so a typed number / handle previews as the link it
+  // will become. Rendered only when the vendor has filled at least one in.
+  const prevSocialHTML = (whatsapp || instagram || tiktok) ? `
+      <div style="margin-top:10px; padding-top:8px; border-top:1px solid ${prevFooterDividerColor}; display:flex; flex-direction:column; align-items:center; gap:6px">
+        <div style="font-size:.5rem; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:${prevFooterTextColor}">Follow us</div>
+        <div style="display:flex; gap:12px; font-size:.95rem">
+          ${whatsapp ? `<a href="${escHtml(socialHref('whatsapp', whatsapp))}" target="_blank" rel="noopener" style="color:#25d366" title="WhatsApp"><i class="fab fa-whatsapp"></i></a>` : ''}
+          ${instagram ? `<a href="${escHtml(socialHref('instagram', instagram))}" target="_blank" rel="noopener" style="color:#f472b6" title="Instagram"><i class="fab fa-instagram"></i></a>` : ''}
+          ${tiktok ? `<a href="${escHtml(socialHref('tiktok', tiktok))}" target="_blank" rel="noopener" style="color:${prevFooterHeadingColor}" title="TikTok"><i class="fab fa-tiktok"></i></a>` : ''}
+        </div>
+      </div>` : '';
+
+  // The preview footer mirrors the real storefront footer: About, Hours,
+  // Policies and the social icons at the bottom. These fields were collected by
+  // the editor and saved but never previewed, so a vendor typing their shipping
+  // policy or WhatsApp number saw nothing change.
   const footerHTML = `
     <footer style="${prevFooterStyle}">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px">
-        <div style="font-weight:800; color:${prevFooterHeadingColor}; display:flex; align-items:center; gap:5px">
-          <i class="fas fa-store" style="color:${primary}"></i> ${escHtml(storeName || 'Storefront')}
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <div>
+          <div style="font-weight:800; color:${prevFooterHeadingColor}; font-size:.62rem; display:flex; align-items:center; gap:4px">
+            <i class="fas fa-store" style="color:${primary}"></i> About ${escHtml(storeName || 'Storefront')}
+          </div>
+          <div style="color:${prevFooterTextColor}; font-size:.58rem; line-height:1.35">${escHtml(desc)}</div>
         </div>
-        <div style="color:${prevFooterTextColor}; font-size:0.6rem">
-          Powered by HAPPA TRADEMART
+
+        <div>
+          <div style="font-weight:800; color:${prevFooterHeadingColor}; font-size:.62rem; display:flex; align-items:center; gap:4px">
+            <i class="fas fa-clock" style="color:${primary}"></i> Hours &amp; Contact
+          </div>
+          <div style="color:${prevFooterTextColor}; font-size:.58rem; display:grid; gap:2px">
+            <div><i class="fas fa-calendar-alt" style="width:12px; color:${primary}"></i> ${escHtml(hours)}</div>
+          </div>
         </div>
+
+        <div>
+          <div style="font-weight:800; color:${prevFooterHeadingColor}; font-size:.62rem; display:flex; align-items:center; gap:4px">
+            <i class="fas fa-shield-alt" style="color:${primary}"></i> Store Policies
+          </div>
+          <div style="color:${prevFooterTextColor}; font-size:.58rem; display:grid; gap:4px">
+            <div><strong style="color:${prevFooterHeadingColor}">Shipping:</strong> ${escHtml(shipping)}</div>
+            <div><strong style="color:${prevFooterHeadingColor}">Returns:</strong> ${escHtml(returns)}</div>
+          </div>
+        </div>
+      </div>
+      ${prevSocialHTML}
+      <div style="border-top:1px solid ${prevFooterDividerColor}; margin-top:8px; padding-top:6px; text-align:center; color:${prevFooterTextColor}; font-size:.55rem">
+        © ${new Date().getFullYear()} ${escHtml(storeName || 'Storefront')}. Powered by HAPPA TRADEMART
       </div>
     </footer>`;
 
@@ -3888,6 +3985,23 @@ window.sfPreviewDevice = function(mode) {
   if (full) full.classList.toggle('on', mode === 'full');
 };
 
+// Mobile only: slide the live-preview panel in from the right edge. On desktop
+// the panel is inline and these classes have no visual effect, so the handle
+// and backdrop are display:none there.
+window.sfTogglePreview = function(open) {
+  const panel = document.getElementById('sf-preview-panel');
+  if (!panel) return;
+  const next = (open === undefined) ? !panel.classList.contains('open') : !!open;
+  panel.classList.toggle('open', next);
+  const backdrop = document.getElementById('sf-preview-backdrop');
+  if (backdrop) backdrop.classList.toggle('open', next);
+  const handle = document.getElementById('sf-preview-handle');
+  if (handle) handle.setAttribute('aria-expanded', next ? 'true' : 'false');
+  if (document.body) document.body.classList.toggle('sf-preview-open', next);
+  // First open may happen before any edit triggered a paint.
+  if (next && typeof window.updateStorefrontPreview === 'function') window.updateStorefrontPreview();
+};
+
 window.createStorefrontDraft = async function(storeId) {
   const store = (App.allStores || []).find(s => s && String(s.id) === String(storeId)) || App.myStore;
   if (!store || !store.id) {
@@ -3948,9 +4062,9 @@ window.saveVendorStoreSettings = async function(storeId) {
   const businessHours = (document.getElementById('store-hours')?.value || '').trim();
   const shippingPolicy = (document.getElementById('store-shipping-policy')?.value || '').trim();
   const returnPolicy = (document.getElementById('store-return-policy')?.value || '').trim();
-  const facebookUrl = (document.getElementById('store-facebook')?.value || '').trim();
+  const whatsappUrl = (document.getElementById('store-whatsapp')?.value || '').trim();
   const instagramUrl = (document.getElementById('store-instagram')?.value || '').trim();
-  const youtubeUrl = (document.getElementById('store-youtube')?.value || '').trim();
+  const tiktokUrl = (document.getElementById('store-tiktok')?.value || '').trim();
   const metaDesc = (document.getElementById('store-meta-desc')?.value || '').trim();
   const bannerUrl = (document.getElementById('store-banner-url')?.value || store.banner_url || '').trim();
   const logoUrl = (document.getElementById('store-logo-url')?.value || store.logo_url || '').trim();
@@ -3984,9 +4098,9 @@ window.saveVendorStoreSettings = async function(storeId) {
     business_hours: businessHours,
     shipping_policy: shippingPolicy,
     return_policy: returnPolicy,
-    facebook_url: facebookUrl,
+    whatsapp_number: whatsappUrl,
     instagram_url: instagramUrl,
-    youtube_url: youtubeUrl,
+    tiktok_url: tiktokUrl,
     meta_description: metaDesc,
     banner_url: bannerUrl,
     logo_url: logoUrl,
@@ -4019,6 +4133,10 @@ window.saveVendorStoreSettings = async function(storeId) {
       description: aboutUs,
       banner_url: bannerUrl,
       logo_url: logoUrl,
+      // The store record carries its own whatsapp column; the storefront page
+      // falls back to it when a store has no storefronts row yet. TikTok has no
+      // stores column, so it lives on the storefronts row only.
+      whatsapp: whatsappUrl,
       storefront_status: App.myStorefront.status
     });
   } catch (err) {

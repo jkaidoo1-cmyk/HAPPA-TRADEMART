@@ -535,6 +535,9 @@ async function renderProductDetail(id) {
 
   const reviews = (rvRes?.data || []).filter(r => r.target_id === p.id && r.target_type === 'product' && r.approved !== false);
 
+  // Reflect a previously saved wishlist item on first paint, not just after a
+  // toggle — the button used to always render as the empty outline heart.
+  const wished = isInWishlist(p.id);
 
 
   c.innerHTML = `
@@ -588,10 +591,10 @@ async function renderProductDetail(id) {
     <h1 style="font-size:1.1rem;font-weight:700;line-height:1.3">${escHtml(itemDisplayName(p.name))}</h1>
 
     <button onclick="toggleWishlist('${p.id}')" id="wish-btn-${p.id}"
+            data-wishlist-id="${escHtml(p.id)}" class="wishlist-btn${wished ? ' is-wished' : ''}"
+            aria-pressed="${wished ? 'true' : 'false'}" title="${wished ? 'Remove from wishlist' : 'Save to wishlist'}">
 
-            style="color:var(--text-muted);font-size:1.3rem;flex-shrink:0">
-
-      <i class="far fa-heart"></i>
+      <i class="${wished ? 'fas' : 'far'} fa-heart"></i>
 
     </button>
 
@@ -896,11 +899,8 @@ async function buyNow(productId) {
 
 
 
-function toggleWishlist(productId) {
-
-  showToast('Saved to wishlist ❤️', 'success');
-
-}
+// toggleWishlist() lives in js/utils.js — one implementation shared by every
+// page. A local stub here used to shadow it depending on script order.
 
 
 
@@ -1630,20 +1630,13 @@ async function renderStorefront(id) {
   const business_hours = sf?.business_hours || s.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM';
   const shipping_policy = sf?.shipping_policy || s.shipping_policy || 'Standard delivery within Ghana.';
   const return_policy = sf?.return_policy || s.return_policy || 'Items can be returned within 3 days.';
-  const facebook_url = sf?.facebook_url || s.facebook_url || '';
+  // Social links: WhatsApp / Instagram / TikTok, projected onto the storefront
+  // record by the server (WhatsApp from the store's `whatsapp` column, TikTok
+  // from the store's `extra` JSONB — the storefronts table has no tiktok
+  // column). Fall back to the store record for the store page.
+  const whatsapp_url = sf?.whatsapp_number || s.whatsapp || s.whatsapp_number || '';
   const instagram_url = sf?.instagram_url || s.instagram_url || '';
-  const youtube_url = sf?.youtube_url || s.youtube_url || '';
-
-  let socialLinksHTML = '';
-  if (facebook_url || instagram_url || youtube_url) {
-    socialLinksHTML = `
-      <div style="display:flex; gap:14px; font-size:1.2rem; margin-top:10px">
-        ${facebook_url ? `<a href="${facebook_url}" target="_blank" style="color:#60a5fa" title="Facebook"><i class="fab fa-facebook"></i></a>` : ''}
-        ${instagram_url ? `<a href="${instagram_url}" target="_blank" style="color:#f472b6" title="Instagram"><i class="fab fa-instagram"></i></a>` : ''}
-        ${youtube_url ? `<a href="${youtube_url}" target="_blank" style="color:#f87171" title="YouTube"><i class="fab fa-youtube"></i></a>` : ''}
-      </div>
-    `;
-  }
+  const tiktok_url = sf?.tiktok_url || s.tiktok_url || '';
 
   // Determine theme-adaptive footer styling
   let footerStyle = '';
@@ -1676,6 +1669,21 @@ async function renderStorefront(id) {
     footerHeadingColor = '#ffffff';
     footerTextColor = '#9ca3af';
     footerDividerColor = `color-mix(in srgb, ${primaryColor} 25%, #1f2937)`;
+  }
+
+  // Social icons, built after the footer palette so the TikTok mark picks up the
+  // theme's heading colour — a fixed near-black icon is invisible on the dark
+  // (default / bold / modern) footers. WhatsApp and Instagram keep their brand
+  // colours, which read on both dark and light footers.
+  let socialLinksHTML = '';
+  if (whatsapp_url || instagram_url || tiktok_url) {
+    socialLinksHTML = `
+      <div class="sf-footer-socials-row" style="display:flex; gap:16px; font-size:1.25rem; justify-content:center">
+        ${whatsapp_url ? `<a href="${escHtml(socialHref('whatsapp', whatsapp_url))}" target="_blank" rel="noopener" style="color:#25d366" title="WhatsApp"><i class="fab fa-whatsapp"></i></a>` : ''}
+        ${instagram_url ? `<a href="${escHtml(socialHref('instagram', instagram_url))}" target="_blank" rel="noopener" style="color:#f472b6" title="Instagram"><i class="fab fa-instagram"></i></a>` : ''}
+        ${tiktok_url ? `<a href="${escHtml(socialHref('tiktok', tiktok_url))}" target="_blank" rel="noopener" style="color:${footerHeadingColor}" title="TikTok"><i class="fab fa-tiktok"></i></a>` : ''}
+      </div>
+    `;
   }
 
   // Determine theme-adaptive search & cart toolbar styling (matches store background color seamlessly)
@@ -1788,7 +1796,6 @@ async function renderStorefront(id) {
                 <i class="fas fa-store" style="color:${primaryColor}"></i> About ${escHtml(s.name)}
               </h4>
               <p style="line-height:1.35; color:${footerTextColor}; margin-bottom:4px">${escHtml(description)}</p>
-              ${socialLinksHTML}
             </div>
 
             <div>
@@ -1823,6 +1830,14 @@ async function renderStorefront(id) {
           </div>
 
         </div>
+
+        <!-- Social icons live at the very bottom of the footer, above the
+             copyright line, instead of buried in the About column. -->
+        ${socialLinksHTML ? `
+        <div style="max-width:1100px; margin:14px auto 0; padding-top:12px; border-top:1px solid ${footerDividerColor}; display:flex; flex-direction:column; align-items:center; gap:8px">
+          <div style="font-size:.62rem; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:${footerTextColor}">Follow us</div>
+          ${socialLinksHTML}
+        </div>` : ''}
 
         <div style="border-top:1px solid ${footerDividerColor}; margin-top:8px; padding-top:6px; text-align:center; color:${footerTextColor}; font-size:.65rem">
           © ${new Date().getFullYear()} ${escHtml(s.name)}. Powered by HAPPA TRADEMART
@@ -3378,9 +3393,11 @@ window.switchStorefrontTab = async function(tabName, storeId) {
   const business_hours = isStorefrontPage ? (sf?.business_hours || s.business_hours || 'Open Mon - Sat 8:00 AM - 6:00 PM') : (s.business_hours || 'Open Mon - Sat 8:00 AM - 6:00 PM');
   const shipping_policy = isStorefrontPage ? (sf?.shipping_policy || s.shipping_policy || 'Standard Ghana shipping rates apply.') : (s.shipping_policy || 'Standard Ghana shipping rates apply.');
   const return_policy = isStorefrontPage ? (sf?.return_policy || s.return_policy || 'Items can be returned within 3 days if seal is not broken.') : (s.return_policy || 'Items can be returned within 3 days if seal is not broken.');
-  const facebook_url = isStorefrontPage ? (sf?.facebook_url || s.facebook_url) : s.facebook_url;
+  // Social links travel with the storefront record (WhatsApp from the store's
+  // `whatsapp` column, TikTok from its `extra` JSONB) — see the footer block.
+  const whatsapp_number = isStorefrontPage ? (sf?.whatsapp_number || s.whatsapp) : s.whatsapp;
   const instagram_url = isStorefrontPage ? (sf?.instagram_url || s.instagram_url) : s.instagram_url;
-  const youtube_url = isStorefrontPage ? (sf?.youtube_url || s.youtube_url) : s.youtube_url;
+  const tiktok_url = isStorefrontPage ? (sf?.tiktok_url || s.tiktok_url) : s.tiktok_url;
 
   const sfLayout = window._sfLayout || 'grid';
 

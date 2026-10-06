@@ -289,14 +289,42 @@ html.is-storefront-root body #main-content {
    means the content starts flush under the nav and scrolls through the full
    height. */
 #main-content {
+  /* Height reserved for the fixed bottom nav. It lives in a custom property
+     because a scroller's own padding-bottom cannot do this job alone: padding
+     only adds reachable space while the content still fits inside the content
+     box, and any page that overflows it (every long dashboard tab does)
+     swallows the padding region entirely — the last thing on the page stayed
+     pinned behind the nav with no way to scroll it into view. Content that
+     owns the end of a page therefore adds this same value to its own
+     padding-bottom (see .dashboard-wrap). updateNavForUser() clears it when
+     the nav is hidden (admins and storefronts), so no phantom gap is left. */
+  --bottom-reserve: calc(var(--bottom-h) + env(safe-area-inset-bottom));
   margin-top: var(--nav-h);
   height: calc(100vh - var(--nav-h));
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
   scroll-padding-top: 12px;
-  padding-bottom: calc(var(--bottom-h) + env(safe-area-inset-bottom));
+  padding-bottom: var(--bottom-reserve);
 }
+
+/* ----- Wishlist heart ----- */
+/* Toggled by syncWishlistIcons() in js/utils.js: the icon swaps between the
+   regular (outline) and solid Font Awesome glyphs and this class supplies the
+   "saved" colour, so the state is visible wherever the heart is rendered. */
+.wishlist-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: transform .15s ease, color .15s ease;
+}
+.wishlist-btn:hover { transform: scale(1.12); }
+.wishlist-btn.is-wished { color: #db2777; }
 
 /* ----- Buttons ----- */
 .btn {
@@ -904,6 +932,13 @@ html.is-storefront-root body #main-content {
 /* ----- Dashboard Panels ----- */
 .dashboard-wrap {
   padding: 16px;
+  /* Every dashboard tab ends with this wrapper, and the fixed bottom nav
+     overlays the bottom of the scroller. Reserve the nav's height here, in
+     real in-flow space: the wrapper grows past the scroller's swallowed
+     padding (see --bottom-reserve on #main-content), so the final card or
+     button on a tab — e.g. the storefront tab's "Save Settings" — scrolls
+     into view instead of hiding behind the nav. */
+  padding-bottom: calc(16px + var(--bottom-reserve, 0px));
 }
 .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
 .stat-card {
@@ -2087,12 +2122,14 @@ html.is-storefront-root body #main-content {
 
   /* Main content area */
   #main-content {
+    --bottom-reserve: var(--bottom-h);
     min-height: calc(100vh - var(--nav-h) - var(--bottom-h));
     background: #f0f2f5;
-    /* Reserve room for the fixed bottom nav so a long page scrolls clear of
-       it. updateNavForUser() zeroes this out when the nav is hidden
+    /* Reserve room for the fixed bottom nav — see --bottom-reserve above. A
+       child that overflows this scroller must reserve it again in its own
+       flow space. updateNavForUser() zeroes it out when the nav is hidden
        (admins and storefronts), exactly like it does for the body padding. */
-    padding: 0 0 var(--bottom-h);
+    padding: 0 0 var(--bottom-reserve);
   }
 
   /* ── DASHBOARD: two-column sidebar layout ── */
@@ -2192,6 +2229,7 @@ html.is-storefront-root body #main-content {
     max-width: 820px;
     margin: 0 auto;
     padding: 28px 32px;
+    padding-bottom: calc(28px + var(--bottom-reserve, 0px));
   }
 
   /* Admin profile pages (full-page mode) */

@@ -28,7 +28,7 @@ async function renderBuyerDashboard() {
 
   // Saved stores
   const savedStoresList = App.allStores.filter(s => App.savedStores.includes(s.id));
-  const wishlistCount = (JSON.parse(localStorage.getItem('happa_wishlist') || '[]')).length;
+  const wishlistCount = wishlistIds().length;
 
   const activeTabId = (App.activeTab && App.activeTab['buyer-dashboard']) || 'buyer-overview';
 
@@ -395,10 +395,11 @@ async function saveProfileSettings(userId) {
 window.renderBuyerWishlist = function() {
   const container = document.getElementById('wishlist-container');
   if (!container) return;
-  const wish = JSON.parse(localStorage.getItem('happa_wishlist') || '[]');
+  // Shared storage helpers live in js/utils.js.
+  const wish = wishlistIds();
   const statCount = document.getElementById('wishlist-stat-count');
   if (statCount) statCount.textContent = wish.length;
-  const items = App.allProducts.filter(p => wish.includes(p.id));
+  const items = App.allProducts.filter(p => wish.includes(String(p.id)));
   if (!items.length) {
     container.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:.85rem">Your wishlist is empty. Save products here!</p>';
     return;
@@ -410,21 +411,8 @@ window.renderBuyerWishlist = function() {
   `;
 };
 
-window.toggleWishlist = function(prodId) {
-  const wish = JSON.parse(localStorage.getItem('happa_wishlist') || '[]');
-  const index = wish.indexOf(prodId);
-  if (index === -1) {
-    wish.push(prodId);
-    showToast('Added to wishlist! 💖', 'success');
-  } else {
-    wish.splice(index, 1);
-    showToast('Removed from wishlist', 'info');
-  }
-  localStorage.setItem('happa_wishlist', JSON.stringify(wish));
-  
-  // Refresh wishlist view if active
-  renderBuyerWishlist();
-};
+// toggleWishlist() is defined once, in js/utils.js, so this grid, the heart
+// icon and the wishlist counter all read and write the same storage.
 
 window.renderBuyerAddresses = function() {
   const container = document.getElementById('addresses-container');

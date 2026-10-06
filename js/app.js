@@ -1613,19 +1613,19 @@ function updateNavForUser() {
   // Bottom nav — hide entirely for admins or when on a storefront
   const bottomNav = document.getElementById('bottom-nav');
   if (bottomNav) {
-    // #main-content reserves the bottom nav's height as padding (see the
-    // desktop #main-content rule) so long pages scroll clear of it. When the
-    // nav is hidden that reservation has to go too, or every page carries a
-    // strip of scrollable emptiness at the bottom.
+    // #main-content (and the dashboard content inside it) reserves the bottom
+    // nav's height as trailing space — see --bottom-reserve in css/style.css.
+    // When the nav is hidden that reservation has to go too, or every page
+    // carries a strip of scrollable emptiness at the bottom.
     const mainEl = document.getElementById('main-content');
     if (isAdmin || isStorefront) {
       bottomNav.style.display = 'none';
       document.body.style.paddingBottom = '0';
-      if (mainEl) mainEl.style.paddingBottom = '0';
+      if (mainEl) mainEl.style.setProperty('--bottom-reserve', '0px');
     } else {
       bottomNav.style.display = '';
       document.body.style.paddingBottom = '';
-      if (mainEl) mainEl.style.paddingBottom = '';
+      if (mainEl) mainEl.style.removeProperty('--bottom-reserve');
     }
   }
 

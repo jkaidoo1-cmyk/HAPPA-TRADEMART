@@ -97,6 +97,93 @@ function storefrontUrl(slug, mode) {
 }
 window.storefrontUrl = storefrontUrl;
 
+// ── Storefront social links ────────────────────────────────
+// The storefront editor collects WhatsApp / Instagram / TikTok, and vendors
+// type all of it: a phone number, "@handle", "tiktok.com/@x", or a full URL.
+// Turn whichever form they typed into the href the storefront footer needs.
+//  • WhatsApp: a bare number becomes wa.me/<digits> (waMeHref, app.js). A real
+//    link — wa.me or a chat.whatsapp.com group invite — is left untouched,
+//    because rewriting it to its digits would break the invite.
+//  • Instagram / TikTok: a bare handle becomes the profile URL; a typed
+//    domain gets https:// so the browser does not treat it as a relative path.
+function socialHref(kind, value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  // A typed domain ("tiktok.com/@x", "chat.whatsapp.com/abc12") is a link, not a
+  // number or a handle — prefix the scheme rather than mangling it into digits.
+  if (/^[\w-]+(?:\.[\w-]+)+(?:\/|$)/.test(raw)) return 'https://' + raw;
+  if (kind === 'whatsapp') return waMeHref(raw);
+  const handle = raw.replace(/^@+/, '').replace(/\/+$/, '');
+  if (!handle) return '';
+  return kind === 'instagram' ? `https://instagram.com/${handle}` : `https://www.tiktok.com/@${handle}`;
+}
+window.socialHref = socialHref;
+
+// ── Wishlist ───────────────────────────────────────────────
+// The wishlist lives in localStorage only (no server row), keyed by product id.
+// Two separate copies of toggleWishlist used to exist — a stub in
+// marketplace.js that did nothing but fire a toast, and the real one in
+// buyer.js. Which one ran depended on script order, and neither repainted the
+// heart, so clicking the icon saved the item while the outline heart stayed
+// unchanged. This is now the single implementation for the whole app.
+const WISHLIST_KEY = 'happa_wishlist';
+
+function wishlistIds() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]');
+    return Array.isArray(raw) ? raw.map(String) : [];
+  } catch (e) { return []; }
+}
+
+function isInWishlist(productId) {
+  if (productId == null) return false;
+  return wishlistIds().includes(String(productId));
+}
+
+// Repaint every rendered wishlist heart + the dashboard counter to match what
+// is actually stored. Called on toggle, and after a page render so a saved item
+// comes back filled instead of resetting to the outline icon.
+function syncWishlistIcons() {
+  const ids = wishlistIds();
+  const btns = document.querySelectorAll('[data-wishlist-id]');
+  for (let i = 0; i < btns.length; i++) {
+    const btn = btns[i];
+    const on = ids.includes(String(btn.dataset.wishlistId));
+    const icon = btn.querySelector('i');
+    if (icon) {
+      icon.classList.toggle('fas', on);
+      icon.classList.toggle('far', !on);
+    }
+    btn.classList.toggle('is-wished', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.setAttribute('title', on ? 'Remove from wishlist' : 'Save to wishlist');
+  }
+  const stat = document.getElementById('wishlist-stat-count');
+  if (stat) stat.textContent = ids.length;
+}
+
+function toggleWishlist(productId) {
+  if (productId == null) return;
+  const id = String(productId);
+  let wish = wishlistIds();
+  const adding = !wish.includes(id);
+  wish = adding ? wish.concat(id) : wish.filter(x => x !== id);
+  try { localStorage.setItem(WISHLIST_KEY, JSON.stringify(wish)); } catch (e) { /* private mode / quota */ }
+  syncWishlistIcons();
+  // The buyer dashboard overview hosts the wishlist grid; refresh it if mounted.
+  if (typeof window.renderBuyerWishlist === 'function') {
+    try { window.renderBuyerWishlist(); } catch (e) { }
+  }
+  if (typeof showToast === 'function') {
+    showToast(adding ? 'Added to wishlist! 💖' : 'Removed from wishlist', adding ? 'success' : 'info');
+  }
+}
+window.wishlistIds = wishlistIds;
+window.isInWishlist = isInWishlist;
+window.syncWishlistIcons = syncWishlistIcons;
+window.toggleWishlist = toggleWishlist;
+
 // ── Scroll to element ──────────────────────────────────────
 function scrollToEl(id) {
   const el = document.getElementById(id);

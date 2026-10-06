@@ -1948,9 +1948,9 @@ app.get('/api/:table', async (req, res) => {
         business_hours: extraSf.business_hours || st.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
         shipping_policy: extraSf.shipping_policy || st.shipping_policy || '',
         return_policy: extraSf.return_policy || st.return_policy || '',
-        facebook_url: extraSf.facebook_url || st.facebook || st.facebook_url || '',
+        whatsapp_number: extraSf.whatsapp_number || st.whatsapp || st.whatsapp_number || '',
         instagram_url: extraSf.instagram_url || st.instagram || st.instagram_url || '',
-        youtube_url: extraSf.youtube_url || st.youtube_url || '',
+        tiktok_url: extraSf.tiktok_url || st.tiktok_url || st.extra?.tiktok_url || '',
         meta_description: extraSf.meta_description || st.meta_description || '',
         subscription_plan: extraSf.subscription_plan || st.subscription_plan || 'starter',
         subscription_status: extraSf.subscription_status || st.subscription_status || 'active',
@@ -2085,9 +2085,9 @@ app.get('/api/:table/:id', async (req, res) => {
       business_hours: st.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
       shipping_policy: st.shipping_policy || '',
       return_policy: st.return_policy || '',
-      facebook_url: st.facebook || st.facebook_url || '',
+      whatsapp_number: st.whatsapp || st.whatsapp_number || st.extra?.whatsapp_number || '',
       instagram_url: st.instagram || st.instagram_url || '',
-      youtube_url: st.youtube_url || '',
+      tiktok_url: st.tiktok_url || st.extra?.tiktok_url || '',
       meta_description: st.meta_description || '',
       subscription_plan: st.subscription_plan || 'starter',
       subscription_status: st.subscription_status || 'active',
@@ -2671,9 +2671,8 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       tertiary_color: pick(body.tertiary_color, st.tertiary_color, '#e85d04'),
       business_hours: pick(body.business_hours, st.business_hours, 'Mon - Sat: 8:00 AM - 6:00 PM'),
       return_policy: pick(body.return_policy, st.return_policy, ''),
-      facebook: pick(body.facebook_url, st.facebook, ''),
+      whatsapp: pick(body.whatsapp_number, st.whatsapp, ''),
       instagram: pick(body.instagram_url, st.instagram, ''),
-      youtube_url: pick(body.youtube_url, st.youtube_url, ''),
       meta_description: pick(body.meta_description, st.meta_description, ''),
       subscription_plan: isAdminEdit ? pick(body.subscription_plan, st.subscription_plan, 'starter') : (st.subscription_plan || 'starter'),
       subscription_status: isAdminEdit ? pick(body.subscription_status, st.subscription_status, 'active') : (st.subscription_status || 'active'),
@@ -2692,6 +2691,10 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
     // image data URLs, and mirroring them stored every store's image twice
     if (storeUpdates.name) extraSf.name = storeUpdates.name;
     if (storeUpdates.slogan) extraSf.slogan = storeUpdates.slogan;
+    // The `stores` table has no tiktok column, so the TikTok link rides in the
+    // `extra` JSONB alongside the other small fields and is projected back out
+    // on read (see the storefronts projections) instead of needing a migration.
+    if ('tiktok_url' in body) extraSf.tiktok_url = String(body.tiktok_url || '').slice(0, 300);
     storeUpdates.extra = extraSf;
 
     if (supabase) {
@@ -2739,9 +2742,9 @@ app.post('/api/:table', writeRateLimiter, async (req, res) => {
       business_hours: storeUpdates.business_hours,
       shipping_policy: storeUpdates.return_policy,
       return_policy: storeUpdates.return_policy,
-      facebook_url: storeUpdates.facebook,
+      whatsapp_number: storeUpdates.whatsapp,
       instagram_url: storeUpdates.instagram,
-      youtube_url: body.youtube_url || '',
+      tiktok_url: storeUpdates.extra?.tiktok_url || '',
       meta_description: body.meta_description || '',
       subscription_plan: storeUpdates.subscription_plan,
       subscription_status: storeUpdates.subscription_status,
@@ -3516,7 +3519,7 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if ('tertiary_color' in body) storeUpdates.tertiary_color = body.tertiary_color;
     if ('business_hours' in body) storeUpdates.business_hours = body.business_hours;
     if ('return_policy' in body) storeUpdates.return_policy = body.return_policy;
-    if ('facebook_url' in body) storeUpdates.facebook = body.facebook_url;
+    if ('whatsapp_number' in body) storeUpdates.whatsapp = body.whatsapp_number;
     if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
     if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
     if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
@@ -3538,6 +3541,7 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if ('layout' in storeUpdates) extraSf.layout = storeUpdates.layout;
     if ('plan_prices' in storeUpdates) extraSf.plan_prices = storeUpdates.plan_prices;
     if ('admin_feedback' in body) extraSf.admin_feedback = String(body.admin_feedback).slice(0, 500);
+    if ('tiktok_url' in body) extraSf.tiktok_url = String(body.tiktok_url || '').slice(0, 300);
     storeUpdates.extra = extraSf;
 
     if (supabase) {
@@ -3587,9 +3591,9 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
       business_hours: updatedSt.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
       shipping_policy: updatedSt.return_policy || '',
       return_policy: updatedSt.return_policy || '',
-      facebook_url: updatedSt.facebook || updatedSt.facebook_url || '',
+      whatsapp_number: updatedSt.whatsapp || updatedSt.whatsapp_number || '',
       instagram_url: updatedSt.instagram || updatedSt.instagram_url || '',
-      youtube_url: body.youtube_url || '',
+      tiktok_url: updatedSt.tiktok_url || updatedSt.extra?.tiktok_url || '',
       meta_description: body.meta_description || '',
       subscription_plan: updatedSt.subscription_plan || 'starter',
       subscription_status: updatedSt.subscription_status || 'active',
@@ -3809,7 +3813,7 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if ('tertiary_color' in body) storeUpdates.tertiary_color = body.tertiary_color;
     if ('business_hours' in body) storeUpdates.business_hours = body.business_hours;
     if ('return_policy' in body) storeUpdates.return_policy = body.return_policy;
-    if ('facebook_url' in body) storeUpdates.facebook = body.facebook_url;
+    if ('whatsapp_number' in body) storeUpdates.whatsapp = body.whatsapp_number;
     if ('instagram_url' in body) storeUpdates.instagram = body.instagram_url;
     if ('subscription_plan' in body) storeUpdates.subscription_plan = body.subscription_plan;
     if ('subscription_status' in body) storeUpdates.subscription_status = body.subscription_status;
@@ -3832,6 +3836,7 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     if ('layout' in storeUpdates) extra.layout = storeUpdates.layout;
     if ('plan_prices' in storeUpdates) extra.plan_prices = storeUpdates.plan_prices;
     if ('admin_feedback' in body) extra.admin_feedback = String(body.admin_feedback).slice(0, 500);
+    if ('tiktok_url' in body) extra.tiktok_url = String(body.tiktok_url || '').slice(0, 300);
     if ('only_show_on_storefront' in body) {
       extra.only_show_on_storefront = body.only_show_on_storefront === true || body.only_show_on_storefront === 'true';
     }
@@ -3886,9 +3891,9 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
       business_hours: updatedSt.business_hours || 'Mon - Sat: 8:00 AM - 6:00 PM',
       shipping_policy: updatedSt.return_policy || '',
       return_policy: updatedSt.return_policy || '',
-      facebook_url: updatedSt.facebook || updatedSt.facebook_url || '',
+      whatsapp_number: updatedSt.whatsapp || updatedSt.whatsapp_number || '',
       instagram_url: updatedSt.instagram || updatedSt.instagram_url || '',
-      youtube_url: body.youtube_url || '',
+      tiktok_url: updatedSt.tiktok_url || updatedSt.extra?.tiktok_url || '',
       meta_description: body.meta_description || '',
       subscription_plan: updatedSt.subscription_plan || 'starter',
       subscription_status: updatedSt.subscription_status || 'active',
