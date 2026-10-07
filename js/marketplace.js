@@ -916,7 +916,13 @@ async function shareProduct(productId) {
     return;
   }
 
-  const baseUrl = window.location.origin + window.location.pathname;
+  // A product shared from inside a storefront links to that store's own URL;
+  // from the marketplace it links to the marketplace. location.pathname alone
+  // made this depend on the sharer's address bar, so a hash-addressed storefront
+  // (#storefront/<slug>) shared the main site and the recipient landed on the
+  // marketplace instead of the store.
+  const sfSlug = (typeof currentStorefrontSlug === 'function') ? currentStorefrontSlug() : '';
+  const baseUrl = sfSlug ? storefrontUrl(sfSlug) : window.location.origin + window.location.pathname;
   let url = baseUrl + '?product=' + productId;
   // Append referral code if user is logged in — enables product-share attribution
   if (App.currentUser?.referral_code) {

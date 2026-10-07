@@ -309,9 +309,12 @@ async function renderBuyerDashboard() {
 
 // ── Build the referral link ────────────────────────────────
 function buildRefLink(code) {
-  if (!code) return window.location.origin + window.location.pathname;
-  // Use clean base URL (strip existing query params)
-  const base = window.location.origin + window.location.pathname;
+  // A referral link always points at the marketplace itself. Building it from
+  // location.pathname meant a link copied while on a storefront became
+  // /storefront/<slug>?ref=…, so the invited person landed on one store instead
+  // of the signup page the referral is meant to bring them to.
+  const base = window.location.origin + '/';
+  if (!code) return base;
   return `${base}?ref=${encodeURIComponent(code)}`;
 }
 

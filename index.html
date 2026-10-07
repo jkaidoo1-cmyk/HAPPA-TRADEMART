@@ -26,6 +26,14 @@
           p.indexOf('/storefront') !== -1 || p.indexOf('/store-admin') !== -1) {
         document.documentElement.classList.add('is-storefront-root');
       }
+      // ── A storefront URL is a plain store page, not the app ──
+      // /storefront/<slug> and /store-admin/<slug> are served by this same shell
+      // but must not set up the app's PWA plumbing: no service-worker
+      // registration and no cache self-heal, so a storefront visit never
+      // installs the app's offline shell for a shopper who only wanted the
+      // store. Only the PATH counts here — '#storefront/<slug>' is ordinary
+      // in-app navigation on a page that already is the app.
+      window.HAPPA_STOREFRONT_SHELL = /^\/(?:storefront|store-admin)\//.test(p);
     })();
 
     // ── One-time self-heal: clear stale service-worker caches on version bump ──
@@ -34,11 +42,15 @@
     // background push notifications.
     (function() {
       if (!('serviceWorker' in navigator)) return;
+      // A storefront page leaves the PWA machinery alone: unregistering the app's
+      // worker and wiping its caches because a *shopper* opened a store link
+      // would knock the app out of offline mode for that device.
+      if (window.HAPPA_STOREFRONT_SHELL) return;
       // Must equal CACHE_NAME in sw.js (test/sw-version.test.js enforces it).
       // It was stuck at v144 while sw.js moved to v159, so clients that had
       // already healed at v144 never healed again — they kept serving the old
       // cached JS long after a fix deployed.
-      var SW_VERSION = 'happa-v187';
+      var SW_VERSION = 'happa-v189';
       var lastCleaned = localStorage.getItem('sw_selfheal_version');
       if (lastCleaned === SW_VERSION) return; // already cleaned for this version
       localStorage.setItem('sw_selfheal_version', SW_VERSION);
@@ -841,7 +853,10 @@
 
   <!-- ── PWA Service Worker Registration ── -->
   <script>
-    if ('serviceWorker' in navigator) {
+    // Skip on a storefront URL: a shopper opening a store link should not have
+    // the app's service worker (and its ~40 precached app assets) installed —
+    // that scaffolding is what makes a storefront behave like a second app.
+    if ('serviceWorker' in navigator && !window.HAPPA_STOREFRONT_SHELL) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
           .then(reg => {

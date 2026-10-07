@@ -97,6 +97,29 @@ function storefrontUrl(slug, mode) {
 }
 window.storefrontUrl = storefrontUrl;
 
+// ── The storefront the visitor is inside, as a slug ────────
+// A link shared from a store page has to carry that store's own URL, so which
+// URL gets shared must not depend on the sharer's address bar: a path storefront
+// (/storefront/<slug>) and a hash one ('#storefront/<slug>') are the same store.
+// Reading location.pathname alone sent a hash-addressed storefront's share link
+// to the marketplace, so the recipient landed on the main site.
+// Returns '' on the marketplace.
+function currentStorefrontSlug() {
+  const pathMatch = /^\/(?:storefront|store-admin)\/([^/?#]+)/i.exec(window.location.pathname || '');
+  if (pathMatch) {
+    try { return decodeURIComponent(pathMatch[1]).trim().slice(0, 120); }
+    catch (e) { return String(pathMatch[1] || '').trim().slice(0, 120); }
+  }
+  const app = (typeof App !== 'undefined' && App) ? App : null;
+  if (!app || (app.currentPage !== 'storefront' && app.currentPage !== 'store-admin')) return '';
+  const id = String(app.currentStoreId || '');
+  const sf = (app.allStorefronts || []).find(s => s && (String(s.store_id) === id || String(s.id) === id || String(s.url_slug) === id));
+  if (sf && sf.url_slug) return String(sf.url_slug);
+  const st = (app.allStores || []).find(s => s && (String(s.id) === id || String(s.slug) === id));
+  return (st && st.slug) ? String(st.slug) : '';
+}
+window.currentStorefrontSlug = currentStorefrontSlug;
+
 // ── Storefront social links ────────────────────────────────
 // The storefront editor collects WhatsApp / Instagram / TikTok, and vendors
 // type all of it: a phone number, "@handle", "tiktok.com/@x", or a full URL.

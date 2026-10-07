@@ -1199,6 +1199,20 @@ function showPage(pageId, entityId = null) {
   }
 
   const targetEntity = entityId || getPageEntityId(pageId);
+
+  // A storefront is its own site, not another page of the app. In the installed
+  // app it hands off to the browser instead of rendering in the app window —
+  // the same rule the <a href> click handler and the served shell enforce, and
+  // what openStorefrontInBrowser() exists for (it had no call sites, so tapping
+  // a store inside the installed app opened the storefront in the app itself).
+  // Skipped in a browser tab, where navigating to a store in place is exactly
+  // what has always happened, and skipped when this document IS the storefront
+  // (a /storefront/<slug> load renders in place — it is already the standalone
+  // page and must never bounce itself to another tab).
+  if ((pageId === 'storefront' || pageId === 'store-admin') && isPwaMode() && !isPathAddressedStorefront()) {
+    if (openStorefrontInBrowser(pageId, targetEntity)) return;
+  }
+
   const currentEntity = prevEntityId;
   const targetEl = document.getElementById('page-' + pageId);
   if (App.currentPage === pageId && String(targetEntity || '') === String(currentEntity || '') && targetEl && targetEl.classList.contains('active') && targetEl.style.display !== 'none') {
@@ -1225,7 +1239,11 @@ function showPage(pageId, entityId = null) {
       // (and the vendor's next copy) holding a URL whose preview card is the
       // marketplace again — the exact thing this canonical form exists to fix.
       if ((pageId === 'storefront' || pageId === 'store-admin') && isPathAddressedStorefront()) {
-        hash = storefrontCanonicalUrl(targetEntity, pageId === 'store-admin' ? 'admin' : 'storefront');
+        // Keep the query string: a visitor who arrived on a shared link carries
+        // ?product=<id> (and ?ref=<code>), and rewriting the URL without it
+        // silently demoted the link they could re-share to a bare store URL.
+        hash = storefrontCanonicalUrl(targetEntity, pageId === 'store-admin' ? 'admin' : 'storefront')
+             + (window.location.search || '');
       }
       App._isProgrammaticNav = true;
       history.pushState({ page: pageId, entityId: targetEntity }, '', hash);
@@ -3334,7 +3352,17 @@ function renderStars(rating) {
 
 // ── Product & Store Open ──────────────────────────────────
 async function openProduct(id) {
-  if (App.currentPage === 'store-detail' || App.currentPage === 'storefront') {
+  // Which site a product link belongs to is settled by the URL, not by how far
+  // the boot got. A link shared from a storefront is
+  // /storefront/<slug>?product=<id>, and its product belongs in the store's own
+  // modal. Testing App.currentPage alone raced the storefront boot: on a slow
+  // connection the deep link fired first and the recipient was handed the
+  // main-site product page instead of the store they were sent to.
+  const storefrontContext =
+    App.currentPage === 'store-detail' ||
+    App.currentPage === 'storefront' ||
+    (typeof isPathAddressedStorefront === 'function' && isPathAddressedStorefront());
+  if (storefrontContext) {
     App.currentProductId = id;
     if (typeof openStorefrontProductModal === 'function') {
       openStorefrontProductModal(id);
