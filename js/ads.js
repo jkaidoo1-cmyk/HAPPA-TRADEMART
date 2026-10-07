@@ -23,15 +23,25 @@
    • When a store's daily budget is exhausted it is skipped for
      the rest of that calendar day; its slot in the round is
      simply dropped (the other stores keep going).
-   • At midnight all budgets reset automatically.
+   • When the LAST active store runs out the campaign is over for
+     the day: the slot is hidden (the default hero returns on Home)
+     and no slide is shown again until the next calendar day.
+   • At midnight all budgets reset — a stopped campaign reappears on
+     the next page view or reload.
 
    BUDGET ACCOUNTING
    ─────────────────
    • Each store has a minutesPerDay budget (admin-configured).
    • Each time a store's slide finishes displaying it is charged
      slideMs / 60000 minutes.
+   • Only time the banner was actually on screen is charged. Every
+     other page of the SPA is display:none and background tabs keep
+     firing timers, so a tick that fires while the banner is
+     off-screen is skipped — the day's allocation can never be
+     drained by a banner nobody could see.
    • Spent time is persisted in localStorage keyed by campaign
-     id + local date string so it resets each new calendar day.
+     id + local date string so it resets each new calendar day. An
+     exhausted day is never rewritten to zero.
    ============================================================ */
 
 'use strict';
@@ -129,13 +139,13 @@ async function initAdBanners(pageKey) {
   _clearSlot(slotId);
 
   const state = _buildSlotState(campaign, pageKey);
-  if (!state) { 
-    _hideSlot(slot); 
-    if (pageKey === 'home') {
-      const hd = document.getElementById('hero-default');
-      if (hd) hd.style.display = '';
-    }
-    return; 
+  if (!state) {
+    // No campaign for this page, or every participating store has already
+    // spent today's allocation — either way the slot stays empty and the
+    // default hero comes back.
+    _hideSlot(slot);
+    _restoreDefaultHero(slotId);
+    return;
   }
 
   if (pageKey === 'home') {
@@ -306,21 +316,12 @@ function _buildSlotState(campaign, pageKey) {
     const currentSpent = spent[e.sid] || 0;
     return currentSpent < budget;
   });
-  if (!activeRing.length) {
-    // If all spent, reset spent for this slot in memory so fallback or campaign continues to display
-    return {
-      campaign,
-      slideMs:       campaign ? _slideDuration(campaign) : AdEngine.DEFAULT_SLIDE_MS,
-      showStoreName: campaign ? campaign.show_store_name !== false : false,
-      allStoreEntries,
-      activeRing:    allStoreEntries,
-      ringIndex:     0,
-      currentEntry:  null,
-      budgets,
-      spent:         {},
-      spentKey,
-    };
-  }
+  // Every participating store has spent today's allocation. The campaign is
+  // over for the day — returning null (rather than handing back a state with a
+  // zeroed `spent`) is what makes the ads actually stop: rebuilding the state
+  // on the next page view must not put the campaign back on screen, and it
+  // must not overwrite the day's record with a fresh budget.
+  if (!activeRing.length) return null;
 
   return {
     campaign,
@@ -330,6 +331,7 @@ function _buildSlotState(campaign, pageKey) {
     activeRing,
     ringIndex:     0,
     currentEntry:  null,   // set on first tick
+    shownAt:       0,      // ms timestamp of the on-screen slide (0 = none)
     budgets,
     spent,
     spentKey,
@@ -340,22 +342,49 @@ function _buildSlotState(campaign, pageKey) {
 /*  Core tick — called once immediately + every slideMs        */
 /* ──────────────────────────────────────────────────────────── */
 
+/**
+ * Is this slot actually on screen? A background tab keeps its timers, and
+ * every page of the SPA other than the active one is display:none, so both
+ * cases must be treated as "not shown" — otherwise the campaign's daily
+ * budget is spent on slides nobody could see.
+ * `offsetParent` is null exactly when the element (or an ancestor) is
+ * display:none; it is also null for a detached node, which is equally invisible.
+ */
+function _slotIsVisible(slot) {
+  if (!slot) return false;
+  if (typeof document !== 'undefined' && document.hidden) return false;
+  if (!('offsetParent' in slot)) return true;      // non-DOM stub (tests)
+  if (slot.offsetParent != null) return true;
+  // offsetParent is null for a display:none element — but also for a rendered
+  // element whose ancestors are all statically positioned, so before declaring
+  // the banner invisible fall back to the element's own box.
+  if (typeof slot.getClientRects === 'function') return slot.getClientRects().length > 0;
+  return false;
+}
+
 function _tick(slotId, slot, firstRender) {
   const state = AdEngine.slots[slotId];
   if (!state) return;
 
+  // 0. Off-screen ticks are not charged and do not render. Forget shownAt so
+  // the stretch the user could not see is never billed to the campaign.
+  if (!_slotIsVisible(slot)) { state.shownAt = 0; return; }
+
   // 1. Midnight check — if calendar day changed, reset all budgets
   _maybeResetBudgets(state);
 
-  // 2. Charge the slide that just finished (skip on very first render)
-  if (!firstRender && state.currentEntry) {
+  // 2. Charge the slide that just finished (skip on the very first render, and
+  //    on the first tick after an off-screen stretch)
+  if (!firstRender && state.currentEntry && state.shownAt) {
     _chargeEntry(state, state.currentEntry);
   }
+  state.shownAt = 0;
 
-  // 3. If no stores left, hide the banner
+  // 3. If no stores left, hide the banner for the rest of the day
   if (!state.activeRing.length) {
     _clearSlot(slotId);
     _hideSlot(slot);
+    _restoreDefaultHero(slotId);
     return;
   }
 
@@ -372,8 +401,10 @@ function _tick(slotId, slot, firstRender) {
   // 7. Advance ringIndex so the NEXT tick uses the next store
   state.ringIndex = (state.ringIndex + 1) % state.activeRing.length;
 
-  // 8. Remember which entry is now on screen (so step 2 charges it next tick)
+  // 8. Remember which entry is now on screen (so step 2 charges it next tick,
+  //    and only when it really was on screen)
   state.currentEntry = entry;
+  state.shownAt      = Date.now();
 
   // 9. Render
   const storeObj = AdEngine.stores.find(s => s.id === entry.sid) || {};
@@ -580,6 +611,16 @@ function _buildStoreDots(state) {
 function _hideSlot(slot) {
   slot.innerHTML   = '';
   slot.style.display = 'none';
+}
+
+/**
+ * The default hero is only hidden while an ad banner occupies the home slot,
+ * so it has to come back the moment the campaign stops for the day.
+ */
+function _restoreDefaultHero(slotId) {
+  if (slotId !== 'ad-banner-home') return;
+  const hd = document.getElementById('hero-default');
+  if (hd) hd.style.display = '';
 }
 
 function _clearSlot(slotId) {

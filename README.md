@@ -125,6 +125,8 @@ The app now runs with a real RESTful `/api` backend and persistent `db.json` sto
 ### 📢 Ad Banner Engine (v4)
 - Strict store-rotation: one item per active store in fixed order; each store has its own daily-minutes budget
 - Budgets stored in localStorage (`happa_ads_<campaignId>_<date>`), reset at midnight
+- A store that runs out of budget drops out of the rotation; when the last participating store does, the banner stops for the rest of that day (the default hero returns on Home) and reappears after midnight
+- Only on-screen time is charged: ticks that fire while the tab is backgrounded or while the SPA is showing another page (every other `.page` is `display:none`) are skipped
 - Slots: `ad-banner-home`, `ad-banner-shop`, `ad-banner-stores`
 - Admin CRUD: `loadAdminAds`, `showAddAdCampaignModal`, `showEditAdCampaignModal`, `saveAdCampaign`, `toggleAdCampaignStatus`, `deleteAdCampaign`
 
@@ -295,7 +297,7 @@ js/
 4. **Admin subscription management** — filter rendors by sub status; bulk-expire / bulk-notify; export rendor list
 5. **Vendor analytics** — real chart data from orders table (not random), top products, revenue by period
 6. **Multi-image products** — carousel on product detail, multiple URLs in `images` array
-7. **Ad campaign analytics** — impressions, clicks, time-spent per campaign in admin Ads tab
+7. **Ad campaign analytics** — impressions, clicks and time-spent are live in the admin Ads tab (30-day rolling history in `ad_campaigns.extra.ads_daily`); next: per-placement breakdown and CSV export of the daily series
 8. **Push notifications** — Web Push API so admins and vendors get notified of new orders without polling
 9. **Search improvements** — index rendor posts alongside products; display rendors in search results
 10. **PWA / offline support** — service worker, manifest, install-to-homescreen prompt
