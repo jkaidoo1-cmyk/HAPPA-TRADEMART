@@ -9,7 +9,7 @@
 // match SW_VERSION in index.html — test/sw-version.test.js fails the build if
 // the two drift, because a stale SW_VERSION silently disables the one-time
 // cache self-heal and leaves returning clients running old JS.
-const CACHE_NAME      = 'happa-v185';
+const CACHE_NAME      = 'happa-v187';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install

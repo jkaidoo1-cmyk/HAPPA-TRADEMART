@@ -784,6 +784,29 @@ async function renderVendorDashboard() {
           .sflbl{display:block;font-size:.72rem;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--text-light);margin-bottom:6px}
           .sfswatch{width:34px;height:34px;border-radius:50%;cursor:pointer;border:2.5px solid #fff;box-shadow:0 0 0 1.5px var(--border),0 2px 6px rgba(0,0,0,.1);transition:transform .15s}
           .sfswatch:hover{transform:scale(1.15)}
+
+          /* ── Colour chip + in-app palette ────────────────────────
+             Phones and tablets open their OS colour sheet on a grid of preset
+             swatches, so the palette is never one tap away the way it is on
+             desktop. On coarse-pointer devices the native swatch is swapped for
+             .sf-color-chip, which opens .sfcp-* straight away. */
+          .sf-color-chip{flex:0 0 36px;width:36px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.55);transition:transform .12s}
+          .sf-color-chip:active{transform:scale(.94)}
+          .sfcp-overlay{position:fixed;inset:0;z-index:3000;background:rgba(15,23,42,.45);display:flex;align-items:flex-end;justify-content:center;animation:sfcpIn .15s ease-out}
+          .sfcp-card{width:100%;max-width:440px;background:#fff;border-radius:20px 20px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.28)}
+          .sfcp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+          .sfcp-title{font-size:.85rem;font-weight:800}
+          .sfcp-close{border:none;background:var(--bg);width:30px;height:30px;border-radius:50%;cursor:pointer;color:var(--text-light);font-size:.9rem;line-height:1}
+          .sfcp-sv{position:relative;width:100%;height:150px;border-radius:12px;overflow:hidden;touch-action:none;cursor:crosshair;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+          .sfcp-dot{position:absolute;width:18px;height:18px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1.5px rgba(0,0,0,.4);transform:translate(-50%,-50%);pointer-events:none}
+          .sfcp-hue{-webkit-appearance:none;appearance:none;width:100%;height:24px;margin:14px 0 2px;border-radius:12px;outline:none;touch-action:pan-y;background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+          .sfcp-hue::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.35);cursor:pointer}
+          .sfcp-hue::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:none;box-shadow:0 0 0 1.5px rgba(0,0,0,.35);cursor:pointer}
+          .sfcp-foot{display:flex;align-items:center;gap:10px;margin-top:12px}
+          .sfcp-prev{flex:none;width:34px;height:34px;border-radius:10px;border:1px solid var(--border)}
+          .sfcp-hex{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;text-transform:uppercase}
+          body.sfcp-open #main-content{overflow:hidden}
+          @keyframes sfcpIn{from{opacity:0}to{opacity:1}}
           .sftile{position:relative;border:1.5px dashed var(--border);border-radius:12px;background:var(--bg);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80px;transition:all .2s}
           .sftile:hover{border-color:var(--primary);background:var(--primary-light)}
           .sftile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -1012,15 +1035,15 @@ async function renderVendorDashboard() {
                    <div style="flex:1;min-width:140px">
                      <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Primary Color (Accents/Buttons)</label>
                      <div style="display:flex;align-items:center;gap:6px">
-                       <input type="color" id="store-primary-color" value="${sfPrimaryColor}" style="width:36px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;cursor:pointer" oninput="document.getElementById('store-primary-text').value = this.value; window.updateStorefrontPreview()">
-                       <input type="text" id="store-primary-text" value="${sfPrimaryColor}" class="form-control" style="font-size:.8rem" oninput="document.getElementById('store-primary-color').value = this.value; window.updateStorefrontPreview()">
+                       ${window.sfColorControlHTML('store-primary-color', sfPrimaryColor, 'Primary Color')}
+                       <input type="text" id="store-primary-text" value="${sfPrimaryColor}" class="form-control" style="font-size:.8rem" oninput="document.getElementById('store-primary-color').value = this.value; window.sfSyncColorChip('store-primary-color', this.value); window.updateStorefrontPreview()">
                      </div>
                    </div>
                    <div style="flex:1;min-width:140px">
                      <label style="display:block;font-size:.78rem;font-weight:700;margin-bottom:4px">Secondary Color (Page Background)</label>
                      <div style="display:flex;align-items:center;gap:6px">
-                       <input type="color" id="store-secondary-color" value="${sfSecondaryColor}" style="width:36px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;cursor:pointer" oninput="document.getElementById('store-secondary-text').value = this.value; window.updateStorefrontPreview()">
-                       <input type="text" id="store-secondary-text" value="${sfSecondaryColor}" class="form-control" style="font-size:.8rem" oninput="document.getElementById('store-secondary-color').value = this.value; window.updateStorefrontPreview()">
+                       ${window.sfColorControlHTML('store-secondary-color', sfSecondaryColor, 'Secondary Color')}
+                       <input type="text" id="store-secondary-text" value="${sfSecondaryColor}" class="form-control" style="font-size:.8rem" oninput="document.getElementById('store-secondary-color').value = this.value; window.sfSyncColorChip('store-secondary-color', this.value); window.updateStorefrontPreview()">
                      </div>
                    </div>
                  </div>
@@ -3427,8 +3450,214 @@ window.applyColorCombo = function(primary, secondary) {
   if (pText) pText.value = primary;
   if (sColor) sColor.value = secondary;
   if (sText) sText.value = secondary;
+  window.sfSyncColorChip('store-primary-color', primary);
+  window.sfSyncColorChip('store-secondary-color', secondary);
   
   window.updateStorefrontPreview();
+};
+
+// ── In-app colour palette ────────────────────────────────────────────────────
+// A native <input type="color"> is fine on a desktop: the browser opens the full
+// palette on the first click. On phones and tablets it does not — the OS colour
+// sheet comes up on a grid of preset swatches, so the vendor has to tap through
+// that before reaching a palette, and the two views behave differently.
+// On coarse-pointer devices we therefore replace the native swatch with our own
+// chip (.sf-color-chip) that opens this palette immediately, so the control
+// behaves the same everywhere. The hidden <input type="color"> stays behind it as
+// the value holder, so saving and the live preview are untouched.
+window.sfPrefersAppColorPicker = function() {
+  try {
+    return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  } catch (e) {
+    return false;
+  }
+};
+
+function sfcpNormalizeHex(value) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(value == null ? '' : value).trim());
+  return m ? '#' + m[1].toLowerCase() : null;
+}
+
+function sfcpHexToRgb(hex) {
+  const h = sfcpNormalizeHex(hex) || '#000000';
+  return {
+    r: parseInt(h.slice(1, 3), 16),
+    g: parseInt(h.slice(3, 5), 16),
+    b: parseInt(h.slice(5, 7), 16),
+  };
+}
+
+function sfcpRgbToHex(r, g, b) {
+  const part = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  return '#' + part(r) + part(g) + part(b);
+}
+
+// HSV keeps the palette square well behaved: hue only moves the gradient, while
+// saturation/brightness are just the x/y position inside it.
+function sfcpRgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return { h, s: max ? d / max : 0, v: max };
+}
+
+function sfcpHsvToHex(h, s, v) {
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  let rgb;
+  if (h < 60) rgb = [c, x, 0];
+  else if (h < 120) rgb = [x, c, 0];
+  else if (h < 180) rgb = [0, c, x];
+  else if (h < 240) rgb = [0, x, c];
+  else if (h < 300) rgb = [x, 0, c];
+  else rgb = [c, 0, x];
+  return sfcpRgbToHex((rgb[0] + m) * 255, (rgb[1] + m) * 255, (rgb[2] + m) * 255);
+}
+
+// Paints the chip that stands in for the native swatch.
+window.sfSyncColorChip = function(inputId, hex) {
+  const chip = document.getElementById(inputId + '-chip');
+  const normalized = sfcpNormalizeHex(hex);
+  if (chip && normalized) chip.style.background = normalized;
+};
+
+// Each swatch is paired with a hex text field: the swatch is `store-primary-color`
+// while the field is `store-primary-text`, so map one to the other instead of
+// assuming a `-text` suffix on the full id.
+function sfcpTextField(inputId) {
+  return document.getElementById(inputId + '-text') || document.getElementById(inputId.replace(/-color$/, '-text'));
+}
+
+// One write path for every colour change (native input, its text field, or the
+// in-app palette), so the value, the hex field, the chip and the live preview can
+// never drift apart.
+window.sfSetColorFromInput = function(inputId, value) {
+  const hex = sfcpNormalizeHex(value);
+  if (!hex) return;
+  const input = document.getElementById(inputId);
+  if (input) input.value = hex;
+  const text = sfcpTextField(inputId);
+  if (text) text.value = hex;
+  window.sfSyncColorChip(inputId, hex);
+  if (typeof window.updateStorefrontPreview === 'function') window.updateStorefrontPreview();
+};
+
+// The swatch markup for the editor: a chip button on touch devices, the native
+// colour input everywhere else.
+window.sfColorControlHTML = function(id, value, label) {
+  const hex = sfcpNormalizeHex(value) || '#000000';
+  const change = `window.sfSetColorFromInput('${id}', this.value)`;
+  const hiddenField = `<input type="color" id="${id}" value="${hex}" style="display:none" tabindex="-1" aria-hidden="true" oninput="${change}">`;
+  if (!window.sfPrefersAppColorPicker()) {
+    return `<input type="color" id="${id}" value="${hex}" style="width:36px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;cursor:pointer" oninput="${change}">`;
+  }
+  return `<button type="button" id="${id}-chip" class="sf-color-chip" style="background:${hex}" aria-label="${label}" title="${label}" aria-haspopup="dialog" onclick="window.openStoreColorPicker('${id}', '${label}')"></button>${hiddenField}`;
+};
+
+window.closeStoreColorPicker = function() {
+  const open = document.getElementById('sfcp-overlay');
+  if (open) open.remove();
+  document.body.classList.remove('sfcp-open');
+};
+
+window.openStoreColorPicker = function(inputId, label) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  window.closeStoreColorPicker();
+
+  const start = sfcpHexToRgb(input.value);
+  const state = sfcpRgbToHsv(start.r, start.g, start.b);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'sfcp-overlay';
+  overlay.id = 'sfcp-overlay';
+  overlay.innerHTML = `<div class="sfcp-card" role="dialog" aria-modal="true" aria-label="${label}">
+      <div class="sfcp-head">
+        <span class="sfcp-title">${label}</span>
+        <button type="button" class="sfcp-close" aria-label="Close" onclick="window.closeStoreColorPicker()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="sfcp-sv" id="sfcp-sv"><div class="sfcp-dot" id="sfcp-dot"></div></div>
+      <input type="range" class="sfcp-hue" id="sfcp-hue" min="0" max="360" step="1" aria-label="Hue">
+      <div class="sfcp-foot">
+        <span class="sfcp-prev" id="sfcp-prev"></span>
+        <input type="text" class="form-control sfcp-hex" id="sfcp-hex" spellcheck="false" maxlength="7" aria-label="Hex colour">
+        <button type="button" class="btn btn-primary btn-sm" onclick="window.closeStoreColorPicker()">Done</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.body.classList.add('sfcp-open');
+
+  const sv = overlay.querySelector('#sfcp-sv');
+  const dot = overlay.querySelector('#sfcp-dot');
+  const hue = overlay.querySelector('#sfcp-hue');
+  const prev = overlay.querySelector('#sfcp-prev');
+  const hexField = overlay.querySelector('#sfcp-hex');
+
+  // `push` writes the choice back into the editor: the hidden colour input, the
+  // hex text field, the chip and the live preview.
+  function paint(push) {
+    const hex = sfcpHsvToHex(state.h, state.s, state.v);
+    sv.style.background = `linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, ${sfcpHsvToHex(state.h, 1, 1)})`;
+    dot.style.left = (state.s * 100) + '%';
+    dot.style.top = ((1 - state.v) * 100) + '%';
+    prev.style.background = hex;
+    hue.value = Math.round(state.h);
+    if (document.activeElement !== hexField) hexField.value = hex;
+    if (!push) return;
+    window.sfSetColorFromInput(inputId, hex);
+  }
+
+  // Dragging inside the square picks saturation (x) and brightness (y). We only
+  // push to the editor when the finger lifts, so a drag stays smooth.
+  let dragging = false;
+  function pick(e) {
+    const rect = sv.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    state.s = x / rect.width;
+    state.v = 1 - (y / rect.height);
+    paint(false);
+  }
+  sv.addEventListener('pointerdown', e => {
+    dragging = true;
+    try { sv.setPointerCapture(e.pointerId); } catch (err) {}
+    pick(e);
+  });
+  sv.addEventListener('pointermove', e => { if (dragging) pick(e); });
+  sv.addEventListener('pointerup', e => {
+    if (!dragging) return;
+    dragging = false;
+    try { sv.releasePointerCapture(e.pointerId); } catch (err) {}
+    pick(e);
+    paint(true);
+  });
+  sv.addEventListener('pointercancel', () => { dragging = false; });
+
+  hue.addEventListener('input', () => { state.h = Number(hue.value) || 0; paint(false); });
+  hue.addEventListener('change', () => { state.h = Number(hue.value) || 0; paint(true); });
+
+  hexField.addEventListener('input', () => {
+    const hex = sfcpNormalizeHex(hexField.value);
+    if (!hex) return;
+    const rgb = sfcpHexToRgb(hex);
+    const next = sfcpRgbToHsv(rgb.r, rgb.g, rgb.b);
+    state.h = next.h;
+    state.s = next.s;
+    state.v = next.v;
+    paint(true);
+  });
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) window.closeStoreColorPicker(); });
+
+  paint(false);
 };
 
 window.previewActiveTab = 'home';
