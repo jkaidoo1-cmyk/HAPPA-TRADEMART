@@ -128,6 +128,30 @@ test('#5: concurrent moves on one wallet cannot overspend', async () => {
   assert.equal(state.user.wallet_balance, 2);
 });
 
+test('#5: a replayed reference on the local path cannot move money twice', async () => {
+  // The Supabase path is idempotent via the unique (user_id, type, reference)
+  // index. db.json has no such constraint, so without an explicit check a
+  // retried deposit/payout credited the wallet again — the module claimed
+  // otherwise and storefrontPayout/releaseDelivery rely on the promise.
+  const { adapter, state } = makeAdapter({ id: 'u1', wallet_balance: 10 });
+  const rec = { user_id: 'u1', type: 'earning', amount: 25, reference: 'SFP-pkg-7', package_id: 'pkg-7' };
+
+  const first = await wallet.applyMove(adapter, rec);
+  assert.equal(first.ok, true, JSON.stringify(first));
+  assert.equal(state.user.wallet_balance, 35);
+
+  const again = await wallet.applyMove(adapter, rec);
+  assert.equal(again.ok, true, 'a replay is answered as success, not an error');
+  assert.equal(state.user.wallet_balance, 35, 'the replay must not credit the wallet again');
+  assert.equal(state.txns.length, 1, 'no second ledger row is written');
+  assert.equal(again.balanceAfter, 35);
+
+  // A genuinely different reference still moves money.
+  const other = await wallet.applyMove(adapter, { ...rec, reference: 'SFP-pkg-8' });
+  assert.equal(other.ok, true);
+  assert.equal(state.user.wallet_balance, 60);
+});
+
 test('#5: a zero amount is refused before anything is written', async () => {
   const { adapter, state } = makeAdapter({ id: 'u1', wallet_balance: 10 });
   const res = await wallet.applyMove(adapter, { user_id: 'u1', type: 'deposit', amount: 0 });

@@ -3484,7 +3484,15 @@ function showToast(msg, type = '', durationMs = 3500) {
   t.className = `toast ${type}`;
   const icons = { success:'check-circle', error:'exclamation-circle', warning:'exclamation-triangle', info:'info-circle' };
   const icon = icons[type] || 'bell';
-  t.innerHTML = `<i class="fas fa-${icon}"></i><span>${msg}</span>`;
+  // The message is written as TEXT, never as markup. Toasts routinely carry a
+  // product / store / user name straight from the database ("Added to cart:
+  // ${product.name}"), so interpolating it into innerHTML made every toast a
+  // script-execution sink: an anonymous POST /api/products could store
+  // `<img src=x onerror=...>` as a product name and run code in any visitor's
+  // session — and the session token lives in localStorage. Only the icon is
+  // markup; the caller's text is escaped by the DOM itself.
+  t.innerHTML = `<i class="fas fa-${icon}"></i><span></span>`;
+  t.querySelector('span').textContent = String(msg == null ? '' : msg);
   c.appendChild(t);
   setTimeout(() => { t.style.animation = 'fadeOut 0.3s ease forwards'; setTimeout(() => t.remove(), 300); }, durationMs);
 }

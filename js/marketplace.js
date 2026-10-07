@@ -3621,7 +3621,7 @@ async function handleStorefrontOrderSearch(storeId, query, isEnter) {
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
               <div style="display:flex;align-items:center;gap:8px;min-width:0">
                 ${buildItemThumbsHTML(pkg.items, 2)}
-                <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => itemDisplayName(i.name)).filter(Boolean).join(', ')}</div>
+                <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => escHtml(itemDisplayName(i.name))).filter(Boolean).join(', ')}</div>
               </div>
               <div style="font-size:.75rem;color:var(--text-muted)">${dateStr}</div>
             </div>
@@ -3980,7 +3980,7 @@ async function renderStorefrontOrders(storeId, container, primaryColor) {
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
               <div style="display:flex;align-items:center;gap:8px;min-width:0">
                 ${buildItemThumbsHTML(pkg.items, 2)}
-                <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => itemDisplayName(i.name)).filter(Boolean).join(', ')}</div>
+                <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items.map(i => escHtml(itemDisplayName(i.name))).filter(Boolean).join(', ')}</div>
               </div>
               <div style="font-size:.75rem;color:var(--text-muted)">${dateStr}</div>
             </div>

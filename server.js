@@ -363,7 +363,15 @@ function loadDb() {
 }
 
 function saveDb(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  // Write to a sibling temp file, then rename it into place. A plain
+  // writeFileSync rewrites the whole file in place, so a crash, a full disk or
+  // a killed process part-way through left a truncated db.json — i.e. the
+  // entire local database. rename() is atomic within one volume, so a reader
+  // sees either the previous complete file or the new complete one, never a
+  // half-written one.
+  const tmp = `${DB_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+  fs.renameSync(tmp, DB_FILE);
 }
 
 // Best-effort audit log for privileged actions (db.json + Supabase mirror).

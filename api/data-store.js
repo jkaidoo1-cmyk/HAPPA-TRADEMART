@@ -63,7 +63,11 @@ function ensureTable(table) {
 
 function saveToFile() {
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(memoryStore, null, 2), 'utf8');
+    // Temp file + rename so an interrupted write can never leave a truncated
+    // db.json behind — same reasoning as server.js's saveDb().
+    const tmp = `${DB_PATH}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(memoryStore, null, 2), 'utf8');
+    fs.renameSync(tmp, DB_PATH);
     return true;
   } catch (err) {
     console.error('[DataStore] Failed to write db.json:', err.message);

@@ -28,6 +28,13 @@ const rendorPosts = require('../lib/rendor-posts');
 const deletion = require('../lib/deletion');
 
 const app = express();
+// (#22) Behind Vercel's proxy req.ip is the socket, not the visitor, unless
+// this is set. Without it every caller shares ONE rate-limit key: the login
+// limiter (5 failed attempts) then locks out the whole platform for 15 minutes
+// after five wrong passwords from anywhere, and express-rate-limit logs
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. server.js already sets this; the
+// production function must match, because production is the one real users hit.
+app.set('trust proxy', 1);
 // Allow larger JSON payloads (product images are sent as base64 up to 5 images)
 // 15mb matches the dev server (server.js) — the same payload must be accepted
 // in both environments. This caps request bodies (guide §: bounded input) and
@@ -723,6 +730,10 @@ app.get('/api', (req, res) => {
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  // Only *failed* logins count, so a legitimate sign-in never eats the caller's
+  // allowance (server.js has always behaved this way; the deployed backend did
+  // not, so five successful logins could exhaust the bucket).
+  skipSuccessfulRequests: true,
   message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false

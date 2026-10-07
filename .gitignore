@@ -11,6 +11,11 @@ npm-debug.log*
 db.json
 # One-off security-cleanup backups of db.json (may contain pre-migration data)
 db.json.bak*
+# Transient file from saveDb()'s atomic write — only survives a hard crash
+db.json.tmp
+# Security audit notes — like EGRESS.md, this describes exploitable weaknesses
+# (including ones not yet fixed). Keep it local unless the repo is private.
+AUDIT-*.md
 scratch/
 supabase_proxy.py
 supabase_schema.json
