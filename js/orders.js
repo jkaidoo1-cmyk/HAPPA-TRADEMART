@@ -41,10 +41,12 @@ function sanitizePackage(pkg) {
 
   let subtotal = 0;
   if (pkg.items.length > 0) {
-    subtotal = pkg.items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+    // Lines are parsed through priceNumber: an order saved while a price was
+    // still a string (or missing) must not turn the vendor's subtotal into NaN.
+    subtotal = pkg.items.reduce((s, i) => s + (priceNumber(i.price) ?? 0) * (parseInt(i.qty) || 1), 0);
   }
   if (!subtotal) {
-    subtotal = parseFloat(pkg.gross_amount) || parseFloat(pkg.total) || parseFloat(pkg.vendor_amount) || 0;
+    subtotal = priceNumber(pkg.gross_amount) ?? priceNumber(pkg.total) ?? priceNumber(pkg.vendor_amount) ?? 0;
   }
 
   pkg.gross_amount = subtotal;
@@ -212,7 +214,7 @@ async function showPackageDetailModal(packageId) {
   const ds = getBuyerDisplayStatus(pkg);
   const vs = pkg.vendor_status || 'pending';
   const as = pkg.admin_status  || 'pending';
-  const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
+  const itemSubtotal = priceNumber(pkg.gross_amount) ?? priceNumber(pkg.total) ?? (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(priceNumber(i.price) ?? 0)*(parseInt(i.qty)||1),0) : 0);
   // The platform does not charge delivery — it is arranged between the vendor and customer.
   const total = itemSubtotal;
 
@@ -266,17 +268,17 @@ async function showPackageDetailModal(packageId) {
       <div style="font-weight:700;font-size:.85rem;margin-bottom:10px">Items in this Package</div>
       ${(pkg.items||[]).map(i=>{
         const title = i.name && i.name.trim() ? escHtml(i.name) : `Item #${i.id || 'unnamed'}`;
-        const img = itemImage(i) || 'https://placehold.co/50x50?text=Item';
+        const img = itemImage(i) || PLACEHOLDER_IMG;
         return `
         <div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
-          <img src="${img}" alt="${title}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://placehold.co/50x50?text=Item'">
+          <img src="${img}" alt="${title}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src=window.PLACEHOLDER_IMG">
           <div style="flex:1;min-width:0">
             <div style="font-size:.84rem;font-weight:700">${title}</div>
-            <div style="font-size:.72rem;color:var(--text-muted)">Qty: ${i.qty || 1} · Unit: GHS ${(parseFloat(i.price)||0).toFixed(2)} ${i.id ? `· ID: ${escHtml(String(i.id))}` : ''}</div>
+            <div style="font-size:.72rem;color:var(--text-muted)">Qty: ${i.qty || 1} · Unit: ${priceAmount(i.price)} ${i.id ? `· ID: ${escHtml(String(i.id))}` : ''}</div>
             ${i.buyer_note ? `<div style="font-size:.72rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:3px 7px;margin-top:3px;display:flex;align-items:flex-start;gap:4px"><i class="fas fa-comment-dots" style="flex-shrink:0;margin-top:1px"></i><span><strong>Note:</strong> ${escHtml(i.buyer_note)}</span></div>` : ''}
           </div>
           <div style="font-weight:700;font-size:.85rem;color:var(--primary);flex-shrink:0">
-            GHS ${((parseFloat(i.price)||0)*(parseInt(i.qty)||1)).toFixed(2)}
+            ${priceAmount((priceNumber(i.price) ?? 0)*(parseInt(i.qty)||1))}
           </div>
         </div>`;
       }).join('')}
@@ -939,7 +941,7 @@ function adminPackageRowHTML(rawPkg, allUsers) {
   const vendor = allUsers.find(u => u.id === pkg.vendor_id);
   const vs  = pkg.vendor_status || 'pending';
   const as  = pkg.admin_status  || 'pending';
-  const itemSubtotal = parseFloat(pkg.gross_amount || pkg.total) || (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.qty)||1),0) : 0);
+  const itemSubtotal = priceNumber(pkg.gross_amount) ?? priceNumber(pkg.total) ?? (Array.isArray(pkg.items) ? pkg.items.reduce((s,i)=>s+(priceNumber(i.price) ?? 0)*(parseInt(i.qty)||1),0) : 0);
   // The platform does not charge delivery — it is arranged between the vendor and customer.
   const total = itemSubtotal;
 
@@ -1012,14 +1014,20 @@ function adminPackageRowHTML(rawPkg, allUsers) {
 
     <!-- Items list with buyer notes -->
     <div style="margin-bottom:12px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
-      ${(pkg.items||[]).map(i=>`
+      ${(pkg.items||[]).map(i=>{
+        // Historical order lines can hold a string price, and a line with no
+        // readable price is reported as "—" rather than a made-up GHS 0.00.
+        const unit = priceNumber(i.price);
+        const qty  = parseInt(i.qty, 10) || 1;
+        const line = unit == null ? null : unit * qty;
+        return `
       <div style="padding:7px 10px;border-bottom:1px solid var(--border);font-size:.82rem">
         <div style="display:flex;justify-content:space-between">
           <span>${escHtml(i.name||'')} <span style="color:var(--text-muted)">× ${i.qty}</span></span>
-          <span style="font-weight:600">GHS ${((i.price||0)*(i.qty||1)).toFixed(2)}</span>
+          <span style="font-weight:600">${line == null ? '—' : 'GHS ' + line.toFixed(2)}</span>
         </div>
         ${i.buyer_note ? `<div style="font-size:.72rem;background:#fefce8;border:1px solid #fde047;border-radius:4px;padding:4px 8px;margin-top:3px;display:flex;align-items:flex-start;gap:5px;color:#713f12"><i class="fas fa-comment-dots" style="flex-shrink:0;margin-top:1px;color:#ca8a04"></i><span><strong>Buyer's note:</strong> ${escHtml(i.buyer_note)}</span></div>` : ''}
-      </div>`).join('')}
+      </div>`;}).join('')}
     </div>
 
     <!-- Admin Action Buttons -->
@@ -1157,10 +1165,10 @@ function packageDetailHTML(rawPkg) {
       </div>
       ${(pkg.items||[]).map(i=>{
         const itemTitle = i.name && i.name.trim() ? escHtml(i.name) : `Item #${i.id || 'unnamed'}`;
-        const itemImg = itemImage(i) || 'https://placehold.co/60x60?text=Item';
+        const itemImg = itemImage(i) || PLACEHOLDER_IMG;
         return `
         <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:#fff">
-          <img src="${itemImg}" alt="${itemTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src='https://placehold.co/60x60?text=Item'">
+          <img src="${itemImg}" alt="${itemTitle}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0" onerror="this.src=window.PLACEHOLDER_IMG">
           <div style="flex:1;min-width:0">
             <div style="font-size:.83rem;font-weight:700;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               ${itemTitle}
@@ -1168,13 +1176,13 @@ function packageDetailHTML(rawPkg) {
             <div style="font-size:.72rem;color:var(--text-muted);display:flex;gap:6px;align-items:center;margin-top:2px;flex-wrap:wrap">
               <span>Qty: <strong>${i.qty || 1}</strong></span>
               <span>·</span>
-              <span>Unit: <strong>GHS ${(parseFloat(i.price)||0).toFixed(2)}</strong></span>
+              <span>Unit: <strong>${priceAmount(i.price)}</strong></span>
               ${i.id ? `<span>·</span><code style="font-size:.68rem;background:var(--bg);padding:1px 4px;border-radius:3px">ID: ${escHtml(String(i.id))}</code>` : ''}
             </div>
             ${i.buyer_note ? `<div style="font-size:.72rem;background:#fefce8;border:1px solid #fde047;border-radius:4px;padding:3px 7px;margin-top:4px;display:flex;align-items:flex-start;gap:4px;color:#713f12"><i class="fas fa-comment-dots" style="flex-shrink:0;margin-top:2px;color:#ca8a04"></i><span><strong>Note:</strong> ${escHtml(i.buyer_note)}</span></div>` : ''}
           </div>
           <div style="font-weight:800;font-size:.84rem;color:var(--primary);flex-shrink:0">
-            GHS ${((parseFloat(i.price)||0)*(parseInt(i.qty)||1)).toFixed(2)}
+            ${priceAmount((priceNumber(i.price) ?? 0)*(parseInt(i.qty)||1))}
           </div>
         </div>`;
       }).join('')}

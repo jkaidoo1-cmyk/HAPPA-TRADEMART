@@ -421,12 +421,16 @@ async function placeOrder() {
   // the per-store packages so each package carries its share. At delivery, orders.js
   // credits the admin wallet with commission + this fee (it reads pkg.platform_fee),
   // so the fee must live on the package or the admin never receives it.
-  const orderSubtotal = Object.values(storeGroups).reduce((s, items) => s + items.reduce((x, i) => x + i.price * i.qty, 0), 0) || 1;
+  // Prices are parsed line by line: the cart is restored from localStorage and
+  // an old row can still carry a string or a missing price, and one such row
+  // used to turn the proration divisor (and the package amounts) into NaN.
+  const lineTotal = i => (priceNumber(i.price) ?? 0) * (parseInt(i.qty, 10) || 1);
+  const orderSubtotal = Object.values(storeGroups).reduce((s, items) => s + items.reduce((x, i) => x + lineTotal(i), 0), 0) || 1;
   for (const [storeId, items] of Object.entries(storeGroups)) {
     const itemLoc = items[0].location || 'Accra';
     const pCode = generatePackageCode(itemLoc);
-    const grossAmt  = items.reduce((s,i) => s + i.price * i.qty, 0);
-    const commission = items.reduce((s,i) => s + i.price * i.qty * (i.commission_pct||8)/100, 0);
+    const grossAmt  = items.reduce((s,i) => s + lineTotal(i), 0);
+    const commission = items.reduce((s,i) => s + lineTotal(i) * (i.commission_pct||8)/100, 0);
     const vendorAmt  = grossAmt - commission;
     const d = calcDelivery(itemLoc, dest, items.reduce((s,i) => s + i.weight_kg * i.qty, 0));
     const pkgPlatformFee = Number(((totals.platformFee || 0) * grossAmt / orderSubtotal).toFixed(2));

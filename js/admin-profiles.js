@@ -255,13 +255,13 @@ async function _apSaveProductEdit(prodId, userId, form) {
   // Never coerce an unparseable price to 0: `parseFloat('') || 0` turned a
   // mis-typed price into a free listing that then sold for GHS 0. Refuse it
   // here and say why, instead of silently writing a price nobody chose.
-  const priceNum = parseFloat(data.price);
-  if (!Number.isFinite(priceNum) || priceNum < 0) {
+  const priceNum = priceNumber(data.price);
+  if (priceNum == null) {
     showToast('Enter a valid price before saving — the product was not updated.', 'warning');
     return;
   }
   data.price = priceNum;
-  data.original_price = data.original_price ? parseFloat(data.original_price) : null;
+  data.original_price = priceNumber(data.original_price);
   data.stock_qty = parseInt(data.stock_qty || '0');
   data.weight_kg = data.weight_kg ? parseFloat(data.weight_kg) : null;
   // Update images array with new URL if provided
@@ -473,8 +473,11 @@ function _apRenderVendorProducts(userId, data) {
   wrap.innerHTML = `<div class="product-grid">` + products.sort((a,b) => (b.created_at||0) - (a.created_at||0)).map(p => {
     const avail = p.is_available !== false;
     const editId = 'ap-prod-edit-'+p.id;
-    const priceSafe = parseFloat(p.price||0).toFixed(2);
-    const origSafe = (p.original_price||'');
+    // priceInputValue keeps "no price" EMPTY: the old `parseFloat(p.price||0)`
+    // prefilled 0.00 into the admin's edit form, and Save then wrote that 0
+    // back to the live listing (the reported "GHS 55 became 0").
+    const priceSafe = priceInputValue(p.price);
+    const origSafe = priceInputValue(p.original_price);
     const stockSafe = (p.stock_qty || 0);
     const weightSafe = (p.weight_kg || '');
     const imgSafe = escHtml((p.images||[])[0] || '');
@@ -599,7 +602,7 @@ function _apRenderEmbeddedStore(storeId, userId, products) {
   </div>
   <div class="ap-preview-middle">
     <div class="ap-preview-avatar">
-      <img src="${store?.logo_url||'https://placehold.co/64x64?text=Store'}" alt="">
+      <img src="${store?.logo_url||PLACEHOLDER_IMG}" alt="">
     </div>
     <div class="ap-preview-info">
       <div class="ap-preview-name">${escHtml(store?.name||'Store')}</div>
@@ -614,7 +617,7 @@ function _apRenderEmbeddedStore(storeId, userId, products) {
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
     ${productsForPreview.map(p=>`
     <div style="aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border)">
-      <img src="${(p.images||[])[0]||'https://placehold.co/80x80?text=P'}" style="width:100%;height:100%;object-fit:cover">
+      <img src="${(p.images||[])[0]||PLACEHOLDER_IMG}" style="width:100%;height:100%;object-fit:cover">
     </div>`).join('')}
   </div>
   `;
@@ -663,7 +666,7 @@ async function _apSaveStore(storeId, form) {
   const data = {};
   new FormData(form).forEach((v,k)=>{ data[k]=v; });
   data.is_paid = !!form.querySelector('[name=is_paid]')?.checked;
-  if (data.store_price) data.store_price = parseFloat(data.store_price);
+  if (data.store_price) data.store_price = priceNumber(data.store_price);
 
   const btn = form.querySelector('[type=submit]');
   const setBtn = OptimisticUI.button(btn, '<i class="fas fa-save"></i> Save');
@@ -729,8 +732,8 @@ function _apRenderVendorProductsForPage(userId, data) {
       ${products.sort((a,b) => (b.created_at||0) - (a.created_at||0)).map(p => {
         const avail = p.is_available !== false;
         const editId = 'ap-v-prod-edit-' + p.id;
-        const priceSafe = parseFloat(p.price||0).toFixed(2);
-        const origSafe = (p.original_price||'');
+        const priceSafe = priceInputValue(p.price);
+        const origSafe = priceInputValue(p.original_price);
         const stockSafe = (p.stock_qty || 0);
         const weightSafe = (p.weight_kg || '');
         const imgSafe = escHtml((p.images||[])[0] || '');
@@ -898,7 +901,7 @@ function _apRenderEmbeddedStoreForPage(storeId, userId, products) {
         ${store?.banner_url ? `<img src="${escHtml(store.banner_url)}" style="width:100%;height:100%;object-fit:cover">` : ''}
       </div>
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
-        <img src="${store?.logo_url||'https://placehold.co/64x64?text=Store'}" style="width:64px;height:64px;object-fit:cover;border-radius:var(--radius-md);flex-shrink:0;border:2px solid var(--border)">
+        <img src="${store?.logo_url||PLACEHOLDER_IMG}" style="width:64px;height:64px;object-fit:cover;border-radius:var(--radius-md);flex-shrink:0;border:2px solid var(--border)">
         <div style="flex:1;min-width:0">
           <div style="font-weight:900;font-size:1.1rem">${escHtml(store?.name||'Store')}</div>
           <div style="font-size:.85rem;color:var(--text-muted)">${store?.location||''}</div>
@@ -912,7 +915,7 @@ function _apRenderEmbeddedStoreForPage(storeId, userId, products) {
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
         ${productsForPreview.map(p=>`
           <div style="aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border)">
-            <img src="${(p.images||[])[0]||'https://placehold.co/80x80?text=P'}" style="width:100%;height:100%;object-fit:cover">
+            <img src="${(p.images||[])[0]||PLACEHOLDER_IMG}" style="width:100%;height:100%;object-fit:cover">
           </div>
         `).join('')}
       </div>
@@ -1333,7 +1336,7 @@ async function adminOpenVendorProfile(userId) {
         ${_apRow('Category', escHtml(store.category||'General'))}
         ${_apRow('Location', escHtml(store.location))}
         ${_apRow('Status', '<span class="status-badge status-' + store.status + '">' + store.status + '</span>')}
-        ${_apRow('Store Price', 'GHS ' + (store.store_price||0).toFixed(2))}
+        ${_apRow('Store Price', priceAmount(store.store_price))}
         ${_apRow('Paid', store.is_paid ? '✅ Yes' : '❌ No')}
         ${_apRow('Total Orders', '' + (store.total_orders||0))}
         ${_apRow('Total Sales', 'GHS ' + (store.total_sales||0).toLocaleString())}
@@ -1402,7 +1405,7 @@ async function adminOpenVendorProfile(userId) {
           </div>
           <div class="form-group">
             <label class="form-label">Store Price (GHS)</label>
-            <input class="form-control" name="store_price" type="number" min="0" value="${store.store_price||0}">
+            <input class="form-control" name="store_price" type="number" min="0" value="${priceInputValue(store.store_price)}">
           </div>
           <div class="form-group">
             <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -1591,7 +1594,7 @@ async function adminOpenRendorProfile(userId) {
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Rendor Details</div>
       ${_apRow('Display Name', escHtml(u.rendor_display_name||'—'))}
       ${_apRow('Service Category', escHtml(u.rendor_service_cat||'—'))}
-      ${_apRow('Starting Price', u.rendor_starting_price ? 'GHS '+parseFloat(u.rendor_starting_price).toFixed(2) : '—')}
+      ${_apRow('Starting Price', priceAmount(u.rendor_starting_price))}
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
       <div style="font-weight:900;margin-bottom:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:.8rem">Subscription</div>
       ${_apRow('Status', '<span style="color:' + (subActive ? '#059669' : '#dc2626') + ';font-weight:800">' + (subActive ? 'Active' : 'Inactive') + '</span>')}

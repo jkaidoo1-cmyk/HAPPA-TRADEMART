@@ -222,7 +222,7 @@ async function renderRendorDashboard() {
 </div>
 
 <!-- ══ MY POSTS ══ -->
-<div class="tab-content" id="rendor-posts">
+<div class="tab-content ${activeTabId === 'rendor-posts' ? 'active' : ''}" id="rendor-posts">
   <div class="dashboard-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <h3 id="rendor-posts-count" style="font-weight:700;margin:0;font-size:.9rem">My Posts (${heldPosts} of ${RENDOR_MAX_POSTS})</h3>
@@ -243,26 +243,37 @@ async function renderRendorDashboard() {
 </div>
 
 <!-- ══ CONTACT INFO ══ -->
-<div class="tab-content" id="rendor-contact">
+<div class="tab-content ${activeTabId === 'rendor-contact' ? 'active' : ''}" id="rendor-contact">
   <div class="dashboard-wrap" id="rendor-contact-content">
     ${_rendorContactHTML(u)}
   </div>
 </div>
 
 <!-- ══ SUBSCRIPTION ══ -->
-<div class="tab-content" id="rendor-subscription">
+<div class="tab-content ${activeTabId === 'rendor-subscription' ? 'active' : ''}" id="rendor-subscription">
   <div class="dashboard-wrap" id="rendor-sub-content">
     <div style="text-align:center;padding:20px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i></div>
   </div>
 </div>
 
 <!-- ══ VERIFY ══ -->
-<div class="tab-content" id="rendor-verify">
+<div class="tab-content ${activeTabId === 'rendor-verify' ? 'active' : ''}" id="rendor-verify">
   <div class="dashboard-wrap" id="rendor-verify-content">
     <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
   </div>
 </div>
 `;
+
+  // Subscription and Verify are built lazily by their buttons' onclick, so a
+  // render that restored a remembered tab (or a reload straight onto it) left
+  // them showing nothing but a spinner until the tab was pressed again. Hand
+  // the same loaders the buttons call to the shared helper. (My Posts is
+  // already complete in the markup above — re-fetching it here would just
+  // duplicate the request this function already made.)
+  hydrateActiveTab(activeTabId, {
+    'rendor-subscription': () => renderRendorSubscription(),
+    'rendor-verify':       () => renderRendorVerify(),
+  });
 }
 
 // ── Contact Info HTML (inline helper) ────────────────────
@@ -388,7 +399,7 @@ function rendorPostCardHTML(p) {
           <span style="font-weight:700;color:${col};text-transform:uppercase">${p.status||'active'}</span>
         </div>
         ${p.description ? `<p style="font-size:.8rem;color:var(--text-light);margin-top:6px;line-height:1.6;-webkit-line-clamp:3;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden">${escHtml(p.description)}</p>` : ''}
-        ${p.price ? `<div style="font-weight:700;color:var(--primary);font-size:.85rem;margin-top:6px">From GHS ${parseFloat(p.price).toFixed(2)}</div>` : ''}
+        ${priceNumber(p.price) != null ? `<div style="font-weight:700;color:var(--primary);font-size:.85rem;margin-top:6px">From ${priceText(p.price)}</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
         <button class="btn btn-ghost btn-sm" onclick="showEditPostModal('${p.id}')">
@@ -989,7 +1000,7 @@ async function savePost(postId) {
   const title  = (document.getElementById('post-title')?.value || '').trim();
   const cat    = document.getElementById('post-cat')?.value || '';
   const desc   = (document.getElementById('post-desc')?.value || '').trim();
-  const price  = parseFloat(document.getElementById('post-price')?.value) || 0;
+  const price  = priceNumber(document.getElementById('post-price')?.value) ?? 0;
   const status = document.getElementById('post-status')?.value || 'active';
 
   // Image: prefer newly uploaded base64; fall back to existing URL kept from edit
@@ -1180,7 +1191,7 @@ async function saveRendorProfile() {
   const displayName = document.getElementById('rp-name')?.value.trim();
   const cat         = document.getElementById('rp-cat')?.value;
   const bio         = document.getElementById('rp-bio')?.value.trim();
-  const price       = parseFloat(document.getElementById('rp-price')?.value) || 0;
+  const price       = priceNumber(document.getElementById('rp-price')?.value) ?? 0;
   const tags        = document.getElementById('rp-tags')?.value.trim();
   const avatarNew   = (document.getElementById('rp-avatar-b64')?.value || '').trim();
   const avatarKeep  = (document.getElementById('rp-avatar-keep')?.value || '').trim();

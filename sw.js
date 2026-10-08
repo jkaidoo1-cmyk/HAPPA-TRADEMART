@@ -9,7 +9,7 @@
 // match SW_VERSION in index.html — test/sw-version.test.js fails the build if
 // the two drift, because a stale SW_VERSION silently disables the one-time
 // cache self-heal and leaves returning clients running old JS.
-const CACHE_NAME      = 'happa-v191';
+const CACHE_NAME      = 'happa-v194';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install
@@ -19,7 +19,7 @@ const PRECACHE_ASSETS = [
   './offline.html',
   './manifest.json',
   './vercel.json',
-  './images/photo_2026-05-30_17-40-49-Photoroom.png',
+  './images/happa-logo.webp',
   './images/icon-192.png',
   './images/icon-512.png',
   './css/style.css',
@@ -31,7 +31,20 @@ const PRECACHE_ASSETS = [
   './css/webfonts/fa-solid-900.woff2',
   './css/webfonts/fa-regular-400.woff2',
   './css/webfonts/fa-brands-400.woff2',
-  './js/chart.min.js',
+  // The two latin subsets of the app's own text fonts. Inter and Outfit used
+  // to come from fonts.gstatic.com, which meant the installed app painted in
+  // Segoe UI whenever the device was offline. latin-ext is deliberately left
+  // out: its unicode-range only pulls it in for names that need it, and
+  // precaching it would make every install pay for a file most never use.
+  './css/webfonts/inter-latin.woff2',
+  './css/webfonts/outfit-latin.woff2',
+  // NOTE: the role bundles (chart.min.js, vendor.js, admin.js,
+  // admin-profiles.js, admin-settings.js, rendor.js) are deliberately NOT
+  // precached. Precaching them meant every visitor downloaded ~865 KB of
+  // somebody else's dashboard at install time — the same waste index.html used
+  // to cause by listing them as <script> tags. They are still available offline:
+  // the stale-while-revalidate branch below caches each one the first time a
+  // role or page asks for it (js/app.js, ensureScriptsForRole/Page).
   './js/optimistic_ui.js',
   './js/app.js',
   './js/auth.js',
@@ -39,19 +52,18 @@ const PRECACHE_ASSETS = [
   './js/cart.js',
   './js/checkout.js',
   './js/orders.js',
-  './js/vendor.js',
   './js/buyer.js',
-  './js/admin.js',
-  './js/admin-profiles.js',
-  './js/admin-settings.js',
-
   './js/utils.js',
   './js/upload.js',
   './js/search.js',
   './js/notifications.js',
   './js/wallet.js',
-  './js/ads.js',
-  './js/rendor.js'
+  // support.js is loaded by index.html on every page, so it belongs to the app
+  // shell as much as the files above it. It was simply missing here, which left
+  // the support page dependent on the network even though its script had been
+  // fetched moments earlier.
+  './js/support.js',
+  './js/ads.js'
 ];
 
 // ── Install: pre-cache all core assets ───────────────────────
@@ -94,9 +106,12 @@ self.addEventListener('fetch', event => {
 
   // ── Storefront / store / store-admin URLs → Never intercept ──
   // These pages must always open in the real browser, not inside the PWA.
-  // The manifest `scope` (./index.html) is what actually keeps them out of the
-  // installed app — Chrome only confines navigations that are inside the app's
-  // scope. This skip is belt-and-braces so a cached shell never swallows one.
+  // Do NOT read this as the thing that keeps them out of the installed app:
+  // the manifest `scope` (./index.html) does not block an out-of-scope deep
+  // link from opening inside the app window — it only adds the browser chrome.
+  // js/app.js hands those URLs to the browser instead (openStorefrontInBrowser).
+  // What this skip guarantees is narrower and still worth having: a cached
+  // shell can never swallow a storefront navigation.
   const storefrontPaths = ['/storefront/', '/store/', '/store-admin/'];
   const isStorefrontNav = storefrontPaths.some(p => url.pathname.startsWith(p));
   if (isStorefrontNav && request.mode === 'navigate') {

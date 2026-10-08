@@ -41,14 +41,14 @@
       "src": "/css/(.*)",
       "dest": "/css/$1",
       "headers": {
-        "Cache-Control": "public, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=86400"
       }
     },
     {
       "src": "/js/(.*)",
       "dest": "/js/$1",
       "headers": {
-        "Cache-Control": "public, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=86400"
       }
     },
     {

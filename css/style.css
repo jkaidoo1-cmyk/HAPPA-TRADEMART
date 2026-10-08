@@ -2,6 +2,52 @@
    HAPPA TRADEMART — Mobile-First Stylesheet
    ============================================================ */
 
+/* ----- Fonts (self-hosted) -----
+   These were loaded from fonts.googleapis.com: two render-blocking requests
+   to a third party, then a second origin (fonts.gstatic.com) for the files
+   themselves, each one a fresh DNS lookup + TLS handshake before a single
+   glyph could be painted. On a slow connection that is seconds of wait, and
+   in the installed app it made every launch depend on the network — offline,
+   the whole UI silently fell back to Segoe UI.
+
+   Both families are now one variable woff2 per subset (all weights 100-900 in
+   a single file), served from our own origin, precached by sw.js, and gated
+   by the same unicode-range declarations Google used — so latin-ext is only
+   ever fetched when a name actually contains one of its characters.
+   Nothing here needs updating when a weight is added; see test/fonts.test.js. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/css/webfonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/css/webfonts/inter-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/css/webfonts/outfit-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/css/webfonts/outfit-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 /* ----- CSS Variables ----- */
 :root {
   --primary: #e85d04;

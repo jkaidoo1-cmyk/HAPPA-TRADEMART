@@ -126,10 +126,19 @@ test('inside the installed app a storefront hands off to the browser', () => {
 
   assert.match(
     guard,
-    /\(pageId === 'storefront' \|\| pageId === 'store-admin'\) && isPwaMode\(\) && !isPathAddressedStorefront\(\)/,
-    'showPage must hand off only in the installed app, and never from the storefront document itself'
+    /\(pageId === 'storefront' \|\| pageId === 'store-admin'\) && isPwaMode\(\)/,
+    'showPage must hand a storefront off whenever it is running in the installed app'
   );
-  assert.match(guard, /openStorefrontInBrowser\(pageId, targetEntity\)\) return;/, 'the handoff must return before the page renders');
+  // The guard must NOT be narrowed by the URL shape. `scope` does not keep an
+  // out-of-scope deep link out of the installed app (the browser merely adds a
+  // URL bar), so exempting /storefront/<slug> is what let a shared store link
+  // render the store inside the PWA.
+  assert.doesNotMatch(
+    guard,
+    /isPwaMode\(\) && !isPathAddressedStorefront\(\)/,
+    'the /storefront/<slug> path form must hand off too, not render in the app window'
+  );
+  assert.match(guard, /openStorefrontInBrowser\(pageId, targetEntity\);\s*return;/, 'the handoff must return before the page renders');
 
   // The helper used to be exported and never called, so tapping a store inside
   // the installed app rendered the storefront in the app window.
@@ -140,6 +149,87 @@ test('inside the installed app a storefront hands off to the browser', () => {
   // …and the anchor path (any <a href="/storefront/x">) keeps its own guard.
   assert.match(appJs, /if \(!isPWA\(\)\) return;/, 'the anchor handler must only act inside the installed app');
   assert.match(appJs, /const storefrontPaths = \['\/storefront\/', '\/store\/', '\/store-admin\/'\]/, 'the anchor handler must know the storefront paths');
+});
+
+test('a storefront deep link never boots the app inside the installed app', () => {
+  // The path that actually broke: an installed app window holding
+  // /storefront/<slug>. The runtime guard alone is not enough, because the boot
+  // block applies the storefront classes, drops the splash and pushes history
+  // before it ever reaches showPage.
+  const boot = appJs.slice(appJs.indexOf("if (isDirectStorefront) {"), appJs.indexOf('function resolveRouteFromHash'));
+  assert.ok(boot.length > 0, 'could not isolate the startup storefront block');
+
+  const firstStatement = boot.indexOf('if (isPwaMode()) {');
+  assert.ok(firstStatement !== -1, 'the startup block must check for the installed app');
+  assert.ok(
+    firstStatement < boot.indexOf('App.isStandaloneStorefront = true'),
+    'the hand-off must come before any storefront state is applied'
+  );
+  assert.ok(
+    firstStatement < boot.indexOf('showPage(isStoreAdmin'),
+    'the hand-off must come before the storefront is rendered'
+  );
+  assert.match(
+    boot,
+    /if \(isPwaMode\(\)\) \{\s*openStorefrontInBrowser\(isStoreAdmin \? 'store-admin' : 'storefront', storeSlug, \{ replaceWindow: true \}\);\s*return;/,
+    'the startup block must hand off and stop'
+  );
+});
+
+test('nothing in the shell shows a storefront before the hand-off runs', () => {
+  // The pre-boot script in index.html used to reach for window.open() with the
+  // non-standard '_system' target in the middle of parsing — no user activation,
+  // so Chrome's popup blocker refused it and the guard did nothing. It then
+  // removed the splash and activated #page-storefront on DOMContentLoaded, so the
+  // store was already on screen whatever js/app.js decided afterwards.
+  const start = indexHtml.indexOf('Standalone PWA Link Guard');
+  const end = indexHtml.indexOf('</script>', start);
+  assert.ok(start !== -1 && end > start, 'could not isolate the pre-boot storefront guard');
+  // Comments are stripped so the assertions describe the code, not the prose
+  // that documents why the old code was wrong.
+  const pre = indexHtml.slice(start, end).replace(/^[^\n]*\/\/[^\n]*$/gm, '');
+
+  assert.doesNotMatch(pre, /_system/, "'_system' is a Cordova target name, not a web one");
+  assert.doesNotMatch(pre, /window\.open\(/, 'a popup attempted during parsing is always blocked');
+  assert.match(
+    pre,
+    /const isStorefrontInInstalledApp = isPWAStandalone && isStorefrontUrl;/,
+    'the installed-app condition must be computed before the skeleton is set up'
+  );
+  assert.match(
+    pre,
+    /if \(!isStorefrontInInstalledApp\) \{\s*const splash = document\.getElementById\('pwa-splash-screen'\);\s*if \(splash\) splash\.remove\(\);\s*\}/,
+    'the splash must stay up in an installed app so nothing of the app shows through'
+  );
+
+  const skeleton = pre.slice(pre.indexOf("document.addEventListener('DOMContentLoaded'"));
+  assert.ok(skeleton.length > 0, 'could not isolate the skeleton block');
+  const guardAt = skeleton.indexOf('if (isStorefrontInInstalledApp) return;');
+  assert.ok(guardAt !== -1, 'the skeleton must be skipped in an installed app');
+  assert.ok(
+    guardAt < skeleton.indexOf("sfPage.classList.add('active')"),
+    'the guard must sit above the code that activates the storefront page'
+  );
+});
+
+test('the hand-off can never fall through and render the storefront in the app', () => {
+  const fn = appJs.slice(appJs.indexOf('function openStorefrontInBrowser'), appJs.indexOf('window.openStorefrontInBrowser'));
+  assert.ok(fn.length > 0, 'could not isolate openStorefrontInBrowser()');
+
+  // Returning false from inside the dedupe window made the caller continue into
+  // the render path — the store came back inside the app on the second caller.
+  assert.doesNotMatch(fn, /return false;/, 'the hand-off must not report "not handled" and let the app render the store');
+  assert.match(fn, /return true;\s*\}/, 'the hand-off must always report that it handled the navigation');
+
+  // A standalone window can refuse the programmatic open (no user activation),
+  // so there must be a tappable way out that does not depend on it.
+  assert.match(fn, /showStorefrontHandoffNotice\(targetUrl\)/, 'a refused window.open must still leave the visitor a way to the store');
+  const notice = appJs.slice(appJs.indexOf('function showStorefrontHandoffNotice'), appJs.indexOf('let _sfHandoffLastUrl'));
+  assert.match(notice, /link\.target = '_blank'/, 'the notice link must open a real browser context');
+  assert.match(notice, /shown\.textContent = targetUrl;/, 'the URL must be set as text, never as HTML');
+  assert.doesNotMatch(notice, /innerHTML/, 'no HTML interpolation of a URL');
+  // The store's own URL keeps whatever it was opened with (?product=, ?ref=).
+  assert.match(appJs, /if \(isPathAddressedStorefront\(\)\) return window\.location\.href;/, 'the path form must hand off the exact URL it was opened with');
 });
 
 test('a link shared from a storefront carries the store, not the marketplace', () => {

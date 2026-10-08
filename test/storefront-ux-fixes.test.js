@@ -185,9 +185,11 @@ test('every vendor tab honours the remembered tab', () => {
     'no conditionally-unmarked vendor tab-content may remain'
   );
   // The wallet tab's transaction list is built by its click handler, which a
-  // render-restored tab never runs — so the render pass must hydrate it.
+  // render-restored tab never runs — so the render pass must hydrate it. This
+  // now goes through the shared helper (js/utils.js) with a tabId→loader map,
+  // so the loader is provably the one the button itself runs.
   assert.ok(
-    /if \(activeTabId === 'vendor-wallet'\) \{\s*try \{ renderWalletHistory\('vendor-txn-list'\); \}/.test(vendor),
+    /hydrateActiveTab\(activeTabId, \{\s*'vendor-wallet': \(\) => renderWalletHistory\('vendor-txn-list'\),?\s*\}\);/.test(vendor),
     'restoring the Wallet tab must hydrate its transaction list'
   );
 });
@@ -211,7 +213,7 @@ test('the live preview is a pull-out side panel on mobile', () => {
   );
 
   // Collapse the author's indentation but keep descendant spaces (those matter
-  // for `body.sf-preview-open .sf-preview-handle`).
+  // for descendant selectors).
   const squash = s => s.replace(/\s+/g, ' ').replace(/\s*([{};,])\s*/g, '$1');
 
   // Off-canvas by default on narrow screens, slid in by the .open class.
@@ -231,9 +233,17 @@ test('the live preview is a pull-out side panel on mobile', () => {
     squash(styles).includes('.sf-preview-handle,.sf-preview-backdrop,.sf-preview-close{display:none}'),
     'the handle, backdrop and close button must be hidden on desktop'
   );
+  // The handle hides via its OWN class, not `body.sf-preview-open`: a dashboard
+  // re-render replaces the drawer with a fresh, closed one while the body flag
+  // survives, and a body-keyed rule then hid the only control that could reopen
+  // it (see test/tab-restore.test.js, which pins that regression end to end).
   assert.ok(
-    squash(styles).includes('body.sf-preview-open .sf-preview-handle{opacity:0;pointer-events:none}'),
+    squash(styles).includes('.sf-preview-handle.is-open{opacity:0;pointer-events:none}'),
     'the handle must hide while the drawer is open'
+  );
+  assert.ok(
+    !/body\.sf-preview-open\s+\.sf-preview-handle/.test(styles),
+    'the handle must never be hidden by the stale body flag again'
   );
   // The pull tab is a white chip with an orange outline, not a solid orange
   // block competing with the Save button.
@@ -256,7 +266,11 @@ test('the live preview is a pull-out side panel on mobile', () => {
     'the drawer must sit between the fixed top nav and the bottom nav'
   );
   // Leaving the storefront tab must not leave the overlay on top of another tab.
-  const switchTab = vendor.slice(vendor.indexOf('function switchTab('));
+  // switchTab() lives in js/utils.js, not js/vendor.js: the buyer dashboard's tab
+  // buttons call it too, and the vendor bundle is only downloaded for the roles
+  // that need it (see test/lazy-scripts.test.js).
+  const switchTab = utils.slice(utils.indexOf('function switchTab('));
+  assert.ok(switchTab.length > 0, 'switchTab() is missing from js/utils.js');
   assert.ok(
     /sfTogglePreview\(false\)/.test(switchTab.slice(0, 2000)),
     'switchTab() must close the preview drawer'

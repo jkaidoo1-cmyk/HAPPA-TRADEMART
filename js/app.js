@@ -79,6 +79,21 @@ const App = {
   publicSettings: null,
 };
 
+// Restore the dashboard tab the user was last on. Dashboards read
+// `App.activeTab[<dashboard>]` when they build their markup, so without this a
+// reload always fell back to the first tab — the Storefront tab (and every
+// other remembered tab) came back "empty" until it was clicked again.
+// Best-effort: a corrupt/absent value just leaves the default tab. See
+// switchTab() in js/utils.js, which is the only writer.
+try {
+  const savedTabs = JSON.parse(localStorage.getItem('happa_active_tab') || '{}');
+  if (savedTabs && typeof savedTabs === 'object' && !Array.isArray(savedTabs)) {
+    App.activeTab = savedTabs;
+  }
+} catch (e) {
+  App.activeTab = {};
+}
+
 let deferredInstallPrompt = null;
 let installPromptToastShown = false;
 
@@ -246,6 +261,11 @@ window.addEventListener('DOMContentLoaded', () => {
   
   loadSession();
   updateNavForUser(); // apply role-based nav immediately after session load
+  // Fetch the bundle this account's dashboards need, in the background: people
+  // who never open a dashboard never pay for the download, and vendors/admins
+  // have it before they click (runPageInit() awaits it too, so this is only an
+  // optimisation).
+  try { ensureScriptsForRole(App.currentUser && App.currentUser.role); } catch (e) {}
   initCountdown();
   // Handle storefront links in hash e.g. #storefront/elsbee, ?storefront=elsbee,
   // or path-based URLs e.g. /storefront/<slug> and /store-admin/<slug> on startup
@@ -267,6 +287,18 @@ window.addEventListener('DOMContentLoaded', () => {
                     (isStorefrontPage ? (startupHash.startsWith('#storefront/') ? startupHash.substring(12) : null) : null);
 
   if (isDirectStorefront) {
+    // ── A storefront link must never boot the app inside the installed app ──
+    // This is the earliest point in the app's life, before a single page is
+    // shown or a single byte is fetched: if this document is an installed app
+    // window holding a store URL, hand it off and stop. Booting any further is
+    // what made a shared store link open "through" the PWA — the store rendered
+    // inside the app window, indistinguishable from the marketplace.
+    // (In a browser tab isPwaMode() is false and the store renders in place, as
+    // it always has.)
+    if (isPwaMode()) {
+      openStorefrontInBrowser(isStoreAdmin ? 'store-admin' : 'storefront', storeSlug, { replaceWindow: true });
+      return;
+    }
     App.isStandaloneStorefront = true;
     document.body.classList.add('is-storefront-view');
     document.documentElement.classList.add('is-storefront-root');
@@ -872,11 +904,15 @@ function injectSkeletonLoaders(pageId) {
     </div>`;
 
   if (pageId === 'home') {
-    const flashList = document.getElementById('flash-sale-list');
     const localList = document.getElementById('local-products-list');
     const trending = document.getElementById('trending-list');
     const stores = document.getElementById('featured-stores-list');
-    if (flashList) flashList.innerHTML = Array(4).fill(cardHtml).join('');
+    // The flash-sale row is the one home section that usually ends up SHORTER
+    // than its skeleton: no flash sales renders a single line, while four
+    // shimmer cards are ~200px tall — so every load pushed "Near You" up by
+    // that much (Lighthouse measured it as the page's only layout shift,
+    // CLS 0.073). The row now starts empty; it fills with cards only when a
+    // sale is actually running, which is the rarer case.
     if (localList) localList.innerHTML = Array(4).fill(cardHtml).join('');
     if (trending) trending.innerHTML = Array(6).fill(cardHtml).join('');
     if (stores) stores.innerHTML = Array(4).fill(rowHtml).join('');
@@ -1073,6 +1109,9 @@ function getPageEntityId(pageId) {
 async function runPageInit(pageId) {
   const cacheKey = getPageCacheKey(pageId);
   try {
+    // The page's own bundle first — several of the cases below call a function
+    // that only exists once its file has arrived.
+    await ensureScriptsForPage(pageId);
     switch(pageId) {
       case 'home':           await loadHomeData().then(() => initAdBanners('home')); break;
       case 'marketplace':    await renderMarketplace().then(() => initAdBanners('shop')); break;
@@ -1110,6 +1149,71 @@ async function runPageInit(pageId) {
   }
 }
 
+// ── Code-splitting: the role bundles ────────────────────────────────────────
+// Every visitor used to download all 20 scripts (~1.7 MB) — the vendor, admin,
+// admin-profiles, admin-settings and rendor dashboards and Chart.js included —
+// because index.html listed them unconditionally. A shopper on a phone paid for
+// ~830 KB of code that belongs to somebody else's dashboard, on a slow link,
+// before anything could be clicked.
+//
+// They are now fetched when the signed-in role or the page being opened needs
+// them. Two lists, because both questions are real:
+//   • ROLE_SCRIPTS — a vendor's wallet top-up re-renders the vendor dashboard,
+//     so the bundle must be there even when they are not ON that page.
+//   • PAGE_SCRIPTS — an admin opening a storefront admin portal needs vendor.js
+//     whatever the session says.
+// Anything still calling into these files from an eager file is listed here; the
+// audit that produced these lists is in test/lazy-scripts.test.js.
+const ROLE_SCRIPTS = {
+  vendor: ['/js/vendor.js', '/js/admin-settings.js'],
+  seller: ['/js/vendor.js', '/js/admin-settings.js'],
+  // admin-settings.js is not optional for the other roles: it owns
+  // getEffectiveReferralCommissionPct(), which js/orders.js calls when a
+  // delivery is released, and it would silently fall back to 3% without it.
+  admin:  ['/js/chart.min.js', '/js/admin.js', '/js/admin-profiles.js', '/js/admin-settings.js'],
+  rendor: ['/js/rendor.js']
+};
+const PAGE_SCRIPTS = {
+  'vendor-dashboard': ['/js/vendor.js'],
+  'vendor-my-store':  ['/js/vendor.js'],
+  'vendor-orders':    ['/js/vendor.js'],
+  'store-admin':      ['/js/vendor.js'],
+  'admin-dashboard':  ['/js/chart.min.js', '/js/admin.js', '/js/admin-profiles.js', '/js/admin-settings.js'],
+  'rendor-dashboard': ['/js/rendor.js']
+};
+const _scriptLoads = {};
+function loadScriptOnce(src) {
+  if (_scriptLoads[src]) return _scriptLoads[src];
+  _scriptLoads[src] = new Promise(resolve => {
+    const el = document.createElement('script');
+    el.src = src;
+    // Ordered execution keeps a multi-file group (chart.min.js before the admin
+    // code that uses it) deterministic.
+    el.async = false;
+    el.onload = () => resolve(true);
+    el.onerror = () => {
+      console.warn('[scripts] could not load ' + src);
+      resolve(false);
+    };
+    document.head.appendChild(el);
+  });
+  return _scriptLoads[src];
+}
+// Await this before running a page's own init, never inside it: the init
+// function it is about to call does not exist until the file has run.
+async function ensureScriptsForPage(pageId) {
+  const list = PAGE_SCRIPTS[pageId];
+  if (!list) return;
+  for (const src of list) await loadScriptOnce(src);
+}
+function ensureScriptsForRole(role) {
+  const list = ROLE_SCRIPTS[String(role || '')];
+  if (!list) return;
+  list.forEach(loadScriptOnce);
+}
+window.ensureScriptsForPage = ensureScriptsForPage;
+window.ensureScriptsForRole = ensureScriptsForRole;
+
 // ── PWA Storefront Guard (shared helpers) ─────────────────────
 // Storefront pages/links must never render inside the installed PWA shell —
 // they always open in the user's real browser. All entry points (showPage,
@@ -1122,26 +1226,146 @@ function isPwaMode() {
 }
 window.isPwaMode = isPwaMode;
 
+// The URL for the storefront we are being asked to hand off.
+//
+// When the document already IS the store page (/storefront/<slug>) the address
+// bar holds the exact URL the visitor arrived with — including the ?product=
+// and ?ref= a shared link carried. Rebuilding it from a slug (the old code did)
+// dropped the query and demoted the link the visitor could re-share.
+function storefrontHandoffUrl(kind, entityId) {
+  if (isPathAddressedStorefront()) return window.location.href;
+  const idGuess = String(entityId || '');
+  const sf = (App.allStorefronts || []).find(
+    s => String(s.store_id) === idGuess || String(s.id) === idGuess || String(s.url_slug) === idGuess
+  );
+  const slug = (sf && sf.url_slug) || idGuess;
+  return storefrontUrl(slug, kind === 'store-admin' ? 'admin' : 'storefront');
+}
+
+// ── The hand-off screen ────────────────────────────────────────────────────
+// A standalone window cannot be told to "go away" with JavaScript, and a
+// programmatic window.open() at boot has no user activation, so Chrome may
+// refuse it. Neither of those may end with the storefront rendering inside the
+// app, which is exactly what used to happen: the store showed up in the app
+// window and the visitor had no way to tell it apart from the marketplace.
+//
+// So the app draws a small stand-in instead — a real <a target="_blank">, which
+// IS allowed to open a browser window because the visitor's tap is the gesture
+// that was missing. Nothing of the app is left underneath it.
+function showStorefrontHandoffNotice(targetUrl) {
+  const doc = document;
+  let el = doc.getElementById('sf-browser-handoff');
+  if (!el) {
+    el = doc.createElement('div');
+    el.id = 'sf-browser-handoff';
+    // Self-contained styling: this screen exists for people whose device already
+    // holds a broken install, so it must not depend on a stylesheet that may be
+    // the stale cached one.
+    el.setAttribute('style', 'position:fixed;inset:0;z-index:2147483600;background:#fff;color:#1f2937;' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;' +
+      'font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif');
+
+    const card = doc.createElement('div');
+    card.setAttribute('style', 'max-width:420px');
+
+    const heading = doc.createElement('h1');
+    heading.textContent = 'Opening this store in your browser';
+    heading.setAttribute('style', 'margin:0 0 10px;font-size:20px;line-height:1.3;font-weight:700');
+
+    const body = doc.createElement('p');
+    body.textContent = 'A HAPPA TRADEMART storefront is its own site, so it never opens inside the app.';
+    body.setAttribute('style', 'margin:0 0 20px;font-size:15px;line-height:1.5;color:#6b7280');
+
+    const link = doc.createElement('a');
+    link.id = 'sf-browser-handoff-link';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Open the store';
+    link.setAttribute('style', 'display:inline-block;padding:13px 22px;border-radius:10px;' +
+      'background:#e85d04;color:#fff;font-size:16px;font-weight:600;text-decoration:none');
+
+    const shown = doc.createElement('p');
+    shown.id = 'sf-browser-handoff-url';
+    shown.setAttribute('style', 'margin:16px 0 0;font-size:12px;line-height:1.5;word-break:break-all;color:#9ca3af');
+
+    card.appendChild(heading);
+    card.appendChild(body);
+    card.appendChild(link);
+    card.appendChild(shown);
+    el.appendChild(card);
+    (doc.body || doc.documentElement).appendChild(el);
+  }
+
+  // textContent / href assignment only: a URL is never interpolated into markup.
+  const link = doc.getElementById('sf-browser-handoff-link');
+  if (link) link.setAttribute('href', targetUrl);
+  const shown = doc.getElementById('sf-browser-handoff-url');
+  if (shown) shown.textContent = targetUrl;
+
+  // The app must not show through while the hand-off is pending.
+  doc.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('active');
+    p.style.display = 'none';
+  });
+  const splash = doc.getElementById('pwa-splash-screen');
+  if (splash) splash.remove();
+}
+window.showStorefrontHandoffNotice = showStorefrontHandoffNotice;
+
+// A standalone window gives a programmatic open() no credit at boot — there is
+// no user activation yet — so the first tap anywhere retries it. Without this the
+// visitor has to notice and find the button; with it, one tap anywhere leaves.
+// Taps on the notice's own link are skipped so the store does not open twice.
+let _sfGestureRetry = null;
+function armFirstGestureHandoff(targetUrl) {
+  if (_sfGestureRetry) {
+    document.removeEventListener('pointerdown', _sfGestureRetry, true);
+  }
+  const retry = e => {
+    if (e.target && e.target.closest && e.target.closest('#sf-browser-handoff-link')) return;
+    document.removeEventListener('pointerdown', retry, true);
+    if (_sfGestureRetry === retry) _sfGestureRetry = null;
+    try { window.open(targetUrl, '_blank', 'noopener,noreferrer'); } catch (err) {}
+  };
+  _sfGestureRetry = retry;
+  document.addEventListener('pointerdown', retry, true);
+}
+
 let _sfHandoffLastUrl = '';
 let _sfHandoffAt = 0;
-function openStorefrontInBrowser(kind, entityId) {
-  const slugGuess = String(entityId || '');
-  const sf = (App.allStorefronts || []).find(
-    s => String(s.store_id) === slugGuess || String(s.id) === slugGuess || String(s.url_slug) === slugGuess
-  );
-  const slug = (sf && sf.url_slug) || slugGuess;
-  const targetUrl = storefrontUrl(slug, kind === 'store-admin' ? 'admin' : 'storefront');
+// Returns true whenever the caller must stop and render nothing: the store is
+// being opened elsewhere. It used to return false inside its dedupe window, and
+// the caller then fell through to rendering the storefront in the app — a second
+// click (or the boot that raced the click) put the store back inside the app.
+function openStorefrontInBrowser(kind, entityId, opts) {
+  const targetUrl = storefrontHandoffUrl(kind, entityId);
 
   // Dedupe per URL within a short window: startup + click + showPage can all
   // fire for one navigation — don't spawn multiple tabs for the same store.
-  // (Different stores always get their own tab.)
+  // (Different stores always get their own tab.) Deduping no longer changes the
+  // answer, only whether we try to open a window.
   const now = Date.now();
-  if (targetUrl === _sfHandoffLastUrl && now - _sfHandoffAt < 1200) return false;
+  const alreadyOpening = targetUrl === _sfHandoffLastUrl && now - _sfHandoffAt < 1200;
   _sfHandoffLastUrl = targetUrl;
   _sfHandoffAt = now;
 
-  try { showToast('Storefronts are standalone — opening in a new tab…', 'info'); } catch (e) {}
-  window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  // The whole window is replaced by the notice when this document IS the store's
+  // URL (the OS handed a storefront link to the installed app), or when the app
+  // is booting straight into a store link and therefore has nothing else to show
+  // — otherwise the app window would sit on its splash screen forever.
+  const replaceWindow = !!(opts && opts.replaceWindow);
+  const isStoreDocument = replaceWindow || isPathAddressedStorefront();
+
+  if (!alreadyOpening) {
+    try { window.open(targetUrl, '_blank', 'noopener,noreferrer'); } catch (e) {}
+    if (!isStoreDocument) {
+      try { showToast('Storefronts are standalone — opening in a new tab…', 'info'); } catch (e) {}
+    }
+  }
+  if (isStoreDocument) {
+    try { showStorefrontHandoffNotice(targetUrl); } catch (e) {}
+    try { armFirstGestureHandoff(targetUrl); } catch (e) {}
+  }
   return true;
 }
 window.openStorefrontInBrowser = openStorefrontInBrowser;
@@ -1200,17 +1424,22 @@ function showPage(pageId, entityId = null) {
 
   const targetEntity = entityId || getPageEntityId(pageId);
 
-  // A storefront is its own site, not another page of the app. In the installed
-  // app it hands off to the browser instead of rendering in the app window —
-  // the same rule the <a href> click handler and the served shell enforce, and
-  // what openStorefrontInBrowser() exists for (it had no call sites, so tapping
-  // a store inside the installed app opened the storefront in the app itself).
-  // Skipped in a browser tab, where navigating to a store in place is exactly
-  // what has always happened, and skipped when this document IS the storefront
-  // (a /storefront/<slug> load renders in place — it is already the standalone
-  // page and must never bounce itself to another tab).
-  if ((pageId === 'storefront' || pageId === 'store-admin') && isPwaMode() && !isPathAddressedStorefront()) {
-    if (openStorefrontInBrowser(pageId, targetEntity)) return;
+  // A storefront is its own site, not another page of the app, and an installed
+  // app window must never show one — the same rule the <a href> click handler
+  // and the served shell enforce, and what openStorefrontInBrowser() exists for.
+  //
+  // This hand-off is UNCONDITIONAL in the installed app, the /storefront/<slug>
+  // path form included. The previous revision exempted that form on the theory
+  // that "this document already is the standalone page". It is not: the manifest
+  // `scope` does not stop an out-of-scope deep link from opening inside the
+  // installed app (the browser only adds a URL bar), so a store link tapped on a
+  // phone with the app installed booted the app and rendered the store in it —
+  // the exact bug this guard exists for, which is why it recurred. A real
+  // browser tab reports display-mode: browser, so the in-place storefront in a
+  // tab is untouched.
+  if ((pageId === 'storefront' || pageId === 'store-admin') && isPwaMode()) {
+    openStorefrontInBrowser(pageId, targetEntity);
+    return;
   }
 
   const currentEntity = prevEntityId;
@@ -1249,6 +1478,15 @@ function showPage(pageId, entityId = null) {
       history.pushState({ page: pageId, entityId: targetEntity }, '', hash);
       setTimeout(() => { App._isProgrammaticNav = false; }, 100);
     } catch(e) { console.warn('history.pushState failed:', e); }
+  }
+
+  // Page-scoped fixed overlays (the storefront editor's mobile preview drawer
+  // and the colour picker) keep their open state on `document.body`, which a
+  // page change does not touch. Drop those flags on the way out, or the next
+  // visit to the vendor dashboard starts with an invisible handle / frozen
+  // scroll and no control that can clear it.
+  if (App.prevPage !== pageId && typeof window.sfResetPreviewOverlays === 'function') {
+    window.sfResetPreviewOverlays();
   }
 
   // Hide ALL pages completely
@@ -1751,14 +1989,14 @@ async function renderVendorMyStorePage() {
 <div style="padding-bottom:20px">
   <!-- Banner -->
   <div style="position:relative">
-    <img src="${freshStore.banner_url||'https://placehold.co/800x200?text=Store+Banner'}"
+    <img src="${freshStore.banner_url||PLACEHOLDER_BANNER}"
          style="width:100%;height:140px;object-fit:cover"
-         onerror="this.src='https://placehold.co/800x200?text=Store+Banner'">
+         onerror="this.src=window.PLACEHOLDER_BANNER">
     <!-- Logo overlay -->
     <div style="position:absolute;bottom:-28px;left:16px;width:60px;height:60px;border-radius:50%;border:3px solid #fff;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15)">
-      <img src="${freshStore.logo_url||'https://placehold.co/80x80?text=Logo'}"
+      <img src="${freshStore.logo_url||PLACEHOLDER_IMG}"
            style="width:100%;height:100%;object-fit:cover"
-           onerror="this.src='https://placehold.co/80x80?text=S'">
+           onerror="this.src=window.PLACEHOLDER_IMG">
     </div>
   </div>
 
@@ -2733,17 +2971,24 @@ function syncFlashSaleStates() {
         p.is_flash_sale = shouldBeFlash;
         stateChanged = true;
       }
+      // Every branch below works on the numbers, never the raw fields: prices
+      // arrive as strings from Postgres, so `p.price * 0.8` produced a real
+      // NaN price and `p.price = p.original_price` copied the string back over
+      // a number. A listing whose price is simply missing is left untouched
+      // rather than being rewritten as 0.
+      const priceNow   = priceNumber(p.price);
+      const priceOrig  = priceNumber(p.original_price);
       if (shouldBeFlash) {
-        if (p.original_price && p.original_price > p.price) {
+        // (return, not continue — this is a forEach callback, not a loop)
+        if (priceNow == null) return;
+        if (priceOrig != null && priceOrig > priceNow) {
           // Keep it
         } else {
-          p.original_price = p.price;
-          p.price = Math.round(p.price * 0.8 * 100) / 100;
+          p.original_price = priceNow;
+          p.price = Math.round(priceNow * 0.8 * 100) / 100;
         }
-      } else {
-        if (p.original_price) {
-          p.price = p.original_price;
-        }
+      } else if (priceOrig != null) {
+        p.price = priceOrig;
       }
     });
   });
@@ -3138,7 +3383,9 @@ function renderLocalProducts() {
     return;
   }
   if (sec) sec.style.display = '';
-  list.innerHTML = items.map(p => productCardSmall(p)).join('');
+  // "Near You" is the third list on the home page and the first one a phone
+  // sees a full card in, so its first cards load eagerly (see _pcSlideshowHTML).
+  list.innerHTML = items.map((p, i) => productCardSmall(p, { eager: i < 3 })).join('');
 }
 
 // ── Featured Stores ────────────────────────────────────────
@@ -3157,7 +3404,7 @@ function renderTrending() {
     .filter(p => p.status !== 'archived' && shouldShowProductOnMainWebsite(p))
     .sort((a,b) => (b.views||0) - (a.views||0))
     .slice(0, 6);
-  list.innerHTML = items.map(p => productCardHTML(p)).join('');
+  list.innerHTML = items.map((p, i) => productCardHTML(p, { eager: i < 3 })).join('');
 }
 
 // ── Helper: build slideshow HTML for a product (≥2 images) ─
@@ -3178,14 +3425,23 @@ function _pcSlide(btn, dir) {
   dots[next].classList.add('active');
 }
 
-function _pcSlideshowHTML(images, altText) {
-  const imgs = (images && images.length) ? images : ['https://placehold.co/300x300?text=No+Image'];
+// opts.eager — the first cards of a list are in the viewport, so they are the
+// page's LCP candidates. They used to be loading="lazy" like the rest, which
+// is what Lighthouse flagged on the home page: the browser deferred the very
+// image it would then measure as the largest paint (13.2 s, with 9.4 s of that
+// spent waiting to even request it). Everything further down the list stays
+// lazy, which is the part that actually saves bandwidth.
+function _pcSlideshowHTML(images, altText, opts) {
+  const imgs = (images && images.length) ? images : [PLACEHOLDER_IMG];
+  const loadAttr = (opts && opts.eager)
+    ? 'loading="eager" fetchpriority="high" decoding="async"'
+    : 'loading="lazy" decoding="async"';
   if (imgs.length === 1) {
-    return `<img class="product-img" src="${imgs[0]}" alt="${altText}" loading="lazy" onload="fitProductImage(this)" onerror="this.src='https://placehold.co/300x300?text=No+Image'">`;
+    return `<img class="product-img" src="${imgs[0]}" alt="${altText}" ${loadAttr} onload="fitProductImage(this)" onerror="this.src=window.PLACEHOLDER_IMG">`;
   }
   const slidesHTML = imgs.map((src, i) =>
     `<div class="pc-slide${i === 0 ? ' active' : ''}">
-      <img src="${src}" alt="${altText} ${i+1}" loading="lazy" decoding="async" onload="fitProductImage(this)" onerror="this.src='https://placehold.co/300x300?text=No+Image'">
+      <img src="${src}" alt="${altText} ${i+1}" ${loadAttr} onload="fitProductImage(this)" onerror="this.src=window.PLACEHOLDER_IMG">
     </div>`
   ).join('');
   const dotsHTML = imgs.map((_, i) =>
@@ -3210,14 +3466,17 @@ function _pcDot(dot, idx) {
 }
 
 // ── Helper: Product Card HTML (grid) ──────────────────────
-function productCardHTML(p) {
+function productCardHTML(p, opts) {
   const isSoldOut = p.stock_qty === 0 || p.status === 'sold_out';
-  const discount = p.original_price > p.price
-    ? `<span class="product-original-price">GHS ${p.original_price}</span>` : '';
+  // A struck-through original price only when there is a real discount, and
+  // printed through the price helper — a string price used to be copied
+  // straight into the markup.
+  const discount = discountPercent(p.original_price, p.price) != null
+    ? `<span class="product-original-price">${priceText(p.original_price)}</span>` : '';
   const flash = p.is_flash_sale ? '<span class="flash-badge">FLASH</span>' : '';
   const soldOut = isSoldOut ? '<div class="sold-out-overlay">SOLD OUT</div>' : '';
   const stars = renderStars(p.avg_rating || 0);
-  const imageBlock = _pcSlideshowHTML(p.images, escHtml(p.name));
+  const imageBlock = _pcSlideshowHTML(p.images, escHtml(p.name), opts);
   const syncing = p._isOptimistic ? '<span style="position:absolute;top:6px;right:6px;background:var(--primary);color:#fff;font-size:.6rem;font-weight:700;padding:2px 6px;border-radius:100px;z-index:2"><i class="fas fa-spinner fa-spin"></i> SYNCING</span>' : '';
   const title = itemDisplayName(p.name) || '';
   return `
@@ -3247,8 +3506,8 @@ function productCardHTML(p) {
 // Only rendered on the vendor's own My Store page — never on public pages.
 function vendorProductCardHTML(p) {
   const isSoldOut = p.stock_qty === 0 || p.status === 'sold_out';
-  const discount = p.original_price > p.price
-    ? `<span class="product-original-price">GHS ${p.original_price}</span>` : '';
+  const discount = discountPercent(p.original_price, p.price) != null
+    ? `<span class="product-original-price">${priceText(p.original_price)}</span>` : '';
   const flash = p.is_flash_sale ? '<span class="flash-badge">FLASH</span>' : '';
   const soldOut = isSoldOut ? '<div class="sold-out-overlay">SOLD OUT</div>' : '';
   const stars = renderStars(p.avg_rating || 0);
@@ -3283,11 +3542,11 @@ function vendorProductCardHTML(p) {
 }
 
 // ── Helper: Product Card Small (scroll) ──────────────────
-function productCardSmall(p) {
+function productCardSmall(p, opts) {
   const isSoldOut = p.stock_qty === 0 || p.status === 'sold_out';
   const flash = p.is_flash_sale ? '<span class="flash-badge">FLASH</span>' : '';
   const soldOut = isSoldOut ? '<div class="sold-out-overlay">SOLD OUT</div>' : '';
-  const imageBlock = _pcSlideshowHTML(p.images, escHtml(p.name));
+  const imageBlock = _pcSlideshowHTML(p.images, escHtml(p.name), opts);
   return `
 <div class="product-card scroll-product-card" onclick="openProduct('${p.id}')">
   ${flash}${soldOut}
@@ -3302,8 +3561,8 @@ function productCardSmall(p) {
 // ── Helper: Store Card HTML ───────────────────────────────
 function storeCardHTML(s, compact = false) {
   const stars = renderStars(s.avg_rating || 0);
-  const banner = s.banner_url || 'https://placehold.co/800x200?text=Store+Banner';
-  const logo   = s.logo_url  || 'https://placehold.co/100x100?text=Logo';
+  const banner = s.banner_url || PLACEHOLDER_BANNER;
+  const logo   = s.logo_url  || PLACEHOLDER_IMG;
   const storeName = s.name || s.slug || 'Store';
   const storeLoc  = s.location || '';
   if (compact) {
@@ -3311,8 +3570,8 @@ function storeCardHTML(s, compact = false) {
     return `
 <div class="store-card store-card-compact" onclick="openStore('${s.id}')">
   <div class="store-banner-wrap">
-    <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x200?text=Store+Banner'">
-    <img class="store-logo store-logo-compact" src="${logo}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/100x100?text=Logo'">
+    <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src=window.PLACEHOLDER_BANNER">
+    <img class="store-logo store-logo-compact" src="${logo}" alt="${escHtml(storeName)}" loading="lazy" decoding="async" onerror="this.src=window.PLACEHOLDER_IMG">
   </div>
   <div class="store-info">
     <div class="store-name">${escHtml(storeName)}</div>
@@ -3326,8 +3585,8 @@ function storeCardHTML(s, compact = false) {
   }
   return `
 <div class="store-card" onclick="openStore('${s.id}')">
-  <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" onerror="this.src='https://placehold.co/800x200?text=Store+Banner'">
-  <img class="store-logo" src="${logo}" alt="${escHtml(storeName)}" onerror="this.src='https://placehold.co/100x100?text=Logo'">
+  <img class="store-banner" src="${banner}" alt="${escHtml(storeName)}" loading="lazy" onerror="this.src=window.PLACEHOLDER_BANNER">
+  <img class="store-logo" src="${logo}" alt="${escHtml(storeName)}" onerror="this.src=window.PLACEHOLDER_IMG">
   <div class="store-info">
     <div class="store-name">${escHtml(storeName)}</div>
     <div class="store-cat">${s.category || ''}</div>

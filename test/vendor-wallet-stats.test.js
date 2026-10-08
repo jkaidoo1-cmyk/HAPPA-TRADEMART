@@ -27,6 +27,9 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const vendorSrc = fs.readFileSync(path.join(ROOT, 'js/vendor.js'), 'utf-8');
+// The extracted blocks price their rows through the shared helpers, so the real
+// declarations are prepended rather than stubbed here.
+const PRICE_HELPERS = require('./price-helpers.fixture').DECLARATIONS;
 
 /**
  * Extract renderVendorChart from js/vendor.js (brace-balanced) and run it in a
@@ -48,7 +51,7 @@ function loadRenderVendorChart() {
       if (depth === 0) { i++; break; }
     }
   }
-  const body = vendorSrc.slice(start, i);
+  const body = PRICE_HELPERS + '\n' + vendorSrc.slice(start, i);
   assert.ok(depth === 0, 'could not isolate the renderVendorChart body');
 
   const canvas = { outerHTML: '' };
@@ -151,7 +154,7 @@ function runWalletStats(myPackages, myProducts) {
   const s = vendorSrc.indexOf('const activeVendorPkgs');
   const e = vendorSrc.indexOf('// Fetch storefront', s);
   assert.ok(s !== -1 && e !== -1, 'could not isolate the wallet stat block');
-  const block = vendorSrc.slice(s, e);
+  const block = PRICE_HELPERS + '\n' + vendorSrc.slice(s, e);
   const fn = new Function('myPackages', 'myProducts',
     `${block}\nreturn { totalEarnedGHS, pendingReleaseGHS, productSoldCount, topProductRows, soldFromOrders };`);
   return fn(myPackages, myProducts);

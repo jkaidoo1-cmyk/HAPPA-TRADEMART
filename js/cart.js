@@ -16,8 +16,8 @@ function addToCart(product, qty = 1, buyerNote = '') {
   // A listing with no usable price must never reach the cart. The server now
   // refuses to price such a line at checkout (Number(null) || 0 would have
   // charged GHS 0 for it), so stop it here and tell the buyer why.
-  const priceNum = Number(product.price);
-  if (product.price == null || product.price === '' || !Number.isFinite(priceNum) || priceNum < 0) {
+  const priceNum = priceNumber(product.price);
+  if (priceNum == null) {
     showToast('This item has no price set yet, so it cannot be ordered. Please tell the vendor.', 'warning', 4500);
     return false;
   }
@@ -46,13 +46,15 @@ function addToCart(product, qty = 1, buyerNote = '') {
       : (App.cart.length > 0 ? (App.cart[0].product_referrer || '') : freshRef);
 
     App.cart.push({
-      id: product.id, name: product.name, price: product.price,
+      // Store the parsed NUMBER: a string price that reached localStorage once
+      // kept poisoning every later sum it touched.
+      id: product.id, name: product.name, price: priceNum,
       image: product.images?.[0] || '', qty,
       stock_qty: product.stock_qty,
       store_id: product.store_id, store_name: store.name,
       vendor_id: product.vendor_id, location: product.location || store.location || 'Accra',
       weight_kg: product.weight_kg || 0.5,
-      commission_pct: getCommission(product.price),
+      commission_pct: getCommission(priceNum),
       buyer_note: buyerNote || '',
       allow_buyer_note: product.allow_buyer_note || false,
       product_referrer: lockedRef
@@ -129,8 +131,12 @@ function clearCart() {
 }
 
 function getCartTotals(overrideDest) {
-  const subtotal = App.cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const commissionTotal = App.cart.reduce((s, i) => s + (i.price * i.qty * (i.commission_pct || 8) / 100), 0);
+  // The cart persists in localStorage across versions, so a line can still hold
+  // a string (or no) price. Sum through the parser or a single bad row turns
+  // the whole order total into "GHS NaN".
+  const lineTotal = i => (priceNumber(i.price) ?? 0) * (parseInt(i.qty, 10) || 1);
+  const subtotal = App.cart.reduce((s, i) => s + lineTotal(i), 0);
+  const commissionTotal = App.cart.reduce((s, i) => s + (lineTotal(i) * (i.commission_pct || 8) / 100), 0);
   const platformFee = subtotal * PLATFORM_FEE_PCT / 100;
   const destSelect = typeof document !== 'undefined' ? document.getElementById('checkout-dest')?.value : '';
   const targetLoc = overrideDest || destSelect || App.currentUser?.location || 'Accra';
@@ -397,13 +403,13 @@ ${Object.values(storeGroups).map(sg => `
   </div>
   ${sg.items.map(item => `
   <div class="cart-item">
-    <img class="cart-item-img" src="${item.image||'https://placehold.co/80x80?text=P'}"
-         alt="${escHtml(item.name)}" onerror="this.src='https://placehold.co/80x80?text=P'">
+    <img class="cart-item-img" src="${item.image||PLACEHOLDER_IMG}"
+         alt="${escHtml(item.name)}" onerror="this.src=window.PLACEHOLDER_IMG">
     <div class="cart-item-info">
       <div class="cart-item-name">${escHtml(itemDisplayName(item.name))}</div>
       <div class="cart-item-store"><i class="fas fa-store"></i> ${escHtml(item.store_name)}</div>
       ${item.buyer_note ? `<div style="font-size:.72rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:3px 7px;margin:3px 0;display:flex;align-items:flex-start;gap:4px"><i class="fas fa-comment-dots" style="margin-top:1px;flex-shrink:0"></i><span>${escHtml(item.buyer_note)}</span></div>` : ''}
-      <div class="cart-item-price">GHS ${item.price}</div>
+      <div class="cart-item-price">${priceText(item.price)}</div>
       <div class="qty-control">
         <button class="qty-btn" onclick="updateCartQty('${item.id}',-1,this)"><i class="fas fa-minus"></i></button>
         <span class="qty-value">${item.qty}</span>
@@ -411,7 +417,7 @@ ${Object.values(storeGroups).map(sg => `
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
-      <span style="font-weight:700;color:var(--primary)">GHS ${(item.price*item.qty).toFixed(2)}</span>
+      <span style="font-weight:700;color:var(--primary)">GHS ${(((priceNumber(item.price) ?? 0))*(parseInt(item.qty,10)||1)).toFixed(2)}</span>
       <button onclick="removeFromCart('${item.id}',this)" style="color:var(--danger);font-size:.8rem"><i class="fas fa-trash"></i></button>
     </div>
   </div>`).join('')}

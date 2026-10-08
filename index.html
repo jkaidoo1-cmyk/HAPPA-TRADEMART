@@ -50,7 +50,7 @@
       // It was stuck at v144 while sw.js moved to v159, so clients that had
       // already healed at v144 never healed again — they kept serving the old
       // cached JS long after a fix deployed.
-      var SW_VERSION = 'happa-v191';
+      var SW_VERSION = 'happa-v194';
       var lastCleaned = localStorage.getItem('sw_selfheal_version');
       if (lastCleaned === SW_VERSION) return; // already cleaned for this version
       localStorage.setItem('sw_selfheal_version', SW_VERSION);
@@ -118,15 +118,17 @@
     }
   </style>
 
-  <!-- Preload critical core fonts & brand logo for zero-latency initial paint -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" href="/images/photo_2026-05-30_17-40-49-Photoroom.png" as="image">
-
-  <!-- Google Fonts (Optimized: Core Fonts only; Custom store fonts are loaded dynamically on-demand) -->
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
-    rel="stylesheet">
+  <!-- Preload the brand logo and the two latin font files, so the first paint
+       does not wait on a discovery round-trip. Only the latin subset is
+       preloaded: preloading latin-ext would fetch a file most pages never use
+       (its unicode-range decides that on its own). -->
+  <link rel="preload" href="/images/happa-logo.webp" as="image" type="image/webp">
+  <link rel="preload" href="/css/webfonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/css/webfonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- Fonts are self-hosted in css/style.css (@font-face). They used to come
+       from Google Fonts: two render-blocking third-party stylesheets, then a
+       second origin for the files, and no offline story at all for the
+       installed app. -->
   <!-- Font Awesome — SELF-HOSTED, deliberately not a CDN link.
        This used to load from cdn.jsdelivr.net. When that request failed, all
        ~1000 `fa-` icon usages in the app became zero-width glyphs, which made
@@ -135,8 +137,12 @@
        CDN must never be able to blank out the app's entire icon set.
        Vendored: css/vendor/fontawesome.min.css + css/webfonts/*.woff2 (FA Free 6.4.0). -->
   <link rel="stylesheet" href="/css/vendor/fontawesome.min.css">
-  <!-- Chart.js (Deferred) — self-hosted for the same reason: a CDN blip silently broke the admin charts. -->
-  <script src="/js/chart.min.js" defer></script>
+  <!-- Chart.js and the role bundles. Chart.js is NOT loaded here:
+       it is self-hosted (a CDN blip silently broke the admin charts) but the
+       admin dashboard is its only user, so it is fetched with the rest of the
+       admin bundle — see ROLE_SCRIPTS/PAGE_SCRIPTS in js/app.js. Loading it
+       unconditionally cost every shopper 200 KB of a chart library they never
+       reach. -->
 
   <link rel="stylesheet" href="/css/style.css">
   <style>
@@ -256,7 +262,7 @@
   <div id="pwa-splash-screen">
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
       <div class="splash-logo-container">
-        <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA Logo" style="width:128px;height:128px;object-fit:contain;">
+        <img src="/images/happa-logo.webp" alt="HAPPA Logo" style="width:128px;height:128px;object-fit:contain;">
       </div>
       <div class="splash-brand-text">HAPPA<span>MART</span></div>
       <div class="splash-subtitle">Ghana's Premier Marketplace</div>
@@ -272,17 +278,30 @@
     const currentPath = window.location.pathname || '';
     const isStorefrontUrl = currentHash.includes('storefront') || currentSearch.includes('storefront') || currentPath.includes('storefront') || currentHash.includes('store/') || currentSearch.includes('store=');
 
-    if (isPWAStandalone && isStorefrontUrl && !currentHash.includes('store-admin')) {
-      const extUrl = window.location.href;
-      window.open(extUrl, '_system') || window.open(extUrl, '_blank');
-    }
+    // ── An installed app window must never render a storefront ──
+    // This used to be "fixed" here by calling window.open() with the
+    // non-standard '_system' target, in the middle of parsing, with no user
+    // gesture behind it: Chrome's popup blocker refuses that and the '_blank'
+    // fallback, so the guard silently did nothing and the code below went on to
+    // activate #page-storefront — the store rendered inside the installed app,
+    // which is the bug this file kept re-introducing. The hand-off that works
+    // lives in js/app.js (openStorefrontInBrowser) and needs one thing from
+    // here: that nothing has already shown the store. So in an installed app the
+    // splash stays up and the skeleton below is skipped; app.js replaces the
+    // window with a hand-off screen whose link opens on a tap — and a tap IS the
+    // gesture the programmatic call was missing.
+    const isStorefrontInInstalledApp = isPWAStandalone && isStorefrontUrl;
 
     if (isStorefrontUrl || currentHash.includes('store-admin')) {
       document.body.classList.add('is-storefront-view');
-      const splash = document.getElementById('pwa-splash-screen');
-      if (splash) splash.remove();
+      if (!isStorefrontInInstalledApp) {
+        const splash = document.getElementById('pwa-splash-screen');
+        if (splash) splash.remove();
+      }
       
       document.addEventListener('DOMContentLoaded', () => {
+        // An installed app hands the store to the browser instead; see above.
+        if (isStorefrontInInstalledApp) return;
         const homePage = document.getElementById('page-home');
         if (homePage) {
           homePage.classList.remove('active');
@@ -351,7 +370,7 @@
      ============================================================ -->
   <nav id="top-nav">
     <div class="nav-logo" onclick="showPage('home')" role="button" aria-label="HAPPA TRADEMART Home">
-      <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA TRADEMART logo">
+      <img src="/images/happa-logo.webp" alt="HAPPA TRADEMART logo">
       <div class="nav-logo-text">
         <span class="nav-logo-name">HAPPA<span>MART</span></span>
         <span class="nav-logo-sub">Ghana's Marketplace</span>
@@ -839,12 +858,14 @@
   <script src="/js/cart.js" defer></script>
   <script src="/js/checkout.js" defer></script>
   <script src="/js/wallet.js" defer></script>
+  <!-- ── Role bundles: NOT listed here on purpose ──────────────────────────
+       js/vendor.js, js/admin.js, js/admin-profiles.js, js/admin-settings.js and
+       js/rendor.js used to be downloaded by every visitor — ~830 KB of vendor
+       and admin dashboards for a shopper who only opened the home page. They
+       are now fetched by ensureScriptsForRole()/ensureScriptsForPage() in
+       js/app.js, for the account role or the page that actually needs them.
+       test/lazy-scripts.test.js pins what may and may not be listed here. -->
 
-  <script src="/js/vendor.js" defer></script>
-  <script src="/js/rendor.js" defer></script>
-  <script src="/js/admin.js" defer></script>
-  <script src="/js/admin-settings.js" defer></script>
-  <script src="/js/admin-profiles.js" defer></script>
   <script src="/js/buyer.js" defer></script>
   <script src="/js/search.js" defer></script>
   <script src="/js/notifications.js" defer></script>

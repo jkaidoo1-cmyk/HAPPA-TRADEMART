@@ -168,10 +168,10 @@ async function showSearchSuggestions(q) {
     html += `<div style="padding:8px 14px;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Products</div>`;
     html += matchedProducts.map(p => `
     <div class="search-suggestion" onclick="openProduct('${p.id}');hideSearchDropdown()">
-      <img src="${p.images?.[0]||'https://placehold.co/30x30?text=P'}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src='https://placehold.co/30x30?text=P'">
+      <img src="${p.images?.[0]||PLACEHOLDER_IMG}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src=window.PLACEHOLDER_IMG">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${highlight(p.name||'', q)}</div>
-        <div style="font-size:.72rem;color:var(--text-muted)">GHS ${p.price} · ${p.location}</div>
+        <div style="font-size:.72rem;color:var(--text-muted)">${priceAmount(p.price)} · ${p.location}</div>
       </div>
     </div>`).join('');
   }
@@ -180,7 +180,7 @@ async function showSearchSuggestions(q) {
     html += `<div style="padding:8px 14px 4px;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Stores</div>`;
     html += matchedStores.map(s => `
     <div class="search-suggestion" onclick="openStore('${s.id}');hideSearchDropdown()">
-      <img src="${s.logo_url||'https://placehold.co/30x30?text=S'}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src='https://placehold.co/30x30?text=S'">
+      <img src="${s.logo_url||PLACEHOLDER_IMG}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.src=window.PLACEHOLDER_IMG">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:.85rem">${highlight(s.name||'', q)}</div>
         <div style="font-size:.72rem;color:var(--text-muted)">${s.category} · ${s.location}</div>
@@ -197,7 +197,7 @@ async function showSearchSuggestions(q) {
       <i class="fas fa-briefcase" style="color:#7c3aed;width:30px;text-align:center"></i>
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:.85rem">${highlight(p.title || '', q)}</div>
-        <div style="font-size:.72rem;color:var(--text-muted)">${escHtml(r.rendor_display_name || r.name || 'Rendor')} · ${p.price ? `From GHS ${p.price}` : escHtml(p.category || 'Service')}</div>
+        <div style="font-size:.72rem;color:var(--text-muted)">${escHtml(r.rendor_display_name || r.name || 'Rendor')} · ${priceNumber(p.price) != null ? `From ${priceText(p.price)}` : escHtml(p.category || 'Service')}</div>
       </div>
     </div>`;
     }).join('');
@@ -329,7 +329,7 @@ ${!products.length && !stores.length && !matchedServices.length && !matchedProvi
 
   if (products.length) {
     const pEl = document.getElementById('search-products-container');
-    if (pEl) renderItemsProgressively(pEl, products, p => productCardHTML(p), { initialBatch: 6, batchSize: 6 });
+    if (pEl) renderItemsProgressively(pEl, products, (p, i) => productCardHTML(p, { eager: i < 3 }), { initialBatch: 6, batchSize: 6 });
   }
 
   if (matchedServices.length) {

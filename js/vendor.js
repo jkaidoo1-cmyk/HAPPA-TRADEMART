@@ -174,7 +174,7 @@ async function renderVendorDashboard() {
         soldProductInfo[pid] = {
           id: pid,
           name: (it && it.name) || 'Deleted product',
-          price: parseFloat(it && it.price) || 0,
+          price: priceNumber(it && it.price) ?? 0,
           images: img ? [img] : []
         };
       }
@@ -503,9 +503,9 @@ async function renderVendorDashboard() {
         ${topProductRows.slice().sort((a,b)=>productSoldCount(b)-productSoldCount(a)).slice(0,5).map((p,i) => `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
           <span style="font-weight:700;color:var(--text-muted);width:16px">${i+1}</span>
-          <img src="${p.images?.[0]||'https://placehold.co/40x40?text=P'}" style="width:36px;height:36px;border-radius:6px;object-fit:cover" onerror="this.src='https://placehold.co/40x40?text=P'">
-          <div style="flex:1;font-size:.82rem"><strong>${escHtml(p.name)}</strong><br><span style="color:var(--text-muted)">${productSoldCount(p)} sold · GHS ${p.price}</span></div>
-          <span style="font-weight:700;color:var(--primary)">GHS ${((productSoldCount(p))*p.price).toFixed(0)}</span>
+          <img src="${p.images?.[0]||PLACEHOLDER_IMG}" style="width:36px;height:36px;border-radius:6px;object-fit:cover" onerror="this.src=window.PLACEHOLDER_IMG">
+          <div style="flex:1;font-size:.82rem"><strong>${escHtml(p.name)}</strong><br><span style="color:var(--text-muted)">${productSoldCount(p)} sold · ${priceText(p.price)}</span></div>
+          <span style="font-weight:700;color:var(--primary)">GHS ${Math.round(productSoldCount(p) * (priceNumber(p.price) ?? 0))}</span>
         </div>`).join('')}
       </div>
     </div>
@@ -857,8 +857,15 @@ async function renderVendorDashboard() {
             .sf-preview-handle span{writing-mode:vertical-rl;text-orientation:mixed}
             .sf-preview-handle i{font-size:.85rem}
             .sf-preview-handle:active{transform:scale(.96)}
-            /* Hide the tab while the drawer is open — the close button takes over. */
-            body.sf-preview-open .sf-preview-handle{opacity:0;pointer-events:none}
+            /* Hide the tab while the drawer is open — the close button takes over.
+               Keyed on the HANDLE's own class, never on the body's
+               sf-preview-open flag: a dashboard re-render replaces the drawer
+               with a fresh (closed) one but the body class survives, and a
+               body-keyed rule then hid the only control that could reopen the
+               drawer — which is why the preview looked broken until the tab
+               was clicked again. A freshly built handle can never be born
+               hidden. */
+            .sf-preview-handle.is-open{opacity:0;pointer-events:none}
 
             .sf-preview-backdrop{
               display:block;position:fixed;top:var(--nav-h);right:0;bottom:var(--bottom-h);left:0;
@@ -1174,6 +1181,11 @@ async function renderVendorDashboard() {
   </div>
 </div>`;
 
+  // The markup above replaced the whole dashboard, preview drawer included, so
+  // any "overlay is open" flag from the previous DOM is now a lie. Clear it
+  // before anything can render against it.
+  if (typeof window.sfResetPreviewOverlays === 'function') window.sfResetPreviewOverlays();
+
   // Render chart and load referral history
   window._vendorSalesPackages = myPackages;
   setTimeout(() => {
@@ -1185,9 +1197,11 @@ async function renderVendorDashboard() {
     // ran that handler — the Storefront tab rendered blank until it was clicked
     // again. The `active` classes above fixed the visibility; hydrate the one
     // tab whose contents are built by a click handler on this pass.
-    if (activeTabId === 'vendor-wallet') {
-      try { renderWalletHistory('vendor-txn-list'); } catch(e) { console.warn('[vendor] wallet hydrate failed:', e); }
-    }
+    // Route every lazily-built tab through the shared helper (js/utils.js) so a
+    // restored tab is filled by exactly the function its button would call.
+    hydrateActiveTab(activeTabId, {
+      'vendor-wallet': () => renderWalletHistory('vendor-txn-list'),
+    });
     if (typeof window.updateStorefrontPreview === 'function') {
       window.updateStorefrontPreview();
     }
@@ -1314,11 +1328,11 @@ function vendorProductRowHTML(p) {
   return `
 <div class="card" style="margin-bottom:10px">
   <div class="card-body" style="display:flex;gap:10px;align-items:flex-start">
-    <img src="${p.images?.[0]||'https://placehold.co/70x70?text=P'}" style="width:64px;height:64px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
-         onerror="this.src='https://placehold.co/70x70?text=P'">
+    <img src="${p.images?.[0]||PLACEHOLDER_IMG}" style="width:64px;height:64px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
+         onerror="this.src=window.PLACEHOLDER_IMG">
     <div style="flex:1;min-width:0">
       <div style="font-weight:700;font-size:.875rem;margin-bottom:2px">${escHtml(p.name)}</div>
-      <div style="font-size:.78rem;color:var(--text-muted)">GHS ${p.price} · ${p.sold_count||0} sold · ${p.views||0} views</div>
+      <div style="font-size:.78rem;color:var(--text-muted)">${priceText(p.price)} · ${p.sold_count||0} sold · ${p.views||0} views</div>
       <div style="font-size:.75rem;margin-top:4px" class="${stockClass}">
         <i class="fas fa-${p.stock_qty===0?'times-circle':'box'}"></i>
         Stock: ${p.stock_qty} ${p.stock_qty===0?'(SOLD OUT)': p.stock_qty<=3?'(LOW!)':''}
@@ -1504,8 +1518,11 @@ async function submitAddProduct(e, storeId, vendorId) {
   }
   const name     = document.getElementById('new-p-name')?.value.trim();
   const desc     = document.getElementById('new-p-desc')?.value.trim();
-  const price    = parseFloat(document.getElementById('new-p-price')?.value);
-  const orig     = parseFloat(document.getElementById('new-p-orig')?.value) || price;
+  // priceNumber (not parseFloat) so a blank field is null rather than NaN, and
+  // a value that arrived as a string is still readable. The check below is what
+  // keeps a priceless row out of the catalog.
+  const price    = priceNumber(document.getElementById('new-p-price')?.value);
+  const orig     = priceNumber(document.getElementById('new-p-orig')?.value) ?? price;
   const stock    = parseInt(document.getElementById('new-p-stock')?.value);
   const weight   = parseFloat(document.getElementById('new-p-weight')?.value) || 0.5;
   const cat      = document.getElementById('new-p-cat')?.value;
@@ -1526,7 +1543,7 @@ async function submitAddProduct(e, storeId, vendorId) {
 
   // A product with no usable price is not sellable, so refuse it here — the
   // API enforces the same rule (a priceless row sold for GHS 0 at checkout).
-  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(stock)) {
+  if (price == null || price <= 0 || !Number.isFinite(stock)) {
     showToast('Enter a price greater than 0 and a valid stock number', 'warning');
     setBtn('idle');
     return;
@@ -1905,7 +1922,7 @@ async function showEditProductModal(productId) {
     <input class="form-control" id="edit-p-stock" type="number" min="0" value="${p.stock_qty||0}">
   </div>
   <div class="form-group"><label class="form-label">Price (GHS)</label>
-    <input class="form-control" id="edit-p-price" type="number" value="${p.price}">
+    <input class="form-control" id="edit-p-price" type="number" value="${priceInputValue(p.price)}">
   </div>
   <div class="form-group"><label class="form-label">Flash Sale</label>
     <div style="display:flex;align-items:center;gap:8px">
@@ -1932,7 +1949,7 @@ async function saveProductEdit(productId) {
   const description     = document.getElementById('edit-p-desc')?.value.trim();
   const category        = document.getElementById('edit-p-cat')?.value;
   const stock           = parseInt(document.getElementById('edit-p-stock')?.value);
-  const price           = parseFloat(document.getElementById('edit-p-price')?.value);
+  const price           = priceNumber(document.getElementById('edit-p-price')?.value);
   const flash           = document.getElementById('edit-p-flash')?.checked;
   const images          = _collectProductImages('edit-p');
   const allowBuyerNote  = document.getElementById('edit-p-allow-note')?.checked || false;
@@ -1940,14 +1957,22 @@ async function saveProductEdit(productId) {
   const buyerNotePrompt = 'Add a note (e.g. color, size)';
   const status = stock === 0 ? 'sold_out' : 'active';
   
-  if (isNaN(price) || isNaN(stock)) {
-    showToast('Fill in price and stock with valid numbers', 'warning');
+  // A price of 0 or a blank field must never be saved: that is precisely how a
+  // GHS 55 product comes back as 0 — the form prefilled "0.00" and one tap on
+  // Save made it real. Ask for a real price instead.
+  if (price == null || price <= 0 || !Number.isFinite(stock)) {
+    showToast('Enter a price greater than 0 and a valid stock number', 'warning');
     return;
   }
 
   const p = App.allProducts.find(p => String(p.id) === String(productId));
   let finalPrice = price;
-  let finalOrig = p ? (p.original_price || p.price) : price;
+  // Both fallbacks read through priceNumber: `p.original_price || p.price`
+  // compared/copied whatever shape the row had, and a string price then broke
+  // the flash branch's arithmetic.
+  const existingOrig  = p ? priceNumber(p.original_price) : null;
+  const existingPrice = p ? priceNumber(p.price) : null;
+  let finalOrig = existingOrig || existingPrice || price;
 
   if (flash) {
     if (finalOrig <= price) {
@@ -2111,22 +2136,9 @@ async function saveStoreInfo(storeId) {
   } catch(e) { showToast('Failed to save. Please try again.', 'error'); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Changes'; } }
 }
 
-function resendOTP() {
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  showModal(`
-<div class="modal-handle"></div>
-<div class="modal-header"><span class="modal-title">📱 Verify Phone</span></div>
-<div class="modal-body">
-  <p style="font-size:.875rem;color:var(--text-light);margin-bottom:16px">
-    New OTP sent to <strong>${App.currentUser?.phone}</strong><br>
-    <span style="color:var(--primary)">[Demo OTP: <strong>${otp}</strong>]</span>
-  </p>
-  <div class="form-group">
-    <input class="form-control" id="otp-input" type="text" placeholder="6-digit code" maxlength="6" style="text-align:center;font-size:1.3rem;letter-spacing:8px">
-  </div>
-  <button class="btn btn-primary btn-block" onclick="verifyOTP('${App.currentUser?.id}','${otp}')">Verify</button>
-</div>`);
-}
+// NOTE: resendOTP() and switchTab() live in js/auth.js and js/utils.js — the
+// buyer dashboard calls both, and this file is now only downloaded for the
+// roles that need it (see ROLE_SCRIPTS in js/app.js).
 
 function showVerificationUploadModal(userId) {
   const u = App.currentUser || {};
@@ -2460,12 +2472,12 @@ async function showAvailableStores() {
   <div class="card" style="margin-bottom:12px">
     <div class="card-body">
       <div style="display:flex;gap:10px;align-items:center">
-        <img src="${s.logo_url||'https://placehold.co/50x50?text=S'}" style="width:44px;height:44px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
-             onerror="this.src='https://placehold.co/50x50?text=S'">
+        <img src="${s.logo_url||PLACEHOLDER_IMG}" style="width:44px;height:44px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
+             onerror="this.src=window.PLACEHOLDER_IMG">
         <div style="flex:1">
           <div style="font-weight:700;font-size:.9rem">${escHtml(s.name)}</div>
           <div style="font-size:.75rem;color:var(--text-muted)">${s.location}</div>
-          <div style="font-size:.75rem;color:var(--text-muted)">Price: <strong>GHS ${(s.store_price||500).toFixed(0)}</strong></div>
+          <div style="font-size:.75rem;color:var(--text-muted)">Price: <strong>${priceAmount(priceNumber(s.store_price) ?? 500)}</strong></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
           ${canUnlockViaReferrals ? `
@@ -2640,47 +2652,6 @@ async function purchaseStore(storeId, price) {
 //       confirmRejectOrder  are all defined in js/orders.js
 
 // NOTE: previewProductImage and clearProductImage are defined in js/utils.js
-
-function switchTab(el, tabId) {
-  if (typeof el === 'string' && !tabId) {
-    tabId = el;
-    el = null;
-  }
-  const target = document.getElementById(tabId);
-  if (!target) return;
-
-  // `App` is a top-level const, not a window property: `if (window.App)` is
-  // always false, so the active tab was never remembered across a re-render.
-  if (typeof App !== 'undefined') {
-    if (!App.activeTab) App.activeTab = {};
-    if (App.currentPage) App.activeTab[App.currentPage] = tabId;
-  }
-
-  const container = target.closest('#vendor-dashboard-content, #buyer-dashboard-content, #admin-dashboard-content, #rendor-dashboard-content, .page') || document.getElementById('main-content');
-  if (container) {
-    container.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    container.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
-  }
-
-  target.classList.add('active');
-
-  // The storefront editor's mobile preview is a fixed overlay — close it on any
-  // tab switch so it cannot linger on top of another tab.
-  if (typeof window.sfTogglePreview === 'function' && document.body.classList.contains('sf-preview-open')) {
-    window.sfTogglePreview(false);
-  }
-
-  if (el) {
-    el.classList.add('active');
-  } else if (container) {
-    const matchingBtn = container.querySelector(`.tab-btn[onclick*="${tabId}"]`);
-    if (matchingBtn) matchingBtn.classList.add('active');
-  }
-  if (el && !App.isBackgroundRefresh) {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-}
-window.switchTab = switchTab;
 
 
 /* ============================================================
@@ -3128,7 +3099,7 @@ function _bapRemoveSlot(cardIdx, slotIdx) {
         if (hid && _bap.drafts[cardIdx]) {
           _bap.drafts[cardIdx].b64 = hid.value;
           const coverImg = document.querySelector(`#bap-card-${cardIdx} .bap-draft-img-wrap img`);
-          if (coverImg) coverImg.src = hid.value || 'https://placehold.co/80?text=No+Image';
+          if (coverImg) coverImg.src = hid.value || PLACEHOLDER_IMG;
         }
       }
     });
@@ -3190,9 +3161,9 @@ async function _bapSubmitAll() {
   let firstError = null;
   for (const { d, i } of active) {
     const name  = (document.getElementById('bap-name-' + i)?.value || '').trim();
-    const price = parseFloat(document.getElementById('bap-price-' + i)?.value);
+    const price = priceNumber(document.getElementById('bap-price-' + i)?.value);
     const stock = document.getElementById('bap-stock-' + i)?.value;
-    if (isNaN(price) || price <= 0 || stock === '' || stock === undefined) {
+    if (price == null || price <= 0 || stock === '' || stock === undefined) {
       firstError = i;
       break;
     }
@@ -3217,8 +3188,8 @@ async function _bapSubmitAll() {
     // Read current field values (vendor may have edited them)
     const name   = (document.getElementById('bap-name-'   + i)?.value || '').trim();
     const desc   = (document.getElementById('bap-desc-'   + i)?.value || '').trim();
-    const price  = parseFloat(document.getElementById('bap-price-'  + i)?.value) || 0;
-    const orig   = parseFloat(document.getElementById('bap-orig-'   + i)?.value) || price;
+    const price  = priceNumber(document.getElementById('bap-price-'  + i)?.value) ?? 0;
+    const orig   = priceNumber(document.getElementById('bap-orig-'   + i)?.value) ?? price;
     const stock  = parseInt(document.getElementById('bap-stock-'  + i)?.value)   || 0;
     const weight = parseFloat(document.getElementById('bap-weight-' + i)?.value) || 0.5;
     const cat    = document.getElementById('bap-cat-'   + i)?.value || '';
@@ -3728,8 +3699,8 @@ window.updateStorefrontPreview = function() {
   };
 
   // Choose placeholder images if none provided
-  const bannerSrc = banner ? banner : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const logoSrc = logo ? logo : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const bannerSrc = banner ? banner : '/images/happa-logo.webp';
+  const logoSrc = logo ? logo : '/images/happa-logo.webp';
 
   // Base layout styles based on selected theme
   let headerHTML = '';
@@ -3759,10 +3730,10 @@ window.updateStorefrontPreview = function() {
     headerHTML = `
       <div style="position:relative; text-align:center; padding-bottom:12px; background:#fff; border-bottom:1px solid var(--border)">
         <div style="width:100%; height:90px; background:${secondary}; display:flex; align-items:center; justify-content:center; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://placehold.co/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src=window.PLACEHOLDER_BANNER">
         </div>
         <div style="margin:-30px auto 6px auto; width:64px; height:64px; border-radius:50%; border:3px solid #fff; background:#fff; overflow:hidden; box-shadow:var(--shadow-md); position:relative; z-index:2">
-          <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://placehold.co/100?text=Logo'">
+          <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src=window.PLACEHOLDER_IMG">
         </div>
         <h4 style="font-size:1rem; font-weight:900; margin:0; color:var(--text); text-transform:uppercase">${storeName}</h4>
         <div style="font-size:0.65rem; color:var(--text-light); font-weight:700; margin-top:2px"><i class="fas fa-star" style="color:#fbbf24"></i> ${(myStore.avg_rating || 5.0).toFixed(1)} (${myStore.review_count || 0} reviews)</div>
@@ -3794,13 +3765,13 @@ window.updateStorefrontPreview = function() {
     headerHTML = `
       <div style="position:relative; overflow:hidden; min-height:165px; display:flex; align-items:center; justify-content:center; padding:20px 10px;">
         <!-- Full-screen hero banner in background -->
-        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" onerror="this.src='https://placehold.co/800x300?text=Banner'">
+        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" onerror="this.src=window.PLACEHOLDER_BANNER">
         <div style="position:absolute; inset:0; background:rgba(15, 23, 42, 0.45); z-index:1;"></div>
         
         <!-- Frosted Glass Card overlay containing logo, title, slogan -->
         <div style="position:relative; z-index:2; width:88%; background:color-mix(in srgb, ${secondary} 20%, rgba(255, 255, 255, 0.7)); backdrop-filter:blur(16px) saturate(180%); -webkit-backdrop-filter:blur(16px) saturate(180%); border:1px solid rgba(255, 255, 255, 0.4); border-radius:14px; padding:16px 12px 12px 12px; text-align:center; box-shadow:0 8px 32px 0 rgba(0, 0, 0, 0.08);">
           <div style="display:flex; justify-content:center; margin-top:-38px; margin-bottom:8px;">
-            <img src="${logoSrc}" style="width:48px; height:48px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px rgba(0,0,0,0.15); object-fit:cover; background:#fff" onerror="this.src='https://placehold.co/100?text=Logo'">
+            <img src="${logoSrc}" style="width:48px; height:48px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px rgba(0,0,0,0.15); object-fit:cover; background:#fff" onerror="this.src=window.PLACEHOLDER_IMG">
           </div>
           <h4 style="font-family:'Outfit', 'Inter', sans-serif; font-size:0.9rem; font-weight:800; margin:0; color:var(--text); letter-spacing:0.5px">${storeName}</h4>
           <p style="font-size:0.68rem; color:var(--text-muted); margin:4px 0 0 0; font-weight:500; font-style:italic;">${slogan}</p>
@@ -3837,12 +3808,12 @@ window.updateStorefrontPreview = function() {
       <div style="background:var(--neu-bg); padding:12px; display:flex; flex-direction:column; align-items:center; position:relative; border-bottom: none">
         <!-- Neumorphic Banner Inset Frame -->
         <div style="width:100%; height:90px; background:var(--neu-bg); padding:4px; box-shadow: inset 1px 1px 3px rgba(165,175,190,0.25), inset -1px -1px 3px #ffffff; border-radius:12px; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" onerror="this.src='https://placehold.co/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" onerror="this.src=window.PLACEHOLDER_BANNER">
         </div>
         
         <!-- Raised Profile Logo -->
         <div style="width:58px; height:58px; border-radius:50%; background:var(--neu-bg); display:flex; align-items:center; justify-content:center; box-shadow: 2px 2px 5px rgba(165,175,190,0.25), -2px -2px 5px #ffffff; padding: 4px; margin-top:-28px; position:relative; z-index:2">
-          <img src="${logoSrc}" style="width:100%; height:100%; border-radius:50%; object-fit:cover" onerror="this.src='https://placehold.co/100?text=Logo'">
+          <img src="${logoSrc}" style="width:100%; height:100%; border-radius:50%; object-fit:cover" onerror="this.src=window.PLACEHOLDER_IMG">
         </div>
         
         <div style="text-align:center; margin-top:6px">
@@ -3876,11 +3847,11 @@ window.updateStorefrontPreview = function() {
     headerHTML = `
       <div style="position:relative">
         <div style="width:100%; height:90px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src='https://placehold.co/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" onerror="this.src=window.PLACEHOLDER_BANNER">
         </div>
         <div style="padding:10px; background:#fff; border-bottom:1px solid var(--border)">
           <div style="display:flex; align-items:flex-start; gap:8px; margin-top:-22px">
-            <img src="${logoSrc}" style="width:40px; height:40px; border-radius:8px; border:2px solid #fff; object-fit:cover; box-shadow:var(--shadow-sm)" onerror="this.src='https://placehold.co/100?text=Logo'">
+            <img src="${logoSrc}" style="width:40px; height:40px; border-radius:8px; border:2px solid #fff; object-fit:cover; box-shadow:var(--shadow-sm)" onerror="this.src=window.PLACEHOLDER_IMG">
             <div style="flex:1; padding-top:14px">
               <h4 style="font-size:0.8rem; font-weight:800; margin:0">${storeName}</h4>
               <div style="font-size:0.65rem; color:var(--text-muted); margin-top:1px"><i class="fas fa-star" style="color:#fbbf24"></i> ${(myStore.avg_rating || 5.0).toFixed(1)} (${myStore.review_count || 0} reviews)</div>
@@ -3911,7 +3882,7 @@ window.updateStorefrontPreview = function() {
               </div>
               <div class="product-body" style="padding: 6px 8px; display:flex; flex-direction:column; gap:2px">
                 <div class="product-name" style="font-size:0.65rem; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
-                <div class="product-price" style="font-size:0.75rem">GHS ${p.price}</div>
+                <div class="product-price" style="font-size:0.75rem">${priceText(p.price)}</div>
                 <div class="product-meta" style="font-size:0.55rem; display:flex; align-items:center; gap:4px">
                   <span class="product-rating" style="font-size:0.55rem; color:#fbbf24"><i class="fas fa-star"></i> ${p.rating || p.avg_rating || '5.0'}</span>
                   <span class="product-sold" style="font-size:0.55rem; color:var(--text-muted)">${p.sold_count || p.total_sold || 0} sold</span>
@@ -3943,7 +3914,7 @@ window.updateStorefrontPreview = function() {
               </div>
               <div class="product-body" style="padding:4px 6px; display:flex; flex-direction:column">
                 <div class="product-name" style="font-size:0.6rem; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
-                <div class="product-price" style="font-size:0.7rem">GHS ${p.price}</div>
+                <div class="product-price" style="font-size:0.7rem">${priceText(p.price)}</div>
               </div>
             </div>
           `).join('')}
@@ -4061,15 +4032,15 @@ window.updateStorefrontPreview = function() {
         <div style="flex:1; min-width:0">
           <div style="font-size:.55rem; font-weight:800; color:${primary}; text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px">⭐ Spotlight</div>
           <div class="product-name" style="font-weight:800; font-size:.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(spot.name)}</div>
-          <div class="product-price" style="font-size:.8rem; font-weight:800">GHS ${spot.price}</div>
+          <div class="product-price" style="font-size:.8rem; font-weight:800">${priceText(spot.price)}</div>
           <button class="prev-btn-theme" style="margin-top:4px; font-size:.55rem; padding:3px 10px">View Product</button>
         </div>
       </div>` : '';
     composedHTML = `
       <div style="position:relative; height:150px; overflow:hidden">
-        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" onerror="this.src='https://placehold.co/800x300?text=Banner'">
+        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" onerror="this.src=window.PLACEHOLDER_BANNER">
         <div style="position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.55)); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:10px">
-          <img src="${logoSrc}" style="width:44px; height:44px; border-radius:50%; border:2px solid #fff; object-fit:cover; margin-bottom:6px" onerror="this.src='https://placehold.co/100?text=Logo'">
+          <img src="${logoSrc}" style="width:44px; height:44px; border-radius:50%; border:2px solid #fff; object-fit:cover; margin-bottom:6px" onerror="this.src=window.PLACEHOLDER_IMG">
           <h4 style="color:#fff; font-size:.85rem; font-weight:900; margin:0; text-shadow:0 1px 6px rgba(0,0,0,.5)">${storeName}</h4>
           <p style="color:rgba(255,255,255,.92); font-size:.6rem; margin:3px 0 0 0; font-style:italic; text-shadow:0 1px 4px rgba(0,0,0,.5)">${slogan}</p>
         </div>
@@ -4086,7 +4057,7 @@ window.updateStorefrontPreview = function() {
                   <div class="product-img" style="height:60px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; overflow:hidden">${getProductImageHTML(p)}</div>
                   <div class="product-body" style="padding:6px 8px">
                     <div class="product-name" style="font-size:.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
-                    <div class="product-price" style="font-size:.75rem">GHS ${p.price}</div>
+                    <div class="product-price" style="font-size:.75rem">${priceText(p.price)}</div>
                   </div>
                 </div>`).join('')}
             </div>
@@ -4100,7 +4071,7 @@ window.updateStorefrontPreview = function() {
                   <div class="product-img" style="height:44px; display:flex; align-items:center; justify-content:center; font-size:1rem; overflow:hidden">${getProductImageHTML(p)}</div>
                   <div class="product-body" style="padding:4px 6px">
                     <div class="product-name" style="font-size:.56rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
-                    <div class="product-price" style="font-size:.66rem">GHS ${p.price}</div>
+                    <div class="product-price" style="font-size:.66rem">${priceText(p.price)}</div>
                   </div>
                 </div>`).join('')}
             </div>
@@ -4110,7 +4081,7 @@ window.updateStorefrontPreview = function() {
     // Compact Bars: slim brand bar + search/cart row + dense multi-column catalogue
     composedHTML = `
       <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#fff; border-bottom:1px solid var(--border)">
-        <img src="${logoSrc}" style="width:30px; height:30px; border-radius:8px; object-fit:cover; border:1px solid var(--border)" onerror="this.src='https://placehold.co/100?text=Logo'">
+        <img src="${logoSrc}" style="width:30px; height:30px; border-radius:8px; object-fit:cover; border:1px solid var(--border)" onerror="this.src=window.PLACEHOLDER_IMG">
         <div style="flex:1; min-width:0">
           <div style="font-size:.72rem; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${storeName}</div>
           <div style="font-size:.55rem; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${slogan}</div>
@@ -4127,7 +4098,7 @@ window.updateStorefrontPreview = function() {
                 <div class="product-img" style="height:40px; display:flex; align-items:center; justify-content:center; font-size:1rem; overflow:hidden">${getProductImageHTML(p)}</div>
                 <div class="product-body" style="padding:3px 5px">
                   <div class="product-name" style="font-size:.52rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escHtml(itemDisplayName(p.name))}</div>
-                  <div class="product-price" style="font-size:.6rem">GHS ${p.price}</div>
+                  <div class="product-price" style="font-size:.6rem">${priceText(p.price)}</div>
                 </div>
               </div>`).join('')}
           </div>
@@ -4220,15 +4191,42 @@ window.sfPreviewDevice = function(mode) {
 window.sfTogglePreview = function(open) {
   const panel = document.getElementById('sf-preview-panel');
   if (!panel) return;
+  // Open state is read from the DRAWER, never from the body class: a re-render
+  // swaps in a closed drawer while the body flag lingers, so trusting the flag
+  // made this call think the drawer was already open and do nothing.
   const next = (open === undefined) ? !panel.classList.contains('open') : !!open;
   panel.classList.toggle('open', next);
   const backdrop = document.getElementById('sf-preview-backdrop');
   if (backdrop) backdrop.classList.toggle('open', next);
   const handle = document.getElementById('sf-preview-handle');
-  if (handle) handle.setAttribute('aria-expanded', next ? 'true' : 'false');
+  if (handle) {
+    handle.setAttribute('aria-expanded', next ? 'true' : 'false');
+    handle.classList.toggle('is-open', next);
+  }
   if (document.body) document.body.classList.toggle('sf-preview-open', next);
   // First open may happen before any edit triggered a paint.
   if (next && typeof window.updateStorefrontPreview === 'function') window.updateStorefrontPreview();
+};
+
+// Drop every "an overlay is open" flag and re-close the overlay nodes.
+//
+// A dashboard re-render replaces the drawer, the backdrop and the colour picker
+// with fresh, closed elements, but the flags they set live on `document.body`
+// and outlive the DOM that owned them. Left behind they are not cosmetic: the
+// preview handle used to be hidden by the stale flag (the reported "empty until
+// I click the tab again") and `sfcp-open` locks #main-content into
+// overflow:hidden, so the page stops scrolling with nothing on screen to close.
+// Called after every dashboard paint, on tab switches and on page changes.
+window.sfResetPreviewOverlays = function() {
+  try {
+    if (document.body) document.body.classList.remove('sf-preview-open', 'sfcp-open');
+    document.querySelectorAll('#sf-preview-panel.open, #sf-preview-backdrop.open').forEach(el => el.classList.remove('open'));
+    const handle = document.getElementById('sf-preview-handle');
+    if (handle) {
+      handle.classList.remove('is-open');
+      handle.setAttribute('aria-expanded', 'false');
+    }
+  } catch (e) { /* overlays are cosmetic — never break a render over them */ }
 };
 
 window.createStorefrontDraft = async function(storeId) {

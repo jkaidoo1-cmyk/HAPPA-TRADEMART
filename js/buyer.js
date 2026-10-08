@@ -151,7 +151,7 @@ async function renderBuyerDashboard() {
 
 
 <!-- ── Referral Tab ── -->
-<div class="tab-content" id="buyer-referral">
+<div class="tab-content ${activeTabId === 'buyer-referral' ? 'active' : ''}" id="buyer-referral">
   <div class="dashboard-wrap">
     
     <!-- Referral Link Card -->
@@ -249,7 +249,7 @@ async function renderBuyerDashboard() {
 </div>
 
 <!-- ── Saved Stores ── -->
-<div class="tab-content" id="buyer-saved">
+<div class="tab-content ${activeTabId === 'buyer-saved' ? 'active' : ''}" id="buyer-saved">
   <div class="dashboard-wrap">
     <h3 style="font-size:.9rem;font-weight:700;margin-bottom:12px">Saved Stores (${savedStoresList.length})</h3>
     ${savedStoresList.length ? savedStoresList.map(s => storeCardHTML(s)).join('') :
@@ -265,7 +265,7 @@ async function renderBuyerDashboard() {
 
 
 <!-- ── Addresses Tab ── -->
-<div class="tab-content" id="buyer-addresses">
+<div class="tab-content ${activeTabId === 'buyer-addresses' ? 'active' : ''}" id="buyer-addresses">
   <div class="dashboard-wrap">
     <div class="card" style="margin-bottom:14px">
       <div class="card-header"><h3>📍 Add New Address</h3></div>
@@ -288,7 +288,7 @@ async function renderBuyerDashboard() {
 
 
 <!-- ── Reviews Tab ── -->
-<div class="tab-content" id="buyer-reviews">
+<div class="tab-content ${activeTabId === 'buyer-reviews' ? 'active' : ''}" id="buyer-reviews">
   <div class="dashboard-wrap">
     <div class="card">
       <div class="card-header"><h3>My Reviews</h3></div>
@@ -301,6 +301,14 @@ async function renderBuyerDashboard() {
 
   // Populate the wishlist card on the overview page (after the DOM above is in place)
   renderBuyerWishlist();
+
+  // Addresses and Reviews are lazy: their buttons call these renderers after
+  // switching, so a restored/remembered tab would otherwise come back as an
+  // empty card. Same functions the buttons call, via the shared helper.
+  hydrateActiveTab(activeTabId, {
+    'buyer-addresses': () => renderBuyerAddresses(),
+    'buyer-reviews':   () => renderBuyerReviews(),
+  });
 }
 
 // NOTE: buyerPackageCard, showPackageDetailModal, filterBuyerOrders,

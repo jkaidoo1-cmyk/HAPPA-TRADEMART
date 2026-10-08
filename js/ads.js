@@ -491,8 +491,9 @@ function _maybeResetBudgets(state) {
 function _renderSlide(slot, slotId, product, store, state) {
   const img      = product.images?.[0] || '';
   const isHero   = product.is_hero;
-  const discount = !isHero && (product.original_price > product.price)
-    ? Math.round((1 - product.price / product.original_price) * 100) : 0;
+  // discountPercent parses both sides first: comparing raw fields is false on
+  // string prices and dividing them produced "NaN% OFF" on a broken pair.
+  const discount = !isHero ? (discountPercent(product.original_price, product.price) ?? 0) : 0;
 
   // Analytics: every slide rendered = one impression + its dwell budget.
   if (state.campaign && state.campaign.id) {
@@ -526,9 +527,9 @@ function _renderSlide(slot, slotId, product, store, state) {
       : ''}
     <h2 class="ads-product-name">${escHtml(itemDisplayName(product.name))}</h2>
     <div class="ads-price-row">
-      <span class="ads-price">GHS ${Number(product.price).toFixed(2)}</span>
-      ${product.original_price > product.price
-        ? `<span class="ads-original-price">GHS ${Number(product.original_price).toFixed(2)}</span>`
+      <span class="ads-price">${priceText(product.price)}</span>
+      ${discountPercent(product.original_price, product.price) != null
+        ? `<span class="ads-original-price">${priceText(product.original_price)}</span>`
         : ''}
     </div>
     <button class="ads-cta" tabindex="-1">Shop Now <i class="fas fa-arrow-right"></i></button>

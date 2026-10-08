@@ -26,7 +26,7 @@ function renderAuth() {
 
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
 
-      <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA MART Logo" style="width:48px;height:48px;">
+      <img src="/images/happa-logo.webp" alt="HAPPA MART Logo" style="width:48px;height:48px;">
 
       <div class="auth-logo" style="font-size:1.6rem;font-weight:900;color:var(--primary);letter-spacing:-1px">HAPPA<span style="color:var(--secondary)">MART</span></div>
 
@@ -936,6 +936,17 @@ function showOTPModal(user) {
 
 
 
+// Resend a phone-verification code from the buyer dashboard's "Verify now →"
+// link. It lives here rather than in js/vendor.js because the buyer dashboard
+// calls it (js/buyer.js) and the vendor bundle is no longer downloaded for
+// buyers — but the move also fixes what it did: it invented a random code in
+// the browser, showed it, and then handed it to verifyOTP(), which checks the
+// code the SERVER generated. The visitor read a code that could never work. It
+// now runs the same server flow signup uses.
+function resendOTP() {
+  showOTPModal(App.currentUser || {});
+}
+
 async function verifyOTP() {
   const entered = document.getElementById('otp-input')?.value.trim();
   if (!entered) { showToast('Enter the 6-digit code we sent you.', 'error'); return; }
@@ -1044,7 +1055,7 @@ function showPendingScreen() {
 
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
 
-      <img src="/images/photo_2026-05-30_17-40-49-Photoroom.png" alt="HAPPA MART Logo" style="width:48px;height:48px;">
+      <img src="/images/happa-logo.webp" alt="HAPPA MART Logo" style="width:48px;height:48px;">
 
       <div class="auth-logo" style="font-size:1.6rem;font-weight:900;color:var(--primary);letter-spacing:-1px">HAPPA<span style="color:var(--secondary)">MART</span></div>
 

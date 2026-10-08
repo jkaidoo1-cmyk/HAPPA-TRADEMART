@@ -31,6 +31,7 @@ const vm = require('node:vm');
 const ROOT = path.join(__dirname, '..');
 const SOURCE = fs.readFileSync(path.join(ROOT, 'js', 'ads.js'), 'utf-8');
 assert.ok(SOURCE.includes('AdEngine'), 'js/ads.js is missing or empty');
+const PRICE_HELPERS = require('./price-helpers.fixture').DECLARATIONS;
 
 const DAY_MS = 86400000;
 const NOW0 = new Date('2026-10-07T10:00:00').getTime();
@@ -141,6 +142,9 @@ function boot({ campaign: camp, products, stores, now = NOW0, spent = null, hidd
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
+  // The engine prices its slides through the shared helpers; run the real
+  // declarations in this context so the shipped rule is what gets exercised.
+  vm.runInContext(PRICE_HELPERS, sandbox, { filename: 'js/utils.js (price helpers)' });
   vm.runInContext(SOURCE, sandbox, { filename: 'js/ads.js' });
 
   return {

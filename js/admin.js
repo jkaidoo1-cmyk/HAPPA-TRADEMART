@@ -845,16 +845,16 @@ function adminStoreRowHTML(s, allUsers) {
 <div class="card" style="margin-bottom:10px" id="store-row-${s.id}">
   <div class="card-body">
     <div style="display:flex;align-items:flex-start;gap:10px">
-      <img src="${s.logo_url||'https://placehold.co/50x50?text=S'}"
+      <img src="${s.logo_url||PLACEHOLDER_IMG}"
            style="width:46px;height:46px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0"
-           onerror="this.src='https://placehold.co/50x50?text=S'">
+           onerror="this.src=window.PLACEHOLDER_IMG">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.9rem">${escHtml(s.name)}</div>
         <div style="font-size:.75rem;color:var(--text-muted)">
           ${s.location} · ${s.category || 'General'}
         </div>
         <div style="font-size:.73rem;color:var(--text-muted);margin-top:2px">
-          Price: <strong>GHS ${(s.store_price||0).toFixed(0)}</strong>
+          Price: <strong>${priceAmount(s.store_price)}</strong>
           ${s.is_paid ? ' · <span style="color:var(--success)">Paid ✓</span>' : ' · <span style="color:var(--warning)">Unpaid</span>'}
           ${s.acquired_by_referral ? ' · <span style="color:#7c3aed"><i class="fas fa-gift"></i> Via Referral</span>' : ''}
           ${s.total_orders ? ` · ${s.total_orders} orders` : ''}
@@ -1010,7 +1010,7 @@ async function showHandoverModal(storeId, prefillEmail = '') {
 
   <div class="form-group">
     <label class="form-label">Store Price Paid (GHS)</label>
-    <input class="form-control" id="handover-price" type="number" value="${store?.store_price || 500}" min="0" step="50">
+    <input class="form-control" id="handover-price" type="number" value="${priceInputValue(store?.store_price) || 500}" min="0" step="50">
     <div class="form-hint">Set to 0 for a free / referral-based handover.</div>
   </div>
 
@@ -1083,7 +1083,7 @@ function previewCreateStoreVendor(email) {
 // ── Confirm handover ──────────────────────────────────────
 async function confirmHandover(storeId) {
   const email    = (document.getElementById('handover-vendor')?.value || '').trim().toLowerCase();
-  const price    = parseFloat(document.getElementById('handover-price')?.value) || 0;
+  const price    = priceNumber(document.getElementById('handover-price')?.value) ?? 0;
   const activate = document.getElementById('handover-activate')?.value || 'active';
 
   if (!email) { showToast('Please enter the vendor\'s email', 'warning'); return; }
@@ -1152,7 +1152,7 @@ async function adminCreateStore(e) {
   const desc    = document.getElementById('a-store-desc')?.value.trim();
   const loc     = document.getElementById('a-store-loc')?.value;
   const cat     = document.getElementById('a-store-cat')?.value;
-  const price   = parseFloat(document.getElementById('a-store-price')?.value) || 0;
+  const price   = priceNumber(document.getElementById('a-store-price')?.value) ?? 0;
   const vendorQ = (document.getElementById('a-store-vendor')?.value || '').trim();
 
   // New vendor creation fields
@@ -1432,7 +1432,7 @@ function adminPendingRendorCardHTML(r) {
         <div style="margin-top:6px;background:#ede9fe;border-radius:var(--radius-sm);padding:6px 8px;font-size:.72rem;color:#4c1d95">
           <strong>🎨 Brand Name:</strong> ${escHtml(r.rendor_display_name)}
           ${r.rendor_service_cat ? ` · <em>${escHtml(r.rendor_service_cat)}</em>` : ''}
-          ${r.rendor_starting_price ? ` · From GHS ${parseFloat(r.rendor_starting_price).toFixed(2)}` : ''}
+          ${priceNumber(r.rendor_starting_price) != null ? ` · From ${priceText(r.rendor_starting_price)}` : ''}
         </div>` : ''}
         ${r.rendor_bio ? `
         <div style="margin-top:4px;font-size:.72rem;color:var(--text-muted);-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden">
@@ -1493,7 +1493,7 @@ function adminActiveRendorCardHTML(r) {
         <div style="font-size:.73rem;color:var(--text-muted)">${r.email} · ${r.rendor_service_cat||'—'}</div>
         <div style="font-size:.73rem;color:var(--text-muted);margin-top:2px">
           📍 ${r.location||'—'}
-          ${r.rendor_starting_price ? ` · From GHS ${parseFloat(r.rendor_starting_price).toFixed(2)}` : ''}
+          ${priceNumber(r.rendor_starting_price) != null ? ` · From ${priceText(r.rendor_starting_price)}` : ''}
         </div>
         <!-- Subscription pill -->
         <div style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;background:${subBg};color:${subColor};border-radius:20px;padding:2px 8px;font-size:.7rem;font-weight:700">
@@ -1730,7 +1730,7 @@ async function showStorePicker(vendorUserId, vendorEmail) {
       <i class="fas fa-store" style="color:var(--primary);font-size:1.1rem;flex-shrink:0"></i>
       <div style="flex:1">
         <div style="font-weight:700;font-size:.875rem">${escHtml(s.name)}</div>
-        <div style="font-size:.75rem;color:var(--text-muted)">${s.location} · GHS ${s.store_price||500}</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">${s.location} · ${priceAmount(s.store_price || 500)}</div>
       </div>
       <i class="fas fa-chevron-right" style="color:var(--text-muted)"></i>
     </div>
@@ -1947,7 +1947,7 @@ function adminVendorWithStoreRowHTML(u, allStores, allUsers) {
     ${store ? `
     <div style="background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px 12px">
       <div style="display:flex;align-items:center;gap:10px">
-        <img src="${store.logo_url||'https://placehold.co/40x40?text=S'}" style="width:38px;height:38px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0" onerror="this.src='https://placehold.co/40x40?text=S'">
+        <img src="${store.logo_url||PLACEHOLDER_IMG}" style="width:38px;height:38px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0" onerror="this.src=window.PLACEHOLDER_IMG">
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:.85rem">${escHtml(store.name)}</div>
           <div style="font-size:.73rem;color:var(--text-muted)">${store.location} · ${store.category||'General'}</div>

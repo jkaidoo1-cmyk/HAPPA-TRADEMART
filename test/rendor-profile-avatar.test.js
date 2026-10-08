@@ -22,6 +22,7 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const marketplaceSrc = fs.readFileSync(path.join(ROOT, 'js/marketplace.js'), 'utf-8');
 const rendorSrc = fs.readFileSync(path.join(ROOT, 'js/rendor.js'), 'utf-8');
+const PRICE_HELPERS = require('./price-helpers.fixture').DECLARATIONS;
 
 /** Extract a top-level function from source (brace-balanced). */
 function extract(src, sig) {
@@ -38,7 +39,9 @@ function extract(src, sig) {
     }
   }
   assert.equal(depth, 0, `could not isolate the body of ${sig}`);
-  return src.slice(start, i);
+  // The extracted function may price things (priceNumber/priceText), so the
+  // real helpers are prepended — the shipped rule, not a stub that can drift.
+  return PRICE_HELPERS + '\n' + src.slice(start, i);
 }
 
 // ── share ──────────────────────────────────────────────────────────────

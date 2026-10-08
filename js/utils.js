@@ -2,6 +2,23 @@
    HAPPA TRADEMART — Utility Functions
    ============================================================ */
 
+// ── Image placeholder ──────────────────────────────────────
+// Used wherever a record has no picture (about 60 call sites). These used to
+// point at placehold.co, which meant a product list without images opened a
+// third-party connection per card. Lighthouse caught the cost on the home
+// page: the largest placeholder was the LCP element and took 4.4 s to arrive
+// over a throttled connection — while the page waited on a DNS lookup, a TLS
+// handshake and an image nobody wanted. Under the production CSP (img-src
+// 'self' data:) an inline SVG is allowed, is fetched from nowhere, and is
+// scaled by the browser to whatever box the slot gives it. It also means a
+// product with no image still renders when the device is offline.
+const PLACEHOLDER_IMG = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IiNlZWYwZjMiLz48cmVjdCB4PSI2MCIgeT0iNjgiIHdpZHRoPSIxODAiIGhlaWdodD0iMTY0IiByeD0iMTQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2M2Y2FkMiIgc3Ryb2tlLXdpZHRoPSI5Ii8+PGNpcmNsZSBjeD0iMTk2IiBjeT0iMTEyIiByPSIxNyIgZmlsbD0iI2M2Y2FkMiIvPjxwYXRoIGQ9Ik02NiAyMjZsNTgtNjYgMzIgMzYgMjgtMzIgNTAgNjJ6IiBmaWxsPSIjYzZjYWQyIi8+PC9zdmc+';
+// Wide (banner) slot — same idea, 800×300 so it crops gracefully under
+// object-fit:cover instead of a square being stretched.
+const PLACEHOLDER_BANNER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MDAgMzAwIiB3aWR0aD0iODAwIiBoZWlnaHQ9IjMwMCI+PHJlY3Qgd2lkdGg9IjgwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IiNlZWYwZjMiLz48Y2lyY2xlIGN4PSI1MjAiIGN5PSIxMTAiIHI9IjI2IiBmaWxsPSIjYzZjYWQyIi8+PHBhdGggZD0iTTIyMCAyMzJsOTYtMTA4IDUyIDU4IDQ2LTUwIDg0IDEwMHoiIGZpbGw9IiNjNmNhZDIiLz48L3N2Zz4=';
+window.PLACEHOLDER_IMG = PLACEHOLDER_IMG;
+window.PLACEHOLDER_BANNER = PLACEHOLDER_BANNER;
+
 // ── UUID Generator ────────────────────────────────────────
 function generateId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -313,7 +330,7 @@ document.addEventListener('keydown', (ev) => {
 // ── Image error handler ──────────────────────────────────
 document.addEventListener('error', (e) => {
   if (e.target.tagName === 'IMG') {
-    e.target.src = 'https://placehold.co/200x200?text=No+Image';
+    e.target.src = PLACEHOLDER_IMG;
   }
 }, true);
 
@@ -396,13 +413,85 @@ async function compressImage(file, maxWidth = 750, quality = 0.70) {
 }
 
 // ── Price display helper ─────────────────────────────────
-// Renders a saved price for cards/detail pages. Legacy rows (and any future
-// bad write) can carry null/undefined — show an honest placeholder instead of
-// the infamous "GHS null".
+// Renders a saved price for cards/detail pages. Delegates to priceText (just
+// below) so the app has exactly ONE price rule: the old inline version did
+// `Number(price)`, and `Number(null)` is 0 — so every row with no price was
+// rendered as a confident "GHS 0.00" (the exact bug a vendor reported when a
+// GHS 55 product came back priced at 0).
 function formatPrice(price) {
-  const n = Number(price);
-  return Number.isFinite(n) && n >= 0 ? 'GHS ' + n : 'Price unavailable';
+  return priceText(price);
 }
+
+// ── Price values ───────────────────────────────────────────
+// A price reaches the browser in three shapes, and assuming any one of them
+// has been expensive:
+//   • a number              — db.json, and anything the app itself wrote
+//   • a string              — Postgres `numeric` is serialised as text, and the
+//                             product create path accepts "55" because
+//                             Number("55") is a valid price
+//   • missing (null / '' / undefined) — a row that was saved without one
+// `(p.price || 0).toFixed(2)` handles none of the three: it THREW on a string
+// ('55'.toFixed is not a function, which killed the whole product list render
+// around it) and it turned a missing price into "GHS 0.00" — a real price the
+// vendor never set, which the store-detail editor then prefilled into its form
+// and saved back as 0. These helpers are the only sanctioned way to touch a
+// price; see test/price-format.test.js.
+function priceNumber(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
+  // Tolerate "GHS 55", "55.00" and "1,200.50", but never guess: anything that
+  // is not a number after cleanup returns null rather than 0.
+  const raw = String(value);
+  // A minus sign is checked on the ORIGINAL text: cleaning first would strip it
+  // ('-5' → '5') and turn a negative price into a perfectly good positive one.
+  if (raw.includes('-')) return null;
+  const cleaned = raw.replace(/[^0-9.]/g, '');
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+// For display: falls back to the same wording formatPrice uses.
+function priceText(value) {
+  const n = priceNumber(value);
+  return n == null ? 'Price unavailable' : 'GHS ' + n;
+}
+
+// For a row that already carries its own label ("Price:", "Store Price",
+// "From"): the value, or an honest dash. Used instead of `|| 0`, which turned a
+// missing price into "GHS 0" — a number the vendor never set, which the
+// store-detail editor then prefilled back into its form and saved as 0.
+function priceAmount(value) {
+  const n = priceNumber(value);
+  return n == null ? '—' : 'GHS ' + n;
+}
+
+// Percentage off, or null when there is no genuine discount. Comparing the raw
+// fields (`original_price > price`) is false-by-accident on the strings
+// Postgres hands back, and dividing them produced NaN — so a real GHS 55/100
+// pair showed no badge while a broken pair showed "NaN% off".
+function discountPercent(original, price) {
+  const o = priceNumber(original);
+  const n = priceNumber(price);
+  if (o == null || n == null || o <= n) return null;
+  return Math.round((1 - n / o) * 100);
+}
+
+// For an editable field: an absent price leaves the input EMPTY so the form
+// cannot silently submit 0 — the old `(p.price || 0).toFixed(2)` prefilled
+// "0.00" and one tap on Save made it real.
+function priceInputValue(value) {
+  const n = priceNumber(value);
+  return n == null ? '' : n.toFixed(2);
+}
+// Explicit globals: these four are the sanctioned price API and every bundle
+// reaches for them by name, so they must never depend on load order.
+window.formatPrice    = formatPrice;
+window.priceNumber    = priceNumber;
+window.priceText      = priceText;
+window.priceAmount    = priceAmount;
+window.discountPercent = discountPercent;
+window.priceInputValue = priceInputValue;
 
 // ── Square product image helper ────────────────────────────
 // Scales the photo to COVER a square canvas and crops the overflow, so the
@@ -771,3 +860,83 @@ function showApiErrorToast(raw, fallback) {
   showToast(friendlyApiError(raw, fallback), 'error');
 }
 window.showApiErrorToast = showApiErrorToast;
+
+// ── Dashboard tabs ────────────────────────────────────────────────────────
+// Lives here, in the bundle every page loads, rather than in js/vendor.js where
+// it was written: the buyer, admin and rendor dashboards all use the same tab
+// markup (`class="tab-btn"` + `class="tab-content"`), and the buyer dashboard
+// calls it from its own tab buttons. Keeping it in the vendor bundle meant the
+// buyer dashboard would lose its tabs the moment that bundle stopped being
+// downloaded for every visitor — which is exactly what it now must not be.
+function switchTab(el, tabId) {
+  if (typeof el === 'string' && !tabId) {
+    tabId = el;
+    el = null;
+  }
+  const target = document.getElementById(tabId);
+  if (!target) return;
+
+  // `App` is a top-level const, not a window property: `if (window.App)` is
+  // always false, so the active tab was never remembered across a re-render.
+  if (typeof App !== 'undefined') {
+    if (!App.activeTab) App.activeTab = {};
+    if (App.currentPage) {
+      App.activeTab[App.currentPage] = tabId;
+      // …and remember it across a RELOAD too. `App.activeTab` is memory-only,
+      // so a reload while the Storefront (or Wallet, or any other) tab was
+      // showing dropped the user back on the first tab — the very "it comes
+      // back empty until I click the tab again" report. Same key shape for
+      // every dashboard, so one store is enough.
+      try { localStorage.setItem('happa_active_tab', JSON.stringify(App.activeTab)); } catch (e) {}
+    }
+  }
+
+  const container = target.closest('#vendor-dashboard-content, #buyer-dashboard-content, #admin-dashboard-content, #rendor-dashboard-content, .page') || document.getElementById('main-content');
+  if (container) {
+    container.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    container.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  }
+
+  target.classList.add('active');
+
+  // The storefront editor's mobile preview is a fixed overlay — close it on any
+  // tab switch so it cannot linger on top of another tab. Prefer the vendor
+  // bundle's reset (it also clears the colour-picker flag); fall back to the
+  // toggle when only the toggle is loaded.
+  if (typeof window.sfResetPreviewOverlays === 'function') {
+    window.sfResetPreviewOverlays();
+  } else if (typeof window.sfTogglePreview === 'function' && document.body.classList.contains('sf-preview-open')) {
+    window.sfTogglePreview(false);
+  }
+
+  if (el) {
+    el.classList.add('active');
+  } else if (container) {
+    const matchingBtn = container.querySelector(`.tab-btn[onclick*="${tabId}"]`);
+    if (matchingBtn) matchingBtn.classList.add('active');
+  }
+  if (el && !App.isBackgroundRefresh) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+window.switchTab = switchTab;
+
+// ── Restored-tab hydration ────────────────────────────────────────────────
+// A few tab bodies are built lazily by their button's onclick and start empty
+// in the markup. That is invisible while the user is the one pressing the
+// button — the press does the work — but not when a render restores a
+// remembered/`active` tab: the tab comes back visible with an empty body, so
+// the screen looks broken until the tab is clicked again. Dashboards hand
+// their `tabId → loader` map (the exact function the button runs) here after
+// the markup is in place.
+function hydrateActiveTab(tabId, loaders) {
+  if (!tabId || !loaders) return;
+  const load = loaders[tabId];
+  if (typeof load !== 'function') return;
+  try {
+    load();
+  } catch (e) {
+    console.warn('[tabs] hydration failed for ' + tabId + ':', e);
+  }
+}
+window.hydrateActiveTab = hydrateActiveTab;

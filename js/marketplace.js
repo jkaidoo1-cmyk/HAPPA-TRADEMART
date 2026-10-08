@@ -8,10 +8,16 @@
 
 function toStorefrontProduct(p) {
   if (!p) return p;
-  const regularPrice = (p.original_price && parseFloat(p.original_price) > 0) ? parseFloat(p.original_price) : parseFloat(p.price);
+  // A storefront always shows the FULL price: the flash-sale price the app
+  // applies client-side must not leak into the store. Coerce through
+  // priceNumber first so Postgres's string prices never end up in arithmetic.
+  const fullPrice = priceNumber(p.original_price) || priceNumber(p.price);
   return {
     ...p,
-    price: regularPrice,
+    // null when neither field holds a usable number: the storefront then says
+    // "Price unavailable" and the cart refuses the item, instead of inventing
+    // a 0 that a buyer could actually order.
+    price: fullPrice,
     original_price: null,
     is_flash_sale: false,
     is_flash_sale_flag: false
@@ -138,9 +144,12 @@ async function renderMarketplace() {
 
   if (af.cat)    items = items.filter(p => p.category?.includes(af.cat.split(' ')[0]));
 
-  if (af.min)    items = items.filter(p => p.price >= af.min);
+  // Filter on the parsed number: `'55' >= 50` happens to coerce, but a listing
+  // with no price at all silently vanished from every filtered view instead of
+  // being reported as unavailable.
+  if (af.min)    items = items.filter(p => { const n = priceNumber(p.price); return n != null && n >= af.min; });
 
-  if (af.max && af.max !== Infinity) items = items.filter(p => p.price <= af.max);
+  if (af.max && af.max !== Infinity) items = items.filter(p => { const n = priceNumber(p.price); return n != null && n <= af.max; });
 
 
 
@@ -148,9 +157,9 @@ async function renderMarketplace() {
 
   const sort = document.getElementById('market-sort')?.value || 'trending';
 
-  if (sort === 'price_low')  items.sort((a,b) => a.price - b.price);
+  if (sort === 'price_low')  items.sort((a,b) => (priceNumber(a.price) ?? Infinity) - (priceNumber(b.price) ?? Infinity));
 
-  if (sort === 'price_high') items.sort((a,b) => b.price - a.price);
+  if (sort === 'price_high') items.sort((a,b) => (priceNumber(b.price) ?? -1) - (priceNumber(a.price) ?? -1));
 
   if (sort === 'rating')     items.sort((a,b) => (b.avg_rating||0) - (a.avg_rating||0));
 
@@ -176,7 +185,7 @@ async function renderMarketplace() {
 
   if (empty) empty.classList.add('hidden');
 
-  renderItemsProgressively(grid, items, p => productCardHTML(p), { initialBatch: 6, batchSize: 6 });
+  renderItemsProgressively(grid, items, (p, i) => productCardHTML(p, { eager: i < 3 }), { initialBatch: 6, batchSize: 6 });
 }
 
 
@@ -279,7 +288,7 @@ function rendorPostCardPublicHTML(post, rendor) {
 
   const price    = post.price
 
-    ? `<span style="font-weight:800;color:#7c3aed;font-size:.9rem">From GHS ${parseFloat(post.price).toFixed(2)}</span>`
+    ? `<span style="font-weight:800;color:#7c3aed;font-size:.9rem">From ${priceText(post.price)}</span>`
 
     : '';
 
@@ -517,15 +526,17 @@ async function renderProductDetail(id) {
 
   const commission = getCommission(p.price);
 
-  const discount = p.original_price > p.price
+  const discountPct = discountPercent(p.original_price, p.price);
 
-    ? Math.round((1 - p.price / p.original_price) * 100) : 0;
+  const discount = discountPct != null
+
+    ? discountPct : 0;
 
   const stockClass = p.stock_qty === 0 ? 'stock-zero' : p.stock_qty <= 3 ? 'stock-low' : 'stock-ok';
 
   const stockMsg   = p.stock_qty === 0 ? 'Out of Stock' : p.stock_qty <= 3 ? `Only ${p.stock_qty} left!` : `${p.stock_qty} in stock`;
 
-  const images = p.images?.length ? p.images : ['https://placehold.co/600x600?text=No+Image'];
+  const images = p.images?.length ? p.images : [PLACEHOLDER_IMG];
 
 
 
@@ -570,11 +581,11 @@ async function renderProductDetail(id) {
 
        onload="fitProductImage(this)"
 
-       onerror="this.src='https://placehold.co/600x600?text=No+Image'">
+       onerror="this.src=window.PLACEHOLDER_IMG">
 
   ${images.length > 1 ? `<div style="display:flex;gap:6px;padding:8px 12px;overflow-x:auto">
 
-    ${images.map((img,i) => `<img src="${img}" onclick="switchImg(this,'${img}')" style="width:56px;height:56px;border-radius:6px;object-fit:cover;cursor:pointer;opacity:${i===0?'1':'0.6'}" onerror="this.src='https://placehold.co/60x60?text=img'">`).join('')}
+    ${images.map((img,i) => `<img src="${img}" onclick="switchImg(this,'${img}')" style="width:56px;height:56px;border-radius:6px;object-fit:cover;cursor:pointer;opacity:${i===0?'1':'0.6'}" onerror="this.src=window.PLACEHOLDER_IMG">`).join('')}
 
   </div>` : ''}
 
@@ -600,9 +611,9 @@ async function renderProductDetail(id) {
 
   </div>
 
-  <div style="display:flex;align-items:center;gap:8px;margin:8px 0">
-    <span style="font-size:1.4rem;font-weight:800;color:var(--primary)">${formatPrice(p.price)}</span>
-    ${p.original_price > p.price ? `<span style="font-size:.9rem;color:var(--text-muted);text-decoration:line-through">GHS ${p.original_price}</span>` : ''}
+  <div style="display:flex;align-items:center;gap:8px;margin:8px 0">    <span style="font-size:1.4rem;font-weight:800;color:var(--primary)">${priceText(p.price)}</span>
+
+    ${discountPercent(p.original_price, p.price) != null ? `<span style="font-size:.9rem;color:var(--text-muted);text-decoration:line-through">${priceText(p.original_price)}</span>` : ''}
   </div>
 
   ${p.is_flash_sale ? `
@@ -728,11 +739,11 @@ ${store.id ? `
 
   <div class="card-body" style="display:flex;align-items:center;gap:12px">
 
-    <img src="${store.logo_url||'https://placehold.co/60x60?text=Store'}" alt="${escHtml(store.name || store.slug || 'Store')}"
+    <img src="${store.logo_url||PLACEHOLDER_IMG}" alt="${escHtml(store.name || store.slug || 'Store')}"
 
          style="width:48px;height:48px;border-radius:var(--radius-sm);object-fit:cover"
 
-         onerror="this.src='https://placehold.co/60x60?text=S'">
+         onerror="this.src=window.PLACEHOLDER_IMG">
 
     <div style="flex:1">
 
@@ -929,8 +940,8 @@ async function shareProduct(productId) {
     url += '&ref=' + encodeURIComponent(App.currentUser.referral_code);
   }
   const title = ((p.name || '').trim() === 'Other') ? '' : (p.name || '').trim();
-  const priceVal = parseFloat(p.price);
-  const price = isNaN(priceVal) ? '' : 'GHS ' + (priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2));
+  const priceVal = priceNumber(p.price);
+  const price = priceVal == null ? '' : 'GHS ' + (priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2));
   const desc = p.description ? `${p.description}` : '';
 
   // Caption shown with the photo in the SAME bubble (like WhatsApp's own
@@ -1031,8 +1042,8 @@ async function renderStoreDetail(id) {
   const slogan = s.slogan || 'Welcome to our store!';
   const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
   let followed = App.savedStores.includes(id);
-  const bannerSrc = s.banner_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const logoSrc = s.logo_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const bannerSrc = s.banner_url || '/images/happa-logo.webp';
+  const logoSrc = s.logo_url || '/images/happa-logo.webp';
   const storeName = s.name;
   if (typeof updatePWAManifest === 'function') {
     updatePWAManifest(storeName, logoSrc, s.primary_color || '#e85d04');
@@ -1041,12 +1052,12 @@ async function renderStoreDetail(id) {
   const headerHTML = `
     <div style="position:relative;background:#f8f9fa">
       <img src="${bannerSrc}" alt="${escHtml(storeName)}" 
-           style="width:100%;height:140px;object-fit:cover;" onerror="this.src='https://placehold.co/800x300?text=Store+Banner'">
+           style="width:100%;height:140px;object-fit:cover;" onerror="this.src=window.PLACEHOLDER_BANNER">
       <div style="padding:12px 16px;background:#fff;border-bottom:1px solid var(--border);position:relative">
         <div style="display:flex;align-items:flex-start;gap:12px;margin-top:-35px">
           <img src="${logoSrc}" alt="${escHtml(storeName)}"
                style="width:64px;height:64px;border-radius:12px;border:3px solid #fff;object-fit:cover;box-shadow:var(--shadow-sm)"
-               onerror="this.src='https://placehold.co/100x100?text=Logo'">
+               onerror="this.src=window.PLACEHOLDER_IMG">
           <div style="flex:1;padding-top:25px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
               <h1 style="font-size:1.1rem;font-weight:800;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text)">
@@ -1134,7 +1145,7 @@ async function renderStoreDetail(id) {
       <!-- Tab Content Area (Used for handleStoreProductSearch) -->
       <div class="store-tab-content" id="store-tab-content" style="padding:16px;background:#f8f9fa;">
         <div class="product-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
-           ${storeProds.map(p => productCardHTML(p)).join('')}
+           ${storeProds.map((p, i) => productCardHTML(p, { eager: i < 3 })).join('')}
         </div>
         ${storeProds.length === 0 ? '<div class="empty-state" style="grid-column: 1 / -1; padding: 40px;"><i class="fas fa-box-open"></i><h3>No products found</h3></div>' : ''}
       </div>
@@ -1409,8 +1420,8 @@ async function renderStorefront(id) {
     let followed = (App.savedStores || []).includes(realStoreId) || (App.savedStores || []).includes(targetId);
     const verifiedBadge = s.verified ? '<span class="verified-seller-badge" style="background:#10b981;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:10px;font-weight:700"><i class="fas fa-check-circle"></i> Verified Seller</span>' : '';
 
-    const bannerSrc = sf?.banner_url || s.banner_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
-  const logoSrc = sf?.logo_url || s.logo_url || '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+    const bannerSrc = sf?.banner_url || s.banner_url || '/images/happa-logo.webp';
+  const logoSrc = sf?.logo_url || s.logo_url || '/images/happa-logo.webp';
   const storeName = sf?.name || s.name || (s.slug ? s.slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'My Store');
 
   let themeStyles = '';
@@ -1445,10 +1456,10 @@ async function renderStorefront(id) {
       <div style="position:relative; text-align:center; padding-bottom:12px; background:#fff; border-bottom:1px solid var(--border)">
 
         <div style="width:100%; height:130px; background:${secondaryColor}; display:flex; align-items:center; justify-content:center; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://placehold.co/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src=window.PLACEHOLDER_BANNER">
         </div>
         <div style="margin:-40px auto 6px auto; width:80px; height:80px; border-radius:50%; border:3px solid #fff; background:#fff; overflow:hidden; box-shadow:var(--shadow-md); position:relative; z-index:2">
-          <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src='https://placehold.co/100?text=Logo'">
+          <img src="${logoSrc}" style="width:100%; height:100%; object-fit:cover" loading="lazy" onerror="this.src=window.PLACEHOLDER_IMG">
         </div>
         <h4 class="store-name-title" style="font-size:1.2rem; font-weight:900; margin:0; text-transform:uppercase">${storeName} ${verifiedBadge}</h4>
         <div class="store-location-tag" style="font-size:0.7rem; font-weight:700; margin-top:2px; color:${primaryColor}"><i class="fas fa-map-marker-alt"></i> ${s.location || ''}</div>
@@ -1478,13 +1489,13 @@ async function renderStorefront(id) {
       <div style="position:relative; overflow:hidden; min-height:190px; display:flex; align-items:center; justify-content:center; padding:25px 10px;">
 
         <!-- Full-screen hero banner in background -->
-        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" loading="lazy" onerror="this.src='https://placehold.co/800x300?text=Banner'">
+        <img src="${bannerSrc}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;" loading="lazy" onerror="this.src=window.PLACEHOLDER_BANNER">
         <div style="position:absolute; inset:0; background:rgba(15, 23, 42, 0.45); z-index:1;"></div>
         
         <!-- Frosted Glass Card overlay containing logo, title, slogan -->
         <div style="position:relative; z-index:2; width:88%; background:color-mix(in srgb, ${secondaryColor} 20%, rgba(255, 255, 255, 0.7)); backdrop-filter:blur(16px) saturate(180%); -webkit-backdrop-filter:blur(16px) saturate(180%); border:1px solid rgba(255, 255, 255, 0.4); border-radius:14px; padding:16px 12px 12px 12px; text-align:center; box-shadow:0 8px 32px 0 rgba(0, 0, 0, 0.08);">
           <div style="display:flex; justify-content:center; margin-top:-38px; margin-bottom:8px;">
-            <img src="${logoSrc}" style="width:58px; height:58px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px rgba(0,0,0,0.15); object-fit:cover; background:#fff" loading="lazy" onerror="this.src='https://placehold.co/100?text=Logo'">
+            <img src="${logoSrc}" style="width:58px; height:58px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px rgba(0,0,0,0.15); object-fit:cover; background:#fff" loading="lazy" onerror="this.src=window.PLACEHOLDER_IMG">
           </div>
           <h4 class="store-name-title" style="font-family:'Outfit', 'Inter', sans-serif; font-size:1.15rem; font-weight:800; margin:0; letter-spacing:0.5px">${storeName} ${verifiedBadge}</h4>
           <p class="store-slogan-text" style="font-size:0.75rem; margin:4px 0 0 0; font-weight:500; font-style:italic;">${slogan}</p>
@@ -1516,12 +1527,12 @@ async function renderStorefront(id) {
 
         <!-- Neumorphic Banner Inset Frame -->
         <div style="width:100%; height:110px; background:color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); padding:4px; box-shadow: inset 1px 1px 3px rgba(165,175,190,0.25), inset -1px -1px 3px #ffffff; border-radius:12px; overflow:hidden">
-          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" loading="lazy" onerror="this.src='https://placehold.co/800x300?text=Banner'">
+          <img src="${bannerSrc}" style="width:100%; height:100%; object-fit:cover; border-radius:10px" loading="lazy" onerror="this.src=window.PLACEHOLDER_BANNER">
         </div>
         
         <!-- Raised Profile Logo -->
         <div style="width:68px; height:68px; border-radius:50%; background:color-mix(in srgb, ${secondaryColor} 10%, #faf9f6); display:flex; align-items:center; justify-content:center; box-shadow: 2px 2px 5px rgba(165,175,190,0.25), -2px -2px 5px #ffffff; padding: 4px; margin-top:-28px; position:relative; z-index:2">
-          <img src="${logoSrc}" style="width:100%; height:100%; border-radius:50%; object-fit:cover" loading="lazy" onerror="this.src='https://placehold.co/100?text=Logo'">
+          <img src="${logoSrc}" style="width:100%; height:100%; border-radius:50%; object-fit:cover" loading="lazy" onerror="this.src=window.PLACEHOLDER_IMG">
         </div>
         
         <div style="text-align:center; margin-top:6px">
@@ -1548,12 +1559,12 @@ async function renderStorefront(id) {
       <div style="position:relative;background:#f8f9fa">
 
         <img src="${bannerSrc}" alt="${escHtml(storeName)}" 
-             style="width:100%;height:180px;object-fit:cover;" onerror="this.src='https://placehold.co/800x300?text=Store+Banner'">
+             style="width:100%;height:180px;object-fit:cover;" onerror="this.src=window.PLACEHOLDER_BANNER">
         <div style="padding:16px;background:#fff;border-bottom:1px solid var(--border);position:relative">
           <div style="display:flex;align-items:flex-start;gap:12px;margin-top:-45px">
             <img src="${logoSrc}" alt="${escHtml(storeName)}"
                  style="width:80px;height:80px;border-radius:12px;border:3px solid #fff;object-fit:cover;box-shadow:var(--shadow-sm)"
-                 onerror="this.src='https://placehold.co/100x100?text=Logo'">
+                 onerror="this.src=window.PLACEHOLDER_IMG">
             <div style="flex:1;padding-top:35px">
               <h1 class="store-name-title" style="font-size:1.25rem;font-weight:800;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 ${escHtml(storeName)} ${verifiedBadge}
@@ -1725,9 +1736,9 @@ async function renderStorefront(id) {
   if (layout === 'showcase') {
     layoutHeroHTML = `
       <div id="sf-showcase-hero">
-        <img class="sf-hero-bg" src="${bannerSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://placehold.co/900x400?text=Store+Banner'">
+        <img class="sf-hero-bg" src="${bannerSrc}" alt="${escHtml(storeName)}" onerror="this.src=window.PLACEHOLDER_BANNER">
         <div class="sf-hero-overlay">
-          <img src="${logoSrc}" alt="${escHtml(storeName)} logo" onerror="this.src='https://placehold.co/100x100?text=Logo'">
+          <img src="${logoSrc}" alt="${escHtml(storeName)} logo" onerror="this.src=window.PLACEHOLDER_IMG">
           <h1>${escHtml(storeName)} ${verifiedBadge}</h1>
           <p>${escHtml(slogan)}</p>
           <div style="display:flex;align-items:center;gap:14px;margin-top:8px;font-size:.72rem;color:rgba(255,255,255,.9)">
@@ -1739,7 +1750,7 @@ async function renderStorefront(id) {
   }
   const compactBarHTML = layout === 'compact' ? `
     <div id="sf-compact-bar">
-      <img src="${logoSrc}" alt="${escHtml(storeName)}" onerror="this.src='https://placehold.co/100x100?text=Logo'">
+      <img src="${logoSrc}" alt="${escHtml(storeName)}" onerror="this.src=window.PLACEHOLDER_IMG">
       <div style="flex:1;min-width:0">
         <div class="cb-name">${escHtml(storeName)} ${verifiedBadge}</div>
         <div class="cb-slogan">${escHtml(slogan)}</div>
@@ -1983,12 +1994,12 @@ function adminProductCardHTML(p) {
 
     <img style="width:100%;height:140px;object-fit:cover;display:block"
 
-         src="${p.images?.[0]||'https://placehold.co/300x300?text=No+Image'}"
+         src="${p.images?.[0]||PLACEHOLDER_IMG}"
 
          alt="${escHtml(p.name)}" loading="lazy"
          onload="fitProductImage(this)"
 
-         onerror="this.src='https://placehold.co/300x300?text=No+Image'">
+         onerror="this.src=window.PLACEHOLDER_IMG">
 
   </div>
 
@@ -2000,7 +2011,7 @@ function adminProductCardHTML(p) {
 
     <div style="font-size:.75rem;color:var(--text-muted)">${p.category||'—'} · Stock: <strong>${p.stock_qty??0}</strong>${isSoldOut?' ⚠️':''}</div>
 
-    <div style="font-weight:800;color:var(--primary);font-size:.9rem">GHS ${(p.price||0).toFixed(2)}</div>
+    <div style="font-weight:800;color:var(--primary);font-size:.9rem">${priceText(p.price)}</div>
 
     <div style="font-size:.68rem;color:var(--text-muted)">${p.sold_count||0} sold · ${p.avg_rating?p.avg_rating.toFixed(1)+' ★':'—'}</div>
 
@@ -2052,7 +2063,7 @@ function adminProductCardHTML(p) {
 
       <div style="display:flex;gap:5px">
 
-        <input class="form-control" name="price"         value="${(p.price||0).toFixed(2)}"  placeholder="Price"      type="number" min="0" step="0.01" style="font-size:.8rem;flex:1">
+        <input class="form-control" name="price"         value="${priceInputValue(p.price)}"  placeholder="Price"      type="number" min="0" step="0.01" style="font-size:.8rem;flex:1">
 
         <input class="form-control" name="original_price" value="${p.original_price||''}"    placeholder="Orig. price" type="number" min="0" step="0.01" style="font-size:.8rem;flex:1">
 
@@ -2199,7 +2210,7 @@ async function _sdSaveStore(storeId, form) {
 
   data.is_paid     = form.querySelector('[name=is_paid]')?.checked ?? false;
 
-  data.store_price = parseFloat(data.store_price) || 0;
+  data.store_price = priceNumber(data.store_price) ?? 0;
 
   if (data.name) data.slug = data.name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
 
@@ -2313,9 +2324,13 @@ async function _sdSaveProduct(productId, form) {
 
 
 
-  data.price          = parseFloat(data.price);
+  // Through priceNumber, not parseFloat: an empty price field is "no price",
+  // never a real 0 — `parseFloat('')` is NaN, which JSON.stringify turns into
+  // null and one server rule accepted, leaving the listing priceless and
+  // rendering as 0. A missing original price stays null.
+  data.price          = priceNumber(data.price);
 
-  data.original_price = parseFloat(data.original_price);
+  data.original_price = priceNumber(data.original_price);
 
   data.stock_qty      = parseInt(data.stock_qty)        || 0;
 
@@ -2348,9 +2363,9 @@ async function _sdSaveProduct(productId, form) {
 
   if (data.name) data.slug = data.name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
 
-  if (isNaN(data.price)) {
+  if (data.price == null) {
 
-    showToast('Fill in a valid price.', 'warning');
+    showToast('Enter the price for this product before saving — it was not updated.', 'warning');
 
     return;
 
@@ -2581,8 +2596,8 @@ function shareRendorProfile(rendorId, name) {
   const bio = String(r.rendor_bio || '').trim().replace(/\s+/g, ' ');
   if (bio) lines.push(bio.length > 240 ? bio.slice(0, 237) + '…' : bio);
   const facts = [];
-  const price = parseFloat(r.rendor_starting_price);
-  if (Number.isFinite(price) && price > 0) facts.push('From GHS ' + (price % 1 === 0 ? price.toFixed(0) : price.toFixed(2)));
+  const price = priceNumber(r.rendor_starting_price);
+  if (price != null && price > 0) facts.push('From GHS ' + (price % 1 === 0 ? price.toFixed(0) : price.toFixed(2)));
   if (r.location) facts.push(String(r.location));
   if (facts.length) lines.push(facts.join(' · '));
   const tags = String(r.rendor_tags || '').split(',').map(function (t) { return t.trim(); }).filter(Boolean);
@@ -2626,7 +2641,7 @@ function shareRendorPost(postId, rendorId, legacyTitle, legacyPrice) {
   const rendor = (entry && entry.rendor) || null;
   const name = rendor ? (rendor.rendor_display_name || rendor.name || '') : '';
   const title = String(post.title || legacyTitle || '').trim();
-  const priceVal = parseFloat(post.price != null ? post.price : legacyPrice);
+  const priceVal = priceNumber(post.price != null ? post.price : legacyPrice);
   const price = Number.isFinite(priceVal) && priceVal > 0
     ? 'GHS ' + (priceVal % 1 === 0 ? priceVal.toFixed(0) : priceVal.toFixed(2))
     : '';
@@ -2764,9 +2779,9 @@ async function renderRendorProfilePublic() {
 
   const bio         = rendor.rendor_bio          || '';
 
-  const startPrice  = rendor.rendor_starting_price
+  const startPrice  = priceNumber(rendor.rendor_starting_price) != null
 
-    ? `From GHS ${parseFloat(rendor.rendor_starting_price).toFixed(2)}`
+    ? `From ${priceText(rendor.rendor_starting_price)}`
 
     : '';
 
@@ -2985,12 +3000,8 @@ function _rendorPublicPostCardHTML(post) {
 
            onload="fitProductImage(this)" onerror="this.style.display='none'">`
 
-    : '';
-
-  const price = post.price
-
-    ? `<span style="font-weight:800;color:#7c3aed;font-size:.88rem">GHS ${parseFloat(post.price).toFixed(2)}</span>`
-
+    : '';  const price = priceNumber(post.price) != null
+    ? `<span style="font-weight:800;color:#7c3aed;font-size:.88rem">${priceText(post.price)}</span>`
     : '';
 
   const cat = post.category
@@ -3178,9 +3189,9 @@ function storesRendorCardHTML(r, postCount) {
 
   const cat = r.rendor_service_cat || 'Service Provider';
 
-  const startPrice = r.rendor_starting_price
+  const startPrice = priceNumber(r.rendor_starting_price) != null
 
-    ? `<span style="font-weight:800;color:#7c3aed;font-size:.78rem">From GHS ${parseFloat(r.rendor_starting_price).toFixed(2)}</span>`
+    ? `<span style="font-weight:800;color:#7c3aed;font-size:.78rem">From ${priceText(r.rendor_starting_price)}</span>`
 
     : '';
 
@@ -3417,7 +3428,7 @@ window.switchStorefrontTab = async function(tabName, storeId) {
         <div class="section" style="margin-top:16px">
           <div class="section-header"><h3 style="font-size:1rem;font-weight:800;margin-left:12px">${title}</h3></div>
           <div class="product-grid" style="padding:0 12px 16px">
-            ${items.map(p => productCardHTML(p)).join('')}
+            ${items.map((p, i) => productCardHTML(p, { eager: i < 3 })).join('')}
           </div>
         </div>
       `;
@@ -3436,7 +3447,7 @@ window.switchStorefrontTab = async function(tabName, storeId) {
           <div class="sf-spot-info">
             <div class="sf-spot-label">⭐ Store Spotlight</div>
             <div class="sf-spot-name">${escHtml(sp.name)}</div>
-            <div class="sf-spot-price">GHS ${sp.price}</div>
+            <div class="sf-spot-price">${priceText(sp.price)}</div>
             <button class="btn btn-sm store-theme-btn" style="font-weight:800">View Product</button>
           </div>
         </div>`;
@@ -3463,7 +3474,7 @@ window.switchStorefrontTab = async function(tabName, storeId) {
     }
     contentEl.innerHTML = `
       <div class="product-grid" style="padding:16px">
-        ${storeProds.map(p => productCardHTML(p)).join('')}
+        ${storeProds.map((p, i) => productCardHTML(p, { eager: i < 3 })).join('')}
       </div>
     `;
 
@@ -3528,7 +3539,7 @@ window.handleStoreProductSearch = function(storeId, query) {
   contentEl.innerHTML = `
     <div style="padding:10px 16px;font-size:.78rem;color:var(--text-muted)">Found ${filtered.length} products matching "${escHtml(query)}"</div>
     <div class="product-grid" style="padding:8px 16px 16px">
-      ${filtered.map(p => productCardHTML(p)).join('')}
+      ${filtered.map((p, i) => productCardHTML(p, { eager: i < 3 })).join('')}
     </div>
   `;
 };
@@ -3703,14 +3714,14 @@ window.openStorefrontProductModal = async function(productId) {
 
   const s = App.allStores.find(st => String(st.id) === String(p.store_id)) || {};
   const primaryColor = s.primary_color || '#e85d04';
-  const img = p.images && p.images[0] ? p.images[0] : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+  const img = p.images && p.images[0] ? p.images[0] : '/images/happa-logo.webp';
 
   modal.innerHTML = `
     <div style="background:#ffffff; border-radius:18px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.15); overflow:hidden; position:relative; animation: slideUp 0.3s ease;">
       <button onclick="document.getElementById('storefront-product-modal').remove()" style="position:absolute; top:12px; right:12px; border:none; background:rgba(0,0,0,0.5); color:#fff; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.8rem; z-index:10">
         <i class="fas fa-times"></i>
       </button>      <div style="width:100%; height:200px; background:#f8f9fa; overflow:hidden">
-        <img src="${img}" style="width:100%; height:100%; object-fit:cover; display:block" onload="fitProductImage(this)" onerror="this.src='https://placehold.co/400x300?text=Product'">
+        <img src="${img}" style="width:100%; height:100%; object-fit:cover; display:block" onload="fitProductImage(this)" onerror="this.src=window.PLACEHOLDER_IMG">
       </div>
       <div style="padding:20px; display:grid; gap:12px">
         <h3 style="font-size:1.15rem; font-weight:800; color:var(--text); margin:0">${escHtml(itemDisplayName(p.name) || '')}</h3>
@@ -3771,6 +3782,12 @@ window.addStorefrontCartItem = async function(storeId, productId) {
     return;
   }
   p = toStorefrontProduct(p);
+  // Same rule as the marketplace cart: no usable price means the item cannot
+  // be ordered — never a silent 0.
+  if (priceNumber(p.price) == null) {
+    showToast('This item does not have a price yet. Please contact the store.', 'error');
+    return;
+  }
 
   const key = 'happa_store_cart_' + storeId;
   let storeCart = JSON.parse(localStorage.getItem(key) || '[]');
@@ -3782,7 +3799,7 @@ window.addStorefrontCartItem = async function(storeId, productId) {
     storeCart.push({
       id: p.id,
       name: p.name,
-      price: p.price,
+      price: priceNumber(p.price),
       images: p.images,
       qty: qty
     });
@@ -3825,15 +3842,20 @@ window.renderStorefrontCart = async function(storeId) {
   } else {
     let subtotal = 0;
     const listHTML = storeCart.map(item => {
-      const total = item.price * item.qty;
+      // Carts live in localStorage across app versions, so a stored row can
+      // still hold a string or a missing price — parse before it reaches the
+      // running total (or the visible line) as NaN.
+      const unit = priceNumber(item.price);
+      const qty  = parseInt(item.qty, 10) || 1;
+      const total = unit == null ? 0 : unit * qty;
       subtotal += total;
-      const img = item.images && item.images[0] ? item.images[0] : '/images/photo_2026-05-30_17-40-49-Photoroom.png';
+      const img = item.images && item.images[0] ? item.images[0] : '/images/happa-logo.webp';
       return `
         <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border)">
           <img src="${img}" style="width:50px; height:50px; border-radius:8px; object-fit:cover; background:#f8f9fa">
           <div style="flex:1">
             <div style="font-weight:800; font-size:0.85rem">${escHtml(itemDisplayName(item.name))}</div>
-            <div style="font-size:0.8rem; color:var(--text-muted)">GHS ${item.price}</div>
+            <div style="font-size:0.8rem; color:var(--text-muted)">${priceText(item.price)}</div>
           </div>
           <div style="display:flex; align-items:center; border:1px solid var(--border); border-radius:6px; overflow:hidden">
             <button onclick="window.updateStorefrontCartItemQty('${storeId}', '${item.id}', -1)" style="padding:2px 8px; border:none; background:#fff; cursor:pointer">-</button>
@@ -4080,7 +4102,10 @@ window.renderStorefrontCheckout = function(storeId) {
   }
 
   let subtotal = 0;
-  storeCart.forEach(i => subtotal += i.price * i.qty);
+  storeCart.forEach(i => {
+    const unit = priceNumber(i.price);
+    subtotal += (unit == null ? 0 : unit) * (parseInt(i.qty, 10) || 1);
+  });
   // The platform does not handle or charge delivery — the vendor and customer
   // arrange delivery directly. So no delivery fee is added to the total here.
   const delivery = 0;
@@ -4150,11 +4175,23 @@ window.renderStorefrontCheckout = function(storeId) {
   `;
 };
 
-let _placingStorefrontOrder = false;
-window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
+let _placingStorefrontOrder = false;window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
   if (_placingStorefrontOrder) return;
+  const cartStoreId = resolveStorefrontCartStoreId(storeId);
+  // Refuse to place an order that contains an item with no readable price.
+  // A row like that would land in the vendor's books at GHS 0 — the "price
+  // changed to 0" report — and the buyer would be charged for less than the
+  // listing said. Better to stop and ask for a refresh.
+  const _cart = JSON.parse(localStorage.getItem('happa_store_cart_' + cartStoreId) || '[]');
+  if (!_cart.length) {
+    showToast('Your cart is empty.', 'warning');
+    return;
+  }
+  if (_cart.some(i => priceNumber(i.price) == null)) {
+    showToast('One item in your cart has no price. Please remove it and try again.', 'error');
+    return;
+  }
   _placingStorefrontOrder = true;
-
   const orderBtn = event?.target?.closest('button');
   if (orderBtn) orderBtn.disabled = true;
 
@@ -4244,7 +4281,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     if (orderBtn) orderBtn.disabled = false;
     return;
   }
-  const grossAmt = storeCart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1), 0);
+  const grossAmt = storeCart.reduce((sum, item) => sum + (priceNumber(item.price) ?? 0) * (parseInt(item.qty) || 1), 0);
   const vendorShare = Number(grossAmt.toFixed(2));
   const adminShare = Number(platformFee.toFixed(2));
   const storeName = storeObj.name || 'Vendor Storefront';
@@ -4286,7 +4323,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
     items: storeCart.map(item => ({
       product_id: item.id,
       name: item.name,
-      price: item.price,
+      price: priceNumber(item.price),
       qty: item.qty,
       image: item.image || (item.images && item.images[0]) || '',
       commission_pct: item.commission_pct || item.vendor_fee_pct || 8,
@@ -4387,7 +4424,7 @@ window.placeStorefrontOrder = async function(storeId, subtotalAmount) {
             <div style="font-size:.82rem;font-weight:700">${confTitle}</div>
             <div style="font-size:.72rem;color:var(--text-muted)">Qty: ${item.qty || 1}</div>
           </div>
-          <div style="font-weight:700;font-size:.82rem;flex-shrink:0">GHS ${((parseFloat(item.price)||0)*(parseInt(item.qty)||1)).toFixed(2)}</div>
+          <div style="font-weight:700;font-size:.82rem;flex-shrink:0">GHS ${(((priceNumber(item.price) ?? 0))*(parseInt(item.qty)||1)).toFixed(2)}</div>
         </div>`;
     }).join('');
     // Show confirmation with button to go to cart page for order tracking
