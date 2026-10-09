@@ -502,6 +502,14 @@ async function renderProductDetail(id) {
     p = toStorefrontProduct(p);
   }
 
+  // Display-only price rule: never open a detail page that would print a price
+  // as 0 or "Price unavailable" — deep links and bookmarks included. Treated
+  // like a missing product (see hasDisplayablePrice in js/utils.js).
+  if (!hasDisplayablePrice(p)) {
+    c.innerHTML = '<div class="empty-state"><i class="fas fa-box-open"></i><h3>Product unavailable</h3><p style="font-size:.85rem;color:var(--text-muted)">This product is not available right now.</p></div>';
+    return;
+  }
+
   // Make sure the full catalog is in memory so the "You may also like" section
   // below has products to suggest — deep links land here before the home page
   // ever loads, leaving App.allProducts empty and the section blank.
@@ -3699,6 +3707,13 @@ window.openStorefrontProductModal = async function(productId) {
   }
   p = toStorefrontProduct(p);
 
+  // Same display-only price rule as the storefront shelves: the modal is
+  // deep-linkable, and it must not print "Price unavailable" either.
+  if (!hasDisplayablePrice(p)) {
+    showToast('This product is not available right now.', 'warning', 4000);
+    return;
+  }
+
   // Create overlay modal if not exists
   let modal = document.getElementById('storefront-product-modal');
   if (!modal) {
@@ -3826,7 +3841,18 @@ window.renderStorefrontCart = async function(storeId) {
   const s = App.allStores.find(st => String(st.id) === String(storeId)) || {};
   const primaryColor = s.primary_color || '#e85d04';
   const key = 'happa_store_cart_' + storeId;
-  const storeCart = JSON.parse(localStorage.getItem(key) || '[]');
+  const stored = JSON.parse(localStorage.getItem(key) || '[]');
+  // Legacy rows: a storefront cart line saved before the price gate can hold a
+  // 0 or a missing price. placeStorefrontOrder() refuses such a cart, so the
+  // line can never be ordered — drop it here instead of printing "Price
+  // unavailable" and letting it block checkout.
+  const storeCart = stored.filter(item => hasDisplayablePrice(item));
+  if (storeCart.length !== stored.length) {
+    localStorage.setItem(key, JSON.stringify(storeCart));
+    if (typeof window.updateStorefrontCartBadge === 'function') {
+      window.updateStorefrontCartBadge(storeId, storeCart.reduce((a, c) => a + (parseInt(c.qty, 10) || 1), 0));
+    }
+  }
   const ordersBoxId = 'sf-recent-orders-box';
 
   let cartHTML = '';

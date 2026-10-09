@@ -1685,7 +1685,7 @@ async function adminOpenRendorProfile(userId) {
           : _apBtn('ap-action-green','fas fa-id-card','Verify ID','_apGrantIdVerify(\'' + userId + '\')')}
         ${_apStatusControl(userId, u.status)}
         ${subActive
-          ? _apBtn('ap-action-gray','fas fa-star-slash','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
+          ? _apBtn('ap-action-gray','fas fa-ban','Deactivate Sub','adminDeactivateRendorSub(\'' + userId + '\')')
           : _apBtn('ap-action-purple','fas fa-star','Activate Sub','adminActivateRendorSub(\'' + userId + '\',\'' + nameSafe + '\')')}
         ${_apBtn('ap-action-teal','fas fa-eye','View Public Profile','setTimeout(()=>{App.currentRendorId=\'' + userId + '\';showPage(\'rendor-profile\');renderRendorProfilePublic();},100)')}
       </div>

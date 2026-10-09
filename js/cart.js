@@ -365,9 +365,24 @@ async function trackPackageByCode() {
 }
 window.trackPackageByCode = trackPackageByCode;
 
+// Legacy cart rows: a line saved before the price gate can carry 0 or no price
+// at all. addToCart() refuses to create one and checkout refuses to submit one,
+// so the line can never be ordered — printing it only ever showed "Price
+// unavailable" / "GHS 0" on the cart page. Drop it from the cart state instead,
+// which also unblocks checkout. Called wherever the cart is loaded or rendered.
+function pruneUnpricedCartItems() {
+  if (!App.cart || !App.cart.length) return 0;
+  const before = App.cart.length;
+  App.cart = App.cart.filter(item => hasDisplayablePrice(item));
+  const removed = before - App.cart.length;
+  if (removed) { saveCart(); updateCartBadge(); }
+  return removed;
+}
+
 function renderCart() {
   const c = document.getElementById('cart-content');
   if (!c) return;
+  pruneUnpricedCartItems();
   if (!App.cart.length) {
     c.innerHTML = `
 <div class="empty-state" style="padding:40px 20px 16px">

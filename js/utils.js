@@ -484,12 +484,24 @@ function priceInputValue(value) {
   const n = priceNumber(value);
   return n == null ? '' : n.toFixed(2);
 }
+// A row may be DISPLAYED only while its price reads as a real, non-zero
+// number: a card built from anything else printed "Price unavailable" or
+// "GHS 0" — the two ways a missing price reached a buyer. Display-only rule:
+// vendor/admin management pages deliberately do NOT filter through this, so an
+// owner can still open the row and set the price, and the server still accepts
+// a deliberate 0 for commerce (see test/commerce-atomic.test.js).
+function hasDisplayablePrice(item) {
+  const n = priceNumber(item && item.price);
+  return n != null && n !== 0;
+}
+
 // Explicit globals: these four are the sanctioned price API and every bundle
 // reaches for them by name, so they must never depend on load order.
 window.formatPrice    = formatPrice;
 window.priceNumber    = priceNumber;
 window.priceText      = priceText;
 window.priceAmount    = priceAmount;
+window.hasDisplayablePrice = hasDisplayablePrice;
 window.discountPercent = discountPercent;
 window.priceInputValue = priceInputValue;
 
@@ -671,6 +683,10 @@ function clearProductImage(previewWrapperId, fileInputId, hiddenId) {
 // them) and are auto-deleted once the last delivery completes.
 window.isProductListable = function(product) {
   if (!product) return false;
+  // Public listings must never print a price as 0 or "Price unavailable":
+  // the card renders product.price through the price helper, so a missing or
+  // zero price has no displayable card (see hasDisplayablePrice above).
+  if (!hasDisplayablePrice(product)) return false;
   if ((parseInt(product.stock_qty) || 0) <= 0) return false;
   if (product.status === 'sold_out' || product.status === 'archived') return false;
   // Hidden while the owner has an open account-deletion request (admin review).

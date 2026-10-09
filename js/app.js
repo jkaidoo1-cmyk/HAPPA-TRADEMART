@@ -638,6 +638,9 @@ function loadSession() {
     if (s) App.currentUser = JSON.parse(s);
     const c = localStorage.getItem('happa_cart');
     if (c) App.cart = JSON.parse(c);
+    // Drop cart lines that can never be ordered (price 0 or missing) before
+    // anything counts or renders them — see pruneUnpricedCartItems in js/cart.js.
+    if (typeof pruneUnpricedCartItems === 'function') pruneUnpricedCartItems();
     const sv = localStorage.getItem('happa_saved');
     if (sv) App.savedStores = JSON.parse(sv);
     const n = localStorage.getItem('happa_notifs');

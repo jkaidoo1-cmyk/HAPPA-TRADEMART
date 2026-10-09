@@ -2148,7 +2148,7 @@ function showVerificationUploadModal(userId) {
 <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
   <div style="display:flex; align-items:center; gap: 12px;">
     <div style="width: 42px; height: 42px; border-radius: 12px; background: var(--primary); color: #fff; display:flex; align-items:center; justify-content:center; font-size: 1.2rem;">
-      <i class="fas fa-shield-check"></i>
+      <i class="fas fa-shield-halved"></i>
     </div>
     <span class="modal-title" style="font-size: 1.3rem; font-weight: 800; color: var(--text);">${isRendor ? 'Rendor' : 'Vendor'} Verification</span>
   </div>

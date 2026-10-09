@@ -408,9 +408,12 @@ window.renderBuyerWishlist = function() {
   if (!container) return;
   // Shared storage helpers live in js/utils.js.
   const wish = wishlistIds();
+  // A saved item whose price reads as 0 or missing is hidden from every other
+  // public surface (hasDisplayablePrice), so its card must not reappear here —
+  // a wishlist card was still one of the places "Price unavailable" could show.
   const statCount = document.getElementById('wishlist-stat-count');
-  if (statCount) statCount.textContent = wish.length;
-  const items = App.allProducts.filter(p => wish.includes(String(p.id)));
+  const items = App.allProducts.filter(p => wish.includes(String(p.id)) && hasDisplayablePrice(p));
+  if (statCount) statCount.textContent = items.length;
   if (!items.length) {
     container.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:.85rem">Your wishlist is empty. Save products here!</p>';
     return;

@@ -1,24 +1,33 @@
 """Subset the bundled Font Awesome Free fonts to the icons this app actually uses.
 
-Font Awesome Free 6.4.0 ships ~2450 icon rules and three woff2 files
+Font Awesome Free 6.4.0 ships ~1856 icon rules and three woff2 files
 (fa-solid-900 148 KB, fa-brands-400 108 KB, fa-regular-400 25 KB). The app uses
-around 90 of them, so every visitor downloaded ~280 KB of glyphs to draw a
+around 150 of them, so every visitor downloaded ~280 KB of glyphs to draw a
 handful of icons — the single largest static asset on the site, and unlike JS
 and CSS it cannot be compressed further (woff2 is already compressed).
 
 What this does:
-  1. Reads the name -> codepoint map out of css/vendor/fontawesome.min.css.
+  1. Reads the class -> codepoint map out of css/vendor/fontawesome.min.css.
+     Rules are GROUPS of aliases
+     (`.fa-home:before,.fa-house:before{content:"\\f015"}`), so the map is read
+     from every selector of every rule — reading only the last one (or only
+     single-class rules) silently loses every alias name.
   2. Collects the icon names the app can ask for: every `fa-<name>` class in the
      source, plus every quoted string literal that matches an icon name (the
      dashboards pick icons dynamically, e.g. `fa-${selectedPayment === 'card'
      ? 'check-circle' : 'circle'}` — those values only ever come from literals).
      Holding a superset is deliberate: an icon missing from the subset renders
      as an empty box, so when in doubt this keeps the glyph.
-  3. Rewrites each font file with only those codepoints, keeping the internal
-     font name so the existing @font-face rules still match.
-  4. Drops the :before rules for icons that are no longer in any subset, and
-     only those — base classes, sizing/animation utilities and the @font-face
-     blocks are left untouched.
+  3. Rewrites each font file with only the kept codepoints, keeping the internal
+     font name so the existing @font-face rules still match, then reads the
+     result back and refuses to write a font that lost a glyph.
+  4. Drops whole :before rules that are no longer reachable — and only whole
+     rules. A group is kept (verbatim, aliases intact) when ANY of its selectors
+     is still used; a group with no used selector is deleted in full. Deleting
+     part of a group is how a previous revision remapped 34 icons to the wrong
+     glyph: cutting `.fa-house:before{content:"\\f015"}` off the end of a group
+     left its other selectors glued to the next surviving rule's body, so
+     `.fa-home` inherited that rule's codepoint.
 
 Run from the repo root:  python tools/subset-icons.py [--check]
 --check reports what would change without writing anything.
@@ -36,9 +45,14 @@ FONT_DIR = os.path.join(ROOT, 'css', 'webfonts')
 
 FONTS = ['fa-solid-900.woff2', 'fa-regular-400.woff2', 'fa-brands-400.woff2']
 
-# Icon rules look like `.fa-bell:before{content:"\f0f3"}` — the name in the map
-# is the part after `fa-`, so a class token and a map key compare directly.
-RULE_RE = re.compile(r'\.fa-([a-z0-9-]+):before\{content:"\\([0-9a-fA-F]+)"\}')
+# A whole content rule: everything between the previous brace and
+# `{content:"\fXXX"}`. The selector part may be a comma-separated GROUP, which
+# is why `[^{}]*` is used rather than a single-class pattern — matching only the
+# tail of a group is what corrupted the stylesheet before (see the module docs).
+CONTENT_RULE = re.compile(r'([^{}]*)\{content:"\\([0-9a-fA-F]{2,5})"\}')
+# Captures the icon NAME (no `fa-` prefix), matching the tokens used_icons()
+# produces — the two sets are compared directly, so they must agree on shape.
+CLASS_IN_SELECTORS = re.compile(r'\.fa-([A-Za-z0-9-]+):before')
 
 
 def read(path):
@@ -50,6 +64,16 @@ def source_text():
     files = ['index.html', 'offline.html', 'css/style.css']
     files += sorted(glob.glob(os.path.join(ROOT, 'js', '*.js')))
     return '\n'.join(read(f) for f in files if os.path.exists(f))
+
+
+def class_map(css):
+    """class name (no dot, no `:before`) -> codepoint, from every selector."""
+    out = {}
+    for m in CONTENT_RULE.finditer(css):
+        code = int(m.group(2), 16)
+        for name in CLASS_IN_SELECTORS.findall(m.group(1)):
+            out[name] = code
+    return out
 
 
 def used_icons(name2cp, text):
@@ -65,6 +89,30 @@ def used_icons(name2cp, text):
     literals = {n[3:] if n.startswith('fa-') else n for n in literals}
     keep = {n for n in (classes | literals) if n in name2cp}
     return keep, classes, literals
+
+
+def trim_css(css, keep):
+    """Drop unreachable icon rules — whole rules only, never part of a group."""
+    kept_names = set()
+    dropped_groups = 0
+    untouched = 0
+
+    def repl(match):
+        nonlocal dropped_groups, untouched
+        selectors = match.group(1)
+        names = CLASS_IN_SELECTORS.findall(selectors)
+        if not names:
+            # Not an icon rule (sizing utilities, @font-face, animations…).
+            untouched += 1
+            return match.group(0)
+        if any(n in keep for n in names):
+            kept_names.update(names)
+            return match.group(0)          # kept verbatim: aliases stay intact
+        dropped_groups += 1
+        return ''
+
+    trimmed = CONTENT_RULE.sub(repl, css)
+    return trimmed, kept_names, dropped_groups, untouched
 
 
 def subset_font(font_path, codepoints):
@@ -117,16 +165,20 @@ def main():
     except ImportError:
         print('FATAL: pip install fonttools brotli')
         return 1
-    name2cp = {n: int(cp, 16) for n, cp in RULE_RE.findall(css)}
+
+    name2cp = class_map(css)
     if not name2cp:
         print('FATAL: no icon rules parsed out of fontawesome.min.css — the file format changed')
         return 1
+    _, classes, literals = used_icons(name2cp, source_text())
+    keep = {n for n in (classes | literals) if n in name2cp}
 
-    keep, classes, literals = used_icons(name2cp, source_text())
-    dropped = sorted(set(name2cp) - keep)
-    print('icon rules in css : %d' % len(name2cp))
-    print('icons kept        : %d' % len(keep))
-    print('rules to drop     : %d' % len(dropped))
+    trimmed, kept_names, dropped_groups, untouched = trim_css(css, keep)
+    kept_cps = {name2cp[n] for n in kept_names}
+
+    print('icon classes in css : %d' % len(name2cp))
+    print('icons kept          : %d classes / %d codepoints' % (len(keep), len(kept_cps)))
+    print('rules dropped       : %d groups (%d non-icon rules untouched)' % (dropped_groups, untouched))
 
     for font_name in FONTS:
         path = os.path.join(FONT_DIR, font_name)
@@ -134,9 +186,8 @@ def main():
             print('FATAL: %s is missing' % font_name)
             return 1
         before = os.path.getsize(path)
-        codepoints = {name2cp[n] for n in keep}
         try:
-            data, missing = subset_font(path, codepoints)
+            data, missing = subset_font(path, kept_cps)
         except Exception as exc:
             # fa-regular-400.woff2 (25 KB) does not survive fontTools' woff2
             # decoder — "not enough 'glyf' table data". The file is fine (the
@@ -154,26 +205,29 @@ def main():
             with open(path, 'wb') as fh:
                 fh.write(data)
 
-    # Trim the CSS rules for icons that are no longer in any subset. Aliases
-    # share one rule (`.fa-concierge-bell:before,.fa-bell-concierge:before{…}`),
-    # so the group is compared as a whole: keeping the rule when any alias is
-    # still reachable is what stops an alias from losing its glyph.
-    def keep_rule(match):
-        names = match.group(1).split(',')
-        return match.group(0) if any(n.strip() in keep for n in names) else ''
-
-    trimmed = RULE_RE.sub(keep_rule, css)
-    remaining = len(RULE_RE.findall(trimmed))
     print('%-22s %7d -> %6d bytes' % ('fontawesome.min.css', len(css), len(trimmed)))
-    print('rules left in css : %d (expected %d)' % (remaining, len(keep)))
     if not check:
         with open(CSS_PATH, 'w', encoding='utf-8', newline='') as fh:
             fh.write(trimmed)
 
-    # Anything still referenced but no longer available would render blank.
-    orphaned = sorted({n for n in re.findall(r'\bfa-([a-z0-9-]+)', source_text())
-                       if n in name2cp and n not in keep})
-    print('orphaned references:', orphaned or 'none')
+    # Post-conditions: every used class must still map to its ORIGINAL
+    # codepoint, and that codepoint must exist in a subset font. This is the
+    # check that would have caught the alias-remap regression.
+    final_map = class_map(trimmed)
+    remapped = {n: (name2cp[n], final_map[n]) for n in keep
+                if n in final_map and final_map[n] != name2cp[n]}
+    lost = sorted(n for n in keep if n not in final_map)
+    if remapped:
+        print('FATAL: %d class(es) were remapped: %s' % (len(remapped), remapped))
+        return 1
+    if lost:
+        print('FATAL: %d used class(es) lost their rule: %s' % (len(lost), lost))
+        return 1
+
+    solid = os.path.join(FONT_DIR, 'fa-solid-900.woff2')
+    print('verified: all %d used classes keep their original codepoint' % len(keep))
+    print('orphaned references: %s' % (sorted({n for n in re.findall(r'\bfa-([a-z0-9-]+)', source_text())
+                                               if n in name2cp and n not in keep}) or 'none'))
     return 0
 
 
