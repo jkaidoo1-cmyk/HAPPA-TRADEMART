@@ -98,6 +98,14 @@ test('the app itself keeps every PWA hook', () => {
   );
 });
 
+test('the PWA splash logo stays comfortably inside the frame', () => {
+  assert.match(
+    indexHtml,
+    /<img src="\/images\/happa-logo\.webp" alt="HAPPA Logo" style="width:96px;height:96px;object-fit:contain;">/,
+    'the PWA splash logo should be reduced to a comfortable 96 px size so it is not cropped'
+  );
+});
+
 test('the shell sets up no service-worker plumbing on a storefront URL', () => {
   // A path-addressed storefront is a store page; a hash storefront is in-app
   // navigation on a page that already is the app.
