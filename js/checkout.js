@@ -64,6 +64,9 @@ function renderCheckout() {
         <label class="form-label">Full Address / Landmark</label>
         <textarea class="form-control" id="checkout-address" rows="2" placeholder="House number, street, landmark…">${u.location || ''}</textarea>
       </div>
+      <div style="font-size:.78rem;color:var(--text-muted);display:flex;gap:6px;align-items:center">
+        <i class="fas fa-truck"></i> Packages ship from <strong>${sat.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'short'})}</strong>
+      </div>
 
     </div>
   </div>

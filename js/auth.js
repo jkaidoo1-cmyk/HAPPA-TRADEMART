@@ -48,6 +48,12 @@ function renderAuth() {
 
     <div id="auth-form-area"></div>
 
+    <div style="text-align:center;margin-top:18px">
+
+      <div style="font-size:.72rem;color:var(--text-muted)"><i class="fas fa-lock"></i> Your contact details are shared with a vendor only after you order</div>
+
+    </div>
+
   </div>
 
 </div>`;
