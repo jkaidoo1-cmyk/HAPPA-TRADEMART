@@ -9,7 +9,7 @@
 // match SW_VERSION in index.html — test/sw-version.test.js fails the build if
 // the two drift, because a stale SW_VERSION silently disables the one-time
 // cache self-heal and leaves returning clients running old JS.
-const CACHE_NAME      = 'happa-v196';
+const CACHE_NAME      = 'happa-v197';
 const OFFLINE_URL     = 'offline.html';
 
 // Core static assets to pre-cache on install
@@ -22,6 +22,11 @@ const PRECACHE_ASSETS = [
   './images/happa-logo.webp',
   './images/icon-192.png',
   './images/icon-512.png',
+  // Maskable variants: the manifest gives Android these as its launcher / OS
+  // launch-splash foreground (small art on white, inside the safe zone). They
+  // must be precached so an installed offline app still serves them.
+  './images/icon-maskable-192.png',
+  './images/icon-maskable-512.png',
   './css/style.css',
   // Icon font — precached on purpose. It used to be a jsDelivr CDN request that
   // was only cached opportunistically, so any cache wipe (see the self-heal in

@@ -151,15 +151,42 @@ test('the brand image and the PWA icons shipped in a modern, smaller form', () =
   }
 
   // Icons stay PNG for manifest compatibility, but they must stay small.
-  for (const [file, budget] of [['images/icon-192.png', 12 * 1024], ['images/icon-512.png', 40 * 1024]]) {
+  for (const [file, budget] of [
+    ['images/icon-192.png', 12 * 1024],
+    ['images/icon-512.png', 40 * 1024],
+    // Maskable variants: full square of white with the bag art inside the
+    // safe-zone circle — flat colour fills compress worse than transparency.
+    ['images/icon-maskable-192.png', 12 * 1024],
+    ['images/icon-maskable-512.png', 60 * 1024],
+  ]) {
     assert.ok(exists(file), `${file} is missing`);
     assert.ok(fs.statSync(path.join(ROOT, file)).size < budget, `${file} is over its ${Math.round(budget / 1024)} KB budget`);
   }
   const manifest = JSON.parse(read('manifest.json'));
   assert.deepEqual(
     manifest.icons.map(i => i.src).sort(),
-    ['images/icon-192.png', 'images/icon-512.png'],
+    [
+      'images/icon-192.png',
+      'images/icon-512.png',
+      'images/icon-maskable-192.png',
+      'images/icon-maskable-512.png',
+    ],
     'the manifest icon list changed — update this test and re-check the install icons'
+  );
+  // Purpose split, not "any maskable" on one file: Android scales a maskable
+  // icon to fill its shape, so full-bleed art with no safe zone came out huge
+  // and cropped on the launcher and the Android 12 launch splash.
+  const bySrc = Object.fromEntries(manifest.icons.map(i => [i.src, i]));
+  for (const src of ['images/icon-maskable-192.png', 'images/icon-maskable-512.png']) {
+    assert.equal(bySrc[src].purpose, 'maskable', `${src} must declare only the maskable purpose`);
+  }
+  for (const src of ['images/icon-192.png', 'images/icon-512.png']) {
+    assert.equal(bySrc[src].purpose, 'any', `${src} must declare only the any purpose`);
+  }
+  assert.equal(
+    manifest.icon_background_color,
+    '#ffffff',
+    'icon_background_color must stay white so the launch splash does not paint a dark backing behind the logo'
   );
 });
 
