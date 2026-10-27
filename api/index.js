@@ -89,14 +89,59 @@ app.use((req, res, next) => {
 // Deep-copies the payload, dropping `password_hash` at any depth. Applied at
 // the single response boundary so every route is covered without touching
 // the stored records (writes still persist the hash).
+// Deleting the documents from the stored row is the write-side half of the
+// rule (scrubSensitive is the read-side half). It is needed because the slim
+// column filter in prepareRecordForDb drops the `null`s we write for the doc
+// fields — they are not real columns — so a merge over the old row would keep
+// the base64 photo sitting in db.json forever.
+function clearVerificationDocs(record) {
+  if (!record || record.id_verified !== true) return record;
+  for (const f of VERIFICATION_DOC_FIELDS) delete record[f];
+  if (record.extra && typeof record.extra === 'object') {
+    for (const f of VERIFICATION_DOC_FIELDS) delete record.extra[f];
+  }
+  return record;
+}
+
+// `extra` is the slim-schema mirror of the user columns, so a record approved
+// before the wipe rule can still carry the ID photos there. Deleting the keys
+// from the top level is not enough — the nested copy has to go too.
+function scrubUserExtra(extra) {
+  let obj = extra;
+  let wasString = false;
+  if (typeof extra === 'string') {
+    try { obj = JSON.parse(extra); wasString = true; } catch (e) { return extra; }
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return extra;
+  let stripped = false;
+  const copy = { ...obj };
+  for (const f of VERIFICATION_DOC_FIELDS) {
+    if (f in copy) { delete copy[f]; stripped = true; }
+  }
+  if (!stripped) return extra;
+  return wasString ? JSON.stringify(copy) : copy;
+}
+
 function scrubSensitive(obj) {
   if (Array.isArray(obj)) return obj.map(scrubSensitive);
   if (obj instanceof Date) return obj;
   if (obj && typeof obj === 'object') {
     const out = {};
+    const idVerified = obj.id_verified === true;
     for (const key of Object.keys(obj)) {
       if (key === 'password_hash') continue;
+      // Verification documents of an already-verified user must never reach
+      // any client — the vendor's own session or an admin panel could be
+      // compromised, and the photos exist only for the one review at approval
+      // time. The write path nulls them when the flag is set; this read-side
+      // guard also covers legacy records that were approved before the wipe
+      // rule existed.
+      if (VERIFICATION_DOC_FIELDS.includes(key) && idVerified) continue;
       const val = obj[key];
+      if (idVerified && key === 'extra' && val) {
+        out[key] = scrubUserExtra(val);
+        continue;
+      }
       out[key] = (val && typeof val === 'object') ? scrubSensitive(val) : val;
     }
     return out;
@@ -284,6 +329,13 @@ const ORDER_META_FIELDS = [
 
 const TXN_META_FIELDS = [
   'balance_before', 'balance_after', 'payment_method', 'status', 'note', 'network', 'account_number', 'reviewed_by'
+];
+
+// Verification documents (ID card + sales/sharing proofs) live on the user
+// record only for the one admin review at approval time — see the redaction
+// rules in PATCH /api/users/:id and scrubSensitive().
+const VERIFICATION_DOC_FIELDS = [
+  'id_image', 'proof_sales_1', 'proof_sales_2', 'proof_sales_3', 'proof_share',
 ];
 
 const USER_META_FIELDS = [
@@ -4135,7 +4187,7 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
       dataStore.ensureTable(table);
       const store = dataStore.getStore();
       const idx = store[table].findIndex(r => String(r.id) === String(id));
-      if (idx === -1) store[table].push(record); else store[table][idx] = { ...store[table][idx], ...record };
+      if (idx === -1) store[table].push(clearVerificationDocs({ ...record })); else store[table][idx] = clearVerificationDocs({ ...store[table][idx], ...record });
       dataStore.saveToFile();
       return res.json(serializeRecord(record));
     }
@@ -4147,7 +4199,7 @@ app.put('/api/:table/:id', writeRateLimiter, async (req, res) => {
         dataStore.ensureTable(table);
         const store = dataStore.getStore();
         const idx = store[table].findIndex(r => String(r.id) === String(id));
-        if (idx === -1) store[table].push(record); else store[table][idx] = { ...store[table][idx], ...record };
+        if (idx === -1) store[table].push(clearVerificationDocs({ ...record })); else store[table][idx] = clearVerificationDocs({ ...store[table][idx], ...record });
         dataStore.saveToFile();
         return res.json(serializeRecord(record));
       } catch (localErr) {
@@ -4260,6 +4312,15 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
           console.error('[Auth] Failed to hash password:', e.message);
           return res.status(500).json({ error: 'Failed to process password update.' });
         }
+      }
+      // Verification documents are reviewed ONCE, then destroyed: the moment a
+      // write marks the ID verified, the uploaded photos are wiped from the
+      // record (and from `extra` on slim schemas). Any later compromise of the
+      // vendor's session or the admin panel must never recover the government
+      // ID. scrubSensitive() additionally refuses to ever serve them for an
+      // already-verified user, covering records approved before this rule.
+      if (body.id_verified === true) {
+        for (const f of VERIFICATION_DOC_FIELDS) body[f] = null;
       }
       global.userCache = {};
     }
@@ -4478,7 +4539,7 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
       if (idx === -1) {
         store[table].push(dbRecord);
       } else {
-        store[table][idx] = { ...store[table][idx], ...dbRecord };
+        store[table][idx] = clearVerificationDocs({ ...store[table][idx], ...dbRecord });
       }
       dataStore.saveToFile();
       return res.json(serializeRecord(idx === -1 ? dbRecord : store[table][idx]));
@@ -4498,7 +4559,7 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
         if (idx === -1) {
           store[table].push(dbRecord);
         } else {
-          store[table][idx] = { ...store[table][idx], ...dbRecord };
+          store[table][idx] = clearVerificationDocs({ ...store[table][idx], ...dbRecord });
         }
         dataStore.saveToFile();
         return res.json(serializeRecord(idx === -1 ? dbRecord : store[table][idx]));

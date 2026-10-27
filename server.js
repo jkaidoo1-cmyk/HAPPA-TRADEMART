@@ -239,14 +239,59 @@ app.use((req, res, next) => {
 // Deep-copies the payload, dropping `password_hash` at any depth. Applied at
 // the single response boundary so every route (list, single, cached, local
 // and Supabase) is covered without touching the stored records.
+// Deleting the documents from the stored row is the write-side half of the
+// rule (scrubSensitive is the read-side half). It is needed because the slim
+// column filter in prepareRecordForDb drops the `null`s we write for the doc
+// fields — they are not real columns — so a merge over the old row would keep
+// the base64 photo sitting in db.json forever.
+function clearVerificationDocs(record) {
+  if (!record || record.id_verified !== true) return record;
+  for (const f of VERIFICATION_DOC_FIELDS) delete record[f];
+  if (record.extra && typeof record.extra === 'object') {
+    for (const f of VERIFICATION_DOC_FIELDS) delete record.extra[f];
+  }
+  return record;
+}
+
+// `extra` is the slim-schema mirror of the user columns, so a record approved
+// before the wipe rule can still carry the ID photos there. Deleting the keys
+// from the top level is not enough — the nested copy has to go too.
+function scrubUserExtra(extra) {
+  let obj = extra;
+  let wasString = false;
+  if (typeof extra === 'string') {
+    try { obj = JSON.parse(extra); wasString = true; } catch (e) { return extra; }
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return extra;
+  let stripped = false;
+  const copy = { ...obj };
+  for (const f of VERIFICATION_DOC_FIELDS) {
+    if (f in copy) { delete copy[f]; stripped = true; }
+  }
+  if (!stripped) return extra;
+  return wasString ? JSON.stringify(copy) : copy;
+}
+
 function scrubSensitive(obj) {
   if (Array.isArray(obj)) return obj.map(scrubSensitive);
   if (obj instanceof Date) return obj;
   if (obj && typeof obj === 'object') {
     const out = {};
+    const idVerified = obj.id_verified === true;
     for (const key of Object.keys(obj)) {
       if (key === 'password_hash') continue;
+      // Verification documents of an already-verified user must never reach
+      // any client — the vendor's own session or an admin panel could be
+      // compromised, and the photos exist only for the one review at approval
+      // time. The write path nulls them when the flag is set; this read-side
+      // guard also covers legacy records that were approved before the wipe
+      // rule existed.
+      if (VERIFICATION_DOC_FIELDS.includes(key) && idVerified) continue;
       const val = obj[key];
+      if (idVerified && key === 'extra' && val) {
+        out[key] = scrubUserExtra(val);
+        continue;
+      }
       out[key] = (val && typeof val === 'object') ? scrubSensitive(val) : val;
     }
     return out;
@@ -446,6 +491,13 @@ const JSONB_COLS = new Set([
 
 const TXN_META_FIELDS = [
   'balance_before', 'balance_after', 'payment_method', 'status', 'note', 'network', 'account_number', 'reviewed_by'
+];
+
+// Verification documents (ID card + sales/sharing proofs) live on the user
+// record only for the one admin review at approval time — see the redaction
+// rules in PATCH /api/users/:id and scrubSensitive().
+const VERIFICATION_DOC_FIELDS = [
+  'id_image', 'proof_sales_1', 'proof_sales_2', 'proof_sales_3', 'proof_share',
 ];
 
 const USER_META_FIELDS = [
@@ -3738,6 +3790,23 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
     } catch(e) {}
   }
 
+  // ── Verification documents are reviewed ONCE, then destroyed ──
+  // The ID card / sales proof / sharing screenshot photos exist only for the
+  // admin to eyeball at approval time. Once id_verified is true they are a
+  // liability, not an asset: any later compromise of the vendor's session or
+  // the admin panel would otherwise hand an attacker the user's government
+  // ID. So the moment a write marks the ID verified, the images are wiped
+  // from the record (and from `extra` for slim schemas). The response
+  // scrubber below also refuses to ever serve them for an already-verified
+  // user — that covers records written before this rule existed.
+  if (table === 'users') {
+    for (const f of VERIFICATION_DOC_FIELDS) {
+      if (body.id_verified === true) body[f] = null;
+      // A body can never wave documents past an already-verified row.
+      // else: leave untouched — unverified uploads are the legitimate case.
+    }
+  }
+
   // Store slugs stay globally unique on edit too — a PATCH must never be able
   // to steal another store's public URL.
   if (table === 'stores' && 'slug' in body) {
@@ -3949,13 +4018,13 @@ app.patch('/api/:table/:id', writeRateLimiter, async (req, res) => {
   if (idx !== -1) {
     const record = serializeRecord({ ...rows[idx], ...body, id: String(id) });
     const dbRecord = prepareRecordForDb(table, record, existingRecord);
-    rows[idx] = { ...rows[idx], ...dbRecord, id: String(id) };
+    rows[idx] = clearVerificationDocs({ ...rows[idx], ...dbRecord, id: String(id) });
     saveDb(db);
     return res.json(serializeRecord(rows[idx]));
   } else {
     const record = serializeRecord({ ...body, id: String(id) });
     const dbRecord = prepareRecordForDb(table, record);
-    rows.push(dbRecord);
+    rows.push(clearVerificationDocs(dbRecord));
     saveDb(db);
     return res.json(serializeRecord(dbRecord));
   }

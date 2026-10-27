@@ -635,12 +635,17 @@ function resolveRouteFromHash(hashStr) {
 function loadSession() {
   try {
     const s = localStorage.getItem('happa_session');
-    if (s) App.currentUser = JSON.parse(s);
+    // An older snapshot can still hold the base64 ID photos of an account the
+    // admin has since verified — those are wiped server-side at approval, so
+    // the local copy goes too (see stripVerifyDocs in js/utils.js).
+    if (s) App.currentUser = stripVerifyDocs(JSON.parse(s));
     const c = localStorage.getItem('happa_cart');
     if (c) App.cart = JSON.parse(c);
     // Drop cart lines that can never be ordered (price 0 or missing) before
     // anything counts or renders them — see pruneUnpricedCartItems in js/cart.js.
     if (typeof pruneUnpricedCartItems === 'function') pruneUnpricedCartItems();
+    // Rewrite (not just hide) any cached record approved since it was stored.
+    if (typeof purgeVerifiedDocsFromStorage === 'function') purgeVerifiedDocsFromStorage();
     const sv = localStorage.getItem('happa_saved');
     if (sv) App.savedStores = JSON.parse(sv);
     const n = localStorage.getItem('happa_notifs');
@@ -710,6 +715,10 @@ async function _doVerifySessionUser() {
 
   // Sync fresh user fields (e.g. status, role, is_verified, id_verified, wallet_balance)
   Object.assign(App.currentUser, me);
+  // `me` no longer carries the documents once verified, but the fields merged
+  // in from the session snapshot would linger in memory — so drop them here and
+  // persist the cleaned record.
+  stripVerifyDocs(App.currentUser);
   saveSessions();
 
   // Update admin user list cache if current user is admin — opportunistically
@@ -829,7 +838,7 @@ function saveCart() {
   updateCartBadge();
 }
 function saveSessions() {
-  localStorage.setItem('happa_session', JSON.stringify(App.currentUser));
+  localStorage.setItem('happa_session', JSON.stringify(stripVerifyDocs(App.currentUser)));
 }
 function saveNotifs() {
   localStorage.setItem('happa_notifs', JSON.stringify(App.notifications));
@@ -2127,7 +2136,10 @@ function loadLocalTable(table) {
 }
 function saveLocalTable(table, data) {
   try {
-    localStorage.setItem(localDbKey(table), JSON.stringify(data || []));
+    // The users table is also the offline cache of every account the admin has
+    // loaded — verified accounts keep no ID photos there either.
+    const rows = table === 'users' ? stripVerifyDocsIn(data || []) : (data || []);
+    localStorage.setItem(localDbKey(table), JSON.stringify(rows));
     return true;
   } catch (e) {
     // Most common cause: QuotaExceededError — base64 images are too big.

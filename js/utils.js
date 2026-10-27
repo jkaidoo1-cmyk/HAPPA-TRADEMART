@@ -19,6 +19,72 @@ const PLACEHOLDER_BANNER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3
 window.PLACEHOLDER_IMG = PLACEHOLDER_IMG;
 window.PLACEHOLDER_BANNER = PLACEHOLDER_BANNER;
 
+// ── Verification document purge ─────────────────────────────
+// A verified account's ID card, sales proofs and sharing screenshot exist only
+// for the single admin review at approval time. The server deletes them the
+// moment it marks the account verified, but browser copies survive in three
+// places — the session snapshot, the mock-DB table cache, and the admin's user
+// list cache — so anything this app writes to storage strips them for a
+// verified record. That way a shared or stolen device cannot recover a photo
+// of the user's government ID from localStorage.
+const VERIFY_DOC_FIELDS = ['id_image', 'proof_sales_1', 'proof_sales_2', 'proof_sales_3', 'proof_share'];
+function stripVerifyDocs(record) {
+  if (!record || typeof record !== 'object' || record.id_verified !== true) return record;
+  for (const f of VERIFY_DOC_FIELDS) {
+    if (f in record) delete record[f];
+  }
+  if (record.extra && typeof record.extra === 'object') {
+    for (const f of VERIFY_DOC_FIELDS) {
+      if (f in record.extra) delete record.extra[f];
+    }
+  }
+  return record;
+}
+// Same rule for a whole table (the cached `users` list). Returns a new array so
+// callers never mutate a response they still hold.
+function stripVerifyDocsIn(rows) {
+  if (!Array.isArray(rows)) return stripVerifyDocs(rows);
+  return rows.map(row => {
+    if (!row || typeof row !== 'object' || row.id_verified !== true) return row;
+    const copy = Object.assign({}, row);
+    if (copy.extra && typeof copy.extra === 'object') copy.extra = Object.assign({}, copy.extra);
+    return stripVerifyDocs(copy);
+  });
+}
+
+// Every place this app caches a user record, so a boot-time sweep can reach all
+// of them: the session snapshot, the offline `users` table (localDbKey('users')),
+// and the admin's loaded user list.
+const VERIFY_DOC_CACHE_KEYS = ['happa_session', 'happa_db_users', 'happa_all_users'];
+
+// Devices that cached an account BEFORE it was approved still hold the base64
+// ID photo next to `id_verified: true`. Stripping on read is not enough there —
+// the bytes stay in localStorage, readable from devtools on a shared or stolen
+// device. This rewrites the stored copies, so the photo is destroyed on the
+// first load after the update rather than lingering until the next write.
+function purgeVerifiedDocsFromStorage() {
+  let purged = 0;
+  for (const key of VERIFY_DOC_CACHE_KEYS) {
+    let raw = null;
+    try { raw = localStorage.getItem(key); } catch (e) { continue; }
+    if (!raw) continue;
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { continue; }
+    if (!parsed || typeof parsed !== 'object') continue;
+    // Clone `extra` too: stripVerifyDocs mutates the record it is given, so a
+    // shared nested object would make the before/after comparison always match.
+    const clean = Array.isArray(parsed)
+      ? stripVerifyDocsIn(parsed)
+      : stripVerifyDocs(Object.assign({}, parsed,
+          (parsed.extra && typeof parsed.extra === 'object')
+            ? { extra: Object.assign({}, parsed.extra) }
+            : {}));
+    if (JSON.stringify(clean) === JSON.stringify(parsed)) continue;
+    try { localStorage.setItem(key, JSON.stringify(clean)); purged++; } catch (e) {}
+  }
+  return purged;
+}
+
 // ── UUID Generator ────────────────────────────────────────
 function generateId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {

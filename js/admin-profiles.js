@@ -190,7 +190,7 @@ async function _apDeleteUser(userId) {
   // Purge user from local memory state
   if (App.allUsers) {
     App.allUsers = App.allUsers.filter(u => String(u.id) !== String(userId));
-    try { localStorage.setItem('happa_all_users', JSON.stringify(App.allUsers)); } catch(e){}
+    try { localStorage.setItem('happa_all_users', JSON.stringify(stripVerifyDocsIn(App.allUsers))); } catch(e){}
   }
 
   // Signal cross-tab logout to instantly revoke deleted session in any open tab
@@ -309,7 +309,14 @@ function _apPatchUserOptimistic(userId, patch, successMsg) {
   if (!App.allUsers) App.allUsers = [];
   const idx = App.allUsers.findIndex(u => u.id === userId);
   const snap = idx > -1 ? { ...App.allUsers[idx] } : null;
-  if (snap) Object.assign(App.allUsers[idx], patch);
+  if (snap) {
+    Object.assign(App.allUsers[idx], patch);
+    // Approving the ID is the point where the uploaded documents are destroyed
+    // server-side, so the cached row must not keep showing them either.
+    if (patch.id_verified === true && typeof stripVerifyDocs === 'function') {
+      stripVerifyDocs(App.allUsers[idx]);
+    }
+  }
   return apiPatch('users', userId, patch)
     .then(() => { showToast(successMsg, 'success', 2000); })
     .catch(err => {
@@ -1252,6 +1259,11 @@ async function adminOpenVendorProfile(userId) {
       <div style="margin-top:14px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md)">
         <div style="font-weight:700;font-size:.78rem;margin-bottom:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:.5px">Submitted Verification Files</div>
         
+        ${u.id_verified ? `
+          <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:10px 12px;border-radius:8px;font-size:.8rem;font-weight:600;margin-bottom:4px">
+            <i class="fas fa-shield-alt"></i> ID verified — the submitted documents have been permanently redacted from the platform and are no longer displayed.
+          </div>
+        ` : `
         <div style="margin-bottom:8px;font-size:.8rem;font-weight:700">Ghana Card / Passport:</div>
         ${u.id_image ? `
           <div style="margin-bottom:12px">
@@ -1272,6 +1284,7 @@ async function adminOpenVendorProfile(userId) {
             <img src="${u.proof_share}" style="max-height:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:contain" onclick="window.showZoomedImage(this.src, 'Link Sharing Proof')">
           </div>
         ` : '<div style="color:var(--text-light);font-size:.78rem;margin-bottom:12px"><i class="fas fa-times-circle" style="color:var(--danger)"></i> Sharing proof missing</div>'}
+        `}
         
         <div style="display:flex;gap:8px;margin-top:12px">
           ${!u.id_verified ? `
@@ -1620,6 +1633,11 @@ async function adminOpenRendorProfile(userId) {
       <div style="margin-top:14px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md)">
         <div style="font-weight:700;font-size:.78rem;margin-bottom:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:.5px">Submitted Verification Files</div>
         
+        ${u.id_verified ? `
+          <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:10px 12px;border-radius:8px;font-size:.8rem;font-weight:600;margin-bottom:4px">
+            <i class="fas fa-shield-alt"></i> ID verified — the submitted documents have been permanently redacted from the platform and are no longer displayed.
+          </div>
+        ` : `
         <div style="margin-bottom:8px;font-size:.8rem;font-weight:700">Ghana Card / Passport:</div>
         ${u.id_image ? `
           <div style="margin-bottom:12px">
@@ -1640,6 +1658,7 @@ async function adminOpenRendorProfile(userId) {
             <img src="${u.proof_share}" style="max-height:100px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:contain" onclick="window.showZoomedImage(this.src, 'Link Sharing Proof')">
           </div>
         ` : '<div style="color:var(--text-light);font-size:.78rem;margin-bottom:12px"><i class="fas fa-times-circle" style="color:var(--danger)"></i> Sharing proof missing</div>'}
+        `}
         
         <div style="display:flex;gap:8px;margin-top:12px">
           ${!u.id_verified ? `

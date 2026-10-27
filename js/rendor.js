@@ -89,7 +89,14 @@ async function renderRendorDashboard() {
     ? `Active — expires ${subExpiry.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`
     : 'No active subscription';
 
-  const activeTabId = (App.activeTab && App.activeTab['rendor-dashboard']) || 'rendor-overview';
+  // The Verify tab is only the ID-document upload + review status. Once the
+  // admin approves (id_verified), the server has wiped the uploaded photos and
+  // there is nothing left to submit — so the tab (and its upload UI) stops
+  // being rendered entirely. A persisted active tab pointing at it is
+  // remapped to the Overview so the dashboard never renders a missing tab.
+  const rendorVerifyDone = u.id_verified;
+  const _persistedTab = (App.activeTab && App.activeTab['rendor-dashboard']) || 'rendor-overview';
+  const activeTabId = _persistedTab === 'rendor-verify' && rendorVerifyDone ? 'rendor-overview' : _persistedTab;
 
   c.innerHTML = `
 <!-- ── Profile banner ── -->
@@ -129,7 +136,7 @@ async function renderRendorDashboard() {
   <div class="tab-btn ${activeTabId === 'rendor-posts' ? 'active' : ''}" onclick="switchTab(this,'rendor-posts');loadRendorPosts()">My Posts</div>
   <div class="tab-btn ${activeTabId === 'rendor-contact' ? 'active' : ''}" onclick="switchTab(this,'rendor-contact')">Contact Info</div>
   <div class="tab-btn ${activeTabId === 'rendor-subscription' ? 'active' : ''}" onclick="switchTab(this,'rendor-subscription');renderRendorSubscription()">Subscription</div>
-  <div class="tab-btn ${activeTabId === 'rendor-verify' ? 'active' : ''}" onclick="switchTab(this,'rendor-verify');renderRendorVerify()">Verify</div>
+  ${!rendorVerifyDone ? `<div class="tab-btn ${activeTabId === 'rendor-verify' ? 'active' : ''}" onclick="switchTab(this,'rendor-verify');renderRendorVerify()">Verify</div>` : ''}
 </div>
 
 <!-- ══ OVERVIEW ══ -->
@@ -256,12 +263,13 @@ async function renderRendorDashboard() {
   </div>
 </div>
 
+${!rendorVerifyDone ? `
 <!-- ══ VERIFY ══ -->
 <div class="tab-content ${activeTabId === 'rendor-verify' ? 'active' : ''}" id="rendor-verify">
   <div class="dashboard-wrap" id="rendor-verify-content">
     <div style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
   </div>
-</div>
+</div>` : ''}
 `;
 
   // Subscription and Verify are built lazily by their buttons' onclick, so a

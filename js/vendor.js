@@ -312,7 +312,14 @@ async function renderVendorDashboard() {
       </button>
     </div>` : '';
 
-  const activeTabId = (App.activeTab && App.activeTab['vendor-dashboard']) || 'vendor-overview';
+  const _persistedTab = (App.activeTab && App.activeTab['vendor-dashboard']) || 'vendor-overview';
+  // Verification complete (phone OTP + ID approved) is the end state: the
+  // Verify tab and its content stop being rendered. The documents behind it
+  // are wiped server-side on approval, so there is nothing left to show —
+  // keeping the tab would also keep a stale entry in the persisted-tab
+  // restore (App.activeTab), which is remapped to Overview here.
+  const vendorVerifyDone = u.id_verified && u.is_verified;
+  const activeTabId = _persistedTab === 'vendor-verify' && vendorVerifyDone ? 'vendor-overview' : _persistedTab;
 
     c.innerHTML = `
 <div class="tab-nav" id="vendor-tabs">
@@ -321,7 +328,7 @@ async function renderVendorDashboard() {
   <div class="tab-btn ${activeTabId === 'vendor-products' ? 'active' : ''}" onclick="switchTab(this,'vendor-products')">Products</div>
   <div class="tab-btn ${activeTabId === 'vendor-wallet' ? 'active' : ''}" onclick="switchTab(this,'vendor-wallet');renderWalletHistory('vendor-txn-list');if(typeof renderVendorChart==='function'&&window._vendorSalesPackages)renderVendorChart(window._vendorSalesPackages)">Wallet</div>
   <div class="tab-btn ${activeTabId === 'vendor-referral' ? 'active' : ''}" onclick="switchTab(this,'vendor-referral')">Referrals</div>
-  <div class="tab-btn ${activeTabId === 'vendor-verify' ? 'active' : ''}" onclick="switchTab(this,'vendor-verify')">Verify</div>
+  ${!vendorVerifyDone ? `<div class="tab-btn ${activeTabId === 'vendor-verify' ? 'active' : ''}" onclick="switchTab(this,'vendor-verify')">Verify</div>` : ''}
 </div>
 
 <!-- ── Overview Tab ── -->
@@ -594,7 +601,7 @@ async function renderVendorDashboard() {
   </div>
 </div>
 
-<!-- ── Verify Tab ── -->
+${!vendorVerifyDone ? `
 <div class="tab-content ${activeTabId === 'vendor-verify' ? 'active' : ''}" id="vendor-verify">
   <div class="dashboard-wrap">
     <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px">Vendor Verification</h3>
@@ -630,7 +637,7 @@ async function renderVendorDashboard() {
       </div>
     </div>
   </div>
-</div>
+</div>` : ''}
 
 <!-- ── Storefront Tab ── -->
 <div class="tab-content ${activeTabId === 'vendor-storefront' ? 'active' : ''}" id="vendor-storefront">
