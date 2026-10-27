@@ -190,6 +190,72 @@ test('the brand image and the PWA icons shipped in a modern, smaller form', () =
   );
 });
 
+test('the maskable icons keep the bag big enough to read, small enough to survive the launcher mask', () => {
+  // Two ways this has gone wrong already, in opposite directions:
+  //   * the full-bleed art declared as maskable → Android scaled it to fill its
+  //     shape and cropped it into a giant, clipped logo;
+  //   * the first padded pass → the bag became a small stamp on the launcher
+  //     and on the Android 12 launch splash.
+  // The safe-zone geometry is what keeps both from coming back, so it is
+  // measured from the pixels instead of trusted to the build script.
+  const { decode } = require(path.join('..', 'tools', 'png.js'));
+
+  for (const [file, size] of [
+    ['images/icon-maskable-192.png', 192],
+    ['images/icon-maskable-512.png', 512],
+  ]) {
+    const { width, height, data } = decode(fs.readFileSync(path.join(ROOT, file)));
+    assert.equal(width, size, `${file} is not ${size}px wide`);
+    assert.equal(height, size, `${file} is not ${size}px tall`);
+
+    // A maskable icon has to paint every pixel: the OS composites whatever the
+    // launcher mask leaves uncovered, and a transparent corner shows through as
+    // the platform background.
+    let minX = width, minY = height, maxX = -1, maxY = -1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const o = (y * width + x) * 4;
+        const [r, g, b, a] = [data[o], data[o + 1], data[o + 2], data[o + 3]];
+        assert.equal(a, 255, `${file} has a transparent pixel at ${x},${y}`);
+        if (r > 250 && g > 250 && b > 250) continue;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    assert.ok(maxX > -1, `${file} has no artwork at all`);
+
+    const artWidth = maxX - minX + 1;
+    const artHeight = maxY - minY + 1;
+    const fraction = artWidth / width;
+
+    // ~39.5% of the canvas. The lower bound is the "too small" regression the
+    // 1.2× bump fixed; the upper bound keeps it clear of the crop.
+    assert.ok(
+      fraction > 0.36 && fraction < 0.45,
+      `${file}: the artwork is ${(fraction * 100).toFixed(1)}% of the canvas — ` +
+      'it should sit around 39-40%, not shrink to a stamp or grow into the crop'
+    );
+
+    // Centred, so the launcher mask trims evenly on every side.
+    assert.ok(
+      Math.abs((minX + maxX) / 2 - width / 2) <= 2 && Math.abs((minY + maxY) / 2 - height / 2) <= 2,
+      `${file}: the artwork is off-centre (${(minX + maxX) / 2}, ${(minY + maxY) / 2})`
+    );
+
+    // The guarantee that actually matters: every corner of the artwork is
+    // inside the 80%-diameter circle Android treats as the safe zone.
+    const safeRadius = size * 0.4;
+    const corner = Math.hypot(artWidth / 2, artHeight / 2);
+    assert.ok(
+      corner < safeRadius,
+      `${file}: the artwork corner (${corner.toFixed(1)}px) falls outside the ` +
+      `${safeRadius.toFixed(1)}px maskable safe zone — a round launcher would clip it`
+    );
+  }
+});
+
 test('the first cards of a list load eagerly and the rest stay lazy', () => {
   // A lazy LCP image is the mistake this pins: Lighthouse found the largest
   // paint was an image the browser had been told to defer.
