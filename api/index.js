@@ -1523,7 +1523,14 @@ function initVapidKeysApi() {
 }
 initVapidKeysApi();
 
-// Auto-create push_subscriptions table if it doesn't exist
+// Auto-create the push_subscriptions table if it doesn't exist.
+// The DDL itself lives in SQL (migrations/007_rls_lockdown.sql →
+// ensure_push_subscriptions()): it is idempotent, closes the table with RLS and
+// zero policies, and only service_role may call it. It must NOT be an inline
+// `exec_sql` string — no migration defines exec_sql, and the SQL this used to
+// carry contained `CREATE POLICY IF NOT EXISTS` (invalid Postgres) plus a
+// `FOR ALL USING (true)` policy with no `to` clause, i.e. PUBLIC: anonymous
+// full read/write on push endpoints, which are push credentials.
 (async () => {
   try {
     const supabase = getSupabase();
@@ -1531,17 +1538,8 @@ initVapidKeysApi();
       const { error } = await supabase.from('push_subscriptions').select('endpoint').limit(1);
       if (error && error.message && error.message.includes('does not exist')) {
         console.log('[Push] Creating push_subscriptions table...');
-        await supabase.rpc('exec_sql', {
-          query: `CREATE TABLE IF NOT EXISTS push_subscriptions (
-            endpoint TEXT PRIMARY KEY,
-            keys JSONB DEFAULT '{}',
-            user_id TEXT DEFAULT 'anonymous',
-            created_at TIMESTAMPTZ DEFAULT NOW()
-          );
-          CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
-          ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
-          CREATE POLICY IF NOT EXISTS "Service role full access" ON push_subscriptions FOR ALL USING (true) WITH CHECK (true);`
-        }).catch(() => null);
+        const { error: ddlErr } = await supabase.rpc('ensure_push_subscriptions');
+        if (ddlErr) console.warn('[Push] ensure_push_subscriptions failed (run migrations/007_rls_lockdown.sql):', ddlErr.message);
       }
     }
   } catch(e) {

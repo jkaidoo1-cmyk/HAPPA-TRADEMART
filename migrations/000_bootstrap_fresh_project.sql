@@ -476,4 +476,25 @@ create table if not exists audit_logs (
 );
 create index if not exists audit_logs_created_idx on audit_logs (created_at desc);
 
--- otps, upload_chunks and the RLS sweep come from migration 005 — nothing else pending.
+-- ── Enable RLS on everything created above ───────────────────────────────────
+-- Deny-by-default from the very first migration: a fresh install that stops
+-- here (or anywhere before 007) must not be readable with the anon key. No
+-- policies are created — service_role bypasses RLS, and that is the only
+-- credential the app uses. 007_rls_lockdown.sql deepens this (grants, functions,
+-- audit hook); this block alone already closes the tables.
+do $$
+declare t text;
+begin
+  for t in
+    select table_name from information_schema.tables
+    where table_schema = 'public' and table_type = 'BASE TABLE'
+  loop
+    begin
+      execute format('alter table %I enable row level security', t);
+    exception when insufficient_privilege then
+      raise notice 'skipping RLS on % (not owned by the migration role)', t;
+    end;
+  end loop;
+end $$;
+
+-- otps, upload_chunks and the fuller RLS lockdown come from migration 005/007 — nothing else pending.

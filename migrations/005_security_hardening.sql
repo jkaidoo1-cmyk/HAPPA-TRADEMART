@@ -178,6 +178,12 @@ create index if not exists wallet_txns_reference_idx on wallet_transactions (ref
 -- password hashes, emails, phone numbers and wallet balances with a single
 -- REST call. Only catalog tables are readable anonymously; every other read
 -- goes through the server, whose service_role key bypasses RLS entirely.
+-- Superseded by `migrations/007_rls_lockdown.sql`, which drops EVERY policy on
+-- every table and revokes anon/authenticated outright. An anon_read policy is
+-- not created here any more: nothing in the app talks to Supabase with the anon
+-- key (the browser only ever calls api/index.js), so a permissive catalog policy
+-- bought nothing while widening the blast radius — `settings` in particular
+-- holds platform configuration, not just storefront content.
 do $$
 declare t text;
 begin
@@ -190,10 +196,6 @@ begin
     begin
       execute format('alter table %I enable row level security', t);
       execute format('drop policy if exists anon_read on %I', t);
-      if t in ('products','stores','storefronts','services','reviews','ad_campaigns','delivery_rates','settings') then
-        execute format(
-          'create policy anon_read on %I for select to anon using (true)', t);
-      end if;
     exception when insufficient_privilege then
       raise notice 'skipping RLS on % (not owned by the migration role)', t;
     end;
@@ -201,7 +203,8 @@ begin
 end $$;
 
 -- Defence in depth: drop any leftover anon policies on personal-data tables in
--- case an earlier revision of this migration created them.
+-- case an earlier revision of this migration created them. (007 drops every
+-- policy on every table, so this is redundant but harmless if 007 is not run.)
 do $$
 declare t text;
 begin
