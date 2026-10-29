@@ -197,7 +197,7 @@ async function showSearchSuggestions(q) {
       <i class="fas fa-briefcase" style="color:#7c3aed;width:30px;text-align:center"></i>
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:.85rem">${highlight(p.title || '', q)}</div>
-        <div style="font-size:.72rem;color:var(--text-muted)">${escHtml(r.rendor_display_name || r.name || 'Rendor')} · ${priceNumber(p.price) != null ? `From ${priceText(p.price)}` : escHtml(p.category || 'Service')}</div>
+        <div style="font-size:.72rem;color:var(--text-muted)">${escHtml(r.rendor_display_name || r.name || 'Rendor')} · ${hasDisplayablePrice(p) ? `From ${priceText(p.price)}` : escHtml(p.category || 'Service')}</div>
       </div>
     </div>`;
     }).join('');

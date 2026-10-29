@@ -407,7 +407,7 @@ function rendorPostCardHTML(p) {
           <span style="font-weight:700;color:${col};text-transform:uppercase">${p.status||'active'}</span>
         </div>
         ${p.description ? `<p style="font-size:.8rem;color:var(--text-light);margin-top:6px;line-height:1.6;-webkit-line-clamp:3;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden">${escHtml(p.description)}</p>` : ''}
-        ${priceNumber(p.price) != null ? `<div style="font-weight:700;color:var(--primary);font-size:.85rem;margin-top:6px">From ${priceText(p.price)}</div>` : ''}
+        ${hasDisplayablePrice(p) ? `<div style="font-weight:700;color:var(--primary);font-size:.85rem;margin-top:6px">From ${priceText(p.price)}</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
         <button class="btn btn-ghost btn-sm" onclick="showEditPostModal('${p.id}')">

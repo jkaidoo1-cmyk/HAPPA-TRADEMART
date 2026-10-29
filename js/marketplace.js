@@ -286,7 +286,7 @@ function rendorPostCardPublicHTML(post, rendor) {
 
     : '';
 
-  const price    = post.price
+  const price    = hasDisplayablePrice(post)
 
     ? `<span style="font-weight:800;color:#7c3aed;font-size:.9rem">From ${priceText(post.price)}</span>`
 
@@ -3008,7 +3008,7 @@ function _rendorPublicPostCardHTML(post) {
 
            onload="fitProductImage(this)" onerror="this.style.display='none'">`
 
-    : '';  const price = priceNumber(post.price) != null
+    : '';  const price = hasDisplayablePrice(post)
     ? `<span style="font-weight:800;color:#7c3aed;font-size:.88rem">${priceText(post.price)}</span>`
     : '';
 
